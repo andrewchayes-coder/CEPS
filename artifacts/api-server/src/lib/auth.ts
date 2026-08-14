@@ -31,8 +31,10 @@ export async function createSession(res: Response, userId: string): Promise<void
   res.cookie
     ? res.cookie(SESSION_COOKIE, token, {
         httpOnly: true,
-        sameSite: "lax",
-        secure: false,
+        // The Replit preview runs inside an iframe on replit.com, which is a
+        // cross-site context — SameSite=Lax cookies are dropped there.
+        sameSite: "none",
+        secure: true,
         maxAge: SESSION_DAYS * 24 * 60 * 60 * 1000,
         path: "/",
       })

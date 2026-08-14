@@ -44,6 +44,21 @@ export default function LoginPage() {
     },
   });
 
+  const quickLogin = (email: string) => {
+    loginMutation.mutate({ data: { email, password: 'ceps-demo-2026' } }, {
+      onSuccess: () => {
+        setLocation('/');
+      },
+      onError: (err: any) => {
+        toast({
+          variant: 'destructive',
+          title: 'Login Failed',
+          description: err?.data?.message || 'Demo account unavailable.',
+        });
+      }
+    });
+  };
+
   const onPasswordSubmit = (values: z.infer<typeof loginSchema>) => {
     loginMutation.mutate({ data: values }, {
       onSuccess: () => {
@@ -179,6 +194,51 @@ export default function LoginPage() {
             </Card>
           </TabsContent>
         </Tabs>
+
+        <Card className="mt-6">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm">Demo Quick Login</CardTitle>
+            <CardDescription className="text-xs">Sign in instantly with a demo account for each role.</CardDescription>
+          </CardHeader>
+          <CardContent className="grid grid-cols-2 gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={loginMutation.isPending}
+              onClick={() => quickLogin('staff@ceps.example')}
+              data-testid="button-quick-login-staff"
+            >
+              CEPS Staff
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={loginMutation.isPending}
+              onClick={() => quickLogin('coordinator@alta.example')}
+              data-testid="button-quick-login-coordinator"
+            >
+              Service Coordinator
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={loginMutation.isPending}
+              onClick={() => quickLogin('parent@family.example')}
+              data-testid="button-quick-login-parent"
+            >
+              Parent / Guardian
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={loginMutation.isPending}
+              onClick={() => quickLogin('vendor@sunrisemusic.example')}
+              data-testid="button-quick-login-vendor"
+            >
+              Vendor
+            </Button>
+          </CardContent>
+        </Card>
       </div>
     </div>
   );

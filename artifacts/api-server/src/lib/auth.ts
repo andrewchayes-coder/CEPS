@@ -132,7 +132,10 @@ export function sessionUserJson(user: User) {
 
 export function appBaseUrl(): string {
   const dev = process.env.REPLIT_DEV_DOMAIN;
-  return dev ? `https://${dev}` : "";
+  const origin = dev ? `https://${dev}` : "";
+  // Portal base path (must match the web app's Vite base). No trailing slash.
+  const basePath = (process.env.APP_BASE_PATH ?? "/").replace(/\/+$/, "");
+  return `${origin}${basePath}`;
 }
 
 export function iso(d: Date | null | undefined): string | null {

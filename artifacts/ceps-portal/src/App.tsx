@@ -1,10 +1,11 @@
-import { type ReactNode, useEffect, useState } from 'react';
+import { type ReactNode } from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { ErrorBoundary } from '@/components/error-boundary';
 import { Toaster } from '@/components/ui/toaster';
 import { TooltipProvider } from '@/components/ui/tooltip';
 import NotFound from '@/pages/not-found';
 import {
+  Redirect,
   Route,
   Switch,
   useLocation,
@@ -46,20 +47,13 @@ const queryClient = new QueryClient({
 
 function ProtectedRoutes() {
   const { user, isLoading } = useAuth();
-  const [, setLocation] = useLocation();
-
-  useEffect(() => {
-    if (!isLoading && !user) {
-      setLocation('/login');
-    }
-  }, [user, isLoading, setLocation]);
 
   if (isLoading) {
     return <div className="min-h-screen flex items-center justify-center">Loading...</div>;
   }
 
   if (!user) {
-    return null;
+    return <Redirect to="/login" replace />;
   }
 
   return (
@@ -95,7 +89,7 @@ function Router() {
         <Route path="/login" component={LoginPage} />
         <Route path="/auth/magic" component={MagicLinkConsumePage} />
         <Route path="/sign/:token" component={SignaturePage} />
-        <Route path="/:rest*">
+        <Route>
           <ProtectedRoutes />
         </Route>
       </Switch>

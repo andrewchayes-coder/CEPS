@@ -3,20 +3,30 @@ info:
   # Do not change the title, if the title changes, the import paths will be broken
   title: Api
   version: 0.1.0
-  description: API specification
+  description: CEPS Portal API — referral intake, authorizations, invoices, payments, remittances, vendors, reporting
 servers:
   - url: /api
     description: Base API path
 tags:
   - name: health
-    description: Health operations
+  - name: auth
+  - name: users
+  - name: clients
+  - name: referrals
+  - name: signature
+  - name: authorizations
+  - name: invoices
+  - name: payments
+  - name: remittances
+  - name: vendors
+  - name: dashboard
+  - name: audit
 paths:
   /healthz:
     get:
       operationId: healthCheck
       tags: [health]
       summary: Health check
-      description: Returns server health status
       responses:
         "200":
           description: Healthy
@@ -24,13 +34,1468 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/HealthStatus"
+  /auth/login:
+    post:
+      operationId: login
+      tags: [auth]
+      summary: Email/password login (staff, coordinators, vendors)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LoginInput"
+      responses:
+        "200":
+          description: Logged in
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SessionUser"
+        "401": { description: Invalid credentials }
+  /auth/logout:
+    post:
+      operationId: logout
+      tags: [auth]
+      summary: Log out
+      responses:
+        "200":
+          description: Logged out
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OkResult"
+  /auth/me:
+    get:
+      operationId: getCurrentUser
+      tags: [auth]
+      summary: Current session user
+      responses:
+        "200":
+          description: Session user
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SessionUser"
+        "401": { description: Not authenticated }
+  /auth/magic-link/request:
+    post:
+      operationId: requestMagicLink
+      tags: [auth]
+      summary: Request a magic sign-in link (parents/guardians, self, vendors)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/MagicLinkRequestInput"
+      responses:
+        "200":
+          description: Link sent (or dev link returned in development)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MagicLinkResult"
+  /auth/magic-link/consume:
+    post:
+      operationId: consumeMagicLink
+      tags: [auth]
+      summary: Consume a magic link token and create a session
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/MagicLinkConsumeInput"
+      responses:
+        "200":
+          description: Session created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SessionUser"
+        "400": { description: Invalid or expired token }
+  /users:
+    get:
+      operationId: listUsers
+      tags: [users]
+      summary: List users (staff only)
+      parameters:
+        - name: role
+          in: query
+          schema: { type: string }
+      responses:
+        "200":
+          description: Users
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/User" }
+    post:
+      operationId: createUser
+      tags: [users]
+      summary: Create/invite a user (staff only)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UserInput"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/User"
+  /users/{id}:
+    patch:
+      operationId: updateUser
+      tags: [users]
+      summary: Update a user (staff only)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UserUpdate"
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/User"
+  /audit-log:
+    get:
+      operationId: listAuditLog
+      tags: [audit]
+      summary: Per-user audit history (staff only)
+      parameters:
+        - name: userId
+          in: query
+          schema: { type: string }
+        - name: limit
+          in: query
+          schema: { type: integer }
+      responses:
+        "200":
+          description: Audit entries
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/AuditEntry" }
+  /clients:
+    get:
+      operationId: listClients
+      tags: [clients]
+      summary: List clients (scoped by role)
+      parameters:
+        - name: status
+          in: query
+          schema: { type: string }
+        - name: search
+          in: query
+          schema: { type: string }
+      responses:
+        "200":
+          description: Clients
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/Client" }
+    post:
+      operationId: createClient
+      tags: [clients]
+      summary: Create client (staff)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ClientInput"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Client"
+  /clients/{id}:
+    get:
+      operationId: getClient
+      tags: [clients]
+      summary: Client detail
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: Client
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Client"
+        "404": { description: Not found }
+    patch:
+      operationId: updateClient
+      tags: [clients]
+      summary: Update client (staff; incl. coordinator reassignment)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ClientUpdate"
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Client"
+  /clients/{id}/case:
+    get:
+      operationId: getClientCase
+      tags: [clients]
+      summary: Full case view — referrals, authorizations, invoices, payments, remittances
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: Case bundle
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ClientCase"
+  /referrals:
+    get:
+      operationId: listReferrals
+      tags: [referrals]
+      summary: List referrals (filterable, scoped by role)
+      parameters:
+        - name: status
+          in: query
+          schema: { type: string }
+        - name: coordinatorId
+          in: query
+          schema: { type: string }
+        - name: clientId
+          in: query
+          schema: { type: string }
+      responses:
+        "200":
+          description: Referrals
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/Referral" }
+    post:
+      operationId: createReferral
+      tags: [referrals]
+      summary: Submit referral (coordinator portal form or staff manual entry)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ReferralInput"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Referral"
+  /referrals/{id}:
+    get:
+      operationId: getReferral
+      tags: [referrals]
+      summary: Referral detail
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: Referral
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Referral"
+        "404": { description: Not found }
+    patch:
+      operationId: updateReferral
+      tags: [referrals]
+      summary: Update referral (status, notes)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ReferralUpdate"
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Referral"
+  /referrals/{id}/send-magic-link:
+    post:
+      operationId: sendReferralMagicLink
+      tags: [referrals]
+      summary: (Re)send the parent/guardian e-signature magic link
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: Sent
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MagicLinkResult"
+  /signature/{token}:
+    get:
+      operationId: getSignaturePage
+      tags: [signature]
+      summary: Load agreement data for a magic-link token (no session required)
+      parameters:
+        - name: token
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: Agreement data
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SignaturePage"
+        "400": { description: Invalid or expired token }
+    post:
+      operationId: submitSignature
+      tags: [signature]
+      summary: Submit typed-name e-signature
+      parameters:
+        - name: token
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SignatureInput"
+      responses:
+        "200":
+          description: Signed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OkResult"
+        "400": { description: Invalid or expired token }
+  /authorizations:
+    get:
+      operationId: listAuthorizations
+      tags: [authorizations]
+      summary: List authorizations (filterable, scoped by role)
+      parameters:
+        - name: clientId
+          in: query
+          schema: { type: string }
+        - name: vendorId
+          in: query
+          schema: { type: string }
+        - name: status
+          in: query
+          schema: { type: string }
+        - name: expiringWithinDays
+          in: query
+          schema: { type: integer }
+      responses:
+        "200":
+          description: Authorizations
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/Authorization" }
+    post:
+      operationId: createAuthorization
+      tags: [authorizations]
+      summary: Create authorization after staff review of parsed/manual data
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AuthorizationInput"
+      responses:
+        "201":
+          description: Created (response includes any warnings, e.g. max-amount)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthorizationResult"
+  /authorizations/{id}:
+    get:
+      operationId: getAuthorization
+      tags: [authorizations]
+      summary: Authorization detail with utilization
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: Authorization
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Authorization"
+        "404": { description: Not found }
+    patch:
+      operationId: updateAuthorization
+      tags: [authorizations]
+      summary: Update authorization
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AuthorizationUpdate"
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthorizationResult"
+  /authorizations/parse-pdf:
+    post:
+      operationId: parseAuthorizationPdf
+      tags: [authorizations]
+      summary: AI-assisted extraction of fields from an Alta POS PDF (draft only — staff must review)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PosPdfInput"
+      responses:
+        "200":
+          description: Parsed draft fields (never auto-committed)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PosParseResult"
+  /invoices:
+    get:
+      operationId: listInvoices
+      tags: [invoices]
+      summary: List invoices (filterable, scoped by role)
+      parameters:
+        - name: status
+          in: query
+          schema: { type: string }
+        - name: clientId
+          in: query
+          schema: { type: string }
+        - name: vendorId
+          in: query
+          schema: { type: string }
+      responses:
+        "200":
+          description: Invoices
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/Invoice" }
+    post:
+      operationId: createInvoice
+      tags: [invoices]
+      summary: Submit invoice (vendor portal, parent, or staff entry)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/InvoiceInput"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Invoice"
+  /invoices/{id}:
+    get:
+      operationId: getInvoice
+      tags: [invoices]
+      summary: Invoice detail
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: Invoice
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Invoice"
+        "404": { description: Not found }
+    patch:
+      operationId: updateInvoice
+      tags: [invoices]
+      summary: Update invoice (link authorization, approve/reject, notes)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/InvoiceUpdate"
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Invoice"
+  /invoices/{id}/validate:
+    post:
+      operationId: validateInvoice
+      tags: [invoices]
+      summary: Run the five validation checks against the linked authorization
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/InvoiceValidationInput"
+      responses:
+        "200":
+          description: Validation outcome (invoice status updated when passed or overridden)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/InvoiceValidationResult"
+  /payments:
+    get:
+      operationId: listPayments
+      tags: [payments]
+      summary: List payments (filterable, scoped by role)
+      parameters:
+        - name: clientId
+          in: query
+          schema: { type: string }
+        - name: vendorId
+          in: query
+          schema: { type: string }
+        - name: authorizationId
+          in: query
+          schema: { type: string }
+      responses:
+        "200":
+          description: Payments
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/Payment" }
+    post:
+      operationId: createPayment
+      tags: [payments]
+      summary: Manually log a payment/check (staff)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PaymentInput"
+      responses:
+        "201":
+          description: Created (auto-generates a Fee record when the placeholder rule applies)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Payment"
+  /payments/import:
+    post:
+      operationId: importCheckRegister
+      tags: [payments]
+      summary: Upload parsed check-register rows; matches to clients/vendors/invoices
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CheckRegisterImportInput"
+      responses:
+        "200":
+          description: Import outcome per row
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CheckRegisterImportResult"
+  /remittances:
+    get:
+      operationId: listRemittances
+      tags: [remittances]
+      summary: List remittances (staff)
+      parameters:
+        - name: clientId
+          in: query
+          schema: { type: string }
+        - name: status
+          in: query
+          schema: { type: string }
+      responses:
+        "200":
+          description: Remittances
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/Remittance" }
+    post:
+      operationId: createRemittance
+      tags: [remittances]
+      summary: Log a remittance line from an Alta Payment Detail Report
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RemittanceInput"
+      responses:
+        "201":
+          description: Created (auto-matched to a payment when possible)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Remittance"
+  /remittances/{id}/match:
+    post:
+      operationId: matchRemittance
+      tags: [remittances]
+      summary: Manually match a remittance line to a payment
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RemittanceMatchInput"
+      responses:
+        "200":
+          description: Matched
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Remittance"
+  /vendors:
+    get:
+      operationId: listVendors
+      tags: [vendors]
+      summary: List vendors (preferred first)
+      parameters:
+        - name: search
+          in: query
+          schema: { type: string }
+        - name: w9Status
+          in: query
+          schema: { type: string }
+        - name: active
+          in: query
+          schema: { type: boolean }
+      responses:
+        "200":
+          description: Vendors
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/Vendor" }
+    post:
+      operationId: createVendor
+      tags: [vendors]
+      summary: Add vendor (staff)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/VendorInput"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Vendor"
+  /vendors/{id}:
+    get:
+      operationId: getVendor
+      tags: [vendors]
+      summary: Vendor detail
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: Vendor
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Vendor"
+        "404": { description: Not found }
+    patch:
+      operationId: updateVendor
+      tags: [vendors]
+      summary: Update vendor (W-9 status, preferred flag, profile)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/VendorUpdate"
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Vendor"
+  /dashboard/summary:
+    get:
+      operationId: getDashboardSummary
+      tags: [dashboard]
+      summary: Program-level overview — status counts, alerts, recent activity
+      responses:
+        "200":
+          description: Summary
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DashboardSummary"
+  /reports/vendor-payments:
+    get:
+      operationId: getVendorPaymentReport
+      tags: [dashboard]
+      summary: Per-vendor payment totals (YTD; feeds Phase 2 1099s)
+      parameters:
+        - name: year
+          in: query
+          schema: { type: integer }
+      responses:
+        "200":
+          description: Vendor totals
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/VendorPaymentSummary" }
 components:
   schemas:
     HealthStatus:
       type: object
       properties:
+        status: { type: string }
+      required: [status]
+    OkResult:
+      type: object
+      properties:
+        ok: { type: boolean }
+      required: [ok]
+    LoginInput:
+      type: object
+      required: [email, password]
+      properties:
+        email: { type: string }
+        password: { type: string }
+    SessionUser:
+      type: object
+      required: [id, name, email, role]
+      properties:
+        id: { type: string }
+        name: { type: string }
+        email: { type: string }
+        role:
+          type: string
+          enum: [staff, service_coordinator, parent_guardian, self, vendor]
+        linkedRecordId: { type: ["string", "null"] }
+        linkedRecordType: { type: ["string", "null"], enum: [client, vendor, null] }
+    MagicLinkRequestInput:
+      type: object
+      required: [email]
+      properties:
+        email: { type: string }
+    MagicLinkConsumeInput:
+      type: object
+      required: [token]
+      properties:
+        token: { type: string }
+    MagicLinkResult:
+      type: object
+      required: [sent]
+      properties:
+        sent: { type: boolean }
+        devLink: { type: ["string", "null"], description: "Development only: the link that would have been emailed" }
+    User:
+      type: object
+      required: [id, name, email, role, active]
+      properties:
+        id: { type: string }
+        name: { type: string }
+        email: { type: string }
+        phone: { type: ["string", "null"] }
+        role:
+          type: string
+          enum: [staff, service_coordinator, parent_guardian, self, vendor]
+        linkedRecordId: { type: ["string", "null"] }
+        linkedRecordType: { type: ["string", "null"], enum: [client, vendor, null] }
+        active: { type: boolean }
+        lastLogin: { type: ["string", "null"] }
+        createdAt: { type: ["string", "null"] }
+    UserInput:
+      type: object
+      required: [name, email, role]
+      properties:
+        name: { type: string }
+        email: { type: string }
+        phone: { type: string }
+        role:
+          type: string
+          enum: [staff, service_coordinator, parent_guardian, self, vendor]
+        password: { type: string, description: "Initial password for staff/coordinator accounts" }
+        linkedRecordId: { type: string }
+        linkedRecordType: { type: string, enum: [client, vendor] }
+    UserUpdate:
+      type: object
+      properties:
+        name: { type: string }
+        phone: { type: string }
+        role:
+          type: string
+          enum: [staff, service_coordinator, parent_guardian, self, vendor]
+        active: { type: boolean }
+        password: { type: string }
+    AuditEntry:
+      type: object
+      required: [id, action, createdAt]
+      properties:
+        id: { type: string }
+        userId: { type: ["string", "null"] }
+        userName: { type: ["string", "null"] }
+        action: { type: string }
+        entityType: { type: ["string", "null"] }
+        entityId: { type: ["string", "null"] }
+        detail: { type: ["string", "null"] }
+        createdAt: { type: string }
+    Client:
+      type: object
+      required: [id, firstName, lastName, dateOfBirth, uciNumber, status]
+      properties:
+        id: { type: string }
+        firstName: { type: string }
+        lastName: { type: string }
+        dateOfBirth: { type: string }
+        uciNumber: { type: string }
+        address: { type: ["string", "null"] }
+        phone: { type: ["string", "null"] }
+        email: { type: ["string", "null"] }
+        status: { type: string, enum: [active, inactive, closed] }
+        regionalCenter: { type: ["string", "null"] }
+        preferredLanguage: { type: ["string", "null"] }
+        assignedCoordinatorId: { type: ["string", "null"] }
+        assignedCoordinatorName: { type: ["string", "null"] }
+        isMinor: { type: ["boolean", "null"] }
+        familyRepName: { type: ["string", "null"] }
+        familyRepPhone: { type: ["string", "null"] }
+        familyRepEmail: { type: ["string", "null"] }
+        familyRepAddress: { type: ["string", "null"] }
+        createdAt: { type: ["string", "null"] }
+    ClientInput:
+      type: object
+      required: [firstName, lastName, dateOfBirth, uciNumber]
+      properties:
+        firstName: { type: string }
+        lastName: { type: string }
+        dateOfBirth: { type: string }
+        uciNumber: { type: string }
+        address: { type: string }
+        phone: { type: string }
+        email: { type: string }
+        status: { type: string, enum: [active, inactive, closed] }
+        regionalCenter: { type: string }
+        preferredLanguage: { type: string }
+        isMinor: { type: boolean }
+        familyRepName: { type: string }
+        familyRepPhone: { type: string }
+        familyRepEmail: { type: string }
+        familyRepAddress: { type: string }
+    ClientUpdate:
+      type: object
+      properties:
+        firstName: { type: string }
+        lastName: { type: string }
+        dateOfBirth: { type: string }
+        uciNumber: { type: string }
+        address: { type: string }
+        phone: { type: string }
+        email: { type: string }
+        status: { type: string, enum: [active, inactive, closed] }
+        regionalCenter: { type: string }
+        preferredLanguage: { type: string }
+        assignedCoordinatorId: { type: ["string", "null"] }
+        isMinor: { type: boolean }
+        familyRepName: { type: string }
+        familyRepPhone: { type: string }
+        familyRepEmail: { type: string }
+        familyRepAddress: { type: string }
+    ClientCase:
+      type: object
+      required: [client, referrals, authorizations, invoices, payments, remittances]
+      properties:
+        client: { $ref: "#/components/schemas/Client" }
+        referrals:
+          type: array
+          items: { $ref: "#/components/schemas/Referral" }
+        authorizations:
+          type: array
+          items: { $ref: "#/components/schemas/Authorization" }
+        invoices:
+          type: array
+          items: { $ref: "#/components/schemas/Invoice" }
+        payments:
+          type: array
+          items: { $ref: "#/components/schemas/Payment" }
+        remittances:
+          type: array
+          items: { $ref: "#/components/schemas/Remittance" }
+    ReferralIntakeFields:
+      type: object
+      description: Structured referral form data (Section 9 field list)
+      properties:
+        regionalCenterName: { type: string }
+        coordinatorName: { type: string }
+        coordinatorEmail: { type: string }
+        coordinatorPhone: { type: string }
+        vendorAcceptsChecks: { type: boolean }
+        vendorName: { type: string }
+        vendorEmail: { type: string }
+        vendorPhone: { type: string }
+        vendorContactPerson: { type: string }
+        vendorServiceStreet: { type: string }
+        vendorServiceCity: { type: string }
+        vendorServiceZip: { type: string }
+        vendorServiceState: { type: string }
+        vendorBillingDifferent: { type: string, enum: [yes, no, unknown] }
+        vendorBillingStreet: { type: string }
+        vendorBillingCity: { type: string }
+        vendorBillingZip: { type: string }
+        vendorBillingState: { type: string }
+        serviceType: { type: string, enum: [direct_pay_459, reimbursement_024] }
+        activityDescription: { type: string }
+        serviceStartDate: { type: string }
+        serviceEndDate: { type: string }
+        posNumber: { type: string }
+        posStartDate: { type: string }
+        posEndDate: { type: string }
+        clientFirstName: { type: string }
+        clientLastName: { type: string }
+        clientDob: { type: string }
+        clientUci: { type: string }
+        preferredLanguage: { type: string }
+        familyRepName: { type: string }
+        clientIsMinor: { type: boolean }
+        contactPhone: { type: string }
+        contactEmail: { type: string }
+        contactStreet: { type: string }
+        contactCity: { type: string }
+        contactZip: { type: string }
+        contactState: { type: string }
+    Referral:
+      type: object
+      required: [id, clientId, referralDate, status]
+      properties:
+        id: { type: string }
+        clientId: { type: string }
+        clientName: { type: ["string", "null"] }
+        serviceCoordinatorId: { type: ["string", "null"] }
+        coordinatorName: { type: ["string", "null"] }
+        referralDate: { type: string }
         status:
           type: string
-      required:
-        - status
-
+          enum: [intake, pending_signature, pending_auth, pending_w9, pending_invoice, active, closed]
+        submittedVia: { type: ["string", "null"], enum: [portal, staff_manual_entry, null] }
+        intakeFields: { $ref: "#/components/schemas/ReferralIntakeFields" }
+        parentEmail: { type: ["string", "null"] }
+        parentSignedAt: { type: ["string", "null"] }
+        signedByName: { type: ["string", "null"] }
+        altaAuthReceivedAt: { type: ["string", "null"] }
+        serviceFrequency: { type: ["string", "null"], enum: [one_time, monthly, null] }
+        notes: { type: ["string", "null"] }
+        createdAt: { type: ["string", "null"] }
+    ReferralInput:
+      type: object
+      required: [intakeFields]
+      properties:
+        intakeFields: { $ref: "#/components/schemas/ReferralIntakeFields" }
+        submittedVia: { type: string, enum: [portal, staff_manual_entry] }
+        parentEmail: { type: string }
+        serviceFrequency: { type: string, enum: [one_time, monthly] }
+        notes: { type: string }
+    ReferralUpdate:
+      type: object
+      properties:
+        status:
+          type: string
+          enum: [intake, pending_signature, pending_auth, pending_w9, pending_invoice, active, closed]
+        serviceCoordinatorId: { type: ["string", "null"] }
+        parentEmail: { type: string }
+        serviceFrequency: { type: string, enum: [one_time, monthly] }
+        notes: { type: string }
+        altaAuthReceivedAt: { type: ["string", "null"] }
+    SignaturePage:
+      type: object
+      required: [referralId, clientName, activityDescription, alreadySigned]
+      properties:
+        referralId: { type: string }
+        clientName: { type: string }
+        activityDescription: { type: ["string", "null"] }
+        vendorName: { type: ["string", "null"] }
+        serviceStartDate: { type: ["string", "null"] }
+        serviceEndDate: { type: ["string", "null"] }
+        serviceType: { type: ["string", "null"] }
+        alreadySigned: { type: boolean }
+    SignatureInput:
+      type: object
+      required: [typedName, agreed]
+      properties:
+        typedName: { type: string, minLength: 1 }
+        agreed: { type: boolean }
+        createAccount: { type: boolean }
+        password: { type: string }
+    Authorization:
+      type: object
+      required: [id, clientId, authNumber, serviceCode, paymentType, servicePeriodStart, servicePeriodEnd, maxPeriodAmount, status]
+      properties:
+        id: { type: string }
+        clientId: { type: string }
+        clientName: { type: ["string", "null"] }
+        vendorId: { type: ["string", "null"] }
+        vendorName: { type: ["string", "null"] }
+        authNumber: { type: string }
+        serviceCode: { type: string, enum: ["459", "024", "490"] }
+        paymentType: { type: string, enum: [direct_payment, reimbursement, fee] }
+        activityDescription: { type: ["string", "null"] }
+        servicePeriodStart: { type: string }
+        servicePeriodEnd: { type: string }
+        monthlyAmount: { type: ["string", "null"] }
+        oneTimeAmount: { type: ["string", "null"] }
+        maxPeriodAmount: { type: string }
+        units: { type: ["integer", "null"] }
+        status: { type: string, enum: [active, expired, pending, exhausted] }
+        posPdfUrl: { type: ["string", "null"] }
+        receivedDate: { type: ["string", "null"] }
+        totalPaid: { type: ["string", "null"] }
+        remainingAmount: { type: ["string", "null"] }
+        daysUntilExpiry: { type: ["integer", "null"] }
+    AuthorizationInput:
+      type: object
+      required: [clientId, authNumber, serviceCode, servicePeriodStart, servicePeriodEnd, maxPeriodAmount]
+      properties:
+        clientId: { type: string }
+        vendorId: { type: ["string", "null"] }
+        authNumber: { type: string }
+        serviceCode: { type: string, enum: ["459", "024", "490"] }
+        paymentType: { type: string, enum: [direct_payment, reimbursement, fee], description: "Optional override; derived from serviceCode by default" }
+        activityDescription: { type: string }
+        servicePeriodStart: { type: string }
+        servicePeriodEnd: { type: string }
+        monthlyAmount: { type: string }
+        oneTimeAmount: { type: string }
+        maxPeriodAmount: { type: string }
+        units: { type: integer }
+        status: { type: string, enum: [active, expired, pending, exhausted] }
+        receivedDate: { type: string }
+        acceptMaxAmountWarning: { type: boolean, description: "Set true to save despite the max-amount data-quality warning" }
+    AuthorizationUpdate:
+      type: object
+      properties:
+        vendorId: { type: ["string", "null"] }
+        authNumber: { type: string }
+        serviceCode: { type: string, enum: ["459", "024", "490"] }
+        paymentType: { type: string, enum: [direct_payment, reimbursement, fee] }
+        activityDescription: { type: string }
+        servicePeriodStart: { type: string }
+        servicePeriodEnd: { type: string }
+        monthlyAmount: { type: ["string", "null"] }
+        oneTimeAmount: { type: ["string", "null"] }
+        maxPeriodAmount: { type: string }
+        units: { type: ["integer", "null"] }
+        status: { type: string, enum: [active, expired, pending, exhausted] }
+        receivedDate: { type: string }
+        acceptMaxAmountWarning: { type: boolean }
+    AuthorizationResult:
+      type: object
+      required: [saved]
+      properties:
+        saved: { type: boolean }
+        authorization: { $ref: "#/components/schemas/Authorization" }
+        warnings:
+          type: array
+          items: { type: string }
+    PosPdfInput:
+      type: object
+      required: [pdfBase64]
+      properties:
+        pdfBase64: { type: string, description: "Base64-encoded POS PDF" }
+        fileName: { type: string }
+    PosParseResult:
+      type: object
+      required: [success]
+      properties:
+        success: { type: boolean }
+        error: { type: ["string", "null"] }
+        fields:
+          type: object
+          description: Extracted draft values — staff must review before saving
+          properties:
+            clientName: { type: ["string", "null"] }
+            clientAddress: { type: ["string", "null"] }
+            clientPhone: { type: ["string", "null"] }
+            uciNumber: { type: ["string", "null"] }
+            authNumber: { type: ["string", "null"] }
+            serviceCode: { type: ["string", "null"] }
+            activityDescription: { type: ["string", "null"] }
+            servicePeriodStart: { type: ["string", "null"] }
+            servicePeriodEnd: { type: ["string", "null"] }
+            units: { type: ["integer", "null"] }
+            monthlyAmount: { type: ["string", "null"] }
+            maxPeriodAmount: { type: ["string", "null"] }
+            caseworkerName: { type: ["string", "null"] }
+    Invoice:
+      type: object
+      required: [id, clientId, submittedByRole, submittedDate, serviceMonth, amountRequested, paymentType, status]
+      properties:
+        id: { type: string }
+        clientId: { type: string }
+        clientName: { type: ["string", "null"] }
+        authorizationId: { type: ["string", "null"] }
+        authNumber: { type: ["string", "null"] }
+        vendorId: { type: ["string", "null"] }
+        vendorName: { type: ["string", "null"] }
+        submittedByRole: { type: string, enum: [vendor, parent, staff] }
+        submittedDate: { type: string }
+        serviceMonth: { type: string, description: "YYYY-MM" }
+        amountRequested: { type: string }
+        paymentType: { type: string, enum: [direct_payment, reimbursement] }
+        documentUrl: { type: ["string", "null"] }
+        status: { type: string, enum: [pending_review, validated, approved, rejected, duplicate] }
+        reviewedBy: { type: ["string", "null"] }
+        reviewedByName: { type: ["string", "null"] }
+        reviewedAt: { type: ["string", "null"] }
+        notes: { type: ["string", "null"] }
+        createdAt: { type: ["string", "null"] }
+    InvoiceInput:
+      type: object
+      required: [clientId, serviceMonth, amountRequested, paymentType]
+      properties:
+        clientId: { type: string }
+        authorizationId: { type: ["string", "null"] }
+        vendorId: { type: ["string", "null"] }
+        serviceMonth: { type: string }
+        amountRequested: { type: string }
+        paymentType: { type: string, enum: [direct_payment, reimbursement] }
+        documentUrl: { type: string }
+        notes: { type: string }
+    InvoiceUpdate:
+      type: object
+      properties:
+        authorizationId: { type: ["string", "null"] }
+        vendorId: { type: ["string", "null"] }
+        serviceMonth: { type: string }
+        amountRequested: { type: string }
+        paymentType: { type: string, enum: [direct_payment, reimbursement] }
+        status: { type: string, enum: [pending_review, validated, approved, rejected, duplicate] }
+        notes: { type: string }
+    InvoiceValidationInput:
+      type: object
+      properties:
+        overrideDuplicate: { type: boolean }
+        overrideJustification: { type: string, description: "Required when overriding the duplicate-payment stop" }
+    InvoiceValidationCheck:
+      type: object
+      required: [check, passed, message]
+      properties:
+        check: { type: string }
+        passed: { type: boolean }
+        message: { type: string }
+    InvoiceValidationResult:
+      type: object
+      required: [valid, checks, status]
+      properties:
+        valid: { type: boolean }
+        status: { type: string }
+        checks:
+          type: array
+          items: { $ref: "#/components/schemas/InvoiceValidationCheck" }
+    Payment:
+      type: object
+      required: [id, clientId, qbCheckNumber, checkDate, amount, paymentType, source]
+      properties:
+        id: { type: string }
+        clientId: { type: string }
+        clientName: { type: ["string", "null"] }
+        authorizationId: { type: ["string", "null"] }
+        authNumber: { type: ["string", "null"] }
+        vendorId: { type: ["string", "null"] }
+        vendorName: { type: ["string", "null"] }
+        invoiceId: { type: ["string", "null"] }
+        qbCheckNumber: { type: string }
+        checkDate: { type: string }
+        amount: { type: string }
+        paymentMonth: { type: ["string", "null"] }
+        paymentType: { type: string, enum: [direct_payment, reimbursement, fee] }
+        source: { type: string, enum: [quickbooks, manual] }
+        loggedBy: { type: ["string", "null"] }
+        remitted: { type: ["boolean", "null"] }
+        createdAt: { type: ["string", "null"] }
+    PaymentInput:
+      type: object
+      required: [clientId, qbCheckNumber, checkDate, amount, paymentType]
+      properties:
+        clientId: { type: string }
+        authorizationId: { type: ["string", "null"] }
+        vendorId: { type: ["string", "null"] }
+        invoiceId: { type: ["string", "null"] }
+        qbCheckNumber: { type: string }
+        checkDate: { type: string }
+        amount: { type: string }
+        paymentMonth: { type: string }
+        paymentType: { type: string, enum: [direct_payment, reimbursement, fee] }
+    CheckRegisterRow:
+      type: object
+      required: [qbCheckNumber, checkDate, amount]
+      properties:
+        qbCheckNumber: { type: string }
+        checkDate: { type: string }
+        amount: { type: string }
+        payeeName: { type: string }
+        clientName: { type: string }
+        memo: { type: string }
+    CheckRegisterImportInput:
+      type: object
+      required: [rows]
+      properties:
+        rows:
+          type: array
+          items: { $ref: "#/components/schemas/CheckRegisterRow" }
+    CheckRegisterImportRowResult:
+      type: object
+      required: [qbCheckNumber, outcome]
+      properties:
+        qbCheckNumber: { type: string }
+        outcome: { type: string, enum: [imported, skipped_duplicate, unmatched] }
+        message: { type: ["string", "null"] }
+        paymentId: { type: ["string", "null"] }
+    CheckRegisterImportResult:
+      type: object
+      required: [imported, skipped, unmatched, results]
+      properties:
+        imported: { type: integer }
+        skipped: { type: integer }
+        unmatched: { type: integer }
+        results:
+          type: array
+          items: { $ref: "#/components/schemas/CheckRegisterImportRowResult" }
+    Remittance:
+      type: object
+      required: [id, clientId, remittanceDate, amount, status, source, autoMatched]
+      properties:
+        id: { type: string }
+        clientId: { type: string }
+        clientName: { type: ["string", "null"] }
+        authorizationId: { type: ["string", "null"] }
+        authNumber: { type: ["string", "null"] }
+        altaReference: { type: ["string", "null"] }
+        remittanceDate: { type: string }
+        amount: { type: string }
+        paymentMonth: { type: ["string", "null"] }
+        status: { type: string, enum: [pending, received, matched] }
+        source: { type: string, enum: [alta_regional, manual] }
+        matchedPaymentId: { type: ["string", "null"] }
+        autoMatched: { type: boolean }
+        remittanceBatchId: { type: ["string", "null"] }
+    RemittanceInput:
+      type: object
+      required: [clientId, remittanceDate, amount]
+      properties:
+        clientId: { type: string }
+        authorizationId: { type: ["string", "null"] }
+        altaReference: { type: string }
+        remittanceDate: { type: string }
+        amount: { type: string }
+        paymentMonth: { type: string }
+        source: { type: string, enum: [alta_regional, manual] }
+        remittanceBatchId: { type: string }
+    RemittanceMatchInput:
+      type: object
+      required: [paymentId]
+      properties:
+        paymentId: { type: string }
+    Vendor:
+      type: object
+      required: [id, name, w9Status, preferred, active]
+      properties:
+        id: { type: string }
+        name: { type: string }
+        altaVendorNumber: { type: ["string", "null"] }
+        ein: { type: ["string", "null"] }
+        billingAddress: { type: ["string", "null"] }
+        serviceAddress: { type: ["string", "null"] }
+        phone: { type: ["string", "null"] }
+        email: { type: ["string", "null"] }
+        contactPerson: { type: ["string", "null"] }
+        w9Status: { type: string, enum: [pending, on_file, expired] }
+        w9DocumentUrl: { type: ["string", "null"] }
+        preferred: { type: boolean }
+        active: { type: boolean }
+        createdAt: { type: ["string", "null"] }
+    VendorInput:
+      type: object
+      required: [name]
+      properties:
+        name: { type: string }
+        altaVendorNumber: { type: string }
+        ein: { type: string }
+        billingAddress: { type: string }
+        serviceAddress: { type: string }
+        phone: { type: string }
+        email: { type: string }
+        contactPerson: { type: string }
+        w9Status: { type: string, enum: [pending, on_file, expired] }
+        preferred: { type: boolean }
+    VendorUpdate:
+      type: object
+      properties:
+        name: { type: string }
+        altaVendorNumber: { type: string }
+        ein: { type: string }
+        billingAddress: { type: string }
+        serviceAddress: { type: string }
+        phone: { type: string }
+        email: { type: string }
+        contactPerson: { type: string }
+        w9Status: { type: string, enum: [pending, on_file, expired] }
+        w9DocumentUrl: { type: string }
+        preferred: { type: boolean }
+        active: { type: boolean }
+    StatusCount:
+      type: object
+      required: [status, count]
+      properties:
+        status: { type: string }
+        count: { type: integer }
+    DashboardSummary:
+      type: object
+      required: [referralsByStatus, alerts, recentActivity, totals]
+      properties:
+        referralsByStatus:
+          type: array
+          items: { $ref: "#/components/schemas/StatusCount" }
+        totals:
+          type: object
+          required: [activeClients, activeAuthorizations, pendingInvoices, vendorsMissingW9]
+          properties:
+            activeClients: { type: integer }
+            activeAuthorizations: { type: integer }
+            pendingInvoices: { type: integer }
+            vendorsMissingW9: { type: integer }
+            paymentsThisMonth: { type: ["string", "null"] }
+            unmatchedRemittances: { type: integer }
+        alerts:
+          type: array
+          items:
+            type: object
+            required: [kind, message]
+            properties:
+              kind: { type: string, enum: [expiring_authorization, missing_document, pending_w9, unmatched_remittance, pending_signature] }
+              message: { type: string }
+              entityType: { type: ["string", "null"] }
+              entityId: { type: ["string", "null"] }
+        recentActivity:
+          type: array
+          items: { $ref: "#/components/schemas/AuditEntry" }
+    VendorPaymentSummary:
+      type: object
+      required: [vendorId, vendorName, totalPaid, paymentCount, year]
+      properties:
+        vendorId: { type: string }
+        vendorName: { type: string }
+        einOnFile: { type: boolean }
+        totalPaid: { type: string }
+        paymentCount: { type: integer }
+        year: { type: integer }

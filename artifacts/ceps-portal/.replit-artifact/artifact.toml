@@ -1,0 +1,28 @@
+kind = "web"
+previewPath = "/"
+title = "CEPS Portal"
+description = "A web application for CEPS (Community Engaged Payee Support), a nonprofit administering a Purchase of Service / Financial Management Services program for individuals with developmental disabilities funded through California Regional Centers. Replaces a paper/Excel/QuickBooks workflow with role-based portals for CEPS staff, Regional Center service coordinators, parents/guardians, self-representing clients, and vendors: referral intake, e-signature, POS authorization management, invoice validation, payment and remittance logging, vendor management, and reporting."
+version = "1.0.0"
+id = "artifacts/ceps-portal"
+router = "path"
+
+[[services]]
+name = "web"
+paths = [ "/" ]
+localPort = 18587
+
+[services.development]
+run = "pnpm --filter @workspace/ceps-portal run dev"
+
+[services.production]
+build = [ "pnpm", "--filter", "@workspace/ceps-portal", "run", "build" ]
+serve = "static"
+publicDir = "artifacts/ceps-portal/dist/public"
+
+[[services.production.rewrites]]
+from = "/*"
+to = "/index.html"
+
+[services.env]
+PORT = "18587"
+BASE_PATH = "/"

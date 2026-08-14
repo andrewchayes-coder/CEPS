@@ -1,0 +1,1 @@
+- [Orval zod v4 import fix](orval-zod-v4.md) — regenerated lib/api-zod imports `zod` but emits zod-v4 API (`zod.int()`); re-point the generated import to `zod/v4` after every codegen.

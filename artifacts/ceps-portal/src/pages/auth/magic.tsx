@@ -1,6 +1,7 @@
 import React, { useEffect } from 'react';
 import { useLocation } from 'wouter';
-import { useConsumeMagicLink } from '@workspace/api-client-react';
+import { useConsumeMagicLink, getGetCurrentUserQueryKey } from '@workspace/api-client-react';
+import { useQueryClient } from '@tanstack/react-query';
 import { useToast } from '@/hooks/use-toast';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Loader2 } from 'lucide-react';
@@ -8,6 +9,7 @@ import { Loader2 } from 'lucide-react';
 export default function MagicLinkConsumePage() {
   const [location, setLocation] = useLocation();
   const { toast } = useToast();
+  const queryClient = useQueryClient();
   const consumeMutation = useConsumeMagicLink();
 
   useEffect(() => {
@@ -25,12 +27,13 @@ export default function MagicLinkConsumePage() {
     }
 
     consumeMutation.mutate({ data: { token } }, {
-      onSuccess: () => {
+      onSuccess: (user) => {
+        queryClient.setQueryData(getGetCurrentUserQueryKey(), user);
         toast({
           title: 'Welcome Back',
           description: 'You have successfully signed in.',
         });
-        setLocation('/');
+        window.location.assign(import.meta.env.BASE_URL);
       },
       onError: (err: any) => {
         toast({

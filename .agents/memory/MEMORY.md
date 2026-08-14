@@ -1,1 +1,2 @@
 - [Orval zod v4 import fix](orval-zod-v4.md) — regenerated lib/api-zod imports `zod` but emits zod-v4 API (`zod.int()`); re-point the generated import to `zod/v4` after every codegen.
+- [Preview iframe session cookies](preview-auth-cookies.md) — cookie auth needs SameSite=None; Secure; Partitioned; full page load after login; dedupe react-query in vite.

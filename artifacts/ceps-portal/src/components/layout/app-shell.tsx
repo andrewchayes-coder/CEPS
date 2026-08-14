@@ -1,3 +1,4 @@
+import { BrandLogo } from '@/components/brand-logo';
 import React from 'react';
 import { useAuth } from '@/components/auth/auth-provider';
 import { Link, useLocation } from 'wouter';
@@ -59,11 +60,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     <div className="flex h-screen bg-background">
       {/* Sidebar */}
       <aside className="w-64 border-r bg-card flex flex-col hidden md:flex shrink-0">
-        <div className="h-16 flex items-center px-6 border-b shrink-0">
-          <div className="flex items-center gap-2 text-primary font-bold text-xl tracking-tight">
-            {/* <BrandMark /> */}
-            <span>CEPS</span>
-          </div>
+        <div className="flex items-center px-4 py-5 border-b shrink-0">
+          <BrandLogo className="h-auto w-full" />
         </div>
         
         <div className="flex-1 overflow-y-auto py-4 px-3 flex flex-col gap-1">
@@ -103,7 +101,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       <main className="flex-1 flex flex-col min-w-0 overflow-hidden">
         {/* Mobile Header */}
         <header className="h-16 border-b bg-card flex items-center justify-between px-4 md:hidden shrink-0">
-          <div className="text-primary font-bold text-lg tracking-tight">CEPS</div>
+          <BrandLogo className="h-7" />
           <Button variant="ghost" size="sm" onClick={handleLogout}>
             <LogOut className="w-4 h-4" />
           </Button>

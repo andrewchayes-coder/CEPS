@@ -1,3 +1,4 @@
+import { BrandLogo } from '@/components/brand-logo';
 import React, { useState } from 'react';
 import { useLocation, useParams } from 'wouter';
 import { useGetSignaturePage, useSubmitSignature } from '@workspace/api-client-react';
@@ -96,7 +97,7 @@ export default function SignaturePage() {
       <Card className="w-full max-w-2xl border-t-4 border-t-primary shadow-lg">
         <CardHeader className="text-center pb-8 border-b">
           <div className="flex justify-center mb-4">
-            <FileSignature className="w-12 h-12 text-primary" />
+            <BrandLogo className="h-12" />
           </div>
           <CardTitle className="text-2xl">Service Authorization Agreement</CardTitle>
           <CardDescription className="text-base mt-2">

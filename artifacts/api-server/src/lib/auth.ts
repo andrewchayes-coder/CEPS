@@ -35,6 +35,9 @@ export async function createSession(res: Response, userId: string): Promise<void
         // cross-site context — SameSite=Lax cookies are dropped there.
         sameSite: "none",
         secure: true,
+        // Chrome blocks unpartitioned third-party cookies; CHIPS keeps the
+        // session working inside the embedded preview iframe.
+        partitioned: true,
         maxAge: SESSION_DAYS * 24 * 60 * 60 * 1000,
         path: "/",
       })

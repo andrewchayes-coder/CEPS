@@ -1,8 +1,10 @@
+import { BrandLogo } from '@/components/brand-logo';
 import React, { useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
-import { useLogin, useRequestMagicLink } from '@workspace/api-client-react';
+import { useLogin, useRequestMagicLink, getGetCurrentUserQueryKey } from '@workspace/api-client-react';
+import { useQueryClient } from '@tanstack/react-query';
 import { useLocation } from 'wouter';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -24,6 +26,7 @@ const magicLinkSchema = z.object({
 export default function LoginPage() {
   const [, setLocation] = useLocation();
   const { toast } = useToast();
+  const queryClient = useQueryClient();
   const loginMutation = useLogin();
   const magicLinkMutation = useRequestMagicLink();
 
@@ -46,8 +49,10 @@ export default function LoginPage() {
 
   const quickLogin = (email: string) => {
     loginMutation.mutate({ data: { email, password: 'ceps-demo-2026' } }, {
-      onSuccess: () => {
-        setLocation('/');
+      onSuccess: (user) => {
+        queryClient.setQueryData(getGetCurrentUserQueryKey(), user);
+        // Full page load: guarantees a clean authenticated boot of the app.
+        window.location.assign(import.meta.env.BASE_URL);
       },
       onError: (err: any) => {
         toast({
@@ -61,8 +66,9 @@ export default function LoginPage() {
 
   const onPasswordSubmit = (values: z.infer<typeof loginSchema>) => {
     loginMutation.mutate({ data: values }, {
-      onSuccess: () => {
-        setLocation('/');
+      onSuccess: (user) => {
+        queryClient.setQueryData(getGetCurrentUserQueryKey(), user);
+        window.location.assign(import.meta.env.BASE_URL);
       },
       onError: (err: any) => {
         toast({
@@ -100,8 +106,7 @@ export default function LoginPage() {
     <div className="min-h-screen flex flex-col items-center justify-center bg-muted/30 p-4">
       <div className="w-full max-w-md">
         <div className="mb-8 text-center">
-          <h1 className="text-3xl font-bold text-primary tracking-tight">CEPS</h1>
-          <p className="text-muted-foreground mt-2 text-sm">Community Engaged Payee Support</p>
+          <BrandLogo className="h-auto w-full" />
         </div>
 
         <Tabs defaultValue="password" className="w-full">

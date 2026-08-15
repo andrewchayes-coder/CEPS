@@ -108,8 +108,9 @@ describe("GET /import/:entity/template", () => {
     // Optional fields do NOT.
     expect(header).toContain("Regional Center");
     expect(header).not.toContain("Regional Center *");
-    // Example row present.
+    // Example row present and clearly marked as sample data.
     expect(example).toContain("UCI-0001");
+    expect(example).toContain("EXAMPLE (delete this row):");
   });
 
   it("404s on an unknown entity", async () => {

@@ -17,6 +17,7 @@ import {
   type RawRow,
   parseCell,
   normalizeHeader,
+  EXAMPLE_ROW_MARKER,
 } from "./importRegistry";
 
 export interface ValidatedRow {
@@ -82,17 +83,29 @@ export function validateRows(def: EntityDef, grid: string[][], ctx: ResolveConte
   grid.slice(1).forEach((r, i) => {
     const rowNumber = i + 2; // 1-based, header is row 1
 
-    // Guard: the template ships with one hardcoded example row. If it's
-    // uploaded unedited, refuse it explicitly instead of importing fake data.
-    const isExampleRow = def.fields.every((field) => {
+    // Guard: the template ships with one hardcoded example row (its first cell
+    // carries EXAMPLE_ROW_MARKER). If it's uploaded unedited — with or without
+    // the marker — refuse it explicitly instead of importing fake data.
+    const cellFor = (field: (typeof def.fields)[number]): string => {
       const idx = colOf.get(field.key);
-      const raw = (idx === undefined ? "" : (r[idx] ?? "")).trim();
-      return raw === "" || raw === field.example.trim();
-    }) && def.fields.some((field) => {
+      let raw = (idx === undefined ? "" : (r[idx] ?? "")).trim();
+      if (raw.startsWith(EXAMPLE_ROW_MARKER)) raw = raw.slice(EXAMPLE_ROW_MARKER.length).trim();
+      return raw;
+    };
+    const hasMarker = def.fields.some((field) => {
       const idx = colOf.get(field.key);
-      const raw = (idx === undefined ? "" : (r[idx] ?? "")).trim();
-      return raw !== "" && raw === field.example.trim();
+      return (idx === undefined ? "" : (r[idx] ?? "")).trim().startsWith(EXAMPLE_ROW_MARKER);
     });
+    const isExampleRow =
+      hasMarker ||
+      (def.fields.every((field) => {
+        const raw = cellFor(field);
+        return raw === "" || raw === field.example.trim();
+      }) &&
+        def.fields.some((field) => {
+          const raw = cellFor(field);
+          return raw !== "" && raw === field.example.trim();
+        }));
     if (isExampleRow) {
       rows.push({
         rowNumber,

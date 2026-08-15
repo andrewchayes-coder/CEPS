@@ -418,9 +418,18 @@ export function templateHeaderRow(def: EntityDef): string {
   return def.fields.map((f) => csvEscape(f.required ? `${f.header} *` : f.header)).join(",");
 }
 
+/**
+ * Marker prepended to the first cell of the template's example row so it is
+ * unmistakably sample data. The validator recognizes this prefix (and the
+ * unmarked example values) and rejects the row if it is uploaded unedited.
+ */
+export const EXAMPLE_ROW_MARKER = "EXAMPLE (delete this row):";
+
 /** Build the example/instruction row string from each field's example. */
 export function templateExampleRow(def: EntityDef): string {
-  return def.fields.map((f) => csvEscape(f.example)).join(",");
+  return def.fields
+    .map((f, i) => csvEscape(i === 0 ? `${EXAMPLE_ROW_MARKER} ${f.example}` : f.example))
+    .join(",");
 }
 
 /**

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { useUpdatePayment } from '@workspace/api-client-react';
+import { useUpdatePayment, useListVendors, useListInvoices, useListAuthorizations } from '@workspace/api-client-react';
 import type { PaymentUpdate } from '@workspace/api-client-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -45,6 +45,9 @@ type Props = {
 export function EditPaymentDialog({ id, payment, onSaved }: Props) {
   const { toast } = useToast();
   const updatePayment = useUpdatePayment();
+  const { data: vendors } = useListVendors();
+  const { data: invoices } = useListInvoices();
+  const { data: authorizations } = useListAuthorizations();
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState({
     qbCheckNumber: payment.qbCheckNumber,
@@ -52,9 +55,9 @@ export function EditPaymentDialog({ id, payment, onSaved }: Props) {
     amount: payment.amount,
     paymentMonth: payment.paymentMonth ?? '',
     paymentType: payment.paymentType,
-    vendorId: payment.vendorId ?? '',
-    invoiceId: payment.invoiceId ?? '',
-    authorizationId: payment.authorizationId ?? '',
+    vendorId: payment.vendorId ?? 'none',
+    invoiceId: payment.invoiceId ?? 'none',
+    authorizationId: payment.authorizationId ?? 'none',
   });
 
   const set = (k: string, v: string) => setForm((p) => ({ ...p, [k]: v }));
@@ -66,9 +69,9 @@ export function EditPaymentDialog({ id, payment, onSaved }: Props) {
       amount: form.amount,
       paymentMonth: form.paymentMonth === '' ? null : form.paymentMonth,
       paymentType: form.paymentType as PaymentUpdate['paymentType'],
-      vendorId: form.vendorId === '' ? null : form.vendorId,
-      invoiceId: form.invoiceId === '' ? null : form.invoiceId,
-      authorizationId: form.authorizationId === '' ? null : form.authorizationId,
+      vendorId: form.vendorId === 'none' ? null : form.vendorId,
+      invoiceId: form.invoiceId === 'none' ? null : form.invoiceId,
+      authorizationId: form.authorizationId === 'none' ? null : form.authorizationId,
     };
     updatePayment.mutate(
       { id, data },
@@ -124,16 +127,44 @@ export function EditPaymentDialog({ id, payment, onSaved }: Props) {
             </Select>
           </div>
           <div className="space-y-2">
-            <Label>Vendor ID</Label>
-            <Input value={form.vendorId} onChange={(e) => set('vendorId', e.target.value)} placeholder="Optional" data-testid="input-payment-vendor-id" />
+            <Label>Vendor</Label>
+            <Select value={form.vendorId} onValueChange={(v) => set('vendorId', v)}>
+              <SelectTrigger data-testid="select-payment-vendor-id"><SelectValue placeholder="None" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="none">None</SelectItem>
+                {vendors?.map((v) => (
+                  <SelectItem key={v.id} value={v.id}>{v.name}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
           <div className="space-y-2">
-            <Label>Invoice ID</Label>
-            <Input value={form.invoiceId} onChange={(e) => set('invoiceId', e.target.value)} placeholder="Optional" data-testid="input-payment-invoice-id" />
+            <Label>Invoice</Label>
+            <Select value={form.invoiceId} onValueChange={(v) => set('invoiceId', v)}>
+              <SelectTrigger data-testid="select-payment-invoice-id"><SelectValue placeholder="None" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="none">None</SelectItem>
+                {invoices?.map((i) => (
+                  <SelectItem key={i.id} value={i.id}>
+                    {`${i.clientName ?? 'Unknown'} – ${i.serviceMonth} – $${parseFloat(i.amountRequested).toFixed(2)}`}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
           <div className="space-y-2">
-            <Label>Authorization ID</Label>
-            <Input value={form.authorizationId} onChange={(e) => set('authorizationId', e.target.value)} placeholder="Optional" data-testid="input-payment-authorization-id" />
+            <Label>Authorization</Label>
+            <Select value={form.authorizationId} onValueChange={(v) => set('authorizationId', v)}>
+              <SelectTrigger data-testid="select-payment-authorization-id"><SelectValue placeholder="None" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="none">None</SelectItem>
+                {authorizations?.map((a) => (
+                  <SelectItem key={a.id} value={a.id}>
+                    {`${a.authNumber} – ${a.clientName ?? 'Unknown'}`}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
         </div>
         <DialogFooter>

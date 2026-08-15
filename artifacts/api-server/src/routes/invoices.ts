@@ -125,6 +125,19 @@ router.patch("/invoices/:id", requireStaff, async (req, res): Promise<void> => {
     updates.reviewedBy = req.user!.id;
     updates.reviewedAt = new Date();
   }
+  // A material edit (amount, service month, or authorization) invalidates any
+  // prior validation result, so reset the status to pending_review to avoid a
+  // stale "validated"/"duplicate" badge — unless the request explicitly sets a
+  // status of its own (in which case honor the caller's intent).
+  const materialFields = ["amountRequested", "serviceMonth", "authorizationId"] as const;
+  const materiallyChanged = materialFields.some(
+    (f) => f in parsed.data && String((before as Record<string, unknown>)[f] ?? null) !== String((parsed.data as Record<string, unknown>)[f] ?? null),
+  );
+  // Treat a status equal to the current one as "not explicitly changed" — the
+  // edit dialog always echoes back the current status.
+  if (materiallyChanged && (parsed.data.status === undefined || parsed.data.status === before.status)) {
+    updates.status = "pending_review";
+  }
   const [invoice] = await db
     .update(invoicesTable)
     .set(updates)
@@ -135,7 +148,7 @@ router.patch("/invoices/:id", requireStaff, async (req, res): Promise<void> => {
     "update_invoice",
     "invoice",
     invoice.id,
-    diffDetail(before, parsed.data, Object.keys(parsed.data)),
+    diffDetail(before, updates, Object.keys(updates)),
   );
   res.json(UpdateInvoiceResponse.parse((await enrich([invoice]))[0]));
 });

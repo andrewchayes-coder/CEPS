@@ -195,11 +195,35 @@ router.patch("/payments/:id", requireStaff, async (req, res): Promise<void> => {
     res.status(404).json({ error: "Payment not found" });
     return;
   }
-  const [payment] = await db
-    .update(paymentsTable)
-    .set(updates)
-    .where(and(eq(paymentsTable.id, id), notDeleted(paymentsTable)))
-    .returning();
+  // If the amount changed, keep the auto-generated interim fee consistent by
+  // recalculating it with the same 5% rule as autoGenerateFee. We only touch
+  // fees still on the interim rule and never clobber a waived (manually
+  // adjusted) fee. Payment + fee updates run in one transaction.
+  const amountChanged =
+    "amount" in parsed.data && String(before.amount) !== String(updates.amount);
+  const { payment, recalculatedFees } = await db.transaction(async (tx) => {
+    const [p] = await tx
+      .update(paymentsTable)
+      .set(updates)
+      .where(and(eq(paymentsTable.id, id), notDeleted(paymentsTable)))
+      .returning();
+    const recalculated: { id: string; before: string; after: string }[] = [];
+    if (amountChanged) {
+      const linkedFees = await tx
+        .select()
+        .from(feesTable)
+        .where(and(eq(feesTable.paymentId, p.id), notDeleted(feesTable)));
+      const newFeeAmount = (Number(p.amount) * INTERIM_FEE_RATE).toFixed(2);
+      for (const fee of linkedFees) {
+        if (fee.ruleApplied !== INTERIM_FEE_RULE) continue; // don't clobber manually set fees
+        if (fee.status === "waived") continue; // don't clobber a waived fee
+        if (String(fee.amount) === newFeeAmount) continue;
+        await tx.update(feesTable).set({ amount: newFeeAmount }).where(eq(feesTable.id, fee.id));
+        recalculated.push({ id: fee.id, before: String(fee.amount), after: newFeeAmount });
+      }
+    }
+    return { payment: p, recalculatedFees: recalculated };
+  });
   await audit(
     req.user!.id,
     "update_payment",
@@ -207,21 +231,40 @@ router.patch("/payments/:id", requireStaff, async (req, res): Promise<void> => {
     payment.id,
     diffDetail(before, updates, Object.keys(updates)),
   );
+  for (const f of recalculatedFees) {
+    await audit(req.user!.id, "update_fee", "fee", f.id, `Auto-recalculated fee $${f.before} → $${f.after} after payment amount change (${INTERIM_FEE_RULE})`);
+  }
   res.json(UpdatePaymentResponse.parse((await enrichPayments([payment]))[0]));
 });
 
 router.delete("/payments/:id", requireStaff, async (req, res): Promise<void> => {
   const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
-  const [payment] = await db
-    .update(paymentsTable)
-    .set({ isDeleted: true, deletedAt: new Date(), deletedBy: req.user!.id })
-    .where(and(eq(paymentsTable.id, id), notDeleted(paymentsTable)))
-    .returning();
+  const deletedAt = new Date();
+  const deletedBy = req.user!.id;
+  // Soft-delete the payment and any linked auto-generated fee(s) together so a
+  // deleted payment never leaves an orphaned fee behind.
+  const { payment, deletedFees } = await db.transaction(async (tx) => {
+    const [p] = await tx
+      .update(paymentsTable)
+      .set({ isDeleted: true, deletedAt, deletedBy })
+      .where(and(eq(paymentsTable.id, id), notDeleted(paymentsTable)))
+      .returning();
+    if (!p) return { payment: undefined, deletedFees: [] as (typeof feesTable.$inferSelect)[] };
+    const fees = await tx
+      .update(feesTable)
+      .set({ isDeleted: true, deletedAt, deletedBy })
+      .where(and(eq(feesTable.paymentId, p.id), notDeleted(feesTable)))
+      .returning();
+    return { payment: p, deletedFees: fees };
+  });
   if (!payment) {
     res.status(404).json({ error: "Payment not found" });
     return;
   }
   await audit(req.user!.id, "delete_payment", "payment", payment.id, `Check ${payment.qbCheckNumber} — $${payment.amount}`);
+  for (const fee of deletedFees) {
+    await audit(req.user!.id, "delete_fee", "fee", fee.id, `Cascade soft-delete with payment ${payment.qbCheckNumber} — $${fee.amount}`);
+  }
   res.json({ ok: true });
 });
 

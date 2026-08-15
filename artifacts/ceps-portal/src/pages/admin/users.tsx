@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { useListUsers, useCreateUser, useDeleteUser, UserInputRole } from '@workspace/api-client-react';
+import { useListUsers, useCreateUser, useDeleteUser, useUpdateUser, UserInputRole } from '@workspace/api-client-react';
 import { useAuth } from '@/components/auth/auth-provider';
 import { EditUserDialog } from '@/components/edit-user-dialog';
 import {
@@ -46,6 +46,7 @@ export default function UsersPage() {
   const { data: users, isLoading, refetch } = useListUsers(undefined, { query: { enabled: isStaff } } as any);
   const createUser = useCreateUser();
   const deleteUser = useDeleteUser();
+  const updateUser = useUpdateUser();
 
   if (!isStaff) {
     return (
@@ -72,6 +73,25 @@ export default function UsersPage() {
             variant: 'destructive',
             title: 'Error',
             description: err?.data?.message || 'Could not deactivate this user.',
+          });
+        },
+      },
+    );
+  };
+
+  const handleReactivate = (id: string) => {
+    updateUser.mutate(
+      { id, data: { active: true } as any },
+      {
+        onSuccess: () => {
+          toast({ title: 'User reactivated' });
+          refetch();
+        },
+        onError: (err: any) => {
+          toast({
+            variant: 'destructive',
+            title: 'Error',
+            description: err?.data?.message || 'Could not reactivate this user.',
           });
         },
       },
@@ -236,6 +256,17 @@ export default function UsersPage() {
                               </AlertDialogFooter>
                             </AlertDialogContent>
                           </AlertDialog>
+                        )}
+                        {!u.active && !isSelf && (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => handleReactivate(u.id)}
+                            disabled={updateUser.isPending}
+                            data-testid={`button-reactivate-user-${u.id}`}
+                          >
+                            <Power className="w-4 h-4 mr-2" /> {updateUser.isPending ? 'Reactivating…' : 'Reactivate'}
+                          </Button>
                         )}
                       </div>
                     </TableCell>

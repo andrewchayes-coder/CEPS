@@ -1,3 +1,4 @@
 - [Orval zod v4 import fix](orval-zod-v4.md) — orval emits zod-v4 API with a plain `zod` import; codegen script now auto-patches to `zod/v4` (fix-zod-imports.mjs), no manual step needed.
 - [Preview iframe session cookies](preview-auth-cookies.md) — cookie auth needs SameSite=None; Secure; Partitioned; full page load after login; dedupe react-query in vite.
 - [Form empty-string inserts](form-empty-strings.md) — portal forms send '' for untouched optional fields; API routes must normalize ''→null before drizzle inserts/updates or numeric/FK columns 500.
+- [Invoice validation lifecycle](invoice-validation.md) — invoice detail page auto re-runs /validate on view+save; a material PATCH resets status to pending_review first. Status seen in UI is freshly computed, not stale.

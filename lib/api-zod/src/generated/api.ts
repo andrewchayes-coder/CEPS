@@ -658,6 +658,7 @@ export const ListReferralsQueryParams = zod.object({
   "status": zod.coerce.string().optional(),
   "coordinatorId": zod.coerce.string().optional(),
   "clientId": zod.coerce.string().optional(),
+  "search": zod.coerce.string().optional(),
   "limit": zod.coerce.number().int().optional(),
   "offset": zod.coerce.number().int().optional()
 })
@@ -1048,6 +1049,7 @@ export const ListAuthorizationsQueryParams = zod.object({
   "vendorId": zod.coerce.string().optional(),
   "status": zod.coerce.string().optional(),
   "expiringWithinDays": zod.coerce.number().int().optional(),
+  "search": zod.coerce.string().optional(),
   "limit": zod.coerce.number().int().optional(),
   "offset": zod.coerce.number().int().optional()
 })
@@ -1264,6 +1266,7 @@ export const ListInvoicesQueryParams = zod.object({
   "status": zod.coerce.string().optional(),
   "clientId": zod.coerce.string().optional(),
   "vendorId": zod.coerce.string().optional(),
+  "search": zod.coerce.string().optional(),
   "limit": zod.coerce.number().int().optional(),
   "offset": zod.coerce.number().int().optional()
 })

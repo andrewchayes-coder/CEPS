@@ -23,12 +23,10 @@ export default function AuthorizationsPage() {
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(0);
 
-  // Server-side pagination — mirrors the audit-log page. The authorizations
-  // list API has no `search` param (Auth #, Client and Vendor names), so that
-  // stays a client-side filter over the loaded page, like referrals.
   const params = {
     limit: PAGE_SIZE,
     offset: page * PAGE_SIZE,
+    ...(search ? { search } : {}),
   };
   const { data, isLoading, refetch } = useListAuthorizations(params, {
     query: { queryKey: ['authorizations', params] },
@@ -37,12 +35,6 @@ export default function AuthorizationsPage() {
   const total = data?.total ?? 0;
   const pageCount = Math.max(1, Math.ceil(total / PAGE_SIZE));
   const deleteAuthorization = useDeleteAuthorization();
-
-  const filteredAuths = auths?.filter(a => 
-    a.authNumber.toLowerCase().includes(search.toLowerCase()) ||
-    a.clientName?.toLowerCase().includes(search.toLowerCase()) ||
-    a.vendorName?.toLowerCase().includes(search.toLowerCase())
-  );
 
   return (
     <div className="space-y-6">
@@ -70,7 +62,7 @@ export default function AuthorizationsPage() {
               placeholder="Search by Auth #, Client, or Vendor..."
               className="pl-8"
               value={search}
-              onChange={(e) => setSearch(e.target.value)}
+              onChange={(e) => { setSearch(e.target.value); setPage(0); }}
             />
           </div>
         </CardHeader>
@@ -90,14 +82,14 @@ export default function AuthorizationsPage() {
             <TableBody>
               {isLoading ? (
                 <AuthsTableSkeleton />
-              ) : filteredAuths?.length === 0 ? (
+              ) : auths?.length === 0 ? (
                 <TableRow>
                   <TableCell colSpan={isStaff ? 7 : 6} className="h-24 text-center text-muted-foreground">
                     No authorizations found.
                   </TableCell>
                 </TableRow>
               ) : (
-                filteredAuths?.map((auth) => {
+                auths?.map((auth) => {
                   const isExpiring = auth.daysUntilExpiry != null && auth.daysUntilExpiry < 30 && auth.status === 'active';
                   
                   return (

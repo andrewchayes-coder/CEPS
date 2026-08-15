@@ -27,9 +27,10 @@ export default function ReferralsPage() {
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(0);
 
-  // Server-driven status filter + pagination (mirrors the audit-log page).
+  // Server-driven status filter, search, and pagination.
   const params = {
     ...(statusFilter !== 'all' ? { status: statusFilter } : {}),
+    ...(search ? { search } : {}),
     limit: PAGE_SIZE,
     offset: page * PAGE_SIZE,
   };
@@ -47,15 +48,6 @@ export default function ReferralsPage() {
     setStatusFilter(value);
     setPage(0);
   };
-
-  // Client name / coordinator name search stays client-side over the loaded
-  // page — the referrals list API has no `search` param.
-  const filteredReferrals = referrals?.filter(r => {
-    const matchesSearch = search === '' ||
-      r.clientName?.toLowerCase().includes(search.toLowerCase()) ||
-      r.coordinatorName?.toLowerCase().includes(search.toLowerCase());
-    return matchesSearch;
-  });
 
   return (
     <div className="space-y-6">
@@ -84,7 +76,7 @@ export default function ReferralsPage() {
                 placeholder="Search clients or coordinators..."
                 className="pl-8"
                 value={search}
-                onChange={(e) => setSearch(e.target.value)}
+                onChange={(e) => { setSearch(e.target.value); setPage(0); }}
               />
             </div>
             <div className="flex items-center gap-2 w-full sm:w-auto">
@@ -122,14 +114,14 @@ export default function ReferralsPage() {
             <TableBody>
               {isLoading ? (
                 <ReferralsTableSkeleton />
-              ) : filteredReferrals?.length === 0 ? (
+              ) : referrals?.length === 0 ? (
                 <TableRow>
                   <TableCell colSpan={6} className="h-24 text-center text-muted-foreground">
                     No referrals found.
                   </TableCell>
                 </TableRow>
               ) : (
-                filteredReferrals?.map((referral) => (
+                referrals?.map((referral) => (
                   <TableRow key={referral.id}>
                     <TableCell className="font-medium whitespace-nowrap">
                       {format(new Date(referral.referralDate), 'MMM d, yyyy')}

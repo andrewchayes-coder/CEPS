@@ -1,5 +1,5 @@
 import { Router, type IRouter } from "express";
-import { eq, desc, and, count, sql, type SQL } from "drizzle-orm";
+import { eq, desc, and, count, sql, ilike, or, type SQL } from "drizzle-orm";
 import { anthropic } from "@workspace/integrations-anthropic-ai";
 import { db, authorizationsTable, referralsTable, vendorsTable, paymentsTable } from "@workspace/db";
 import {
@@ -73,9 +73,20 @@ router.get("/authorizations", requireAuth, async (req, res): Promise<void> => {
   } else if ((u.role === "parent_guardian" || u.role === "self") && u.linkedRecordType === "client") {
     conditions.push(eq(authorizationsTable.clientId, u.linkedRecordId ?? ""));
   }
+  const escapeLike = (s: string) => s.replace(/[\\%_]/g, (c) => `\\${c}`);
   // Query-string filters on plain columns.
   if (query.data.clientId) conditions.push(eq(authorizationsTable.clientId, query.data.clientId));
   if (query.data.vendorId) conditions.push(eq(authorizationsTable.vendorId, query.data.vendorId));
+  if (query.data.search) {
+    const like = `%${escapeLike(query.data.search)}%`;
+    conditions.push(
+      or(
+        ilike(authorizationsTable.authNumber, like),
+        sql`${authorizationsTable.clientId} in (select id from clients where (first_name || ' ' || last_name) ilike ${like})`,
+        sql`${authorizationsTable.vendorId} in (select id from vendors where name ilike ${like})`,
+      )!,
+    );
+  }
 
   // The `status` and `expiringWithinDays` filters operate on the *derived*
   // effective status / days-until-expiry (see effectiveAuthStatus &

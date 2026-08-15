@@ -1644,6 +1644,7 @@ export type ListReferralsParams = {
 status?: string;
 coordinatorId?: string;
 clientId?: string;
+search?: string;
 limit?: number;
 offset?: number;
 };
@@ -1658,6 +1659,7 @@ clientId?: string;
 vendorId?: string;
 status?: string;
 expiringWithinDays?: number;
+search?: string;
 limit?: number;
 offset?: number;
 };
@@ -1671,6 +1673,7 @@ export type ListInvoicesParams = {
 status?: string;
 clientId?: string;
 vendorId?: string;
+search?: string;
 limit?: number;
 offset?: number;
 };

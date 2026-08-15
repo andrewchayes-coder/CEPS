@@ -1,5 +1,5 @@
 import { Router, type IRouter } from "express";
-import { eq, and, desc, sql, count, type SQL } from "drizzle-orm";
+import { eq, and, desc, sql, count, ilike, or, type SQL } from "drizzle-orm";
 import { db, invoicesTable, authorizationsTable, paymentsTable } from "@workspace/db";
 import { money } from "../lib/money";
 import {
@@ -51,10 +51,21 @@ router.get("/invoices", requireAuth, async (req, res): Promise<void> => {
   } else if ((u.role === "parent_guardian" || u.role === "self") && u.linkedRecordType === "client") {
     conditions.push(eq(invoicesTable.clientId, u.linkedRecordId ?? ""));
   }
+  const escapeLike = (s: string) => s.replace(/[\\%_]/g, (c) => `\\${c}`);
   // Query-string filters
   if (query.data.status) conditions.push(eq(invoicesTable.status, query.data.status));
   if (query.data.clientId) conditions.push(eq(invoicesTable.clientId, query.data.clientId));
   if (query.data.vendorId) conditions.push(eq(invoicesTable.vendorId, query.data.vendorId));
+  if (query.data.search) {
+    const like = `%${escapeLike(query.data.search)}%`;
+    conditions.push(
+      or(
+        sql`${invoicesTable.clientId} in (select id from clients where (first_name || ' ' || last_name) ilike ${like})`,
+        sql`${invoicesTable.vendorId} in (select id from vendors where name ilike ${like})`,
+        sql`${invoicesTable.authorizationId} in (select id from authorizations where auth_number ilike ${like})`,
+      )!,
+    );
+  }
   const where = and(...conditions);
   const limit = Math.min(Math.max(query.data.limit ?? 50, 1), 1000);
   const offset = Math.max(query.data.offset ?? 0, 0);

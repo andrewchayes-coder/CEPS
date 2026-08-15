@@ -19,22 +19,17 @@ export default function InvoicesPage() {
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(0);
 
-  // The invoices list API has no server-side search param (only status/client/
-  // vendor filters, none surfaced here), so search stays a client-side filter
-  // over the current page; pagination is server-driven like the audit-log page.
-  const params = { limit: PAGE_SIZE, offset: page * PAGE_SIZE };
+  const params = {
+    limit: PAGE_SIZE,
+    offset: page * PAGE_SIZE,
+    ...(search ? { search } : {}),
+  };
   const { data, isLoading } = useListInvoices(params, {
     query: { queryKey: ['invoices', params] },
   });
   const invoices = data?.items;
   const total = data?.total ?? 0;
   const pageCount = Math.max(1, Math.ceil(total / PAGE_SIZE));
-
-  const filteredInvoices = invoices?.filter(i => 
-    i.vendorName?.toLowerCase().includes(search.toLowerCase()) ||
-    i.clientName?.toLowerCase().includes(search.toLowerCase()) ||
-    i.authNumber?.toLowerCase().includes(search.toLowerCase())
-  );
 
   return (
     <div className="space-y-6">
@@ -60,7 +55,7 @@ export default function InvoicesPage() {
               placeholder="Search by vendor, client, or auth #..."
               className="pl-8"
               value={search}
-              onChange={(e) => setSearch(e.target.value)}
+              onChange={(e) => { setSearch(e.target.value); setPage(0); }}
             />
           </div>
         </CardHeader>
@@ -80,14 +75,14 @@ export default function InvoicesPage() {
             <TableBody>
               {isLoading ? (
                 <InvoicesTableSkeleton />
-              ) : filteredInvoices?.length === 0 ? (
+              ) : invoices?.length === 0 ? (
                 <TableRow>
                   <TableCell colSpan={7} className="h-24 text-center text-muted-foreground">
                     No invoices found.
                   </TableCell>
                 </TableRow>
               ) : (
-                filteredInvoices?.map((invoice) => (
+                invoices?.map((invoice) => (
                   <TableRow key={invoice.id}>
                     <TableCell className="font-medium whitespace-nowrap">{invoice.serviceMonth}</TableCell>
                     <TableCell>{invoice.vendorName}</TableCell>

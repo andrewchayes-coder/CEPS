@@ -1,5 +1,5 @@
 import { Router, type IRouter } from "express";
-import { eq, and, isNull, gt, desc, count, type SQL } from "drizzle-orm";
+import { eq, and, isNull, gt, desc, count, ilike, or, sql, type SQL } from "drizzle-orm";
 import {
   db,
   clientsTable,
@@ -66,10 +66,20 @@ router.get("/referrals", requireAuth, async (req, res): Promise<void> => {
   } else if (u.role === "vendor") {
     vendorEmpty = true;
   }
+  const escapeLike = (s: string) => s.replace(/[\\%_]/g, (c) => `\\${c}`);
   // Query-string filters
   if (query.data.status) conditions.push(eq(referralsTable.status, query.data.status));
   if (query.data.coordinatorId) conditions.push(eq(referralsTable.serviceCoordinatorId, query.data.coordinatorId));
   if (query.data.clientId) conditions.push(eq(referralsTable.clientId, query.data.clientId));
+  if (query.data.search) {
+    const like = `%${escapeLike(query.data.search)}%`;
+    conditions.push(
+      or(
+        sql`${referralsTable.clientId} in (select id from clients where (first_name || ' ' || last_name) ilike ${like})`,
+        sql`${referralsTable.serviceCoordinatorId} in (select id from users where name ilike ${like})`,
+      )!,
+    );
+  }
   const where = conditions.length ? and(...conditions) : undefined;
   const limit = Math.min(Math.max(query.data.limit ?? 50, 1), 1000);
   const offset = Math.max(query.data.offset ?? 0, 0);

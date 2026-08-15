@@ -21,12 +21,13 @@ import {
   FolderSync
 } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Link } from 'wouter';
+import { Link, useLocation } from 'wouter';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 
 export default function DashboardPage() {
   const { user } = useAuth();
+  const [, navigate] = useLocation();
   const { data: summary, isLoading, error } = useGetDashboardSummary();
 
   if (isLoading) {
@@ -63,20 +64,43 @@ export default function DashboardPage() {
       {/* Alerts Section (High Priority) */}
       {summary.alerts && summary.alerts.length > 0 && (
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-          {summary.alerts.map((alert, i) => (
-            <Card key={i} className={`border-l-4 ${getAlertBorderColor(alert.kind)}`}>
-              <CardContent className="p-4 flex gap-4 items-start">
-                <div className={`mt-0.5 ${getAlertIconColor(alert.kind)}`}>
-                  <AlertTriangle className="h-5 w-5" />
-                </div>
-                <div className="flex-1">
-                  <p className="text-sm font-medium">{alert.message}</p>
-                </div>
-                <Button variant="ghost" size="sm" asChild className="shrink-0 -mr-2 -mt-2">
-                  <Link href={getAlertLink(alert.kind)}>View</Link>
-                </Button>
-              </CardContent>
-            </Card>
+          {groupAlerts(summary.alerts).map((group) => (
+            <Link key={group.kind} href={getAlertLink(group.kind)} className="block">
+              <Card
+                className={`border-l-4 ${getAlertBorderColor(group.kind)} h-full cursor-pointer transition-colors hover:bg-accent/50`}
+                data-testid={`card-alert-${group.kind}`}
+              >
+                <CardContent className="p-4 flex gap-4 items-start">
+                  <div className={`mt-0.5 ${getAlertIconColor(group.kind)}`}>
+                    <AlertTriangle className="h-5 w-5" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    {group.alerts.length === 1 ? (
+                      <p className="text-sm font-medium">{group.alerts[0].message}</p>
+                    ) : (
+                      <>
+                        <p className="text-sm font-semibold">
+                          {group.alerts.length} {getAlertGroupTitle(group.kind)}
+                        </p>
+                        <ul className="mt-1.5 space-y-1">
+                          {group.alerts.slice(0, 3).map((alert, i) => (
+                            <li key={i} className="text-xs text-muted-foreground truncate">
+                              {alert.message}
+                            </li>
+                          ))}
+                          {group.alerts.length > 3 && (
+                            <li className="text-xs text-muted-foreground">
+                              +{group.alerts.length - 3} more…
+                            </li>
+                          )}
+                        </ul>
+                      </>
+                    )}
+                  </div>
+                  <span className="shrink-0 text-sm text-primary font-medium">View</span>
+                </CardContent>
+              </Card>
+            </Link>
           ))}
         </div>
       )}
@@ -84,7 +108,11 @@ export default function DashboardPage() {
       {/* KPI Cards */}
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
         {(user?.role === 'staff' || user?.role === 'service_coordinator') && (
-          <Card>
+          <Card
+            className="cursor-pointer transition-colors hover:bg-accent/50"
+            onClick={() => navigate('/referrals')}
+            data-testid="card-kpi-referrals"
+          >
             <CardHeader className="flex flex-row items-center justify-between pb-2 space-y-0">
               <CardTitle className="text-sm font-medium">Active Referrals</CardTitle>
               <FileText className="h-4 w-4 text-muted-foreground" />
@@ -95,7 +123,7 @@ export default function DashboardPage() {
                 {pendingReferrals} pending processing
               </p>
               {user?.role === 'staff' && (
-                <Link href="/reports?tab=case-status" className="text-xs text-primary hover:underline mt-2 inline-block" data-testid="link-tile-case-status">
+                <Link href="/reports?tab=case-status" onClick={(e) => e.stopPropagation()} className="text-xs text-primary hover:underline mt-2 inline-block" data-testid="link-tile-case-status">
                   View case status →
                 </Link>
               )}
@@ -104,7 +132,11 @@ export default function DashboardPage() {
         )}
 
         {(user?.role === 'staff' || user?.role === 'service_coordinator') && (
-          <Card>
+          <Card
+            className="cursor-pointer transition-colors hover:bg-accent/50"
+            onClick={() => navigate('/clients')}
+            data-testid="card-kpi-clients"
+          >
             <CardHeader className="flex flex-row items-center justify-between pb-2 space-y-0">
               <CardTitle className="text-sm font-medium">Total Clients</CardTitle>
               <Users className="h-4 w-4 text-muted-foreground" />
@@ -119,7 +151,11 @@ export default function DashboardPage() {
         )}
 
         {user?.role === 'staff' && (
-          <Card>
+          <Card
+            className="cursor-pointer transition-colors hover:bg-accent/50"
+            onClick={() => navigate('/authorizations')}
+            data-testid="card-kpi-authorizations"
+          >
             <CardHeader className="flex flex-row items-center justify-between pb-2 space-y-0">
               <CardTitle className="text-sm font-medium">Active Authorizations</CardTitle>
               <FileCheck className="h-4 w-4 text-muted-foreground" />
@@ -130,10 +166,10 @@ export default function DashboardPage() {
                 {summary.totals.vendorsMissingW9} vendors missing W-9
               </p>
               <div className="flex gap-3 mt-2">
-                <Link href="/reports?tab=expiring-auth" className="text-xs text-primary hover:underline inline-block" data-testid="link-tile-expiring-auth">
+                <Link href="/reports?tab=expiring-auth" onClick={(e) => e.stopPropagation()} className="text-xs text-primary hover:underline inline-block" data-testid="link-tile-expiring-auth">
                   Expiring →
                 </Link>
-                <Link href="/reports?tab=missing-docs&docType=w9" className="text-xs text-primary hover:underline inline-block" data-testid="link-tile-missing-w9">
+                <Link href="/reports?tab=missing-docs&docType=w9" onClick={(e) => e.stopPropagation()} className="text-xs text-primary hover:underline inline-block" data-testid="link-tile-missing-w9">
                   Missing W-9 →
                 </Link>
               </div>
@@ -141,7 +177,11 @@ export default function DashboardPage() {
           </Card>
         )}
 
-        <Card>
+        <Card
+          className="cursor-pointer transition-colors hover:bg-accent/50"
+          onClick={() => navigate('/invoices')}
+          data-testid="card-kpi-invoices"
+        >
           <CardHeader className="flex flex-row items-center justify-between pb-2 space-y-0">
             <CardTitle className="text-sm font-medium">Pending Invoices</CardTitle>
             <Receipt className="h-4 w-4 text-muted-foreground" />
@@ -286,6 +326,29 @@ function DashboardSkeleton() {
 }
 
 // Helpers
+type DashboardAlert = { kind: string; message: string };
+
+function groupAlerts(alerts: DashboardAlert[]): { kind: string; alerts: DashboardAlert[] }[] {
+  const groups = new Map<string, DashboardAlert[]>();
+  for (const alert of alerts) {
+    const existing = groups.get(alert.kind);
+    if (existing) existing.push(alert);
+    else groups.set(alert.kind, [alert]);
+  }
+  return Array.from(groups.entries()).map(([kind, list]) => ({ kind, alerts: list }));
+}
+
+function getAlertGroupTitle(type: string) {
+  switch (type) {
+    case 'expiring_authorization': return 'authorizations expiring soon';
+    case 'missing_document': return 'cases missing documents';
+    case 'pending_w9': return 'vendors missing a W-9 — payments blocked';
+    case 'pending_signature': return 'referrals awaiting signature';
+    case 'unmatched_remittance': return 'remittances with no matching payment';
+    default: return 'alerts';
+  }
+}
+
 function getAlertBorderColor(type: string) {
   switch (type) {
     case 'expiring_authorization': return 'border-chart-1';

@@ -1483,6 +1483,7 @@ components:
       type: object
       properties:
         name: { type: string }
+        email: { type: string, format: email }
         phone: { type: string }
         role:
           type: string

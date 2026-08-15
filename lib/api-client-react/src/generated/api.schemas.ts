@@ -241,6 +241,7 @@ export const UserUpdateRole = {
 
 export interface UserUpdate {
   name?: string;
+  email?: string;
   phone?: string;
   role?: UserUpdateRole;
   active?: boolean;

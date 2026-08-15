@@ -71,6 +71,22 @@ router.patch("/users/:id", requireStaff, async (req, res): Promise<void> => {
     res.status(404).json({ error: "User not found" });
     return;
   }
+  if (rest.email) {
+    const email = rest.email.trim().toLowerCase();
+    updates.email = email;
+    rest.email = email;
+    if (email !== before.email) {
+      const [existing] = await db.select().from(usersTable).where(eq(usersTable.email, email));
+      if (existing) {
+        res.status(409).json({ error: "A user with this email already exists" });
+        return;
+      }
+    }
+  } else if (rest.email !== undefined) {
+    // Ignore empty-string email from untouched form fields
+    delete updates.email;
+    delete (rest as Record<string, unknown>).email;
+  }
   const [user] = await db.update(usersTable).set(updates).where(eq(usersTable.id, id)).returning();
   await audit(req.user!.id, "update_user", "user", user.id, diffDetail(before, rest, Object.keys(rest)));
   res.json(UpdateUserResponse.parse(userJson(user)));

@@ -251,6 +251,7 @@ export const UpdateUserParams = zod.object({
 
 export const UpdateUserBody = zod.object({
   "name": zod.string().optional(),
+  "email": zod.email().optional(),
   "phone": zod.string().optional(),
   "role": zod.enum(['staff', 'service_coordinator', 'parent_guardian', 'self', 'vendor']).optional(),
   "active": zod.boolean().optional(),

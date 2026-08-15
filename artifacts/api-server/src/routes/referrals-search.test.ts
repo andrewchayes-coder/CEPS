@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import request from "supertest";
-import { inArray } from "drizzle-orm";
+import { inArray, eq } from "drizzle-orm";
 import {
   db,
   usersTable,
@@ -194,5 +194,53 @@ describe("GET /referrals ?search — offset interaction (page reset)", () => {
     const res = await get({ search: `${nonce} CoordAlpha`, limit: 10, offset: 100 });
     expect(res.body.items).toEqual([]);
     expect(res.body.total).toBe(2);
+  });
+});
+
+describe("GET /referrals ?search — soft-deleted client excluded", () => {
+  const nonceDel = `refdel${Date.now().toString(36)}`;
+  let deletedClientId: string;
+  let deletedReferralId: string;
+
+  beforeAll(async () => {
+    const [client] = await db
+      .insert(clientsTable)
+      .values({
+        firstName: `${nonceDel}Gone`,
+        lastName: "SoftDel",
+        dateOfBirth: "2000-06-15",
+        uciNumber: `${nonceDel}-uci`,
+      })
+      .returning();
+    deletedClientId = client.id;
+
+    const [referral] = await db
+      .insert(referralsTable)
+      .values({
+        clientId: deletedClientId,
+        serviceCoordinatorId: null,
+        referralDate: "2025-03-01",
+        status: "intake",
+      })
+      .returning();
+    deletedReferralId = referral.id;
+
+    // Soft-delete the client
+    await db
+      .update(clientsTable)
+      .set({ isDeleted: true })
+      .where(eq(clientsTable.id, deletedClientId));
+  });
+
+  afterAll(async () => {
+    await db.delete(referralsTable).where(eq(referralsTable.id, deletedReferralId));
+    await db.delete(clientsTable).where(eq(clientsTable.id, deletedClientId));
+  });
+
+  it("does not return referrals for a soft-deleted client when searching by name", async () => {
+    const res = await get({ search: `${nonceDel}Gone`, limit: 1000 });
+    expect(res.status).toBe(200);
+    expect(res.body.total).toBe(0);
+    expect(res.body.items).toEqual([]);
   });
 });

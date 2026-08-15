@@ -75,7 +75,7 @@ router.get("/referrals", requireAuth, async (req, res): Promise<void> => {
     const like = `%${escapeLike(query.data.search)}%`;
     conditions.push(
       or(
-        sql`${referralsTable.clientId} in (select id from clients where (first_name || ' ' || last_name) ilike ${like})`,
+        sql`${referralsTable.clientId} in (select id from clients where (first_name || ' ' || last_name) ilike ${like} and is_deleted = false)`,
         sql`${referralsTable.serviceCoordinatorId} in (select id from users where name ilike ${like})`,
       )!,
     );

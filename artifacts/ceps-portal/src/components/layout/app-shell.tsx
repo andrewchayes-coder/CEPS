@@ -62,6 +62,22 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     user && item.roles.includes(user.role)
   );
 
+  // Parents/guardians and self-advocates are linked to a single client record;
+  // give them a direct link to it (they don't get the staff "Clients" list).
+  if (
+    user &&
+    (user.role === 'parent_guardian' || user.role === 'self') &&
+    user.linkedRecordType === 'client' &&
+    user.linkedRecordId
+  ) {
+    filteredNavItems.splice(1, 0, {
+      title: user.role === 'parent_guardian' ? 'My Child' : 'My Info',
+      href: `/clients/${user.linkedRecordId}`,
+      icon: Users,
+      roles: [user.role],
+    });
+  }
+
   return (
     <div className="flex h-screen bg-background">
       {/* Sidebar */}

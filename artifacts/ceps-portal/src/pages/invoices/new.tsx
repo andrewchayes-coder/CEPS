@@ -31,8 +31,10 @@ export default function InvoiceNewPage() {
   const createInvoice = useCreateInvoice();
   const [documentUrl, setDocumentUrl] = React.useState<string | undefined>(undefined);
   
-  const { data: clients, isLoading: clientsLoading } = useListClients();
-  const { data: vendors, isLoading: vendorsLoading } = useListVendors();
+  const { data: clientsData, isLoading: clientsLoading } = useListClients({ limit: 1000 });
+  const { data: vendorsData, isLoading: vendorsLoading } = useListVendors({ limit: 1000 });
+  const clients = clientsData?.items;
+  const vendors = vendorsData?.items;
 
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),

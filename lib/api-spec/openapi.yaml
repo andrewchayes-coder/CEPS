@@ -403,14 +403,25 @@ paths:
         - name: search
           in: query
           schema: { type: string }
+        - name: limit
+          in: query
+          schema: { type: integer }
+        - name: offset
+          in: query
+          schema: { type: integer }
       responses:
         "200":
           description: Clients
           content:
             application/json:
               schema:
-                type: array
-                items: { $ref: "#/components/schemas/Client" }
+                type: object
+                required: [items, total]
+                properties:
+                  items:
+                    type: array
+                    items: { $ref: "#/components/schemas/Client" }
+                  total: { type: integer }
     post:
       operationId: createClient
       tags: [clients]
@@ -517,14 +528,25 @@ paths:
         - name: clientId
           in: query
           schema: { type: string }
+        - name: limit
+          in: query
+          schema: { type: integer }
+        - name: offset
+          in: query
+          schema: { type: integer }
       responses:
         "200":
           description: Referrals
           content:
             application/json:
               schema:
-                type: array
-                items: { $ref: "#/components/schemas/Referral" }
+                type: object
+                required: [items, total]
+                properties:
+                  items:
+                    type: array
+                    items: { $ref: "#/components/schemas/Referral" }
+                  total: { type: integer }
     post:
       operationId: createReferral
       tags: [referrals]
@@ -676,14 +698,25 @@ paths:
         - name: expiringWithinDays
           in: query
           schema: { type: integer }
+        - name: limit
+          in: query
+          schema: { type: integer }
+        - name: offset
+          in: query
+          schema: { type: integer }
       responses:
         "200":
           description: Authorizations
           content:
             application/json:
               schema:
-                type: array
-                items: { $ref: "#/components/schemas/Authorization" }
+                type: object
+                required: [items, total]
+                properties:
+                  items:
+                    type: array
+                    items: { $ref: "#/components/schemas/Authorization" }
+                  total: { type: integer }
     post:
       operationId: createAuthorization
       tags: [authorizations]
@@ -791,14 +824,25 @@ paths:
         - name: vendorId
           in: query
           schema: { type: string }
+        - name: limit
+          in: query
+          schema: { type: integer }
+        - name: offset
+          in: query
+          schema: { type: integer }
       responses:
         "200":
           description: Invoices
           content:
             application/json:
               schema:
-                type: array
-                items: { $ref: "#/components/schemas/Invoice" }
+                type: object
+                required: [items, total]
+                properties:
+                  items:
+                    type: array
+                    items: { $ref: "#/components/schemas/Invoice" }
+                  total: { type: integer }
     post:
       operationId: createInvoice
       tags: [invoices]
@@ -911,14 +955,31 @@ paths:
         - name: authorizationId
           in: query
           schema: { type: string }
+        - name: status
+          in: query
+          schema: { type: string }
+        - name: search
+          in: query
+          schema: { type: string }
+        - name: limit
+          in: query
+          schema: { type: integer }
+        - name: offset
+          in: query
+          schema: { type: integer }
       responses:
         "200":
           description: Payments
           content:
             application/json:
               schema:
-                type: array
-                items: { $ref: "#/components/schemas/Payment" }
+                type: object
+                required: [items, total]
+                properties:
+                  items:
+                    type: array
+                    items: { $ref: "#/components/schemas/Payment" }
+                  total: { type: integer }
     post:
       operationId: createPayment
       tags: [payments]
@@ -936,6 +997,15 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Payment"
+        "409":
+          description: |
+            A duplicate payment already exists for this client + authorization +
+            service month (hard stop). Resubmit with overrideDuplicate + a written
+            overrideJustification to proceed.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DuplicatePaymentError"
   /payments/{id}:
     patch:
       operationId: updatePayment
@@ -960,6 +1030,15 @@ paths:
               schema:
                 $ref: "#/components/schemas/Payment"
         "404": { description: Not found }
+        "409":
+          description: |
+            The update would create a duplicate payment for this client +
+            authorization + service month (hard stop). Resubmit with
+            overrideDuplicate + a written overrideJustification to proceed.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DuplicatePaymentError"
     delete:
       operationId: deletePayment
       tags: [payments]
@@ -1084,14 +1163,25 @@ paths:
         - name: status
           in: query
           schema: { type: string }
+        - name: limit
+          in: query
+          schema: { type: integer }
+        - name: offset
+          in: query
+          schema: { type: integer }
       responses:
         "200":
           description: Remittances
           content:
             application/json:
               schema:
-                type: array
-                items: { $ref: "#/components/schemas/Remittance" }
+                type: object
+                required: [items, total]
+                properties:
+                  items:
+                    type: array
+                    items: { $ref: "#/components/schemas/Remittance" }
+                  total: { type: integer }
     post:
       operationId: createRemittance
       tags: [remittances]
@@ -1188,14 +1278,25 @@ paths:
         - name: active
           in: query
           schema: { type: boolean }
+        - name: limit
+          in: query
+          schema: { type: integer }
+        - name: offset
+          in: query
+          schema: { type: integer }
       responses:
         "200":
           description: Vendors
           content:
             application/json:
               schema:
-                type: array
-                items: { $ref: "#/components/schemas/Vendor" }
+                type: object
+                required: [items, total]
+                properties:
+                  items:
+                    type: array
+                    items: { $ref: "#/components/schemas/Vendor" }
+                  total: { type: integer }
     post:
       operationId: createVendor
       tags: [vendors]
@@ -1888,6 +1989,18 @@ components:
         amount: { type: string }
         paymentMonth: { type: string }
         paymentType: { type: string, enum: [direct_payment, reimbursement, fee] }
+        overrideDuplicate: { type: boolean, description: "Set true (with a justification) to bypass the duplicate-payment hard stop" }
+        overrideJustification: { type: string, description: "Required written justification when overrideDuplicate is true" }
+    DuplicatePaymentError:
+      type: object
+      required: [error, code, existingPayments]
+      properties:
+        error: { type: string }
+        code: { type: string, enum: [duplicate_payment] }
+        existingPayments:
+          type: array
+          description: The payment(s) already on file that block this insert.
+          items: { $ref: "#/components/schemas/Payment" }
     CheckRegisterRow:
       type: object
       required: [qbCheckNumber, checkDate, amount]
@@ -1910,7 +2023,7 @@ components:
       required: [qbCheckNumber, outcome]
       properties:
         qbCheckNumber: { type: string }
-        outcome: { type: string, enum: [imported, skipped_duplicate, unmatched] }
+        outcome: { type: string, enum: [imported, skipped_duplicate, flagged_duplicate, unmatched] }
         message: { type: ["string", "null"] }
         paymentId: { type: ["string", "null"] }
     CheckRegisterImportResult:
@@ -2001,6 +2114,8 @@ components:
         amount: { type: string }
         paymentMonth: { type: ["string", "null"] }
         paymentType: { type: string, enum: [direct_payment, reimbursement, fee] }
+        overrideDuplicate: { type: boolean, description: "Set true (with a justification) to bypass the duplicate-payment hard stop when an update would create a duplicate" }
+        overrideJustification: { type: string, description: "Required written justification when overrideDuplicate is true" }
     RemittanceUpdate:
       type: object
       properties:

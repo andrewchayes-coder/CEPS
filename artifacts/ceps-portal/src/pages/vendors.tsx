@@ -8,16 +8,32 @@ import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Plus, Search, AlertTriangle, CheckCircle2 } from 'lucide-react';
+import { Plus, Search, AlertTriangle, CheckCircle2, ChevronLeft, ChevronRight } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
+
+const PAGE_SIZE = 50;
 
 export default function VendorsPage() {
   const [search, setSearch] = useState('');
-  const { data: vendors, isLoading } = useListVendors();
+  const [page, setPage] = useState(0);
 
-  const filteredVendors = vendors?.filter(v => 
-    v.name.toLowerCase().includes(search.toLowerCase())
-  );
+  // Server-driven search (vendor name) + pagination — mirrors the audit-log page.
+  const params = {
+    ...(search ? { search } : {}),
+    limit: PAGE_SIZE,
+    offset: page * PAGE_SIZE,
+  };
+  const { data, isLoading } = useListVendors(params, {
+    query: { queryKey: ['vendors', params] },
+  });
+  const vendors = data?.items;
+  const total = data?.total ?? 0;
+  const pageCount = Math.max(1, Math.ceil(total / PAGE_SIZE));
+
+  const onSearch = (value: string) => {
+    setSearch(value);
+    setPage(0);
+  };
 
   return (
     <div className="space-y-6">
@@ -43,7 +59,7 @@ export default function VendorsPage() {
               placeholder="Search vendors..."
               className="pl-8"
               value={search}
-              onChange={(e) => setSearch(e.target.value)}
+              onChange={(e) => onSearch(e.target.value)}
             />
           </div>
         </CardHeader>
@@ -61,14 +77,14 @@ export default function VendorsPage() {
             <TableBody>
               {isLoading ? (
                 <VendorsTableSkeleton />
-              ) : filteredVendors?.length === 0 ? (
+              ) : !vendors || vendors.length === 0 ? (
                 <TableRow>
                   <TableCell colSpan={5} className="h-24 text-center text-muted-foreground">
                     No vendors found.
                   </TableCell>
                 </TableRow>
               ) : (
-                filteredVendors?.map((vendor) => (
+                vendors.map((vendor) => (
                   <TableRow key={vendor.id}>
                     <TableCell className="font-medium">
                       <div className="flex items-center gap-2">
@@ -106,6 +122,34 @@ export default function VendorsPage() {
               )}
             </TableBody>
           </Table>
+          <div className="flex items-center justify-between px-4 py-3 border-t">
+            <p className="text-sm text-muted-foreground" data-testid="text-vendors-pagination">
+              {total === 0
+                ? 'No vendors'
+                : `Showing ${page * PAGE_SIZE + 1}–${Math.min((page + 1) * PAGE_SIZE, total)} of ${total} vendors`}
+            </p>
+            <div className="flex items-center gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setPage((p) => Math.max(0, p - 1))}
+                disabled={page === 0}
+                data-testid="button-vendors-prev"
+              >
+                <ChevronLeft className="w-4 h-4 mr-1" /> Previous
+              </Button>
+              <span className="text-sm text-muted-foreground">Page {page + 1} of {pageCount}</span>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setPage((p) => Math.min(pageCount - 1, p + 1))}
+                disabled={page >= pageCount - 1}
+                data-testid="button-vendors-next"
+              >
+                Next <ChevronRight className="w-4 h-4 ml-1" />
+              </Button>
+            </div>
+          </div>
         </CardContent>
       </Card>
     </div>

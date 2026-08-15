@@ -12,5 +12,6 @@ export type CheckRegisterImportRowResultOutcome = typeof CheckRegisterImportRowR
 export const CheckRegisterImportRowResultOutcome = {
   imported: 'imported',
   skipped_duplicate: 'skipped_duplicate',
+  flagged_duplicate: 'flagged_duplicate',
   unmatched: 'unmatched',
 } as const;

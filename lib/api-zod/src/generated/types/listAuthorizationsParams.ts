@@ -11,4 +11,6 @@ clientId?: string;
 vendorId?: string;
 status?: string;
 expiringWithinDays?: number;
+limit?: number;
+offset?: number;
 };

@@ -1,6 +1,7 @@
 import { Router, type IRouter } from "express";
-import { eq, and, desc } from "drizzle-orm";
+import { eq, and, desc, sql, count, type SQL } from "drizzle-orm";
 import { db, invoicesTable, authorizationsTable, paymentsTable } from "@workspace/db";
+import { money } from "../lib/money";
 import {
   ListInvoicesQueryParams,
   ListInvoicesResponse,
@@ -14,6 +15,7 @@ import {
 } from "@workspace/api-zod";
 import { requireAuth, requireStaff, audit } from "../lib/auth";
 import { invoiceJson, clientNameMap, vendorNameMap, authNumberMap, userNameMap, notDeleted, diffDetail } from "../lib/serializers";
+import { checkDuplicatePayment } from "../lib/paymentDuplicateCheck";
 
 const router: IRouter = Router();
 
@@ -40,21 +42,33 @@ router.get("/invoices", requireAuth, async (req, res): Promise<void> => {
     res.status(400).json({ error: query.error.message });
     return;
   }
-  let invoices = await db
-    .select()
-    .from(invoicesTable)
-    .where(notDeleted(invoicesTable))
-    .orderBy(desc(invoicesTable.createdAt));
+  const conditions: SQL[] = [notDeleted(invoicesTable)];
+  // Role scoping — mirrors the payments/audit-log SQL-WHERE pattern:
+  // vendors see only their own invoices; parent/self only their linked client's.
   const u = req.user!;
   if (u.role === "vendor" && u.linkedRecordType === "vendor") {
-    invoices = invoices.filter((i) => i.vendorId === u.linkedRecordId);
+    conditions.push(eq(invoicesTable.vendorId, u.linkedRecordId ?? ""));
   } else if ((u.role === "parent_guardian" || u.role === "self") && u.linkedRecordType === "client") {
-    invoices = invoices.filter((i) => i.clientId === u.linkedRecordId);
+    conditions.push(eq(invoicesTable.clientId, u.linkedRecordId ?? ""));
   }
-  if (query.data.status) invoices = invoices.filter((i) => i.status === query.data.status);
-  if (query.data.clientId) invoices = invoices.filter((i) => i.clientId === query.data.clientId);
-  if (query.data.vendorId) invoices = invoices.filter((i) => i.vendorId === query.data.vendorId);
-  res.json(ListInvoicesResponse.parse(await enrich(invoices)));
+  // Query-string filters
+  if (query.data.status) conditions.push(eq(invoicesTable.status, query.data.status));
+  if (query.data.clientId) conditions.push(eq(invoicesTable.clientId, query.data.clientId));
+  if (query.data.vendorId) conditions.push(eq(invoicesTable.vendorId, query.data.vendorId));
+  const where = and(...conditions);
+  const limit = Math.min(Math.max(query.data.limit ?? 50, 1), 1000);
+  const offset = Math.max(query.data.offset ?? 0, 0);
+  const [[{ total }], invoices] = await Promise.all([
+    db.select({ total: count() }).from(invoicesTable).where(where),
+    db
+      .select()
+      .from(invoicesTable)
+      .where(where)
+      .orderBy(desc(invoicesTable.createdAt), desc(invoicesTable.id))
+      .limit(limit)
+      .offset(offset),
+  ]);
+  res.json(ListInvoicesResponse.parse({ items: await enrich(invoices), total }));
 });
 
 router.post("/invoices", requireAuth, async (req, res): Promise<void> => {
@@ -207,7 +221,7 @@ router.post("/invoices/:id/validate", requireStaff, async (req, res): Promise<vo
     if (expected == null) {
       checks.push({ check: "amount_matches", passed: true, message: "No fixed authorized amount to compare; verify manually." });
     } else {
-      const matches = Number(invoice.amountRequested) <= Number(expected);
+      const matches = money(invoice.amountRequested).lessThanOrEqualTo(money(expected));
       checks.push({
         check: "amount_matches",
         passed: matches,
@@ -223,18 +237,12 @@ router.post("/invoices/:id/validate", requireStaff, async (req, res): Promise<vo
   // 4. No duplicate payment for client + authorization + month (HARD STOP)
   let duplicatePassed = true;
   if (invoice.authorizationId) {
-    const dupPayments = await db
-      .select()
-      .from(paymentsTable)
-      .where(
-        and(
-          eq(paymentsTable.clientId, invoice.clientId),
-          eq(paymentsTable.authorizationId, invoice.authorizationId),
-          eq(paymentsTable.paymentMonth, invoice.serviceMonth),
-          notDeleted(paymentsTable),
-        ),
-      );
-    if (dupPayments.length > 0) {
+    const { isDuplicate } = await checkDuplicatePayment(db, {
+      clientId: invoice.clientId,
+      authorizationId: invoice.authorizationId,
+      paymentMonth: invoice.serviceMonth,
+    });
+    if (isDuplicate) {
       if (parsed.data.overrideDuplicate && parsed.data.overrideJustification?.trim()) {
         checks.push({
           check: "no_duplicate_payment",
@@ -259,10 +267,16 @@ router.post("/invoices/:id/validate", requireStaff, async (req, res): Promise<vo
 
   // 5. Cumulative payments + this invoice within max period amount
   if (auth) {
-    const paid = await db.select().from(paymentsTable).where(and(eq(paymentsTable.authorizationId, auth.id), notDeleted(paymentsTable)));
-    const totalPaid = paid.reduce((sum, p) => sum + Number(p.amount), 0);
-    const wouldBe = totalPaid + Number(invoice.amountRequested);
-    const within = wouldBe <= Number(auth.maxPeriodAmount);
+    // Sum in SQL — Postgres numeric addition is exact and avoids fetching an
+    // unbounded number of payment rows just to total them in JS. COALESCE keeps
+    // the result "0" (never null) when there are no payments yet.
+    const [row] = await db
+      .select({ total: sql<string>`coalesce(sum(${paymentsTable.amount}), 0)` })
+      .from(paymentsTable)
+      .where(and(eq(paymentsTable.authorizationId, auth.id), notDeleted(paymentsTable)));
+    const totalPaid = money(row?.total);
+    const wouldBe = totalPaid.plus(money(invoice.amountRequested));
+    const within = wouldBe.lessThanOrEqualTo(money(auth.maxPeriodAmount));
     checks.push({
       check: "within_max_period_amount",
       passed: within,

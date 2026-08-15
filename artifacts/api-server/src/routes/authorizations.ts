@@ -1,7 +1,7 @@
 import { Router, type IRouter } from "express";
-import { eq, desc, and } from "drizzle-orm";
+import { eq, desc, and, count, sql, type SQL } from "drizzle-orm";
 import { anthropic } from "@workspace/integrations-anthropic-ai";
-import { db, authorizationsTable, referralsTable, vendorsTable } from "@workspace/db";
+import { db, authorizationsTable, referralsTable, vendorsTable, paymentsTable } from "@workspace/db";
 import {
   ListAuthorizationsQueryParams,
   ListAuthorizationsResponse,
@@ -63,38 +63,64 @@ router.get("/authorizations", requireAuth, async (req, res): Promise<void> => {
     res.status(400).json({ error: query.error.message });
     return;
   }
-  let auths = await db
-    .select()
-    .from(authorizationsTable)
-    .where(notDeleted(authorizationsTable))
-    .orderBy(desc(authorizationsTable.createdAt));
+  const conditions: SQL[] = [notDeleted(authorizationsTable)];
+  // Role scoping — mirrors the payments/audit-log SQL-WHERE pattern:
+  // vendors see only their own vendor's auths; parent/self only their linked
+  // client's auths.
   const u = req.user!;
   if (u.role === "vendor" && u.linkedRecordType === "vendor") {
-    auths = auths.filter((a) => a.vendorId === u.linkedRecordId);
+    conditions.push(eq(authorizationsTable.vendorId, u.linkedRecordId ?? ""));
   } else if ((u.role === "parent_guardian" || u.role === "self") && u.linkedRecordType === "client") {
-    auths = auths.filter((a) => a.clientId === u.linkedRecordId);
+    conditions.push(eq(authorizationsTable.clientId, u.linkedRecordId ?? ""));
   }
-  if (query.data.clientId) auths = auths.filter((a) => a.clientId === query.data.clientId);
-  if (query.data.vendorId) auths = auths.filter((a) => a.vendorId === query.data.vendorId);
+  // Query-string filters on plain columns.
+  if (query.data.clientId) conditions.push(eq(authorizationsTable.clientId, query.data.clientId));
+  if (query.data.vendorId) conditions.push(eq(authorizationsTable.vendorId, query.data.vendorId));
+
+  // The `status` and `expiringWithinDays` filters operate on the *derived*
+  // effective status / days-until-expiry (see effectiveAuthStatus &
+  // authorizationJson). We replicate that derivation in SQL so filtering and
+  // pagination stay at the DB level with identical semantics.
+  //   totalPaid  = coalesce(sum(non-deleted payments for this auth), 0)
+  //   effective  = pending | expired (period end past) | exhausted (paid ≥ max) | status
+  //   days       = ceil((servicePeriodEnd@00:00Z − now) / 1 day)
+  const totalPaidSql = sql`coalesce((select sum(${paymentsTable.amount}) from ${paymentsTable} where ${paymentsTable.authorizationId} = ${authorizationsTable.id} and ${paymentsTable.isDeleted} = false), 0)`;
+  const effectiveStatusSql = sql`case when ${authorizationsTable.status} = 'pending' then 'pending' when ${authorizationsTable.servicePeriodEnd} < (now() at time zone 'utc')::date then 'expired' when ${totalPaidSql} >= ${authorizationsTable.maxPeriodAmount} then 'exhausted' else ${authorizationsTable.status} end`;
+  const daysUntilExpirySql = sql`ceil(extract(epoch from ((${authorizationsTable.servicePeriodEnd} || 'T00:00:00Z')::timestamptz - now())) / 86400)`;
+  if (query.data.status) {
+    conditions.push(sql`${effectiveStatusSql} = ${query.data.status}`);
+  }
+  if (query.data.expiringWithinDays != null) {
+    conditions.push(
+      sql`${daysUntilExpirySql} >= 0 and ${daysUntilExpirySql} <= ${query.data.expiringWithinDays} and ${effectiveStatusSql} = 'active'`,
+    );
+  }
+  const where = and(...conditions);
+  const limit = Math.min(Math.max(query.data.limit ?? 50, 1), 1000);
+  const offset = Math.max(query.data.offset ?? 0, 0);
+  const [[{ total }], auths] = await Promise.all([
+    db.select({ total: count() }).from(authorizationsTable).where(where),
+    db
+      .select()
+      .from(authorizationsTable)
+      .where(where)
+      .orderBy(desc(authorizationsTable.createdAt), desc(authorizationsTable.id))
+      .limit(limit)
+      .offset(offset),
+  ]);
   const totals = await authorizationTotalsPaid(auths.map((a) => a.id));
   const [clientNames, vendorNames] = await Promise.all([
     clientNameMap(auths.map((a) => a.clientId)),
     vendorNameMap(auths.map((a) => a.vendorId)),
   ]);
-  let items = auths.map((a) =>
+  const items = auths.map((a) =>
     authorizationJson(a, {
       clientName: clientNames.get(a.clientId),
       vendorName: a.vendorId ? vendorNames.get(a.vendorId) : null,
       totalPaid: totals.get(a.id) ?? 0,
     }),
   );
-  if (query.data.status) items = items.filter((a) => a.status === query.data.status);
-  if (query.data.expiringWithinDays != null) {
-    items = items.filter(
-      (a) => a.daysUntilExpiry >= 0 && a.daysUntilExpiry <= query.data.expiringWithinDays! && a.status === "active",
-    );
-  }
-  res.json(ListAuthorizationsResponse.parse(items));
+  res.json(ListAuthorizationsResponse.parse({ items, total }));
 });
 
 router.post("/authorizations", requireStaff, async (req, res): Promise<void> => {

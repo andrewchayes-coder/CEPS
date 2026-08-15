@@ -7,6 +7,7 @@ import {
   boolean,
   timestamp,
   uniqueIndex,
+  index,
 } from "drizzle-orm/pg-core";
 import { clientsTable } from "./clients";
 import { authorizationsTable } from "./authorizations";
@@ -42,6 +43,15 @@ export const paymentsTable = pgTable("payments", {
   qbCheckNumberUnique: uniqueIndex("payments_qb_check_number_unique").on(
     table.qbCheckNumber,
   ),
+  // Backing indexes for the SQL-WHERE list filtering / role scoping
+  // (Prompt 6), following the audit-log indexing pattern.
+  checkDateIdx: index("payments_check_date_idx").on(table.checkDate.desc()),
+  clientIdIdx: index("payments_client_id_idx").on(table.clientId),
+  vendorIdIdx: index("payments_vendor_id_idx").on(table.vendorId),
+  authorizationIdIdx: index("payments_authorization_id_idx").on(
+    table.authorizationId,
+  ),
+  paymentTypeIdx: index("payments_payment_type_idx").on(table.paymentType),
 }));
 
 export type Payment = typeof paymentsTable.$inferSelect;

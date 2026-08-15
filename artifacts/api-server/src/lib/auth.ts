@@ -115,8 +115,9 @@ export async function audit(
   entityType?: string,
   entityId?: string,
   detail?: string,
+  database: typeof db = db,
 ): Promise<void> {
-  await db.insert(auditLogTable).values({ userId, action, entityType, entityId, detail });
+  await database.insert(auditLogTable).values({ userId, action, entityType, entityId, detail });
 }
 
 export function sessionUserJson(user: User) {

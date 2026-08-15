@@ -107,6 +107,37 @@ describe("PATCH /payments/:id fee recalculation", () => {
   });
 });
 
+describe("autoGenerateFee decimal-safe 5% calculation", () => {
+  // Numbers chosen so Number(amount) * 0.05 drifts off the exact cent value.
+  it("computes the fee exactly for a float-drift-prone amount (0.10)", async () => {
+    // 0.10 * 0.05 = 0.005 → rounds to 0.01; naive float gives 0.005000000...
+    const p = await createPayment("0.10");
+    const [fee] = await linkedFees(p.id);
+    expect(fee.amount).toBe("0.01");
+  });
+
+  it("computes the fee exactly for 20.15 (float product = 1.0074999999...)", async () => {
+    // 20.15 * 0.05 = 1.0075 → half-up rounds to 1.01; binary float underflows to 1.007499...
+    const p = await createPayment("20.15");
+    const [fee] = await linkedFees(p.id);
+    expect(fee.amount).toBe("1.01");
+  });
+
+  it("recalculates the fee exactly on a float-drift-prone amount change", async () => {
+    const p = await createPayment("100.00");
+    const [feeBefore] = await linkedFees(p.id);
+    expect(feeBefore.amount).toBe("5.00");
+
+    const res = await request(app)
+      .patch(`/api/payments/${p.id}`)
+      .set("Cookie", cookie)
+      .send({ amount: "20.15" });
+    expect(res.status).toBe(200);
+    const [feeAfter] = await linkedFees(p.id);
+    expect(feeAfter.amount).toBe("1.01");
+  });
+});
+
 describe("DELETE /payments/:id cascade soft-delete", () => {
   it("soft-deletes the linked fee alongside the payment", async () => {
     const p = await createPayment("100.00");

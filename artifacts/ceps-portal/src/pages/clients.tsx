@@ -6,19 +6,32 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Search, UserPlus } from 'lucide-react';
+import { Search, ChevronLeft, ChevronRight } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
+
+const PAGE_SIZE = 50;
 
 export default function ClientsPage() {
   const [search, setSearch] = useState('');
-  
-  const { data: clients, isLoading } = useListClients();
+  const [page, setPage] = useState(0);
 
-  const filteredClients = clients?.filter(c => 
-    c.firstName.toLowerCase().includes(search.toLowerCase()) ||
-    c.lastName.toLowerCase().includes(search.toLowerCase()) ||
-    c.uciNumber.includes(search)
-  );
+  // Server-driven search (name + UCI) + pagination — mirrors the audit-log page.
+  const params = {
+    ...(search ? { search } : {}),
+    limit: PAGE_SIZE,
+    offset: page * PAGE_SIZE,
+  };
+  const { data, isLoading } = useListClients(params, {
+    query: { queryKey: ['clients', params] },
+  });
+  const clients = data?.items;
+  const total = data?.total ?? 0;
+  const pageCount = Math.max(1, Math.ceil(total / PAGE_SIZE));
+
+  const onSearch = (value: string) => {
+    setSearch(value);
+    setPage(0);
+  };
 
   return (
     <div className="space-y-6">
@@ -38,7 +51,7 @@ export default function ClientsPage() {
               placeholder="Search by name or UCI..."
               className="pl-8"
               value={search}
-              onChange={(e) => setSearch(e.target.value)}
+              onChange={(e) => onSearch(e.target.value)}
             />
           </div>
         </CardHeader>
@@ -57,14 +70,14 @@ export default function ClientsPage() {
             <TableBody>
               {isLoading ? (
                 <ClientsTableSkeleton />
-              ) : filteredClients?.length === 0 ? (
+              ) : !clients || clients.length === 0 ? (
                 <TableRow>
                   <TableCell colSpan={6} className="h-24 text-center text-muted-foreground">
                     No clients found.
                   </TableCell>
                 </TableRow>
               ) : (
-                filteredClients?.map((client) => (
+                clients.map((client) => (
                   <TableRow key={client.id}>
                     <TableCell className="font-medium">
                       {client.firstName} {client.lastName}
@@ -87,6 +100,34 @@ export default function ClientsPage() {
               )}
             </TableBody>
           </Table>
+          <div className="flex items-center justify-between px-4 py-3 border-t">
+            <p className="text-sm text-muted-foreground" data-testid="text-clients-pagination">
+              {total === 0
+                ? 'No clients'
+                : `Showing ${page * PAGE_SIZE + 1}–${Math.min((page + 1) * PAGE_SIZE, total)} of ${total} clients`}
+            </p>
+            <div className="flex items-center gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setPage((p) => Math.max(0, p - 1))}
+                disabled={page === 0}
+                data-testid="button-clients-prev"
+              >
+                <ChevronLeft className="w-4 h-4 mr-1" /> Previous
+              </Button>
+              <span className="text-sm text-muted-foreground">Page {page + 1} of {pageCount}</span>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setPage((p) => Math.min(pageCount - 1, p + 1))}
+                disabled={page >= pageCount - 1}
+                data-testid="button-clients-next"
+              >
+                Next <ChevronRight className="w-4 h-4 ml-1" />
+              </Button>
+            </div>
+          </div>
         </CardContent>
       </Card>
     </div>

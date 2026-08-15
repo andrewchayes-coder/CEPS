@@ -16,27 +16,45 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { FileText, Plus, Search, Filter } from 'lucide-react';
+import { Plus, Search, Filter, ChevronLeft, ChevronRight } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
+
+const PAGE_SIZE = 50;
 
 export default function ReferralsPage() {
   const { user } = useAuth();
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [search, setSearch] = useState('');
+  const [page, setPage] = useState(0);
 
-  const { data: referrals, isLoading } = useListReferrals(undefined, {
+  // Server-driven status filter + pagination (mirrors the audit-log page).
+  const params = {
+    ...(statusFilter !== 'all' ? { status: statusFilter } : {}),
+    limit: PAGE_SIZE,
+    offset: page * PAGE_SIZE,
+  };
+  const { data, isLoading } = useListReferrals(params, {
     query: {
-      queryKey: ['referrals', statusFilter]
-    }
+      queryKey: ['referrals', params],
+    },
   });
 
-  // Client-side search filtering (since API doesn't have a search param yet)
+  const referrals = data?.items;
+  const total = data?.total ?? 0;
+  const pageCount = Math.max(1, Math.ceil(total / PAGE_SIZE));
+
+  const onStatusChange = (value: string) => {
+    setStatusFilter(value);
+    setPage(0);
+  };
+
+  // Client name / coordinator name search stays client-side over the loaded
+  // page — the referrals list API has no `search` param.
   const filteredReferrals = referrals?.filter(r => {
-    const matchesStatus = statusFilter === 'all' || r.status === statusFilter;
-    const matchesSearch = search === '' || 
+    const matchesSearch = search === '' ||
       r.clientName?.toLowerCase().includes(search.toLowerCase()) ||
       r.coordinatorName?.toLowerCase().includes(search.toLowerCase());
-    return matchesStatus && matchesSearch;
+    return matchesSearch;
   });
 
   return (
@@ -71,7 +89,7 @@ export default function ReferralsPage() {
             </div>
             <div className="flex items-center gap-2 w-full sm:w-auto">
               <Filter className="h-4 w-4 text-muted-foreground shrink-0" />
-              <Select value={statusFilter} onValueChange={setStatusFilter}>
+              <Select value={statusFilter} onValueChange={onStatusChange}>
                 <SelectTrigger className="w-full sm:w-[180px]">
                   <SelectValue placeholder="All Statuses" />
                 </SelectTrigger>
@@ -142,6 +160,34 @@ export default function ReferralsPage() {
               )}
             </TableBody>
           </Table>
+          <div className="flex items-center justify-between px-4 py-3 border-t">
+            <p className="text-sm text-muted-foreground" data-testid="text-referrals-pagination">
+              {total === 0
+                ? 'No referrals'
+                : `Showing ${page * PAGE_SIZE + 1}–${Math.min((page + 1) * PAGE_SIZE, total)} of ${total} referrals`}
+            </p>
+            <div className="flex items-center gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setPage((p) => Math.max(0, p - 1))}
+                disabled={page === 0}
+                data-testid="button-referrals-prev"
+              >
+                <ChevronLeft className="w-4 h-4 mr-1" /> Previous
+              </Button>
+              <span className="text-sm text-muted-foreground">Page {page + 1} of {pageCount}</span>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setPage((p) => Math.min(pageCount - 1, p + 1))}
+                disabled={page >= pageCount - 1}
+                data-testid="button-referrals-next"
+              >
+                Next <ChevronRight className="w-4 h-4 ml-1" />
+              </Button>
+            </div>
+          </div>
         </CardContent>
       </Card>
     </div>

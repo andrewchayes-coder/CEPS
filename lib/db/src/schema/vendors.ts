@@ -4,6 +4,7 @@ import {
   uuid,
   boolean,
   timestamp,
+  index,
 } from "drizzle-orm/pg-core";
 
 export const vendorsTable = pgTable("vendors", {
@@ -23,6 +24,12 @@ export const vendorsTable = pgTable("vendors", {
   createdAt: timestamp("created_at", { withTimezone: true })
     .notNull()
     .defaultNow(),
-});
+}, (table) => ({
+  // Backing indexes for the SQL-WHERE list filtering / sorting
+  // (Prompt 6), following the audit-log indexing pattern.
+  nameIdx: index("vendors_name_idx").on(table.name),
+  w9StatusIdx: index("vendors_w9_status_idx").on(table.w9Status),
+  activeIdx: index("vendors_active_idx").on(table.active),
+}));
 
 export type Vendor = typeof vendorsTable.$inferSelect;

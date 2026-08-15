@@ -1,5 +1,5 @@
 import { Router, type IRouter } from "express";
-import { eq } from "drizzle-orm";
+import { eq, and, ilike, asc, desc, count, sql, type SQL } from "drizzle-orm";
 import { db, vendorsTable } from "@workspace/db";
 import {
   ListVendorsQueryParams,
@@ -25,20 +25,33 @@ router.get("/vendors", requireAuth, async (req, res): Promise<void> => {
     res.status(400).json({ error: query.error.message });
     return;
   }
-  let vendors = await db.select().from(vendorsTable);
+  const escapeLike = (s: string) => s.replace(/[\\%_]/g, (c) => `\\${c}`);
+  const conditions: SQL[] = [];
+  // Role scoping — mirrors the payments/audit-log SQL-WHERE pattern:
+  // vendor users only see their own vendor record.
   const u = req.user!;
   if (u.role === "vendor" && u.linkedRecordType === "vendor") {
-    vendors = vendors.filter((v) => v.id === u.linkedRecordId);
+    conditions.push(eq(vendorsTable.id, u.linkedRecordId ?? ""));
   }
-  if (query.data.search) {
-    const s = query.data.search.toLowerCase();
-    vendors = vendors.filter((v) => v.name.toLowerCase().includes(s));
-  }
-  if (query.data.w9Status) vendors = vendors.filter((v) => v.w9Status === query.data.w9Status);
-  if (query.data.active != null) vendors = vendors.filter((v) => v.active === query.data.active);
-  // Preferred vendors sort first, then alphabetical
-  vendors.sort((a, b) => Number(b.preferred) - Number(a.preferred) || a.name.localeCompare(b.name));
-  res.json(ListVendorsResponse.parse(vendors.map(vendorJson)));
+  // Query-string filters
+  if (query.data.search) conditions.push(ilike(vendorsTable.name, `%${escapeLike(query.data.search)}%`));
+  if (query.data.w9Status) conditions.push(eq(vendorsTable.w9Status, query.data.w9Status));
+  if (query.data.active != null) conditions.push(eq(vendorsTable.active, query.data.active));
+  const where = conditions.length ? and(...conditions) : undefined;
+  const limit = Math.min(Math.max(query.data.limit ?? 50, 1), 1000);
+  const offset = Math.max(query.data.offset ?? 0, 0);
+  const [[{ total }], vendors] = await Promise.all([
+    db.select({ total: count() }).from(vendorsTable).where(where),
+    db
+      .select()
+      .from(vendorsTable)
+      .where(where)
+      // Preferred vendors first, then alphabetical by name, stable by id.
+      .orderBy(desc(vendorsTable.preferred), asc(vendorsTable.name), desc(vendorsTable.id))
+      .limit(limit)
+      .offset(offset),
+  ]);
+  res.json(ListVendorsResponse.parse({ items: vendors.map(vendorJson), total }));
 });
 
 router.post("/vendors", requireStaff, async (req, res): Promise<void> => {

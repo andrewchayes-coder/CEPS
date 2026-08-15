@@ -6,6 +6,7 @@ import {
   numeric,
   boolean,
   timestamp,
+  index,
 } from "drizzle-orm/pg-core";
 import { clientsTable } from "./clients";
 import { authorizationsTable } from "./authorizations";
@@ -36,6 +37,12 @@ export const remittancesTable = pgTable("remittances", {
   createdAt: timestamp("created_at", { withTimezone: true })
     .notNull()
     .defaultNow(),
-});
+}, (table) => ({
+  // Backing indexes for the SQL-WHERE list filtering / role scoping
+  // (Prompt 6), following the audit-log indexing pattern.
+  clientIdIdx: index("remittances_client_id_idx").on(table.clientId),
+  statusIdx: index("remittances_status_idx").on(table.status),
+  createdAtIdx: index("remittances_created_at_idx").on(table.createdAt.desc()),
+}));
 
 export type Remittance = typeof remittancesTable.$inferSelect;

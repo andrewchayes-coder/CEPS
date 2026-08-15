@@ -6,11 +6,22 @@ import { EditRemittanceDialog } from '@/components/edit-remittance-dialog';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
 import { format } from 'date-fns';
+import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
 
+const PAGE_SIZE = 50;
+
 export default function RemittancesPage() {
-  const { data: remittances, isLoading, refetch } = useListRemittances();
+  const [page, setPage] = useState(0);
+  const params = { limit: PAGE_SIZE, offset: page * PAGE_SIZE };
+  const { data, isLoading, refetch } = useListRemittances(params, {
+    query: { queryKey: ['remittances', params] },
+  });
+  const remittances = data?.items;
+  const total = data?.total ?? 0;
+  const pageCount = Math.max(1, Math.ceil(total / PAGE_SIZE));
   const { user } = useAuth();
   const isStaff = user?.role === 'staff';
   const deleteRemittance = useDeleteRemittance();
@@ -81,6 +92,34 @@ export default function RemittancesPage() {
               )}
             </TableBody>
           </Table>
+          <div className="flex items-center justify-between px-4 py-3 border-t">
+            <p className="text-sm text-muted-foreground" data-testid="text-remittances-pagination">
+              {total === 0
+                ? 'No remittances'
+                : `Showing ${page * PAGE_SIZE + 1}–${Math.min((page + 1) * PAGE_SIZE, total)} of ${total} remittances`}
+            </p>
+            <div className="flex items-center gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setPage((p) => Math.max(0, p - 1))}
+                disabled={page === 0}
+                data-testid="button-remittances-prev"
+              >
+                <ChevronLeft className="w-4 h-4 mr-1" /> Previous
+              </Button>
+              <span className="text-sm text-muted-foreground">Page {page + 1} of {pageCount}</span>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setPage((p) => Math.min(pageCount - 1, p + 1))}
+                disabled={page >= pageCount - 1}
+                data-testid="button-remittances-next"
+              >
+                Next <ChevronRight className="w-4 h-4 ml-1" />
+              </Button>
+            </div>
+          </div>
         </CardContent>
       </Card>
     </div>

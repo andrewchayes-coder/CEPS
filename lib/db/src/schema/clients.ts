@@ -5,6 +5,7 @@ import {
   boolean,
   date,
   timestamp,
+  index,
 } from "drizzle-orm/pg-core";
 import { usersTable } from "./users";
 
@@ -35,6 +36,14 @@ export const clientsTable = pgTable("clients", {
   createdAt: timestamp("created_at", { withTimezone: true })
     .notNull()
     .defaultNow(),
-});
+}, (table) => ({
+  // Backing indexes for the SQL-WHERE list filtering / role scoping
+  // (Prompt 6), following the audit-log indexing pattern.
+  lastNameIdx: index("clients_last_name_idx").on(table.lastName),
+  statusIdx: index("clients_status_idx").on(table.status),
+  assignedCoordinatorIdIdx: index("clients_assigned_coordinator_id_idx").on(
+    table.assignedCoordinatorId,
+  ),
+}));
 
 export type Client = typeof clientsTable.$inferSelect;

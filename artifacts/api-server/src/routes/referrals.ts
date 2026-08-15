@@ -1,5 +1,5 @@
 import { Router, type IRouter } from "express";
-import { eq, and, isNull, gt, desc } from "drizzle-orm";
+import { eq, and, isNull, gt, desc, count, type SQL } from "drizzle-orm";
 import {
   db,
   clientsTable,
@@ -53,32 +53,55 @@ router.get("/referrals", requireAuth, async (req, res): Promise<void> => {
     res.status(400).json({ error: query.error.message });
     return;
   }
-  let referrals = await db.select().from(referralsTable).orderBy(desc(referralsTable.createdAt));
+  const conditions: SQL[] = [];
+  // Role scoping — mirrors the audit-log SQL-WHERE pattern:
+  // coordinators see only referrals they own; parent/self only their linked
+  // client's; vendors see none (forced to an unsatisfiable condition).
   const u = req.user!;
+  let vendorEmpty = false;
   if (u.role === "service_coordinator") {
-    referrals = referrals.filter((r) => r.serviceCoordinatorId === u.id);
+    conditions.push(eq(referralsTable.serviceCoordinatorId, u.id));
   } else if ((u.role === "parent_guardian" || u.role === "self") && u.linkedRecordType === "client") {
-    referrals = referrals.filter((r) => r.clientId === u.linkedRecordId);
+    conditions.push(eq(referralsTable.clientId, u.linkedRecordId ?? ""));
   } else if (u.role === "vendor") {
-    referrals = [];
+    vendorEmpty = true;
   }
-  if (query.data.status) referrals = referrals.filter((r) => r.status === query.data.status);
-  if (query.data.coordinatorId) referrals = referrals.filter((r) => r.serviceCoordinatorId === query.data.coordinatorId);
-  if (query.data.clientId) referrals = referrals.filter((r) => r.clientId === query.data.clientId);
+  // Query-string filters
+  if (query.data.status) conditions.push(eq(referralsTable.status, query.data.status));
+  if (query.data.coordinatorId) conditions.push(eq(referralsTable.serviceCoordinatorId, query.data.coordinatorId));
+  if (query.data.clientId) conditions.push(eq(referralsTable.clientId, query.data.clientId));
+  const where = conditions.length ? and(...conditions) : undefined;
+  const limit = Math.min(Math.max(query.data.limit ?? 50, 1), 1000);
+  const offset = Math.max(query.data.offset ?? 0, 0);
+  if (vendorEmpty) {
+    res.json(ListReferralsResponse.parse({ items: [], total: 0 }));
+    return;
+  }
+  const [[{ total }], referrals] = await Promise.all([
+    db.select({ total: count() }).from(referralsTable).where(where),
+    db
+      .select()
+      .from(referralsTable)
+      .where(where)
+      .orderBy(desc(referralsTable.createdAt), desc(referralsTable.id))
+      .limit(limit)
+      .offset(offset),
+  ]);
   const [clientNames, coordNames] = await Promise.all([
     clientNameMap(referrals.map((r) => r.clientId)),
     userNameMap(referrals.map((r) => r.serviceCoordinatorId)),
   ]);
   res.json(
-    ListReferralsResponse.parse(
-      referrals.map((r) =>
+    ListReferralsResponse.parse({
+      items: referrals.map((r) =>
         referralJson(
           r,
           clientNames.get(r.clientId),
           r.serviceCoordinatorId ? coordNames.get(r.serviceCoordinatorId) : null,
         ),
       ),
-    ),
+      total,
+    }),
   );
 });
 

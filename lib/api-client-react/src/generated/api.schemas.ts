@@ -1042,6 +1042,24 @@ export interface PaymentInput {
   amount: string;
   paymentMonth?: string;
   paymentType: PaymentInputPaymentType;
+  /** Set true (with a justification) to bypass the duplicate-payment hard stop */
+  overrideDuplicate?: boolean;
+  /** Required written justification when overrideDuplicate is true */
+  overrideJustification?: string;
+}
+
+export type DuplicatePaymentErrorCode = typeof DuplicatePaymentErrorCode[keyof typeof DuplicatePaymentErrorCode];
+
+
+export const DuplicatePaymentErrorCode = {
+  duplicate_payment: 'duplicate_payment',
+} as const;
+
+export interface DuplicatePaymentError {
+  error: string;
+  code: DuplicatePaymentErrorCode;
+  /** The payment(s) already on file that block this insert. */
+  existingPayments: Payment[];
 }
 
 export interface CheckRegisterRow {
@@ -1063,6 +1081,7 @@ export type CheckRegisterImportRowResultOutcome = typeof CheckRegisterImportRowR
 export const CheckRegisterImportRowResultOutcome = {
   imported: 'imported',
   skipped_duplicate: 'skipped_duplicate',
+  flagged_duplicate: 'flagged_duplicate',
   unmatched: 'unmatched',
 } as const;
 
@@ -1197,6 +1216,10 @@ export interface PaymentUpdate {
   /** @nullable */
   paymentMonth?: string | null;
   paymentType?: PaymentUpdatePaymentType;
+  /** Set true (with a justification) to bypass the duplicate-payment hard stop when an update would create a duplicate */
+  overrideDuplicate?: boolean;
+  /** Required written justification when overrideDuplicate is true */
+  overrideJustification?: string;
 }
 
 export type RemittanceUpdateStatus = typeof RemittanceUpdateStatus[keyof typeof RemittanceUpdateStatus];
@@ -1398,12 +1421,26 @@ export type ListAuditLog200 = {
 export type ListClientsParams = {
 status?: string;
 search?: string;
+limit?: number;
+offset?: number;
+};
+
+export type ListClients200 = {
+  items: Client[];
+  total: number;
 };
 
 export type ListReferralsParams = {
 status?: string;
 coordinatorId?: string;
 clientId?: string;
+limit?: number;
+offset?: number;
+};
+
+export type ListReferrals200 = {
+  items: Referral[];
+  total: number;
 };
 
 export type ListAuthorizationsParams = {
@@ -1411,18 +1448,41 @@ clientId?: string;
 vendorId?: string;
 status?: string;
 expiringWithinDays?: number;
+limit?: number;
+offset?: number;
+};
+
+export type ListAuthorizations200 = {
+  items: Authorization[];
+  total: number;
 };
 
 export type ListInvoicesParams = {
 status?: string;
 clientId?: string;
 vendorId?: string;
+limit?: number;
+offset?: number;
+};
+
+export type ListInvoices200 = {
+  items: Invoice[];
+  total: number;
 };
 
 export type ListPaymentsParams = {
 clientId?: string;
 vendorId?: string;
 authorizationId?: string;
+status?: string;
+search?: string;
+limit?: number;
+offset?: number;
+};
+
+export type ListPayments200 = {
+  items: Payment[];
+  total: number;
 };
 
 export type ListFeesParams = {
@@ -1433,12 +1493,26 @@ status?: string;
 export type ListRemittancesParams = {
 clientId?: string;
 status?: string;
+limit?: number;
+offset?: number;
+};
+
+export type ListRemittances200 = {
+  items: Remittance[];
+  total: number;
 };
 
 export type ListVendorsParams = {
 search?: string;
 w9Status?: string;
 active?: boolean;
+limit?: number;
+offset?: number;
+};
+
+export type ListVendors200 = {
+  items: Vendor[];
+  total: number;
 };
 
 export type GetVendorPaymentReportParams = {

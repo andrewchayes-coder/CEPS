@@ -18,6 +18,8 @@ import {
 } from "@workspace/api-zod";
 import { requireAuth, requireStaff, iso } from "../lib/auth";
 import { userNameMap, authorizationTotalsPaid, effectiveAuthStatus, notDeleted } from "../lib/serializers";
+import { money, sumMoney } from "../lib/money";
+import Decimal from "decimal.js";
 
 const router: IRouter = Router();
 
@@ -69,9 +71,11 @@ router.get("/dashboard/summary", requireAuth, async (req, res): Promise<void> =>
   }));
 
   const thisMonth = new Date().toISOString().slice(0, 7);
-  const paymentsThisMonth = payments
-    .filter((p) => (p.paymentMonth ?? p.checkDate.slice(0, 7)) === thisMonth)
-    .reduce((sum, p) => sum + Number(p.amount), 0);
+  const paymentsThisMonth = sumMoney(
+    payments
+      .filter((p) => (p.paymentMonth ?? p.checkDate.slice(0, 7)) === thisMonth)
+      .map((p) => p.amount),
+  );
 
   const missingW9 = vendors.filter((v) => v.active && v.w9Status !== "on_file");
   const unmatchedRemits = remits.filter((r) => r.status !== "matched");
@@ -155,12 +159,12 @@ router.get("/reports/vendor-payments", requireStaff, async (req, res): Promise<v
     db.select().from(paymentsTable).where(notDeleted(paymentsTable)),
     db.select().from(vendorsTable),
   ]);
-  const byVendor = new Map<string, { total: number; count: number }>();
+  const byVendor = new Map<string, { total: Decimal; count: number }>();
   for (const p of payments) {
     if (!p.vendorId) continue;
     if (!p.checkDate.startsWith(String(year))) continue;
-    const cur = byVendor.get(p.vendorId) ?? { total: 0, count: 0 };
-    cur.total += Number(p.amount);
+    const cur = byVendor.get(p.vendorId) ?? { total: new Decimal(0), count: 0 };
+    cur.total = cur.total.plus(money(p.amount));
     cur.count += 1;
     byVendor.set(p.vendorId, cur);
   }
@@ -177,7 +181,7 @@ router.get("/reports/vendor-payments", requireStaff, async (req, res): Promise<v
         year,
       };
     })
-    .sort((a, b) => Number(b.totalPaid) - Number(a.totalPaid));
+    .sort((a, b) => money(b.totalPaid).comparedTo(money(a.totalPaid)));
   res.json(GetVendorPaymentReportResponse.parse(rows));
 });
 

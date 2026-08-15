@@ -9,4 +9,6 @@
 export type ListRemittancesParams = {
 clientId?: string;
 status?: string;
+limit?: number;
+offset?: number;
 };

@@ -9,4 +9,6 @@
 export type ListClientsParams = {
 status?: string;
 search?: string;
+limit?: number;
+offset?: number;
 };

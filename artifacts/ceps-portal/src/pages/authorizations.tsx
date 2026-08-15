@@ -11,16 +11,31 @@ import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { FileCheck, Plus, Search, AlertCircle } from 'lucide-react';
+import { FileCheck, Plus, Search, AlertCircle, ChevronLeft, ChevronRight } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useAuth } from '@/components/auth/auth-provider';
+
+const PAGE_SIZE = 50;
 
 export default function AuthorizationsPage() {
   const { user } = useAuth();
   const isStaff = user?.role === 'staff';
   const [search, setSearch] = useState('');
+  const [page, setPage] = useState(0);
 
-  const { data: auths, isLoading, refetch } = useListAuthorizations();
+  // Server-side pagination — mirrors the audit-log page. The authorizations
+  // list API has no `search` param (Auth #, Client and Vendor names), so that
+  // stays a client-side filter over the loaded page, like referrals.
+  const params = {
+    limit: PAGE_SIZE,
+    offset: page * PAGE_SIZE,
+  };
+  const { data, isLoading, refetch } = useListAuthorizations(params, {
+    query: { queryKey: ['authorizations', params] },
+  });
+  const auths = data?.items;
+  const total = data?.total ?? 0;
+  const pageCount = Math.max(1, Math.ceil(total / PAGE_SIZE));
   const deleteAuthorization = useDeleteAuthorization();
 
   const filteredAuths = auths?.filter(a => 
@@ -136,6 +151,34 @@ export default function AuthorizationsPage() {
               )}
             </TableBody>
           </Table>
+          <div className="flex items-center justify-between px-4 py-3 border-t">
+            <p className="text-sm text-muted-foreground" data-testid="text-authorizations-pagination">
+              {total === 0
+                ? 'No authorizations'
+                : `Showing ${page * PAGE_SIZE + 1}–${Math.min((page + 1) * PAGE_SIZE, total)} of ${total} authorizations`}
+            </p>
+            <div className="flex items-center gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setPage((p) => Math.max(0, p - 1))}
+                disabled={page === 0}
+                data-testid="button-authorizations-prev"
+              >
+                <ChevronLeft className="w-4 h-4 mr-1" /> Previous
+              </Button>
+              <span className="text-sm text-muted-foreground">Page {page + 1} of {pageCount}</span>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setPage((p) => Math.min(pageCount - 1, p + 1))}
+                disabled={page >= pageCount - 1}
+                data-testid="button-authorizations-next"
+              >
+                Next <ChevronRight className="w-4 h-4 ml-1" />
+              </Button>
+            </div>
+          </div>
         </CardContent>
       </Card>
     </div>

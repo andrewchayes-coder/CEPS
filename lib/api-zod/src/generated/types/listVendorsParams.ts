@@ -10,4 +10,6 @@ export type ListVendorsParams = {
 search?: string;
 w9Status?: string;
 active?: boolean;
+limit?: number;
+offset?: number;
 };

@@ -2,3 +2,6 @@
 - [Preview iframe session cookies](preview-auth-cookies.md) — cookie auth needs SameSite=None; Secure; Partitioned; full page load after login; dedupe react-query in vite.
 - [Form empty-string inserts](form-empty-strings.md) — portal forms send '' for untouched optional fields; API routes must normalize ''→null before drizzle inserts/updates or numeric/FK columns 500.
 - [Invoice validation lifecycle](invoice-validation.md) — invoice detail page auto re-runs /validate on view+save; a material PATCH resets status to pending_review first. Status seen in UI is freshly computed, not stale.
+- [DB migrations, not push](db-migrations.md) — schema changes go db:generate + db:migrate (lib/db/migrations); runner auto-stamps baseline on push-built DBs; deploy step not wired yet.
+- [Duplicate-payment rule](duplicate-payment-rule.md) — shared checkDuplicatePayment + pg advisory xact lock; overrides legitimately allow dup triples, so never add a unique index on client/auth/month.
+- [List endpoint pagination](list-pagination.md) — all 7 list endpoints use {items,total} + limit/offset SQL pattern (audit-log is the reference, envelope key differs: entries).

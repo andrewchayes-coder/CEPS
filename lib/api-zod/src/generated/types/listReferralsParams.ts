@@ -10,4 +10,6 @@ export type ListReferralsParams = {
 status?: string;
 coordinatorId?: string;
 clientId?: string;
+limit?: number;
+offset?: number;
 };

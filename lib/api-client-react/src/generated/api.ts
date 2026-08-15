@@ -31,6 +31,7 @@ import type {
   ClientInput,
   ClientUpdate,
   DashboardSummary,
+  DuplicatePaymentError,
   ErrorEnvelope,
   Fee,
   FeeInput,
@@ -48,14 +49,21 @@ import type {
   InvoiceValidationResult,
   ListAuditLog200,
   ListAuditLogParams,
+  ListAuthorizations200,
   ListAuthorizationsParams,
+  ListClients200,
   ListClientsParams,
   ListFeesParams,
+  ListInvoices200,
   ListInvoicesParams,
+  ListPayments200,
   ListPaymentsParams,
+  ListReferrals200,
   ListReferralsParams,
+  ListRemittances200,
   ListRemittancesParams,
   ListUsersParams,
+  ListVendors200,
   ListVendorsParams,
   LoginInput,
   MagicLinkConsumeInput,
@@ -1402,9 +1410,9 @@ export const getListClientsUrl = (params?: ListClientsParams,) => {
 /**
  * @summary List clients (scoped by role)
  */
-export const listClients = async (params?: ListClientsParams, options?: Parameters<typeof customFetch>[1]): Promise<Client[]> => {
+export const listClients = async (params?: ListClientsParams, options?: Parameters<typeof customFetch>[1]): Promise<ListClients200> => {
 
-  return customFetch<Client[]>(getListClientsUrl(params),
+  return customFetch<ListClients200>(getListClientsUrl(params),
   {
     ...options,
     method: 'GET'
@@ -1854,9 +1862,9 @@ export const getListReferralsUrl = (params?: ListReferralsParams,) => {
 /**
  * @summary List referrals (filterable, scoped by role)
  */
-export const listReferrals = async (params?: ListReferralsParams, options?: Parameters<typeof customFetch>[1]): Promise<Referral[]> => {
+export const listReferrals = async (params?: ListReferralsParams, options?: Parameters<typeof customFetch>[1]): Promise<ListReferrals200> => {
 
-  return customFetch<Referral[]>(getListReferralsUrl(params),
+  return customFetch<ListReferrals200>(getListReferralsUrl(params),
   {
     ...options,
     method: 'GET'
@@ -2449,9 +2457,9 @@ export const getListAuthorizationsUrl = (params?: ListAuthorizationsParams,) => 
 /**
  * @summary List authorizations (filterable, scoped by role)
  */
-export const listAuthorizations = async (params?: ListAuthorizationsParams, options?: Parameters<typeof customFetch>[1]): Promise<Authorization[]> => {
+export const listAuthorizations = async (params?: ListAuthorizationsParams, options?: Parameters<typeof customFetch>[1]): Promise<ListAuthorizations200> => {
 
-  return customFetch<Authorization[]>(getListAuthorizationsUrl(params),
+  return customFetch<ListAuthorizations200>(getListAuthorizationsUrl(params),
   {
     ...options,
     method: 'GET'
@@ -2895,9 +2903,9 @@ export const getListInvoicesUrl = (params?: ListInvoicesParams,) => {
 /**
  * @summary List invoices (filterable, scoped by role)
  */
-export const listInvoices = async (params?: ListInvoicesParams, options?: Parameters<typeof customFetch>[1]): Promise<Invoice[]> => {
+export const listInvoices = async (params?: ListInvoicesParams, options?: Parameters<typeof customFetch>[1]): Promise<ListInvoices200> => {
 
-  return customFetch<Invoice[]>(getListInvoicesUrl(params),
+  return customFetch<ListInvoices200>(getListInvoicesUrl(params),
   {
     ...options,
     method: 'GET'
@@ -3342,9 +3350,9 @@ export const getListPaymentsUrl = (params?: ListPaymentsParams,) => {
 /**
  * @summary List payments (filterable, scoped by role)
  */
-export const listPayments = async (params?: ListPaymentsParams, options?: Parameters<typeof customFetch>[1]): Promise<Payment[]> => {
+export const listPayments = async (params?: ListPaymentsParams, options?: Parameters<typeof customFetch>[1]): Promise<ListPayments200> => {
 
-  return customFetch<Payment[]>(getListPaymentsUrl(params),
+  return customFetch<ListPayments200>(getListPaymentsUrl(params),
   {
     ...options,
     method: 'GET'
@@ -3434,7 +3442,7 @@ export const createPayment = async (paymentInput: PaymentInput, options?: Parame
 
 
 
-export const getCreatePaymentMutationOptions = <TError = ErrorType<unknown>,
+export const getCreatePaymentMutationOptions = <TError = ErrorType<DuplicatePaymentError>,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createPayment>>, TError,{data: BodyType<PaymentInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
 ): UseMutationOptions<Awaited<ReturnType<typeof createPayment>>, TError,{data: BodyType<PaymentInput>}, TContext> => {
 
@@ -3463,12 +3471,12 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
 
     export type CreatePaymentMutationResult = NonNullable<Awaited<ReturnType<typeof createPayment>>>
     export type CreatePaymentMutationBody = BodyType<PaymentInput>
-    export type CreatePaymentMutationError = ErrorType<unknown>
+    export type CreatePaymentMutationError = ErrorType<DuplicatePaymentError>
 
     /**
  * @summary Manually log a payment/check (staff)
  */
-export const useCreatePayment = <TError = ErrorType<unknown>,
+export const useCreatePayment = <TError = ErrorType<DuplicatePaymentError>,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createPayment>>, TError,{data: BodyType<PaymentInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
  ): UseMutationResult<
         Awaited<ReturnType<typeof createPayment>>,
@@ -3506,7 +3514,7 @@ export const updatePayment = async (id: string,
 
 
 
-export const getUpdatePaymentMutationOptions = <TError = ErrorType<void>,
+export const getUpdatePaymentMutationOptions = <TError = ErrorType<void | DuplicatePaymentError>,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updatePayment>>, TError,{id: string;data: BodyType<PaymentUpdate>}, TContext>, request?: SecondParameter<typeof customFetch>}
 ): UseMutationOptions<Awaited<ReturnType<typeof updatePayment>>, TError,{id: string;data: BodyType<PaymentUpdate>}, TContext> => {
 
@@ -3535,12 +3543,12 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
 
     export type UpdatePaymentMutationResult = NonNullable<Awaited<ReturnType<typeof updatePayment>>>
     export type UpdatePaymentMutationBody = BodyType<PaymentUpdate>
-    export type UpdatePaymentMutationError = ErrorType<void>
+    export type UpdatePaymentMutationError = ErrorType<void | DuplicatePaymentError>
 
     /**
  * @summary Update a payment (staff)
  */
-export const useUpdatePayment = <TError = ErrorType<void>,
+export const useUpdatePayment = <TError = ErrorType<void | DuplicatePaymentError>,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updatePayment>>, TError,{id: string;data: BodyType<PaymentUpdate>}, TContext>, request?: SecondParameter<typeof customFetch>}
  ): UseMutationResult<
         Awaited<ReturnType<typeof updatePayment>>,
@@ -4009,9 +4017,9 @@ export const getListRemittancesUrl = (params?: ListRemittancesParams,) => {
 /**
  * @summary List remittances (staff)
  */
-export const listRemittances = async (params?: ListRemittancesParams, options?: Parameters<typeof customFetch>[1]): Promise<Remittance[]> => {
+export const listRemittances = async (params?: ListRemittancesParams, options?: Parameters<typeof customFetch>[1]): Promise<ListRemittances200> => {
 
-  return customFetch<Remittance[]>(getListRemittancesUrl(params),
+  return customFetch<ListRemittances200>(getListRemittancesUrl(params),
   {
     ...options,
     method: 'GET'
@@ -4379,9 +4387,9 @@ export const getListVendorsUrl = (params?: ListVendorsParams,) => {
 /**
  * @summary List vendors (preferred first)
  */
-export const listVendors = async (params?: ListVendorsParams, options?: Parameters<typeof customFetch>[1]): Promise<Vendor[]> => {
+export const listVendors = async (params?: ListVendorsParams, options?: Parameters<typeof customFetch>[1]): Promise<ListVendors200> => {
 
-  return customFetch<Vendor[]>(getListVendorsUrl(params),
+  return customFetch<ListVendors200>(getListVendorsUrl(params),
   {
     ...options,
     method: 'GET'

@@ -20,4 +20,8 @@ export interface PaymentUpdate {
   /** @nullable */
   paymentMonth?: string | null;
   paymentType?: PaymentUpdatePaymentType;
+  /** Set true (with a justification) to bypass the duplicate-payment hard stop when an update would create a duplicate */
+  overrideDuplicate?: boolean;
+  /** Required written justification when overrideDuplicate is true */
+  overrideJustification?: string;
 }

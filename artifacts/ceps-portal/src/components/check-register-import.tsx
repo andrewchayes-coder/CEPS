@@ -156,7 +156,8 @@ export function CheckRegisterImport({ onImported }: { onImported: () => void }) 
 
   const outcomeBadge = (outcome: string) => {
     if (outcome === 'imported') return <Badge className="bg-green-100 text-green-800 hover:bg-green-100">Imported</Badge>;
-    if (outcome === 'skipped_duplicate') return <Badge variant="secondary">Duplicate</Badge>;
+    if (outcome === 'skipped_duplicate') return <Badge variant="secondary">Duplicate (check #)</Badge>;
+    if (outcome === 'flagged_duplicate') return <Badge className="bg-amber-100 text-amber-900 hover:bg-amber-100">Flagged duplicate</Badge>;
     return <Badge variant="destructive">Unmatched</Badge>;
   };
 

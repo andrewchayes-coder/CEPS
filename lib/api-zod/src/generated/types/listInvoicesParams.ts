@@ -10,4 +10,6 @@ export type ListInvoicesParams = {
 status?: string;
 clientId?: string;
 vendorId?: string;
+limit?: number;
+offset?: number;
 };

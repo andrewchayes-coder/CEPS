@@ -20,4 +20,8 @@ export interface PaymentInput {
   amount: string;
   paymentMonth?: string;
   paymentType: PaymentInputPaymentType;
+  /** Set true (with a justification) to bypass the duplicate-payment hard stop */
+  overrideDuplicate?: boolean;
+  /** Required written justification when overrideDuplicate is true */
+  overrideJustification?: string;
 }

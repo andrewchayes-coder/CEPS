@@ -45,9 +45,12 @@ type Props = {
 export function EditPaymentDialog({ id, payment, onSaved }: Props) {
   const { toast } = useToast();
   const updatePayment = useUpdatePayment();
-  const { data: vendors } = useListVendors();
-  const { data: invoices } = useListInvoices();
-  const { data: authorizations } = useListAuthorizations();
+  const { data: vendorsData } = useListVendors({ limit: 1000 });
+  const { data: invoicesData } = useListInvoices({ limit: 1000 });
+  const { data: authorizationsData } = useListAuthorizations({ limit: 1000 });
+  const vendors = vendorsData?.items;
+  const invoices = invoicesData?.items;
+  const authorizations = authorizationsData?.items;
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState({
     qbCheckNumber: payment.qbCheckNumber,

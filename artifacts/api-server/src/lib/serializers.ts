@@ -1,4 +1,6 @@
-import { inArray, eq, and, type Column, type SQL } from "drizzle-orm";
+import { inArray, eq, and, sql, type Column, type SQL } from "drizzle-orm";
+import Decimal from "decimal.js";
+import { money } from "./money";
 import {
   db,
   clientsTable,
@@ -129,34 +131,41 @@ export function referralJson(r: Referral, clientName?: string | null, coordinato
   };
 }
 
-export async function authorizationTotalsPaid(ids: string[]): Promise<Map<string, number>> {
+// Exact per-authorization sum of non-deleted payments. Summed in SQL (Postgres
+// numeric addition is exact) and returned as Decimal so callers never coerce
+// cent values through Number().
+export async function authorizationTotalsPaid(ids: string[]): Promise<Map<string, Decimal>> {
   if (ids.length === 0) return new Map();
   const rows = await db
-    .select({ authorizationId: paymentsTable.authorizationId, amount: paymentsTable.amount })
+    .select({
+      authorizationId: paymentsTable.authorizationId,
+      total: sql<string>`coalesce(sum(${paymentsTable.amount}), 0)`,
+    })
     .from(paymentsTable)
-    .where(and(inArray(paymentsTable.authorizationId, ids), notDeleted(paymentsTable)));
-  const map = new Map<string, number>();
+    .where(and(inArray(paymentsTable.authorizationId, ids), notDeleted(paymentsTable)))
+    .groupBy(paymentsTable.authorizationId);
+  const map = new Map<string, Decimal>();
   for (const row of rows) {
     if (!row.authorizationId) continue;
-    map.set(row.authorizationId, (map.get(row.authorizationId) ?? 0) + Number(row.amount));
+    map.set(row.authorizationId, money(row.total));
   }
   return map;
 }
 
-export function effectiveAuthStatus(a: Authorization, totalPaid: number): string {
+export function effectiveAuthStatus(a: Authorization, totalPaid: Decimal | number): string {
   if (a.status === "pending") return "pending";
   const today = new Date().toISOString().slice(0, 10);
   if (a.servicePeriodEnd < today) return "expired";
-  if (totalPaid >= Number(a.maxPeriodAmount)) return "exhausted";
+  if (money(totalPaid).greaterThanOrEqualTo(money(a.maxPeriodAmount))) return "exhausted";
   return a.status;
 }
 
 export function authorizationJson(
   a: Authorization,
-  opts: { clientName?: string | null; vendorName?: string | null; totalPaid?: number },
+  opts: { clientName?: string | null; vendorName?: string | null; totalPaid?: Decimal | number },
 ) {
-  const totalPaid = opts.totalPaid ?? 0;
-  const remaining = Number(a.maxPeriodAmount) - totalPaid;
+  const totalPaid = money(opts.totalPaid ?? 0);
+  const remaining = money(a.maxPeriodAmount).minus(totalPaid);
   const end = new Date(`${a.servicePeriodEnd}T00:00:00Z`);
   const daysUntilExpiry = Math.ceil((end.getTime() - Date.now()) / (24 * 60 * 60 * 1000));
   return {

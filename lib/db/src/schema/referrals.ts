@@ -5,6 +5,7 @@ import {
   date,
   jsonb,
   timestamp,
+  index,
 } from "drizzle-orm/pg-core";
 import { clientsTable } from "./clients";
 import { usersTable } from "./users";
@@ -34,6 +35,15 @@ export const referralsTable = pgTable("referrals", {
   createdAt: timestamp("created_at", { withTimezone: true })
     .notNull()
     .defaultNow(),
-});
+}, (table) => ({
+  // Backing indexes for the SQL-WHERE list filtering / role scoping
+  // (Prompt 6), following the audit-log indexing pattern.
+  createdAtIdx: index("referrals_created_at_idx").on(table.createdAt.desc()),
+  clientIdIdx: index("referrals_client_id_idx").on(table.clientId),
+  serviceCoordinatorIdIdx: index("referrals_service_coordinator_id_idx").on(
+    table.serviceCoordinatorId,
+  ),
+  statusIdx: index("referrals_status_idx").on(table.status),
+}));
 
 export type Referral = typeof referralsTable.$inferSelect;

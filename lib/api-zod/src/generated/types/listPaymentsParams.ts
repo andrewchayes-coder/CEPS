@@ -10,4 +10,8 @@ export type ListPaymentsParams = {
 clientId?: string;
 vendorId?: string;
 authorizationId?: string;
+status?: string;
+search?: string;
+limit?: number;
+offset?: number;
 };

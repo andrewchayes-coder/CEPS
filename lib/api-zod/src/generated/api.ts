@@ -317,10 +317,13 @@ export const ListAuditLogResponse = zod.object({
  */
 export const ListClientsQueryParams = zod.object({
   "status": zod.coerce.string().optional(),
-  "search": zod.coerce.string().optional()
+  "search": zod.coerce.string().optional(),
+  "limit": zod.coerce.number().int().optional(),
+  "offset": zod.coerce.number().int().optional()
 })
 
-export const ListClientsResponseItem = zod.object({
+export const ListClientsResponse = zod.object({
+  "items": zod.array(zod.object({
   "id": zod.string(),
   "firstName": zod.string(),
   "lastName": zod.string(),
@@ -340,8 +343,9 @@ export const ListClientsResponseItem = zod.object({
   "familyRepEmail": zod.string().nullish(),
   "familyRepAddress": zod.string().nullish(),
   "createdAt": zod.string().nullish()
+})),
+  "total": zod.int()
 })
-export const ListClientsResponse = zod.array(ListClientsResponseItem)
 
 
 /**
@@ -653,10 +657,13 @@ export const GetClientCaseResponse = zod.object({
 export const ListReferralsQueryParams = zod.object({
   "status": zod.coerce.string().optional(),
   "coordinatorId": zod.coerce.string().optional(),
-  "clientId": zod.coerce.string().optional()
+  "clientId": zod.coerce.string().optional(),
+  "limit": zod.coerce.number().int().optional(),
+  "offset": zod.coerce.number().int().optional()
 })
 
-export const ListReferralsResponseItem = zod.object({
+export const ListReferralsResponse = zod.object({
+  "items": zod.array(zod.object({
   "id": zod.string(),
   "clientId": zod.string(),
   "clientName": zod.string().nullish(),
@@ -712,8 +719,9 @@ export const ListReferralsResponseItem = zod.object({
   "serviceFrequency": zod.union([zod.literal('one_time'),zod.literal('monthly'),zod.literal(null)]).nullish(),
   "notes": zod.string().nullish(),
   "createdAt": zod.string().nullish()
+})),
+  "total": zod.int()
 })
-export const ListReferralsResponse = zod.array(ListReferralsResponseItem)
 
 
 /**
@@ -1039,10 +1047,13 @@ export const ListAuthorizationsQueryParams = zod.object({
   "clientId": zod.coerce.string().optional(),
   "vendorId": zod.coerce.string().optional(),
   "status": zod.coerce.string().optional(),
-  "expiringWithinDays": zod.coerce.number().int().optional()
+  "expiringWithinDays": zod.coerce.number().int().optional(),
+  "limit": zod.coerce.number().int().optional(),
+  "offset": zod.coerce.number().int().optional()
 })
 
-export const ListAuthorizationsResponseItem = zod.object({
+export const ListAuthorizationsResponse = zod.object({
+  "items": zod.array(zod.object({
   "id": zod.string(),
   "clientId": zod.string(),
   "clientName": zod.string().nullish(),
@@ -1064,8 +1075,9 @@ export const ListAuthorizationsResponseItem = zod.object({
   "totalPaid": zod.string().nullish(),
   "remainingAmount": zod.string().nullish(),
   "daysUntilExpiry": zod.int().nullish()
+})),
+  "total": zod.int()
 })
-export const ListAuthorizationsResponse = zod.array(ListAuthorizationsResponseItem)
 
 
 /**
@@ -1251,10 +1263,13 @@ export const ParseAuthorizationPdfResponse = zod.object({
 export const ListInvoicesQueryParams = zod.object({
   "status": zod.coerce.string().optional(),
   "clientId": zod.coerce.string().optional(),
-  "vendorId": zod.coerce.string().optional()
+  "vendorId": zod.coerce.string().optional(),
+  "limit": zod.coerce.number().int().optional(),
+  "offset": zod.coerce.number().int().optional()
 })
 
-export const ListInvoicesResponseItem = zod.object({
+export const ListInvoicesResponse = zod.object({
+  "items": zod.array(zod.object({
   "id": zod.string(),
   "clientId": zod.string(),
   "clientName": zod.string().nullish(),
@@ -1274,8 +1289,9 @@ export const ListInvoicesResponseItem = zod.object({
   "reviewedAt": zod.string().nullish(),
   "notes": zod.string().nullish(),
   "createdAt": zod.string().nullish()
+})),
+  "total": zod.int()
 })
-export const ListInvoicesResponse = zod.array(ListInvoicesResponseItem)
 
 
 /**
@@ -1427,10 +1443,15 @@ export const ValidateInvoiceResponse = zod.object({
 export const ListPaymentsQueryParams = zod.object({
   "clientId": zod.coerce.string().optional(),
   "vendorId": zod.coerce.string().optional(),
-  "authorizationId": zod.coerce.string().optional()
+  "authorizationId": zod.coerce.string().optional(),
+  "status": zod.coerce.string().optional(),
+  "search": zod.coerce.string().optional(),
+  "limit": zod.coerce.number().int().optional(),
+  "offset": zod.coerce.number().int().optional()
 })
 
-export const ListPaymentsResponseItem = zod.object({
+export const ListPaymentsResponse = zod.object({
+  "items": zod.array(zod.object({
   "id": zod.string(),
   "clientId": zod.string(),
   "clientName": zod.string().nullish(),
@@ -1448,8 +1469,9 @@ export const ListPaymentsResponseItem = zod.object({
   "loggedBy": zod.string().nullish(),
   "remitted": zod.boolean().nullish(),
   "createdAt": zod.string().nullish()
+})),
+  "total": zod.int()
 })
-export const ListPaymentsResponse = zod.array(ListPaymentsResponseItem)
 
 
 /**
@@ -1464,7 +1486,9 @@ export const CreatePaymentBody = zod.object({
   "checkDate": zod.string(),
   "amount": zod.string(),
   "paymentMonth": zod.string().optional(),
-  "paymentType": zod.enum(['direct_payment', 'reimbursement', 'fee'])
+  "paymentType": zod.enum(['direct_payment', 'reimbursement', 'fee']),
+  "overrideDuplicate": zod.boolean().optional().describe('Set true (with a justification) to bypass the duplicate-payment hard stop'),
+  "overrideJustification": zod.string().optional().describe('Required written justification when overrideDuplicate is true')
 })
 
 export const CreatePaymentResponse = zod.object({
@@ -1503,7 +1527,9 @@ export const UpdatePaymentBody = zod.object({
   "checkDate": zod.string().optional(),
   "amount": zod.string().optional(),
   "paymentMonth": zod.string().nullish(),
-  "paymentType": zod.enum(['direct_payment', 'reimbursement', 'fee']).optional()
+  "paymentType": zod.enum(['direct_payment', 'reimbursement', 'fee']).optional(),
+  "overrideDuplicate": zod.boolean().optional().describe('Set true (with a justification) to bypass the duplicate-payment hard stop when an update would create a duplicate'),
+  "overrideJustification": zod.string().optional().describe('Required written justification when overrideDuplicate is true')
 })
 
 export const UpdatePaymentResponse = zod.object({
@@ -1559,7 +1585,7 @@ export const ImportCheckRegisterResponse = zod.object({
   "unmatched": zod.int(),
   "results": zod.array(zod.object({
   "qbCheckNumber": zod.string(),
-  "outcome": zod.enum(['imported', 'skipped_duplicate', 'unmatched']),
+  "outcome": zod.enum(['imported', 'skipped_duplicate', 'flagged_duplicate', 'unmatched']),
   "message": zod.string().nullish(),
   "paymentId": zod.string().nullish()
 }))
@@ -1663,10 +1689,13 @@ export const DeleteFeeResponse = zod.object({
  */
 export const ListRemittancesQueryParams = zod.object({
   "clientId": zod.coerce.string().optional(),
-  "status": zod.coerce.string().optional()
+  "status": zod.coerce.string().optional(),
+  "limit": zod.coerce.number().int().optional(),
+  "offset": zod.coerce.number().int().optional()
 })
 
-export const ListRemittancesResponseItem = zod.object({
+export const ListRemittancesResponse = zod.object({
+  "items": zod.array(zod.object({
   "id": zod.string(),
   "clientId": zod.string(),
   "clientName": zod.string().nullish(),
@@ -1681,8 +1710,9 @@ export const ListRemittancesResponseItem = zod.object({
   "matchedPaymentId": zod.string().nullish(),
   "autoMatched": zod.boolean(),
   "remittanceBatchId": zod.string().nullish()
+})),
+  "total": zod.int()
 })
-export const ListRemittancesResponse = zod.array(ListRemittancesResponseItem)
 
 
 /**
@@ -1800,10 +1830,13 @@ export const MatchRemittanceResponse = zod.object({
 export const ListVendorsQueryParams = zod.object({
   "search": zod.coerce.string().optional(),
   "w9Status": zod.coerce.string().optional(),
-  "active": zod.coerce.boolean().optional()
+  "active": zod.coerce.boolean().optional(),
+  "limit": zod.coerce.number().int().optional(),
+  "offset": zod.coerce.number().int().optional()
 })
 
-export const ListVendorsResponseItem = zod.object({
+export const ListVendorsResponse = zod.object({
+  "items": zod.array(zod.object({
   "id": zod.string(),
   "name": zod.string(),
   "altaVendorNumber": zod.string().nullish(),
@@ -1818,8 +1851,9 @@ export const ListVendorsResponseItem = zod.object({
   "preferred": zod.boolean(),
   "active": zod.boolean(),
   "createdAt": zod.string().nullish()
+})),
+  "total": zod.int()
 })
-export const ListVendorsResponse = zod.array(ListVendorsResponseItem)
 
 
 /**

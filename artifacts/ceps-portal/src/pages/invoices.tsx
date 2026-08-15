@@ -8,15 +8,27 @@ import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Plus, Search, Receipt } from 'lucide-react';
+import { Plus, Search, Receipt, ChevronLeft, ChevronRight } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useAuth } from '@/components/auth/auth-provider';
+
+const PAGE_SIZE = 50;
 
 export default function InvoicesPage() {
   const { user } = useAuth();
   const [search, setSearch] = useState('');
-  
-  const { data: invoices, isLoading } = useListInvoices();
+  const [page, setPage] = useState(0);
+
+  // The invoices list API has no server-side search param (only status/client/
+  // vendor filters, none surfaced here), so search stays a client-side filter
+  // over the current page; pagination is server-driven like the audit-log page.
+  const params = { limit: PAGE_SIZE, offset: page * PAGE_SIZE };
+  const { data, isLoading } = useListInvoices(params, {
+    query: { queryKey: ['invoices', params] },
+  });
+  const invoices = data?.items;
+  const total = data?.total ?? 0;
+  const pageCount = Math.max(1, Math.ceil(total / PAGE_SIZE));
 
   const filteredInvoices = invoices?.filter(i => 
     i.vendorName?.toLowerCase().includes(search.toLowerCase()) ||
@@ -95,6 +107,34 @@ export default function InvoicesPage() {
               )}
             </TableBody>
           </Table>
+          <div className="flex items-center justify-between px-4 py-3 border-t">
+            <p className="text-sm text-muted-foreground" data-testid="text-invoices-pagination">
+              {total === 0
+                ? 'No invoices'
+                : `Showing ${page * PAGE_SIZE + 1}–${Math.min((page + 1) * PAGE_SIZE, total)} of ${total} invoices`}
+            </p>
+            <div className="flex items-center gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setPage((p) => Math.max(0, p - 1))}
+                disabled={page === 0}
+                data-testid="button-invoices-prev"
+              >
+                <ChevronLeft className="w-4 h-4 mr-1" /> Previous
+              </Button>
+              <span className="text-sm text-muted-foreground">Page {page + 1} of {pageCount}</span>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setPage((p) => Math.min(pageCount - 1, p + 1))}
+                disabled={page >= pageCount - 1}
+                data-testid="button-invoices-next"
+              >
+                Next <ChevronRight className="w-4 h-4 ml-1" />
+              </Button>
+            </div>
+          </div>
         </CardContent>
       </Card>
     </div>

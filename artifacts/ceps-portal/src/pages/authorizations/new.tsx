@@ -37,8 +37,10 @@ export default function AuthorizationNewPage() {
   const { toast } = useToast();
   const createAuth = useCreateAuthorization();
   
-  const { data: clients, isLoading: clientsLoading } = useListClients();
-  const { data: vendors, isLoading: vendorsLoading } = useListVendors();
+  const { data: clientsData, isLoading: clientsLoading } = useListClients({ limit: 1000 });
+  const { data: vendorsData, isLoading: vendorsLoading } = useListVendors({ limit: 1000 });
+  const clients = clientsData?.items;
+  const vendors = vendorsData?.items;
   const [warnings, setWarnings] = useState<string[]>([]);
   const parsePdf = useParseAuthorizationPdf();
   const [posPdfUrl, setPosPdfUrl] = useState<string | undefined>(undefined);

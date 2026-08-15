@@ -1,5 +1,5 @@
 import { Router, type IRouter } from "express";
-import { eq, or, ilike, desc, and } from "drizzle-orm";
+import { eq, or, ilike, desc, and, inArray, sql, count, type SQL } from "drizzle-orm";
 import {
   db,
   clientsTable,
@@ -68,28 +68,53 @@ router.get("/clients", requireAuth, async (req, res): Promise<void> => {
     res.status(400).json({ error: query.error.message });
     return;
   }
+  const escapeLike = (s: string) => s.replace(/[\\%_]/g, (c) => `\\${c}`);
   const scoped = scopeClientId(req);
   const vendorIds = await vendorClientIds(req);
-  let clients = await db.select().from(clientsTable).where(notDeleted(clientsTable)).orderBy(clientsTable.lastName);
-  if (scoped) clients = clients.filter((c) => c.id === scoped);
+  const conditions: SQL[] = [notDeleted(clientsTable)];
+  // Role scoping — mirrors the payments/audit-log SQL-WHERE pattern.
+  // parent/self only their linked client; coordinators only their caseload;
+  // vendors only clients they hold an authorization for.
+  if (scoped) conditions.push(eq(clientsTable.id, scoped));
   if (req.user!.role === "service_coordinator") {
-    clients = clients.filter((c) => c.assignedCoordinatorId === req.user!.id);
+    conditions.push(eq(clientsTable.assignedCoordinatorId, req.user!.id));
   }
-  // Vendors may only see clients they have an authorization for.
-  if (vendorIds) clients = clients.filter((c) => vendorIds.has(c.id));
-  if (query.data.status) clients = clients.filter((c) => c.status === query.data.status);
+  if (vendorIds) {
+    // Empty set → vendor sees no clients (unsatisfiable condition).
+    const ids = [...vendorIds];
+    conditions.push(ids.length ? inArray(clientsTable.id, ids) : sql`false`);
+  }
+  // Query-string filters
+  if (query.data.status) conditions.push(eq(clientsTable.status, query.data.status));
   if (query.data.search) {
-    const s = query.data.search.toLowerCase();
-    clients = clients.filter(
-      (c) =>
-        `${c.firstName} ${c.lastName}`.toLowerCase().includes(s) || c.uciNumber.toLowerCase().includes(s),
+    const like = `%${escapeLike(query.data.search)}%`;
+    // Matches the JS filter: "firstName lastName" concat OR uciNumber (case-insensitive).
+    conditions.push(
+      or(
+        ilike(sql`${clientsTable.firstName} || ' ' || ${clientsTable.lastName}`, like),
+        ilike(clientsTable.uciNumber, like),
+      )!,
     );
   }
-  const names = await userNameMap(clients.map((c) => c.assignedCoordinatorId));
+  const where = and(...conditions);
+  const limit = Math.min(Math.max(query.data.limit ?? 50, 1), 1000);
+  const offset = Math.max(query.data.offset ?? 0, 0);
+  const [[{ total }], page] = await Promise.all([
+    db.select({ total: count() }).from(clientsTable).where(where),
+    db
+      .select()
+      .from(clientsTable)
+      .where(where)
+      .orderBy(clientsTable.lastName, desc(clientsTable.id))
+      .limit(limit)
+      .offset(offset),
+  ]);
+  const names = await userNameMap(page.map((c) => c.assignedCoordinatorId));
   res.json(
-    ListClientsResponse.parse(
-      clients.map((c) => clientJson(c, c.assignedCoordinatorId ? names.get(c.assignedCoordinatorId) : null)),
-    ),
+    ListClientsResponse.parse({
+      items: page.map((c) => clientJson(c, c.assignedCoordinatorId ? names.get(c.assignedCoordinatorId) : null)),
+      total,
+    }),
   );
 });
 

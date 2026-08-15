@@ -1,3 +1,3 @@
-- [Orval zod v4 import fix](orval-zod-v4.md) — regenerated lib/api-zod imports `zod` but emits zod-v4 API (`zod.int()`); re-point the generated import to `zod/v4` after every codegen.
+- [Orval zod v4 import fix](orval-zod-v4.md) — orval emits zod-v4 API with a plain `zod` import; codegen script now auto-patches to `zod/v4` (fix-zod-imports.mjs), no manual step needed.
 - [Preview iframe session cookies](preview-auth-cookies.md) — cookie auth needs SameSite=None; Secure; Partitioned; full page load after login; dedupe react-query in vite.
 - [Form empty-string inserts](form-empty-strings.md) — portal forms send '' for untouched optional fields; API routes must normalize ''→null before drizzle inserts/updates or numeric/FK columns 500.

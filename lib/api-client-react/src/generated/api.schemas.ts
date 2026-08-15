@@ -1719,10 +1719,18 @@ export type ListRemittances200 = {
 export type ListVendorsParams = {
 search?: string;
 w9Status?: string;
-active?: boolean;
+active?: ListVendorsActive;
 limit?: number;
 offset?: number;
 };
+
+export type ListVendorsActive = typeof ListVendorsActive[keyof typeof ListVendorsActive];
+
+
+export const ListVendorsActive = {
+  true: 'true',
+  false: 'false',
+} as const;
 
 export type ListVendors200 = {
   items: Vendor[];

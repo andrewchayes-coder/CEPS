@@ -5,12 +5,11 @@
  * CEPS Portal API — referral intake, authorizations, invoices, payments, remittances, vendors, reporting
  * OpenAPI spec version: 0.1.0
  */
-import type { ListVendorsActive } from './listVendorsActive';
 
-export type ListVendorsParams = {
-search?: string;
-w9Status?: string;
-active?: ListVendorsActive;
-limit?: number;
-offset?: number;
-};
+export type ListVendorsActive = typeof ListVendorsActive[keyof typeof ListVendorsActive];
+
+
+export const ListVendorsActive = {
+  true: 'true',
+  false: 'false',
+} as const;

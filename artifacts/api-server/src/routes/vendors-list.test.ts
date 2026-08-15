@@ -153,16 +153,22 @@ describe("GET /vendors filters", () => {
     expect(res.body.items[0].id).toBe(vendorA);
   });
 
-  it("filters by active at the SQL level", async () => {
-    // NB: the generated ListVendorsQueryParams uses zod.coerce.boolean(), which
-    // treats any non-empty string as true — so only `active=true` is expressible
-    // over a querystring. It must exclude the inactive vendor (Bravo).
-    const res = await get(staffCookie, { search: nonce, active: true, limit: 1000 });
+  it("filters by active=true at the SQL level", async () => {
+    const res = await get(staffCookie, { search: nonce, active: "true", limit: 1000 });
     expect(res.body.total).toBe(2);
     const ids = res.body.items.map((v: { id: string }) => v.id);
     expect(ids).toContain(vendorA);
     expect(ids).toContain(vendorC);
     expect(ids).not.toContain(vendorB);
+  });
+
+  it("filters by active=false at the SQL level", async () => {
+    const res = await get(staffCookie, { search: nonce, active: "false", limit: 1000 });
+    expect(res.body.total).toBe(1);
+    const ids = res.body.items.map((v: { id: string }) => v.id);
+    expect(ids).toContain(vendorB);
+    expect(ids).not.toContain(vendorA);
+    expect(ids).not.toContain(vendorC);
   });
 
   it("search matches the vendor name (ilike) at the SQL level", async () => {

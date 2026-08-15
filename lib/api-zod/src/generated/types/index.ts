@@ -108,6 +108,7 @@ export * from './listRemittances200';
 export * from './listRemittancesParams';
 export * from './listUsersParams';
 export * from './listVendors200';
+export * from './listVendorsActive';
 export * from './listVendorsParams';
 export * from './loginInput';
 export * from './magicLinkConsumeInput';

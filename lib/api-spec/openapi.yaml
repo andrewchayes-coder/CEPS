@@ -1375,7 +1375,9 @@ paths:
           schema: { type: string }
         - name: active
           in: query
-          schema: { type: boolean }
+          schema:
+            type: string
+            enum: ['true', 'false']
         - name: limit
           in: query
           schema: { type: integer }

@@ -36,7 +36,7 @@ router.get("/vendors", requireAuth, async (req, res): Promise<void> => {
   // Query-string filters
   if (query.data.search) conditions.push(ilike(vendorsTable.name, `%${escapeLike(query.data.search)}%`));
   if (query.data.w9Status) conditions.push(eq(vendorsTable.w9Status, query.data.w9Status));
-  if (query.data.active != null) conditions.push(eq(vendorsTable.active, query.data.active));
+  if (query.data.active != null) conditions.push(eq(vendorsTable.active, query.data.active === "true"));
   const where = conditions.length ? and(...conditions) : undefined;
   const limit = Math.min(Math.max(query.data.limit ?? 50, 1), 1000);
   const offset = Math.max(query.data.offset ?? 0, 0);

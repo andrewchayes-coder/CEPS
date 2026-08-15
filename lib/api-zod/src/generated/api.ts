@@ -1924,7 +1924,7 @@ export const ImportAltaRemittancesResponse = zod.object({
 export const ListVendorsQueryParams = zod.object({
   "search": zod.coerce.string().optional(),
   "w9Status": zod.coerce.string().optional(),
-  "active": zod.coerce.boolean().optional(),
+  "active": zod.enum(['true', 'false']).optional(),
   "limit": zod.coerce.number().int().optional(),
   "offset": zod.coerce.number().int().optional()
 })

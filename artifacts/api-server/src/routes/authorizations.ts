@@ -82,7 +82,7 @@ router.get("/authorizations", requireAuth, async (req, res): Promise<void> => {
     conditions.push(
       or(
         ilike(authorizationsTable.authNumber, like),
-        sql`${authorizationsTable.clientId} in (select id from clients where (first_name || ' ' || last_name) ilike ${like})`,
+        sql`${authorizationsTable.clientId} in (select id from clients where (first_name || ' ' || last_name) ilike ${like} and is_deleted = false)`,
         sql`${authorizationsTable.vendorId} in (select id from vendors where name ilike ${like})`,
       )!,
     );

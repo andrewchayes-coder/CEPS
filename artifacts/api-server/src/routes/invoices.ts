@@ -60,7 +60,7 @@ router.get("/invoices", requireAuth, async (req, res): Promise<void> => {
     const like = `%${escapeLike(query.data.search)}%`;
     conditions.push(
       or(
-        sql`${invoicesTable.clientId} in (select id from clients where (first_name || ' ' || last_name) ilike ${like})`,
+        sql`${invoicesTable.clientId} in (select id from clients where (first_name || ' ' || last_name) ilike ${like} and is_deleted = false)`,
         sql`${invoicesTable.vendorId} in (select id from vendors where name ilike ${like})`,
         sql`${invoicesTable.authorizationId} in (select id from authorizations where auth_number ilike ${like})`,
       )!,

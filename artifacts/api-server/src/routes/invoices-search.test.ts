@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import request from "supertest";
-import { inArray } from "drizzle-orm";
+import { inArray, eq } from "drizzle-orm";
 import {
   db,
   usersTable,
@@ -227,5 +227,44 @@ describe("GET /invoices ?search — offset interaction (page reset)", () => {
     const res = await get({ search: `${nonce}Alpha`, limit: 10, offset: 100 });
     expect(res.body.items).toEqual([]);
     expect(res.body.total).toBe(2);
+  });
+});
+
+// Soft-delete guard: the client subquery must include `is_deleted = false` so
+// that searching by a soft-deleted client's name does not silently return their
+// linked invoices. Vendors have no is_deleted column; their search path is
+// unaffected and does not need a separate guard.
+describe("GET /invoices ?search — soft-deleted client", () => {
+  beforeAll(async () => {
+    // Soft-delete clientAlpha
+    await db
+      .update(clientsTable)
+      .set({ isDeleted: true, deletedAt: new Date() })
+      .where(eq(clientsTable.id, clientAlpha));
+  });
+
+  afterAll(async () => {
+    // Restore clientAlpha so other tests and cleanup are unaffected
+    await db
+      .update(clientsTable)
+      .set({ isDeleted: false, deletedAt: null })
+      .where(eq(clientsTable.id, clientAlpha));
+  });
+
+  it("returns 0 invoices when searching by a soft-deleted client's name", async () => {
+    // clientAlpha has 2 invoices but is now soft-deleted; the search subquery
+    // must not match soft-deleted clients.
+    const res = await get({ search: `${nonce}Alpha`, limit: 1000 });
+    expect(res.status).toBe(200);
+    expect(res.body.total).toBe(0);
+    expect(res.body.items).toEqual([]);
+  });
+
+  it("still returns invoices for non-deleted clients", async () => {
+    // clientBeta is not deleted; its invoice should still be found.
+    const res = await get({ search: `${nonce}Beta`, limit: 1000 });
+    expect(res.status).toBe(200);
+    expect(res.body.total).toBe(1);
+    expect(res.body.items[0].clientId).toBe(clientBeta);
   });
 });

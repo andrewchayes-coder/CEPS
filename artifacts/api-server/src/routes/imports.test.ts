@@ -162,6 +162,18 @@ describe("POST /import/:entity/validate", () => {
     expect(dup).toBeUndefined();
   });
 
+  it("rejects the template's unedited example row instead of importing it", async () => {
+    const tpl = await request(app).get("/api/import/clients/template").set("Cookie", cookie);
+    const res = await request(app)
+      .post("/api/import/clients/validate")
+      .set("Cookie", cookie)
+      .send({ csvText: tpl.text });
+    expect(res.status).toBe(200);
+    const row = res.body.results[0];
+    expect(row.status).toBe("error");
+    expect(row.errors.join(" ")).toContain("example row");
+  });
+
   it("reports a header error when a required column is missing", async () => {
     const csv = ["First Name,Last Name,Date of Birth", "A,B,2020-01-01"].join("\n");
     const res = await request(app).post("/api/import/clients/validate").set("Cookie", cookie).send({ csvText: csv });

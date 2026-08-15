@@ -81,6 +81,29 @@ export function validateRows(def: EntityDef, grid: string[][], ctx: ResolveConte
   const rows: ValidatedRow[] = [];
   grid.slice(1).forEach((r, i) => {
     const rowNumber = i + 2; // 1-based, header is row 1
+
+    // Guard: the template ships with one hardcoded example row. If it's
+    // uploaded unedited, refuse it explicitly instead of importing fake data.
+    const isExampleRow = def.fields.every((field) => {
+      const idx = colOf.get(field.key);
+      const raw = (idx === undefined ? "" : (r[idx] ?? "")).trim();
+      return raw === "" || raw === field.example.trim();
+    }) && def.fields.some((field) => {
+      const idx = colOf.get(field.key);
+      const raw = (idx === undefined ? "" : (r[idx] ?? "")).trim();
+      return raw !== "" && raw === field.example.trim();
+    });
+    if (isExampleRow) {
+      rows.push({
+        rowNumber,
+        values: null,
+        raw: {},
+        errors: ["This is the template's example row — delete it from your file before importing."],
+        warnings: [],
+      });
+      return;
+    }
+
     const errors: string[] = [];
     const warnings: string[] = [];
     const values: Record<string, unknown> = {};

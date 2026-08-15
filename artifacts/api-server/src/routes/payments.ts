@@ -1,6 +1,6 @@
 import { Router, type IRouter } from "express";
 import { randomUUID } from "node:crypto";
-import { eq, and, desc, ilike, count, sql, inArray, type SQL } from "drizzle-orm";
+import { eq, and, desc, ilike, or, count, sql, inArray, type SQL } from "drizzle-orm";
 import { db, paymentsTable, clientsTable, remittancesTable, feesTable, authorizationsTable } from "@workspace/db";
 import {
   ListPaymentsQueryParams,
@@ -81,7 +81,14 @@ router.get("/payments", requireAuth, async (req, res): Promise<void> => {
     return;
   }
   const escapeLike = (s: string) => s.replace(/[\\%_]/g, (c) => `\\${c}`);
-  const conditions: SQL[] = [notDeleted(paymentsTable)];
+  const conditions: SQL[] = [
+    notDeleted(paymentsTable),
+    // Exclude payments belonging to soft-deleted clients regardless of how the
+    // query is filtered (check number search, clientId filter, unfiltered list).
+    // This mirrors the invoices/authorizations pattern and ensures a client's
+    // payments are invisible the moment the client is soft-deleted.
+    sql`${paymentsTable.clientId} in (select id from clients where is_deleted = false)`,
+  ];
   // Role scoping — mirrors the audit-log SQL-WHERE pattern:
   // vendors see only their own payments; parent/self only their linked client's.
   const u = req.user!;
@@ -95,7 +102,15 @@ router.get("/payments", requireAuth, async (req, res): Promise<void> => {
   if (query.data.vendorId) conditions.push(eq(paymentsTable.vendorId, query.data.vendorId));
   if (query.data.authorizationId) conditions.push(eq(paymentsTable.authorizationId, query.data.authorizationId));
   if (query.data.status) conditions.push(eq(paymentsTable.paymentType, query.data.status));
-  if (query.data.search) conditions.push(ilike(paymentsTable.qbCheckNumber, `%${escapeLike(query.data.search)}%`));
+  if (query.data.search) {
+    const like = `%${escapeLike(query.data.search)}%`;
+    conditions.push(
+      or(
+        ilike(paymentsTable.qbCheckNumber, like),
+        sql`${paymentsTable.clientId} in (select id from clients where (first_name || ' ' || last_name) ilike ${like} and is_deleted = false)`,
+      )!,
+    );
+  }
   const where = and(...conditions);
   const limit = Math.min(Math.max(query.data.limit ?? 50, 1), 1000);
   const offset = Math.max(query.data.offset ?? 0, 0);

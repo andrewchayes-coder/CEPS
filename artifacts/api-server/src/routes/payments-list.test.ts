@@ -240,4 +240,85 @@ describe("GET /payments filters", () => {
     expect(res.body.total).toBe(1);
     expect(res.body.items[0].qbCheckNumber).toBe(check);
   });
+
+  it("search matches client name (ilike) at the SQL level", async () => {
+    // clientA has payments — searching by the last name portion should find them.
+    const res = await get(staffCookie, { search: "ClientA", limit: 1000 });
+    expect(res.status).toBe(200);
+    expect(res.body.total).toBeGreaterThanOrEqual(1);
+    for (const p of res.body.items) expect(p.clientId).toBe(clientA);
+  });
+});
+
+describe("GET /payments soft-deleted client filtering", () => {
+  // This suite creates its own isolated client + payment so the soft-delete
+  // doesn't affect the shared fixtures in the outer beforeAll.
+  let sdClientId: string;
+  let sdPaymentId: string;
+
+  beforeAll(async () => {
+    const [c] = await db
+      .insert(clientsTable)
+      .values({
+        firstName: "SoftDel",
+        lastName: `SDClient${nonce}`,
+        dateOfBirth: "2000-01-01",
+        uciNumber: `${nonce}-uciSD`,
+      })
+      .returning();
+    sdClientId = c.id;
+
+    const [p] = await db
+      .insert(paymentsTable)
+      .values({
+        clientId: sdClientId,
+        qbCheckNumber: `${nonce}-sd-chk`,
+        checkDate: "2026-01-15",
+        amount: "200.00",
+        paymentType: "direct_payment",
+        source: "manual",
+      })
+      .returning();
+    sdPaymentId = p.id;
+  });
+
+  afterAll(async () => {
+    await db.delete(feesTable).where(eq(feesTable.clientId, sdClientId));
+    await db.delete(paymentsTable).where(eq(paymentsTable.id, sdPaymentId));
+    await db.delete(clientsTable).where(eq(clientsTable.id, sdClientId));
+  });
+
+  it("payment is found by client name before soft-delete", async () => {
+    const res = await get(staffCookie, { search: `SDClient${nonce}`, limit: 1000 });
+    expect(res.status).toBe(200);
+    expect(res.body.total).toBe(1);
+    expect(res.body.items[0].id).toBe(sdPaymentId);
+  });
+
+  it("soft-deleted client's payments are excluded from all search paths", async () => {
+    // Soft-delete the client directly in the DB.
+    await db
+      .update(clientsTable)
+      .set({ isDeleted: true, deletedAt: new Date(), deletedBy: staffId })
+      .where(eq(clientsTable.id, sdClientId));
+
+    // 1. Client-name search must return nothing.
+    const byName = await get(staffCookie, { search: `SDClient${nonce}`, limit: 1000 });
+    expect(byName.status).toBe(200);
+    expect(byName.body.total).toBe(0);
+    expect(byName.body.items).toEqual([]);
+
+    // 2. Check-number search must also return nothing — the outer active-client
+    //    predicate hides the payment regardless of how the filter is expressed.
+    const byCheck = await get(staffCookie, { search: `${nonce}-sd-chk`, limit: 1000 });
+    expect(byCheck.status).toBe(200);
+    expect(byCheck.body.total).toBe(0);
+    expect(byCheck.body.items).toEqual([]);
+
+    // 3. Filtering by clientId must return nothing.
+    const byClientId = await get(staffCookie, { clientId: sdClientId, limit: 1000 });
+    expect(byClientId.status).toBe(200);
+    expect(byClientId.body.total).toBe(0);
+    expect(byClientId.body.items).toEqual([]);
+  });
 });

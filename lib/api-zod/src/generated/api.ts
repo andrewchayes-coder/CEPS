@@ -1355,7 +1355,8 @@ export const UpdateInvoiceBody = zod.object({
   "amountRequested": zod.string().optional(),
   "paymentType": zod.enum(['direct_payment', 'reimbursement']).optional(),
   "status": zod.enum(['pending_review', 'validated', 'approved', 'rejected', 'duplicate']).optional(),
-  "notes": zod.string().optional()
+  "notes": zod.string().optional(),
+  "documentUrl": zod.string().nullish()
 })
 
 export const UpdateInvoiceResponse = zod.object({

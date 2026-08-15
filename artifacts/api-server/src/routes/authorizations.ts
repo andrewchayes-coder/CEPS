@@ -228,13 +228,14 @@ router.patch("/authorizations/:id", requireStaff, async (req, res): Promise<void
     vendorNameMap([auth.vendorId]),
   ]);
   res.json(
-    UpdateAuthorizationResponse.parse(
-      authorizationJson(auth, {
+    UpdateAuthorizationResponse.parse({
+      saved: true,
+      authorization: authorizationJson(auth, {
         clientName: clientNames.get(auth.clientId),
         vendorName: auth.vendorId ? vendorNames.get(auth.vendorId) : null,
         totalPaid: totals.get(auth.id) ?? 0,
       }),
-    ),
+    }),
   );
 });
 

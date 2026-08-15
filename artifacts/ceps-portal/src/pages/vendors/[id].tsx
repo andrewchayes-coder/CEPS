@@ -10,8 +10,19 @@ import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useToast } from '@/hooks/use-toast';
-import { ArrowLeft, Save, FileText, ExternalLink } from 'lucide-react';
+import { ArrowLeft, Save, FileText, ExternalLink, Power } from 'lucide-react';
 import { Link } from 'wouter';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from '@/components/ui/alert-dialog';
 
 export default function VendorDetailPage() {
   const { id } = useParams<{ id: string }>();
@@ -57,6 +68,26 @@ export default function VendorDetailPage() {
 
   const saving = updateVendor.isPending || updateVendorContact.isPending;
 
+  const handleToggleActive = (nextActive: boolean) => {
+    updateVendor.mutate(
+      { id, data: { active: nextActive } as any },
+      {
+        onSuccess: () => {
+          toast({ title: nextActive ? 'Vendor Reactivated' : 'Vendor Deactivated' });
+          setFormData((prev: any) => ({ ...prev, active: nextActive }));
+          refetch();
+        },
+        onError: () => {
+          toast({
+            variant: 'destructive',
+            title: 'Error',
+            description: `Could not ${nextActive ? 'reactivate' : 'deactivate'} this vendor.`,
+          });
+        },
+      },
+    );
+  };
+
   const handleSave = () => {
     const onSuccess = () => {
       toast({ title: 'Vendor Updated' });
@@ -91,8 +122,58 @@ export default function VendorDetailPage() {
         <h1 className="text-3xl font-bold tracking-tight">Edit Vendor</h1>
         <div className="flex items-center gap-3">
           {formData.preferred && <Badge variant="secondary" className="bg-primary/10 text-primary">Preferred Vendor</Badge>}
+          <Badge
+            variant="outline"
+            className={vendor.active ? 'text-chart-5 border-chart-5/20' : 'bg-muted text-muted-foreground'}
+            data-testid="badge-vendor-status"
+          >
+            {vendor.active ? 'Active' : 'Inactive'}
+          </Badge>
           {isStaff && (
             <InvitePortalDialog linkedRecordType="vendor" linkedRecordId={id} recordName={vendor.name} />
+          )}
+          {isStaff && (
+            vendor.active ? (
+              <AlertDialog>
+                <AlertDialogTrigger asChild>
+                  <Button variant="outline" size="sm" className="text-destructive hover:text-destructive" data-testid="button-deactivate-vendor">
+                    <Power className="w-4 h-4 mr-2" /> Deactivate
+                  </Button>
+                </AlertDialogTrigger>
+                <AlertDialogContent>
+                  <AlertDialogHeader>
+                    <AlertDialogTitle>Deactivate Vendor?</AlertDialogTitle>
+                    <AlertDialogDescription>
+                      This will mark the vendor as inactive and hide it from active vendor lists. You can reactivate it later. Continue?
+                    </AlertDialogDescription>
+                  </AlertDialogHeader>
+                  <AlertDialogFooter>
+                    <AlertDialogCancel disabled={saving}>Cancel</AlertDialogCancel>
+                    <AlertDialogAction
+                      onClick={(e) => {
+                        e.preventDefault();
+                        handleToggleActive(false);
+                      }}
+                      disabled={saving}
+                      data-testid="button-confirm-deactivate-vendor"
+                      className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                    >
+                      {saving ? 'Deactivating…' : 'Deactivate'}
+                    </AlertDialogAction>
+                  </AlertDialogFooter>
+                </AlertDialogContent>
+              </AlertDialog>
+            ) : (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => handleToggleActive(true)}
+                disabled={saving}
+                data-testid="button-reactivate-vendor"
+              >
+                <Power className="w-4 h-4 mr-2" /> {saving ? 'Reactivating…' : 'Reactivate'}
+              </Button>
+            )
           )}
         </div>
       </div>
@@ -176,14 +257,22 @@ export default function VendorDetailPage() {
                 W-9 on file
                 <Badge variant="secondary" className="capitalize">{vendor.w9Status.replace('_', ' ')}</Badge>
               </span>
-              <Button variant="outline" size="sm" asChild data-testid="link-view-w9">
-                <a
-                  href={`${import.meta.env.BASE_URL}api/storage${vendor.w9DocumentUrl}`}
-                  target="_blank"
-                  rel="noreferrer"
-                >
-                  <ExternalLink className="w-4 h-4 mr-1" /> View / Download
-                </a>
+              <Button
+                variant="outline"
+                size="sm"
+                data-testid="link-view-w9"
+                onClick={async () => {
+                  // Fetch with credentials and open a blob URL: a plain href in
+                  // a new top-level tab doesn't carry the partitioned session
+                  // cookie, so the request would 401.
+                  const res = await fetch(`${import.meta.env.BASE_URL}api/storage${vendor.w9DocumentUrl}`, { credentials: 'include' });
+                  if (!res.ok) return;
+                  const blobUrl = URL.createObjectURL(await res.blob());
+                  window.open(blobUrl, '_blank', 'noopener');
+                  setTimeout(() => URL.revokeObjectURL(blobUrl), 60_000);
+                }}
+              >
+                <ExternalLink className="w-4 h-4 mr-1" /> View / Download
               </Button>
             </div>
           ) : (

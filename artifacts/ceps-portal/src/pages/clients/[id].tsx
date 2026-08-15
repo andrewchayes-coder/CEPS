@@ -1,9 +1,10 @@
 import React from 'react';
 import { useLocation, useParams } from 'wouter';
-import { useGetClientCase, useListFees, useDeleteClient } from '@workspace/api-client-react';
+import { useGetClientCase, useListFees, useDeleteClient, useDeleteFee } from '@workspace/api-client-react';
 import { useAuth } from '@/components/auth/auth-provider';
 import { InvitePortalDialog } from '@/components/invite-portal-dialog';
 import { EditClientDialog } from '@/components/edit-client-dialog';
+import { EditFeeDialog } from '@/components/edit-fee-dialog';
 import { DeleteEntityButton } from '@/components/delete-entity-button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
@@ -21,6 +22,7 @@ export default function ClientDetailPage() {
   const { user } = useAuth();
   const isStaff = user?.role === 'staff';
   const deleteClient = useDeleteClient();
+  const deleteFee = useDeleteFee();
   const { data: caseData, isLoading, refetch } = useGetClientCase(id, {
     query: {
       enabled: !!id,
@@ -28,7 +30,7 @@ export default function ClientDetailPage() {
     }
   });
 
-  const { data: fees } = useListFees(
+  const { data: fees, refetch: refetchFees } = useListFees(
     { clientId: id },
     { query: { enabled: !!id, queryKey: ['fees', id] } },
   );
@@ -296,6 +298,7 @@ export default function ClientDetailPage() {
                     <TableHead className="text-right">Amount</TableHead>
                     <TableHead>Rule</TableHead>
                     <TableHead>Status</TableHead>
+                    {isStaff && <TableHead className="text-right">Actions</TableHead>}
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -307,10 +310,23 @@ export default function ClientDetailPage() {
                       <TableCell className="text-right font-medium">${parseFloat(fee.amount).toFixed(2)}</TableCell>
                       <TableCell className="text-xs text-muted-foreground font-mono">{fee.ruleApplied || '-'}</TableCell>
                       <TableCell><Badge variant="outline">{fee.status}</Badge></TableCell>
+                      {isStaff && (
+                        <TableCell className="text-right">
+                          <div className="flex items-center justify-end gap-2">
+                            <EditFeeDialog id={fee.id} fee={fee} onSaved={() => refetchFees()} />
+                            <DeleteEntityButton
+                              entityLabel="Fee"
+                              testId={`button-delete-fee-${fee.id}`}
+                              onDelete={() => deleteFee.mutateAsync({ id: fee.id })}
+                              onDeleted={() => refetchFees()}
+                            />
+                          </div>
+                        </TableCell>
+                      )}
                     </TableRow>
                   ))}
                   {feeList.length === 0 && (
-                    <TableRow><TableCell colSpan={4} className="text-center py-8 text-muted-foreground">No fees found.</TableCell></TableRow>
+                    <TableRow><TableCell colSpan={isStaff ? 5 : 4} className="text-center py-8 text-muted-foreground">No fees found.</TableCell></TableRow>
                   )}
                 </TableBody>
               </Table>

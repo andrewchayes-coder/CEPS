@@ -997,6 +997,8 @@ export interface InvoiceUpdate {
   paymentType?: InvoiceUpdatePaymentType;
   status?: InvoiceUpdateStatus;
   notes?: string;
+  /** @nullable */
+  documentUrl?: string | null;
 }
 
 export interface InvoiceValidationInput {

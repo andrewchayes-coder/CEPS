@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { useListRemittances, useDeleteRemittance } from '@workspace/api-client-react';
 import { useAuth } from '@/components/auth/auth-provider';
 import { DeleteEntityButton } from '@/components/delete-entity-button';
+import { EditRemittanceDialog } from '@/components/edit-remittance-dialog';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
@@ -58,14 +59,21 @@ export default function RemittancesPage() {
                     </TableCell>
                     {isStaff && (
                       <TableCell className="text-right">
-                        <DeleteEntityButton
-                          variant="ghost"
-                          buttonLabel=""
-                          entityLabel="Remittance"
-                          testId="button-delete-remittance"
-                          onDelete={() => deleteRemittance.mutateAsync({ id: r.id })}
-                          onDeleted={() => refetch()}
-                        />
+                        <div className="flex items-center justify-end gap-1">
+                          <EditRemittanceDialog
+                            id={r.id}
+                            remittance={r}
+                            onSaved={() => refetch()}
+                          />
+                          <DeleteEntityButton
+                            variant="ghost"
+                            buttonLabel=""
+                            entityLabel="Remittance"
+                            testId="button-delete-remittance"
+                            onDelete={() => deleteRemittance.mutateAsync({ id: r.id })}
+                            onDeleted={() => refetch()}
+                          />
+                        </div>
                       </TableCell>
                     )}
                   </TableRow>

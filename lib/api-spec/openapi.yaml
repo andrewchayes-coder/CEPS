@@ -1823,6 +1823,7 @@ components:
         paymentType: { type: string, enum: [direct_payment, reimbursement] }
         status: { type: string, enum: [pending_review, validated, approved, rejected, duplicate] }
         notes: { type: string }
+        documentUrl: { type: ["string", "null"] }
     InvoiceValidationInput:
       type: object
       properties:

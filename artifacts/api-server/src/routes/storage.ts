@@ -11,6 +11,7 @@ import {
   vendorsTable,
   authorizationsTable,
   clientsTable,
+  invoicesTable,
 } from '@workspace/db';
 
 import {
@@ -41,7 +42,18 @@ async function canAccessPrivateObject(
       .select({ w9DocumentUrl: vendorsTable.w9DocumentUrl })
       .from(vendorsTable)
       .where(eq(vendorsTable.id, user.linkedRecordId));
-    return !!vendor?.w9DocumentUrl && vendor.w9DocumentUrl === objectPath;
+    if (vendor?.w9DocumentUrl === objectPath) return true;
+    const invoiceDocs = await db
+      .select({ documentUrl: invoicesTable.documentUrl })
+      .from(invoicesTable)
+      .where(
+        and(
+          eq(invoicesTable.vendorId, user.linkedRecordId),
+          isNotNull(invoicesTable.documentUrl),
+          notDeleted(invoicesTable),
+        ),
+      );
+    return invoiceDocs.some((r) => r.documentUrl === objectPath);
   }
 
   if (
@@ -59,7 +71,18 @@ async function canAccessPrivateObject(
           notDeleted(authorizationsTable),
         ),
       );
-    return rows.some((r) => r.posPdfUrl === objectPath);
+    if (rows.some((r) => r.posPdfUrl === objectPath)) return true;
+    const invoiceDocs = await db
+      .select({ documentUrl: invoicesTable.documentUrl })
+      .from(invoicesTable)
+      .where(
+        and(
+          eq(invoicesTable.clientId, user.linkedRecordId),
+          isNotNull(invoicesTable.documentUrl),
+          notDeleted(invoicesTable),
+        ),
+      );
+    return invoiceDocs.some((r) => r.documentUrl === objectPath);
   }
 
   if (user.role === 'service_coordinator') {
@@ -79,7 +102,18 @@ async function canAccessPrivateObject(
           notDeleted(authorizationsTable),
         ),
       );
-    return rows.some((r) => r.posPdfUrl === objectPath);
+    if (rows.some((r) => r.posPdfUrl === objectPath)) return true;
+    const invoiceDocs = await db
+      .select({ documentUrl: invoicesTable.documentUrl })
+      .from(invoicesTable)
+      .where(
+        and(
+          inArray(invoicesTable.clientId, clientIds),
+          isNotNull(invoicesTable.documentUrl),
+          notDeleted(invoicesTable),
+        ),
+      );
+    return invoiceDocs.some((r) => r.documentUrl === objectPath);
   }
 
   return false;

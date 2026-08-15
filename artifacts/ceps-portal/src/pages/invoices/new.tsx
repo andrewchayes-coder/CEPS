@@ -8,11 +8,13 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
+import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
 import { useToast } from '@/hooks/use-toast';
-import { ArrowLeft, Save } from 'lucide-react';
+import { ArrowLeft, Save, FileText } from 'lucide-react';
 import { Link } from 'wouter';
+import { FileUpload } from '@/components/file-upload';
 
 const formSchema = z.object({
   clientId: z.string().min(1, 'Client is required'),
@@ -27,6 +29,7 @@ export default function InvoiceNewPage() {
   const [, setLocation] = useLocation();
   const { toast } = useToast();
   const createInvoice = useCreateInvoice();
+  const [documentUrl, setDocumentUrl] = React.useState<string | undefined>(undefined);
   
   const { data: clients, isLoading: clientsLoading } = useListClients();
   const { data: vendors, isLoading: vendorsLoading } = useListVendors();
@@ -47,7 +50,8 @@ export default function InvoiceNewPage() {
     createInvoice.mutate({
       data: {
         ...data,
-        paymentType: data.paymentType as InvoiceInputPaymentType
+        paymentType: data.paymentType as InvoiceInputPaymentType,
+        documentUrl: documentUrl || undefined
       }
     }, {
       onSuccess: () => {
@@ -153,6 +157,31 @@ export default function InvoiceNewPage() {
                   <FormMessage />
                 </FormItem>
               )} />
+
+              <div className="space-y-2">
+                <Label>Attach Document (Optional)</Label>
+                {documentUrl ? (
+                  <div className="flex items-center justify-between rounded-md border p-3 text-sm" data-testid="text-invoice-document-attached">
+                    <span className="flex items-center gap-2">
+                      <FileText className="w-4 h-4 text-muted-foreground" /> Document attached
+                    </span>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => setDocumentUrl(undefined)}
+                      data-testid="button-remove-invoice-document"
+                    >
+                      Remove
+                    </Button>
+                  </div>
+                ) : (
+                  <FileUpload
+                    label="Drag & drop the invoice document here, or click to browse"
+                    onUploaded={(r) => setDocumentUrl(r.objectPath)}
+                  />
+                )}
+              </div>
 
               <Button type="submit" className="w-full" disabled={createInvoice.isPending}>
                 <Save className="w-4 h-4 mr-2" />

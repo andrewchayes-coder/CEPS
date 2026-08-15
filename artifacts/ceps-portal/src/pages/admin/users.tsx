@@ -1,5 +1,19 @@
 import React, { useState } from 'react';
-import { useListUsers, useCreateUser, UserInputRole } from '@workspace/api-client-react';
+import { useListUsers, useCreateUser, useDeleteUser, UserInputRole } from '@workspace/api-client-react';
+import { useAuth } from '@/components/auth/auth-provider';
+import { EditUserDialog } from '@/components/edit-user-dialog';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from '@/components/ui/alert-dialog';
+import { Power } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
@@ -27,8 +41,42 @@ const userSchema = z.object({
 export default function UsersPage() {
   const [open, setOpen] = useState(false);
   const { toast } = useToast();
-  const { data: users, isLoading, refetch } = useListUsers();
+  const { user: currentUser } = useAuth();
+  const isStaff = currentUser?.role === 'staff';
+  const { data: users, isLoading, refetch } = useListUsers(undefined, { query: { enabled: isStaff } } as any);
   const createUser = useCreateUser();
+  const deleteUser = useDeleteUser();
+
+  if (!isStaff) {
+    return (
+      <div className="p-6">
+        <Card>
+          <CardContent className="py-10 text-center text-muted-foreground" data-testid="text-users-forbidden">
+            You don't have access to user administration.
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
+  const handleDeactivate = (id: string) => {
+    deleteUser.mutate(
+      { id },
+      {
+        onSuccess: () => {
+          toast({ title: 'User deactivated' });
+          refetch();
+        },
+        onError: (err: any) => {
+          toast({
+            variant: 'destructive',
+            title: 'Error',
+            description: err?.data?.message || 'Could not deactivate this user.',
+          });
+        },
+      },
+    );
+  };
 
   const form = useForm<z.infer<typeof userSchema>>({
     resolver: zodResolver(userSchema),
@@ -133,13 +181,16 @@ export default function UsersPage() {
                 <TableHead>Role</TableHead>
                 <TableHead>Status</TableHead>
                 <TableHead>Last Login</TableHead>
+                <TableHead className="text-right">Actions</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {isLoading ? (
-                <TableRow><TableCell colSpan={5} className="h-24 text-center"><Skeleton className="h-4 w-full" /></TableCell></TableRow>
+                <TableRow><TableCell colSpan={6} className="h-24 text-center"><Skeleton className="h-4 w-full" /></TableCell></TableRow>
               ) : (
-                users?.map((u) => (
+                users?.map((u) => {
+                  const isSelf = currentUser?.id === u.id;
+                  return (
                   <TableRow key={u.id}>
                     <TableCell className="font-medium">{u.name}</TableCell>
                     <TableCell>{u.email}</TableCell>
@@ -152,8 +203,45 @@ export default function UsersPage() {
                     <TableCell className="text-sm text-muted-foreground">
                       {u.lastLogin ? format(new Date(u.lastLogin), 'MMM d, yyyy') : 'Never'}
                     </TableCell>
+                    <TableCell className="text-right">
+                      <div className="flex items-center justify-end gap-2">
+                        <EditUserDialog id={u.id} user={{ name: u.name, email: u.email, role: u.role }} onSaved={refetch} />
+                        {u.active && !isSelf && (
+                          <AlertDialog>
+                            <AlertDialogTrigger asChild>
+                              <Button variant="outline" size="sm" className="text-destructive hover:text-destructive" data-testid={`button-deactivate-user-${u.id}`}>
+                                <Power className="w-4 h-4 mr-2" /> Deactivate
+                              </Button>
+                            </AlertDialogTrigger>
+                            <AlertDialogContent>
+                              <AlertDialogHeader>
+                                <AlertDialogTitle>Deactivate User?</AlertDialogTitle>
+                                <AlertDialogDescription>
+                                  This will mark {u.name} as inactive and revoke their access. Continue?
+                                </AlertDialogDescription>
+                              </AlertDialogHeader>
+                              <AlertDialogFooter>
+                                <AlertDialogCancel disabled={deleteUser.isPending}>Cancel</AlertDialogCancel>
+                                <AlertDialogAction
+                                  onClick={(e) => {
+                                    e.preventDefault();
+                                    handleDeactivate(u.id);
+                                  }}
+                                  disabled={deleteUser.isPending}
+                                  data-testid={`button-confirm-deactivate-user-${u.id}`}
+                                  className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                                >
+                                  {deleteUser.isPending ? 'Deactivating…' : 'Deactivate'}
+                                </AlertDialogAction>
+                              </AlertDialogFooter>
+                            </AlertDialogContent>
+                          </AlertDialog>
+                        )}
+                      </div>
+                    </TableCell>
                   </TableRow>
-                ))
+                  );
+                })
               )}
             </TableBody>
           </Table>

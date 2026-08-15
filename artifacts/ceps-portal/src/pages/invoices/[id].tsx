@@ -8,9 +8,10 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { useToast } from '@/hooks/use-toast';
-import { ArrowLeft, CheckCircle2, XCircle, AlertTriangle, ShieldCheck } from 'lucide-react';
+import { ArrowLeft, CheckCircle2, XCircle, AlertTriangle, ShieldCheck, FileText, ExternalLink } from 'lucide-react';
 import { Link } from 'wouter';
 import { Textarea } from '@/components/ui/textarea';
+import { FileUpload } from '@/components/file-upload';
 
 export default function InvoiceDetailPage() {
   const { id } = useParams<{ id: string }>();
@@ -43,6 +44,19 @@ export default function InvoiceDetailPage() {
   }, [id]);
 
   const updateInvoice = useUpdateInvoice();
+
+  const handleDocument = (documentUrl: string | null) => {
+    updateInvoice.mutate(
+      { id, data: { documentUrl } },
+      {
+        onSuccess: () => {
+          toast({ title: documentUrl ? 'Document attached' : 'Document removed' });
+          refetch();
+        },
+        onError: () => toast({ variant: 'destructive', title: 'Error', description: 'Could not update the attachment.' }),
+      },
+    );
+  };
 
   if (isLoading) return <div className="p-8 text-center">Loading invoice...</div>;
   if (!invoice) return <div className="p-8 text-center">Invoice not found.</div>;
@@ -107,6 +121,55 @@ export default function InvoiceDetailPage() {
               <dt className="text-muted-foreground">Amount:</dt><dd className="col-span-2 font-bold text-lg">${parseFloat(invoice.amountRequested).toFixed(2)}</dd>
               <dt className="text-muted-foreground mt-2">Submitted By:</dt><dd className="col-span-2 mt-2 capitalize">{invoice.submittedByRole}</dd>
             </dl>
+            <div className="pt-4 border-t space-y-3">
+              <p className="text-muted-foreground">Attachment</p>
+              {invoice.documentUrl ? (
+                <div className="flex items-center justify-between rounded-md border p-3">
+                  <span className="flex items-center gap-2">
+                    <FileText className="w-4 h-4 text-muted-foreground" /> Document on file
+                  </span>
+                  <div className="flex items-center gap-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      data-testid="link-view-invoice-document"
+                      onClick={async () => {
+                        // Fetch with credentials and open a blob URL: a plain
+                        // href opened in a new top-level tab does not carry the
+                        // partitioned session cookie, so the request would 401.
+                        const res = await fetch(`${import.meta.env.BASE_URL}api/storage${invoice.documentUrl}`, { credentials: 'include' });
+                        if (!res.ok) return;
+                        const blobUrl = URL.createObjectURL(await res.blob());
+                        window.open(blobUrl, '_blank', 'noopener');
+                        setTimeout(() => URL.revokeObjectURL(blobUrl), 60_000);
+                      }}
+                    >
+                      <ExternalLink className="w-4 h-4 mr-1" /> View / Download
+                    </Button>
+                    {isStaff && (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => handleDocument(null)}
+                        disabled={updateInvoice.isPending}
+                        className="text-destructive hover:text-destructive"
+                        data-testid="button-remove-invoice-document"
+                      >
+                        Remove
+                      </Button>
+                    )}
+                  </div>
+                </div>
+              ) : (
+                !isStaff && <p className="text-muted-foreground">No document attached.</p>
+              )}
+              {isStaff && (
+                <FileUpload
+                  label={invoice.documentUrl ? 'Drag & drop to replace the document, or click to browse' : 'Drag & drop the invoice document here, or click to browse'}
+                  onUploaded={(r) => handleDocument(r.objectPath)}
+                />
+              )}
+            </div>
           </CardContent>
         </Card>
 

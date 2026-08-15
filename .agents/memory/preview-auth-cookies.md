@@ -7,3 +7,5 @@ Rule: session cookies must be set with `SameSite=None; Secure; Partitioned` — 
 **Why:** login POST returned 200 but every subsequent request was 401 in the preview, appearing as a "broken login" while curl worked fine.
 
 **How to apply:** in `res.cookie(...)` use `{ sameSite: "none", secure: true, partitioned: true }`. Also: after login, prefer a full `window.location.assign(BASE_URL)` over SPA navigation — SPA redirect raced the react-query auth cache and left users stuck on /login. Related: workspace libs (e.g. api-client-react) can carry their own `@tanstack/react-query` copy; add it to vite `resolve.dedupe` and clear `node_modules/.vite` or mutations silently hang.
+
+**Private file links:** a plain `<a href>` to an authenticated API file route opened in a new top-level tab does NOT send the partitioned session cookie → 401/404. Fetch with `credentials: 'include'`, then `window.open(URL.createObjectURL(blob))` instead (pattern used for invoice documents and vendor W-9 links).

@@ -3,6 +3,7 @@ import { useListPayments, useDeletePayment } from '@workspace/api-client-react';
 import { useAuth } from '@/components/auth/auth-provider';
 import { CheckRegisterImport } from '@/components/check-register-import';
 import { DeleteEntityButton } from '@/components/delete-entity-button';
+import { EditPaymentDialog } from '@/components/edit-payment-dialog';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Input } from '@/components/ui/input';
@@ -78,14 +79,21 @@ export default function PaymentsPage() {
                     </TableCell>
                     {isStaff && (
                       <TableCell className="text-right">
-                        <DeleteEntityButton
-                          variant="ghost"
-                          buttonLabel=""
-                          entityLabel="Payment"
-                          testId="button-delete-payment"
-                          onDelete={() => deletePayment.mutateAsync({ id: p.id })}
-                          onDeleted={() => refetch()}
-                        />
+                        <div className="flex items-center justify-end gap-1">
+                          <EditPaymentDialog
+                            id={p.id}
+                            payment={p}
+                            onSaved={() => refetch()}
+                          />
+                          <DeleteEntityButton
+                            variant="ghost"
+                            buttonLabel=""
+                            entityLabel="Payment"
+                            testId="button-delete-payment"
+                            onDelete={() => deletePayment.mutateAsync({ id: p.id })}
+                            onDeleted={() => refetch()}
+                          />
+                        </div>
                       </TableCell>
                     )}
                   </TableRow>

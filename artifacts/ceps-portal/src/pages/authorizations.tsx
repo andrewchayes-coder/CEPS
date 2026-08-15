@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useListAuthorizations, useDeleteAuthorization } from '@workspace/api-client-react';
 import { DeleteEntityButton } from '@/components/delete-entity-button';
+import { EditAuthorizationDialog } from '@/components/edit-authorization-dialog';
 import { Link } from 'wouter';
 import { format } from 'date-fns';
 import { 
@@ -112,14 +113,21 @@ export default function AuthorizationsPage() {
                       </TableCell>
                       {isStaff && (
                         <TableCell className="text-right">
-                          <DeleteEntityButton
-                            variant="ghost"
-                            buttonLabel=""
-                            entityLabel="Authorization"
-                            testId={`button-delete-authorization`}
-                            onDelete={() => deleteAuthorization.mutateAsync({ id: auth.id })}
-                            onDeleted={() => refetch()}
-                          />
+                          <div className="flex items-center justify-end gap-1">
+                            <EditAuthorizationDialog
+                              id={auth.id}
+                              authorization={auth}
+                              onSaved={() => refetch()}
+                            />
+                            <DeleteEntityButton
+                              variant="ghost"
+                              buttonLabel=""
+                              entityLabel="Authorization"
+                              testId={`button-delete-authorization`}
+                              onDelete={() => deleteAuthorization.mutateAsync({ id: auth.id })}
+                              onDeleted={() => refetch()}
+                            />
+                          </div>
                         </TableCell>
                       )}
                     </TableRow>

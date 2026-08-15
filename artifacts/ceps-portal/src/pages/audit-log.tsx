@@ -11,6 +11,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip
 import { Download, ChevronLeft, ChevronRight } from 'lucide-react';
 import { format } from 'date-fns';
 import { downloadCSV } from '@/lib/csv';
+import { useToast } from '@/hooks/use-toast';
 
 const PAGE_SIZE = 50;
 const ALL_USERS = '__all__';
@@ -23,6 +24,8 @@ export default function AuditLogPage() {
   const [dateTo, setDateTo] = useState('');
   const [page, setPage] = useState(0);
   const [exporting, setExporting] = useState(false);
+  const [exportProgress, setExportProgress] = useState<{ fetched: number; total: number } | null>(null);
+  const { toast } = useToast();
 
   const filterParams = {
     ...(search ? { action: search } : {}),
@@ -54,6 +57,7 @@ export default function AuditLogPage() {
 
   const exportAuditLog = async () => {
     setExporting(true);
+    setExportProgress(null);
     try {
       const all: any[] = [];
       const batch = 1000;
@@ -62,6 +66,7 @@ export default function AuditLogPage() {
         const res = await listAuditLog({ ...filterParams, limit: batch, offset });
         all.push(...res.entries);
         offset += res.entries.length;
+        setExportProgress({ fetched: offset, total: res.total });
         if (res.entries.length < batch || offset >= res.total) break;
       }
       const headers = ['Timestamp', 'User', 'Action', 'Entity Type', 'Entity ID', 'Detail'];
@@ -74,8 +79,15 @@ export default function AuditLogPage() {
         e.detail ?? '',
       ]);
       downloadCSV('audit_log.csv', headers, rows);
+    } catch (err) {
+      toast({
+        variant: 'destructive',
+        title: 'Export failed',
+        description: 'Could not fetch all audit entries. Please check your connection and try again.',
+      });
     } finally {
       setExporting(false);
+      setExportProgress(null);
     }
   };
 
@@ -154,7 +166,12 @@ export default function AuditLogPage() {
             data-testid="button-export-audit-log"
             className="shrink-0"
           >
-            <Download className="w-4 h-4 mr-2" /> {exporting ? 'Exporting…' : 'Export CSV'}
+            <Download className="w-4 h-4 mr-2" />
+            {exporting
+              ? exportProgress
+                ? `Fetched ${exportProgress.fetched.toLocaleString()} of ${exportProgress.total.toLocaleString()}…`
+                : 'Exporting…'
+              : 'Export CSV'}
           </Button>
         </CardHeader>
         <CardContent className="p-0">

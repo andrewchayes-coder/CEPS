@@ -21,8 +21,9 @@ args = ["pnpm", "--filter", "@workspace/api-server", "run", "build"]
 NODE_ENV = "production"
 
 [services.production.run]
-# Run DB migrations before starting the server so schema changes are applied on every deploy.
-args = ["sh", "-c", "pnpm --filter @workspace/db run db:migrate && node --enable-source-maps artifacts/api-server/dist/index.mjs"]
+# Production schema is managed by Replit's publish flow (dev->prod schema diff);
+# do NOT run migrations here — replaying them against an already-synced prod DB fails.
+args = ["node", "--enable-source-maps", "artifacts/api-server/dist/index.mjs"]
 
 [services.production.run.env]
 PORT = "8080"

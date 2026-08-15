@@ -375,14 +375,22 @@ paths:
         - name: limit
           in: query
           schema: { type: integer }
+        - name: offset
+          in: query
+          schema: { type: integer }
       responses:
         "200":
           description: Audit entries
           content:
             application/json:
               schema:
-                type: array
-                items: { $ref: "#/components/schemas/AuditEntry" }
+                type: object
+                required: [entries, total]
+                properties:
+                  entries:
+                    type: array
+                    items: { $ref: "#/components/schemas/AuditEntry" }
+                  total: { type: integer }
   /clients:
     get:
       operationId: listClients

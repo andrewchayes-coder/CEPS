@@ -1,49 +1,82 @@
 import React, { useState } from 'react';
-import { useListAuditLog } from '@workspace/api-client-react';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+import { useListAuditLog, useListUsers, listAuditLog } from '@workspace/api-client-react';
+import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
-import { Download } from 'lucide-react';
+import { Download, ChevronLeft, ChevronRight } from 'lucide-react';
 import { format } from 'date-fns';
 import { downloadCSV } from '@/lib/csv';
+
+const PAGE_SIZE = 50;
+const ALL_USERS = '__all__';
 
 export default function AuditLogPage() {
   const [search, setSearch] = useState('');
   const [entityType, setEntityType] = useState('');
+  const [userId, setUserId] = useState(ALL_USERS);
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
+  const [page, setPage] = useState(0);
+  const [exporting, setExporting] = useState(false);
 
-  const params = {
+  const filterParams = {
     ...(search ? { action: search } : {}),
     ...(entityType ? { entityType } : {}),
+    ...(userId !== ALL_USERS ? { userId } : {}),
     ...(dateFrom ? { dateFrom } : {}),
     ...(dateTo ? { dateTo } : {}),
-    limit: 500,
   };
+  const params = { ...filterParams, limit: PAGE_SIZE, offset: page * PAGE_SIZE };
 
-  const { data: entries, isLoading } = useListAuditLog(params, {
+  const { data, isLoading } = useListAuditLog(params, {
     query: { queryKey: ['auditLog', params] },
   });
+  const { data: users } = useListUsers(undefined, {
+    query: { queryKey: ['users'] },
+  });
+
+  const entries = data?.entries;
+  const total = data?.total ?? 0;
+  const pageCount = Math.max(1, Math.ceil(total / PAGE_SIZE));
+
+  const setFilter = (setter: (v: string) => void) => (value: string) => {
+    setter(value);
+    setPage(0);
+  };
 
   const formatTs = (ts?: string | null) =>
     ts ? format(new Date(ts), 'MMM d, yyyy h:mm a') : '';
 
-  const exportAuditLog = () => {
-    if (!entries) return;
-    const headers = ['Timestamp', 'User', 'Action', 'Entity Type', 'Entity ID', 'Detail'];
-    const rows = entries.map((e: any) => [
-      formatTs(e.createdAt),
-      e.userName ?? '',
-      e.action ?? '',
-      e.entityType ?? '',
-      e.entityId ?? '',
-      e.detail ?? '',
-    ]);
-    downloadCSV('audit_log.csv', headers, rows);
+  const exportAuditLog = async () => {
+    setExporting(true);
+    try {
+      const all: any[] = [];
+      const batch = 1000;
+      let offset = 0;
+      for (;;) {
+        const res = await listAuditLog({ ...filterParams, limit: batch, offset });
+        all.push(...res.entries);
+        offset += res.entries.length;
+        if (res.entries.length < batch || offset >= res.total) break;
+      }
+      const headers = ['Timestamp', 'User', 'Action', 'Entity Type', 'Entity ID', 'Detail'];
+      const rows = all.map((e: any) => [
+        formatTs(e.createdAt),
+        e.userName ?? '',
+        e.action ?? '',
+        e.entityType ?? '',
+        e.entityId ?? '',
+        e.detail ?? '',
+      ]);
+      downloadCSV('audit_log.csv', headers, rows);
+    } finally {
+      setExporting(false);
+    }
   };
 
   return (
@@ -57,7 +90,21 @@ export default function AuditLogPage() {
 
       <Card>
         <CardHeader className="flex flex-col gap-4 pb-4 border-b sm:flex-row sm:items-end sm:justify-between">
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 flex-1">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3 flex-1">
+            <div className="space-y-1">
+              <Label className="text-xs">User</Label>
+              <Select value={userId} onValueChange={setFilter(setUserId)}>
+                <SelectTrigger data-testid="select-audit-user">
+                  <SelectValue placeholder="All users" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value={ALL_USERS}>All users</SelectItem>
+                  {(users ?? []).map((u: any) => (
+                    <SelectItem key={u.id} value={u.id}>{u.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
             <div className="space-y-1">
               <Label htmlFor="audit-search" className="text-xs">Action</Label>
               <Input
@@ -65,7 +112,7 @@ export default function AuditLogPage() {
                 data-testid="input-audit-search"
                 placeholder="Search action…"
                 value={search}
-                onChange={(e) => setSearch(e.target.value)}
+                onChange={(e) => setFilter(setSearch)(e.target.value)}
               />
             </div>
             <div className="space-y-1">
@@ -75,7 +122,7 @@ export default function AuditLogPage() {
                 data-testid="input-audit-entity"
                 placeholder="e.g. invoice"
                 value={entityType}
-                onChange={(e) => setEntityType(e.target.value)}
+                onChange={(e) => setFilter(setEntityType)(e.target.value)}
               />
             </div>
             <div className="space-y-1">
@@ -85,7 +132,7 @@ export default function AuditLogPage() {
                 data-testid="input-audit-date-from"
                 type="date"
                 value={dateFrom}
-                onChange={(e) => setDateFrom(e.target.value)}
+                onChange={(e) => setFilter(setDateFrom)(e.target.value)}
               />
             </div>
             <div className="space-y-1">
@@ -95,7 +142,7 @@ export default function AuditLogPage() {
                 data-testid="input-audit-date-to"
                 type="date"
                 value={dateTo}
-                onChange={(e) => setDateTo(e.target.value)}
+                onChange={(e) => setFilter(setDateTo)(e.target.value)}
               />
             </div>
           </div>
@@ -103,11 +150,11 @@ export default function AuditLogPage() {
             variant="outline"
             size="sm"
             onClick={exportAuditLog}
-            disabled={!entries || entries.length === 0}
+            disabled={exporting || total === 0}
             data-testid="button-export-audit-log"
             className="shrink-0"
           >
-            <Download className="w-4 h-4 mr-2" /> Export CSV
+            <Download className="w-4 h-4 mr-2" /> {exporting ? 'Exporting…' : 'Export CSV'}
           </Button>
         </CardHeader>
         <CardContent className="p-0">
@@ -154,6 +201,34 @@ export default function AuditLogPage() {
               )}
             </TableBody>
           </Table>
+          <div className="flex items-center justify-between px-4 py-3 border-t">
+            <p className="text-sm text-muted-foreground" data-testid="text-audit-pagination">
+              {total === 0
+                ? 'No entries'
+                : `Showing ${page * PAGE_SIZE + 1}–${Math.min((page + 1) * PAGE_SIZE, total)} of ${total} entries`}
+            </p>
+            <div className="flex items-center gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setPage((p) => Math.max(0, p - 1))}
+                disabled={page === 0}
+                data-testid="button-audit-prev"
+              >
+                <ChevronLeft className="w-4 h-4 mr-1" /> Previous
+              </Button>
+              <span className="text-sm text-muted-foreground">Page {page + 1} of {pageCount}</span>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setPage((p) => Math.min(pageCount - 1, p + 1))}
+                disabled={page >= pageCount - 1}
+                data-testid="button-audit-next"
+              >
+                Next <ChevronRight className="w-4 h-4 ml-1" />
+              </Button>
+            </div>
+          </div>
         </CardContent>
       </Card>
     </div>

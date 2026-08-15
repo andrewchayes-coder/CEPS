@@ -20,7 +20,6 @@ import type {
 } from '@tanstack/react-query';
 
 import type {
-  AuditEntry,
   Authorization,
   AuthorizationInput,
   AuthorizationResult,
@@ -47,6 +46,7 @@ import type {
   InvoiceUpdate,
   InvoiceValidationInput,
   InvoiceValidationResult,
+  ListAuditLog200,
   ListAuditLogParams,
   ListAuthorizationsParams,
   ListClientsParams,
@@ -1318,9 +1318,9 @@ export const getListAuditLogUrl = (params?: ListAuditLogParams,) => {
 /**
  * @summary Per-user audit history (staff only)
  */
-export const listAuditLog = async (params?: ListAuditLogParams, options?: Parameters<typeof customFetch>[1]): Promise<AuditEntry[]> => {
+export const listAuditLog = async (params?: ListAuditLogParams, options?: Parameters<typeof customFetch>[1]): Promise<ListAuditLog200> => {
 
-  return customFetch<AuditEntry[]>(getListAuditLogUrl(params),
+  return customFetch<ListAuditLog200>(getListAuditLogUrl(params),
   {
     ...options,
     method: 'GET'

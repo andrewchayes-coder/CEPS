@@ -5,13 +5,9 @@
  * CEPS Portal API — referral intake, authorizations, invoices, payments, remittances, vendors, reporting
  * OpenAPI spec version: 0.1.0
  */
+import type { AuditEntry } from './auditEntry';
 
-export type ListAuditLogParams = {
-userId?: string;
-action?: string;
-entityType?: string;
-dateFrom?: string;
-dateTo?: string;
-limit?: number;
-offset?: number;
+export type ListAuditLog200 = {
+  entries: AuditEntry[];
+  total: number;
 };

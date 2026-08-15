@@ -292,10 +292,12 @@ export const ListAuditLogQueryParams = zod.object({
   "entityType": zod.coerce.string().optional(),
   "dateFrom": zod.coerce.string().optional(),
   "dateTo": zod.coerce.string().optional(),
-  "limit": zod.coerce.number().int().optional()
+  "limit": zod.coerce.number().int().optional(),
+  "offset": zod.coerce.number().int().optional()
 })
 
-export const ListAuditLogResponseItem = zod.object({
+export const ListAuditLogResponse = zod.object({
+  "entries": zod.array(zod.object({
   "id": zod.string(),
   "userId": zod.string().nullish(),
   "userName": zod.string().nullish(),
@@ -304,8 +306,9 @@ export const ListAuditLogResponseItem = zod.object({
   "entityId": zod.string().nullish(),
   "detail": zod.string().nullish(),
   "createdAt": zod.string()
+})),
+  "total": zod.int()
 })
-export const ListAuditLogResponse = zod.array(ListAuditLogResponseItem)
 
 
 /**

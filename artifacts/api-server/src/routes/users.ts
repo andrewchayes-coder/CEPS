@@ -1,5 +1,5 @@
 import { Router, type IRouter } from "express";
-import { eq, desc } from "drizzle-orm";
+import { eq, desc, and, gte, lte, ilike, count, type SQL } from "drizzle-orm";
 import { db, usersTable, auditLogTable } from "@workspace/db";
 import {
   ListUsersQueryParams,
@@ -97,30 +97,37 @@ router.get("/audit-log", requireStaff, async (req, res): Promise<void> => {
     res.status(400).json({ error: query.error.message });
     return;
   }
-  let entries = await db.select().from(auditLogTable).orderBy(desc(auditLogTable.createdAt));
   const { userId, action, entityType, dateFrom, dateTo } = query.data;
-  if (userId) entries = entries.filter((e) => e.userId === userId);
-  if (action) {
-    const needle = action.toLowerCase();
-    entries = entries.filter((e) => e.action.toLowerCase().includes(needle));
-  }
-  if (entityType) {
-    const needle = entityType.toLowerCase();
-    entries = entries.filter((e) => (e.entityType ?? "").toLowerCase().includes(needle));
-  }
+  const escapeLike = (s: string) => s.replace(/[\\%_]/g, (c) => `\\${c}`);
+  const conditions: SQL[] = [];
+  if (userId) conditions.push(eq(auditLogTable.userId, userId));
+  if (action) conditions.push(ilike(auditLogTable.action, `%${escapeLike(action)}%`));
+  if (entityType) conditions.push(ilike(auditLogTable.entityType, `%${escapeLike(entityType)}%`));
   if (dateFrom) {
-    const from = new Date(`${dateFrom}T00:00:00Z`).getTime();
-    if (!Number.isNaN(from)) entries = entries.filter((e) => e.createdAt != null && e.createdAt.getTime() >= from);
+    const from = new Date(`${dateFrom}T00:00:00Z`);
+    if (!Number.isNaN(from.getTime())) conditions.push(gte(auditLogTable.createdAt, from));
   }
   if (dateTo) {
-    const to = new Date(`${dateTo}T23:59:59.999Z`).getTime();
-    if (!Number.isNaN(to)) entries = entries.filter((e) => e.createdAt != null && e.createdAt.getTime() <= to);
+    const to = new Date(`${dateTo}T23:59:59.999Z`);
+    if (!Number.isNaN(to.getTime())) conditions.push(lte(auditLogTable.createdAt, to));
   }
-  entries = entries.slice(0, query.data.limit ?? 500);
+  const where = conditions.length ? and(...conditions) : undefined;
+  const limit = Math.min(Math.max(query.data.limit ?? 50, 1), 1000);
+  const offset = Math.max(query.data.offset ?? 0, 0);
+  const [[{ total }], entries] = await Promise.all([
+    db.select({ total: count() }).from(auditLogTable).where(where),
+    db
+      .select()
+      .from(auditLogTable)
+      .where(where)
+      .orderBy(desc(auditLogTable.createdAt), desc(auditLogTable.id))
+      .limit(limit)
+      .offset(offset),
+  ]);
   const names = await userNameMap(entries.map((e) => e.userId));
   res.json(
-    ListAuditLogResponse.parse(
-      entries.map((e) => ({
+    ListAuditLogResponse.parse({
+      entries: entries.map((e) => ({
         id: e.id,
         userId: e.userId,
         userName: e.userId ? (names.get(e.userId) ?? null) : null,
@@ -130,7 +137,8 @@ router.get("/audit-log", requireStaff, async (req, res): Promise<void> => {
         detail: e.detail,
         createdAt: iso(e.createdAt),
       })),
-    ),
+      total,
+    }),
   );
 });
 

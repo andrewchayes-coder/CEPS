@@ -65,6 +65,7 @@ export * from './invoiceUpdateStatus';
 export * from './invoiceValidationCheck';
 export * from './invoiceValidationInput';
 export * from './invoiceValidationResult';
+export * from './listAuditLog200';
 export * from './listAuditLogParams';
 export * from './listAuthorizationsParams';
 export * from './listClientsParams';

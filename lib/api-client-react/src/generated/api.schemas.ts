@@ -1386,6 +1386,12 @@ entityType?: string;
 dateFrom?: string;
 dateTo?: string;
 limit?: number;
+offset?: number;
+};
+
+export type ListAuditLog200 = {
+  entries: AuditEntry[];
+  total: number;
 };
 
 export type ListClientsParams = {

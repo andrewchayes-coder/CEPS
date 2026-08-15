@@ -9,6 +9,58 @@ import * as zod from 'zod/v4';
 
 
 /**
+ * Returns a presigned GCS URL for direct upload. The client sends JSON
+ * metadata here, then uploads the file directly to the returned URL.
+ * @summary Request a presigned URL for file upload
+ */
+
+
+
+
+
+export const RequestUploadUrlBody = zod.object({
+  "name": zod.string().min(1).describe('Original file name.'),
+  "size": zod.int().min(1).describe('File size in bytes.'),
+  "contentType": zod.string().min(1).describe('MIME type of the file (e.g. `application\/pdf`).')
+})
+
+
+
+
+
+
+export const RequestUploadUrlResponse = zod.object({
+  "uploadURL": zod.url().describe('Presigned GCS URL for PUT upload.'),
+  "objectPath": zod.string().describe('Normalized object path (e.g. `\/objects\/uploads\/uuid`). Store this in your database.'),
+  "metadata": zod.object({
+  "name": zod.string().min(1).describe('Original file name.'),
+  "size": zod.int().min(1).describe('File size in bytes.'),
+  "contentType": zod.string().min(1).describe('MIME type of the file (e.g. `application\/pdf`).')
+}).optional()
+})
+
+
+/**
+ * @summary Serve a public asset from PUBLIC_OBJECT_SEARCH_PATHS
+ */
+export const GetPublicObjectParams = zod.object({
+  "filePath": zod.coerce.string()
+})
+
+export const GetPublicObjectResponse = zod.unknown()
+
+
+/**
+ * @summary Serve an object entity from PRIVATE_OBJECT_DIR
+ */
+export const GetStorageObjectParams = zod.object({
+  "objectPath": zod.coerce.string()
+})
+
+export const GetStorageObjectResponse = zod.unknown()
+
+
+/**
  * @summary Health check
  */
 export const HealthCheckResponse = zod.object({
@@ -76,6 +128,62 @@ export const ConsumeMagicLinkBody = zod.object({
 })
 
 export const ConsumeMagicLinkResponse = zod.object({
+  "id": zod.string(),
+  "name": zod.string(),
+  "email": zod.string(),
+  "role": zod.enum(['staff', 'service_coordinator', 'parent_guardian', 'self', 'vendor']),
+  "linkedRecordId": zod.string().nullish(),
+  "linkedRecordType": zod.union([zod.literal('client'),zod.literal('vendor'),zod.literal(null)]).nullish()
+})
+
+
+/**
+ * @summary Create a portal invite (staff only) — vendor / parent-guardian / self
+ */
+export const CreateInviteBody = zod.object({
+  "email": zod.string(),
+  "role": zod.enum(['vendor', 'parent_guardian', 'self']),
+  "linkedRecordType": zod.enum(['client', 'vendor']),
+  "linkedRecordId": zod.string()
+})
+
+export const CreateInviteResponse = zod.object({
+  "inviteUrl": zod.string().describe('Development only: the invite link for staff to share until email is set up')
+})
+
+
+/**
+ * @summary Look up an invite by token (public, no session required)
+ */
+export const GetInviteParams = zod.object({
+  "token": zod.coerce.string()
+})
+
+export const GetInviteResponse = zod.object({
+  "email": zod.string(),
+  "role": zod.enum(['vendor', 'parent_guardian', 'self']),
+  "linkedRecordType": zod.enum(['client', 'vendor']),
+  "recordName": zod.string().describe('Display name of the linked vendor\/client')
+})
+
+
+/**
+ * @summary Accept an invite, set a password, and create a session (public)
+ */
+export const AcceptInviteParams = zod.object({
+  "token": zod.coerce.string()
+})
+
+export const acceptInviteBodyPasswordMin = 8;
+
+
+
+export const AcceptInviteBody = zod.object({
+  "name": zod.string().optional(),
+  "password": zod.string().min(acceptInviteBodyPasswordMin)
+})
+
+export const AcceptInviteResponse = zod.object({
   "id": zod.string(),
   "name": zod.string(),
   "email": zod.string(),
@@ -164,10 +272,26 @@ export const UpdateUserResponse = zod.object({
 
 
 /**
+ * @summary Deactivate a user (staff; cannot delete yourself)
+ */
+export const DeleteUserParams = zod.object({
+  "id": zod.coerce.string()
+})
+
+export const DeleteUserResponse = zod.object({
+  "ok": zod.boolean()
+})
+
+
+/**
  * @summary Per-user audit history (staff only)
  */
 export const ListAuditLogQueryParams = zod.object({
   "userId": zod.coerce.string().optional(),
+  "action": zod.coerce.string().optional(),
+  "entityType": zod.coerce.string().optional(),
+  "dateFrom": zod.coerce.string().optional(),
+  "dateTo": zod.coerce.string().optional(),
   "limit": zod.coerce.number().int().optional()
 })
 
@@ -336,6 +460,18 @@ export const UpdateClientResponse = zod.object({
   "familyRepEmail": zod.string().nullish(),
   "familyRepAddress": zod.string().nullish(),
   "createdAt": zod.string().nullish()
+})
+
+
+/**
+ * @summary Soft-delete a client (staff)
+ */
+export const DeleteClientParams = zod.object({
+  "id": zod.coerce.string()
+})
+
+export const DeleteClientResponse = zod.object({
+  "ok": zod.boolean()
 })
 
 
@@ -827,6 +963,18 @@ export const UpdateReferralResponse = zod.object({
 
 
 /**
+ * @summary Delete a referral (staff; blocked if converted to a client)
+ */
+export const DeleteReferralParams = zod.object({
+  "id": zod.coerce.string()
+})
+
+export const DeleteReferralResponse = zod.object({
+  "ok": zod.boolean()
+})
+
+
+/**
  * @summary (Re)send the parent/guardian e-signature magic link
  */
 export const SendReferralMagicLinkParams = zod.object({
@@ -934,6 +1082,7 @@ export const CreateAuthorizationBody = zod.object({
   "units": zod.int().optional(),
   "status": zod.enum(['active', 'expired', 'pending', 'exhausted']).optional(),
   "receivedDate": zod.string().optional(),
+  "posPdfUrl": zod.string().optional().describe('Stored object path of the uploaded POS PDF'),
   "acceptMaxAmountWarning": zod.boolean().optional().describe('Set true to save despite the max-amount data-quality warning')
 })
 
@@ -1048,6 +1197,18 @@ export const UpdateAuthorizationResponse = zod.object({
   "daysUntilExpiry": zod.int().nullish()
 }).optional(),
   "warnings": zod.array(zod.string()).optional()
+})
+
+
+/**
+ * @summary Soft-delete an authorization (staff)
+ */
+export const DeleteAuthorizationParams = zod.object({
+  "id": zod.coerce.string()
+})
+
+export const DeleteAuthorizationResponse = zod.object({
+  "ok": zod.boolean()
 })
 
 
@@ -1221,6 +1382,18 @@ export const UpdateInvoiceResponse = zod.object({
 
 
 /**
+ * @summary Soft-delete an invoice (staff)
+ */
+export const DeleteInvoiceParams = zod.object({
+  "id": zod.coerce.string()
+})
+
+export const DeleteInvoiceResponse = zod.object({
+  "ok": zod.boolean()
+})
+
+
+/**
  * @summary Run the five validation checks against the linked authorization
  */
 export const ValidateInvoiceParams = zod.object({
@@ -1311,6 +1484,57 @@ export const CreatePaymentResponse = zod.object({
 
 
 /**
+ * @summary Update a payment (staff)
+ */
+export const UpdatePaymentParams = zod.object({
+  "id": zod.coerce.string()
+})
+
+export const UpdatePaymentBody = zod.object({
+  "authorizationId": zod.string().nullish(),
+  "vendorId": zod.string().nullish(),
+  "invoiceId": zod.string().nullish(),
+  "qbCheckNumber": zod.string().optional(),
+  "checkDate": zod.string().optional(),
+  "amount": zod.string().optional(),
+  "paymentMonth": zod.string().nullish(),
+  "paymentType": zod.enum(['direct_payment', 'reimbursement', 'fee']).optional()
+})
+
+export const UpdatePaymentResponse = zod.object({
+  "id": zod.string(),
+  "clientId": zod.string(),
+  "clientName": zod.string().nullish(),
+  "authorizationId": zod.string().nullish(),
+  "authNumber": zod.string().nullish(),
+  "vendorId": zod.string().nullish(),
+  "vendorName": zod.string().nullish(),
+  "invoiceId": zod.string().nullish(),
+  "qbCheckNumber": zod.string(),
+  "checkDate": zod.string(),
+  "amount": zod.string(),
+  "paymentMonth": zod.string().nullish(),
+  "paymentType": zod.enum(['direct_payment', 'reimbursement', 'fee']),
+  "source": zod.enum(['quickbooks', 'manual']),
+  "loggedBy": zod.string().nullish(),
+  "remitted": zod.boolean().nullish(),
+  "createdAt": zod.string().nullish()
+})
+
+
+/**
+ * @summary Soft-delete a payment (staff)
+ */
+export const DeletePaymentParams = zod.object({
+  "id": zod.coerce.string()
+})
+
+export const DeletePaymentResponse = zod.object({
+  "ok": zod.boolean()
+})
+
+
+/**
  * @summary Upload parsed check-register rows; matches to clients/vendors/invoices
  */
 export const ImportCheckRegisterBody = zod.object({
@@ -1334,6 +1558,98 @@ export const ImportCheckRegisterResponse = zod.object({
   "message": zod.string().nullish(),
   "paymentId": zod.string().nullish()
 }))
+})
+
+
+/**
+ * @summary List fees (scoped by role)
+ */
+export const ListFeesQueryParams = zod.object({
+  "clientId": zod.coerce.string().optional(),
+  "status": zod.coerce.string().optional()
+})
+
+export const ListFeesResponseItem = zod.object({
+  "id": zod.string(),
+  "clientId": zod.string(),
+  "clientName": zod.string().nullish(),
+  "paymentId": zod.string().nullish(),
+  "authorizationId": zod.string().nullish(),
+  "amount": zod.string(),
+  "ruleApplied": zod.string().nullish(),
+  "status": zod.enum(['pending', 'invoiced', 'collected', 'waived']),
+  "notes": zod.string().nullish(),
+  "createdBy": zod.string().nullish(),
+  "createdAt": zod.string().nullish()
+})
+export const ListFeesResponse = zod.array(ListFeesResponseItem)
+
+
+/**
+ * @summary Manually create/adjust a fee (staff)
+ */
+export const CreateFeeBody = zod.object({
+  "clientId": zod.string(),
+  "paymentId": zod.string().nullish(),
+  "authorizationId": zod.string().nullish(),
+  "amount": zod.string(),
+  "ruleApplied": zod.string().optional(),
+  "status": zod.enum(['pending', 'invoiced', 'collected', 'waived']).optional(),
+  "notes": zod.string().optional()
+})
+
+export const CreateFeeResponse = zod.object({
+  "id": zod.string(),
+  "clientId": zod.string(),
+  "clientName": zod.string().nullish(),
+  "paymentId": zod.string().nullish(),
+  "authorizationId": zod.string().nullish(),
+  "amount": zod.string(),
+  "ruleApplied": zod.string().nullish(),
+  "status": zod.enum(['pending', 'invoiced', 'collected', 'waived']),
+  "notes": zod.string().nullish(),
+  "createdBy": zod.string().nullish(),
+  "createdAt": zod.string().nullish()
+})
+
+
+/**
+ * @summary Update a fee (staff)
+ */
+export const UpdateFeeParams = zod.object({
+  "id": zod.coerce.string()
+})
+
+export const UpdateFeeBody = zod.object({
+  "amount": zod.string().optional(),
+  "status": zod.enum(['pending', 'invoiced', 'collected', 'waived']).optional(),
+  "notes": zod.string().optional()
+})
+
+export const UpdateFeeResponse = zod.object({
+  "id": zod.string(),
+  "clientId": zod.string(),
+  "clientName": zod.string().nullish(),
+  "paymentId": zod.string().nullish(),
+  "authorizationId": zod.string().nullish(),
+  "amount": zod.string(),
+  "ruleApplied": zod.string().nullish(),
+  "status": zod.enum(['pending', 'invoiced', 'collected', 'waived']),
+  "notes": zod.string().nullish(),
+  "createdBy": zod.string().nullish(),
+  "createdAt": zod.string().nullish()
+})
+
+
+/**
+ * @summary Soft-delete a fee (staff)
+ */
+export const DeleteFeeParams = zod.object({
+  "id": zod.coerce.string()
+})
+
+export const DeleteFeeResponse = zod.object({
+  "ok": zod.boolean()
 })
 
 
@@ -1393,6 +1709,54 @@ export const CreateRemittanceResponse = zod.object({
   "matchedPaymentId": zod.string().nullish(),
   "autoMatched": zod.boolean(),
   "remittanceBatchId": zod.string().nullish()
+})
+
+
+/**
+ * @summary Update a remittance (staff)
+ */
+export const UpdateRemittanceParams = zod.object({
+  "id": zod.coerce.string()
+})
+
+export const UpdateRemittanceBody = zod.object({
+  "authorizationId": zod.string().nullish(),
+  "altaReference": zod.string().nullish(),
+  "remittanceDate": zod.string().optional(),
+  "amount": zod.string().optional(),
+  "paymentMonth": zod.string().nullish(),
+  "status": zod.enum(['pending', 'received', 'matched']).optional(),
+  "source": zod.enum(['alta_regional', 'manual']).optional(),
+  "remittanceBatchId": zod.string().nullish()
+})
+
+export const UpdateRemittanceResponse = zod.object({
+  "id": zod.string(),
+  "clientId": zod.string(),
+  "clientName": zod.string().nullish(),
+  "authorizationId": zod.string().nullish(),
+  "authNumber": zod.string().nullish(),
+  "altaReference": zod.string().nullish(),
+  "remittanceDate": zod.string(),
+  "amount": zod.string(),
+  "paymentMonth": zod.string().nullish(),
+  "status": zod.enum(['pending', 'received', 'matched']),
+  "source": zod.enum(['alta_regional', 'manual']),
+  "matchedPaymentId": zod.string().nullish(),
+  "autoMatched": zod.boolean(),
+  "remittanceBatchId": zod.string().nullish()
+})
+
+
+/**
+ * @summary Soft-delete a remittance (staff)
+ */
+export const DeleteRemittanceParams = zod.object({
+  "id": zod.coerce.string()
+})
+
+export const DeleteRemittanceResponse = zod.object({
+  "ok": zod.boolean()
 })
 
 
@@ -1535,6 +1899,68 @@ export const UpdateVendorBody = zod.object({
 })
 
 export const UpdateVendorResponse = zod.object({
+  "id": zod.string(),
+  "name": zod.string(),
+  "altaVendorNumber": zod.string().nullish(),
+  "ein": zod.string().nullish(),
+  "billingAddress": zod.string().nullish(),
+  "serviceAddress": zod.string().nullish(),
+  "phone": zod.string().nullish(),
+  "email": zod.string().nullish(),
+  "contactPerson": zod.string().nullish(),
+  "w9Status": zod.enum(['pending', 'on_file', 'expired']),
+  "w9DocumentUrl": zod.string().nullish(),
+  "preferred": zod.boolean(),
+  "active": zod.boolean(),
+  "createdAt": zod.string().nullish()
+})
+
+
+/**
+ * @summary Attach an uploaded W-9 document (staff, or the vendor's own account)
+ */
+export const UploadVendorW9Params = zod.object({
+  "id": zod.coerce.string()
+})
+
+export const UploadVendorW9Body = zod.object({
+  "w9DocumentUrl": zod.string().describe('Stored object path of the uploaded W-9 (e.g. \/objects\/uploads\/uuid)')
+})
+
+export const UploadVendorW9Response = zod.object({
+  "id": zod.string(),
+  "name": zod.string(),
+  "altaVendorNumber": zod.string().nullish(),
+  "ein": zod.string().nullish(),
+  "billingAddress": zod.string().nullish(),
+  "serviceAddress": zod.string().nullish(),
+  "phone": zod.string().nullish(),
+  "email": zod.string().nullish(),
+  "contactPerson": zod.string().nullish(),
+  "w9Status": zod.enum(['pending', 'on_file', 'expired']),
+  "w9DocumentUrl": zod.string().nullish(),
+  "preferred": zod.boolean(),
+  "active": zod.boolean(),
+  "createdAt": zod.string().nullish()
+})
+
+
+/**
+ * @summary Update vendor contact fields (staff, or the vendor's own account)
+ */
+export const UpdateVendorContactParams = zod.object({
+  "id": zod.coerce.string()
+})
+
+export const UpdateVendorContactBody = zod.object({
+  "email": zod.string().optional(),
+  "phone": zod.string().optional(),
+  "contactPerson": zod.string().optional(),
+  "billingAddress": zod.string().optional(),
+  "serviceAddress": zod.string().optional()
+})
+
+export const UpdateVendorContactResponse = zod.object({
   "id": zod.string(),
   "name": zod.string(),
   "altaVendorNumber": zod.string().nullish(),

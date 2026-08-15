@@ -17,6 +17,7 @@ import { AppShell } from '@/components/layout/app-shell';
 // Pages
 import LoginPage from '@/pages/login';
 import MagicLinkConsumePage from '@/pages/auth/magic';
+import InviteAcceptPage from '@/pages/invite/[token]';
 import SignaturePage from '@/pages/sign';
 import DashboardPage from '@/pages/dashboard';
 import ReferralsPage from '@/pages/referrals';
@@ -35,6 +36,7 @@ import VendorsPage from '@/pages/vendors';
 import VendorDetailPage from '@/pages/vendors/[id]';
 import ReportsPage from '@/pages/reports';
 import UsersPage from '@/pages/admin/users';
+import AuditLogPage from '@/pages/audit-log';
 import HelpPage from '@/pages/help';
 
 const queryClient = new QueryClient({
@@ -77,6 +79,7 @@ function ProtectedRoutes() {
         <Route path="/vendors/:id" component={VendorDetailPage} />
         <Route path="/reports" component={ReportsPage} />
         <Route path="/admin/users" component={UsersPage} />
+        <Route path="/audit-log" component={AuditLogPage} />
         <Route path="/help" component={HelpPage} />
         <Route component={NotFound} />
       </Switch>
@@ -90,6 +93,7 @@ function Router() {
       <Switch>
         <Route path="/login" component={LoginPage} />
         <Route path="/auth/magic" component={MagicLinkConsumePage} />
+        <Route path="/invite/:token" component={InviteAcceptPage} />
         <Route path="/sign/:token" component={SignaturePage} />
         <Route>
           <ProtectedRoutes />

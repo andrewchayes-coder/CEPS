@@ -29,6 +29,9 @@ export const clientsTable = pgTable("clients", {
   familyRepPhone: text("family_rep_phone"),
   familyRepEmail: text("family_rep_email"),
   familyRepAddress: text("family_rep_address"),
+  isDeleted: boolean("is_deleted").notNull().default(false),
+  deletedAt: timestamp("deleted_at", { withTimezone: true }),
+  deletedBy: uuid("deleted_by"),
   createdAt: timestamp("created_at", { withTimezone: true })
     .notNull()
     .defaultNow(),

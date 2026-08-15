@@ -1,6 +1,10 @@
 import React from 'react';
 import { useLocation, useParams } from 'wouter';
-import { useGetClientCase } from '@workspace/api-client-react';
+import { useGetClientCase, useListFees, useDeleteClient } from '@workspace/api-client-react';
+import { useAuth } from '@/components/auth/auth-provider';
+import { InvitePortalDialog } from '@/components/invite-portal-dialog';
+import { EditClientDialog } from '@/components/edit-client-dialog';
+import { DeleteEntityButton } from '@/components/delete-entity-button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -13,17 +17,27 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 
 export default function ClientDetailPage() {
   const { id } = useParams<{ id: string }>();
-  const { data: caseData, isLoading } = useGetClientCase(id, {
+  const [, navigate] = useLocation();
+  const { user } = useAuth();
+  const isStaff = user?.role === 'staff';
+  const deleteClient = useDeleteClient();
+  const { data: caseData, isLoading, refetch } = useGetClientCase(id, {
     query: {
       enabled: !!id,
       queryKey: ['clientCase', id]
     }
   });
 
+  const { data: fees } = useListFees(
+    { clientId: id },
+    { query: { enabled: !!id, queryKey: ['fees', id] } },
+  );
+
   if (isLoading) return <div className="p-8 text-center">Loading case record...</div>;
   if (!caseData) return <div className="p-8 text-center">Client not found.</div>;
 
   const { client, authorizations, invoices, payments, remittances, referrals } = caseData;
+  const feeList = fees ?? [];
 
   return (
     <div className="space-y-6 pb-10">
@@ -51,6 +65,24 @@ export default function ClientDetailPage() {
           <div className="text-sm text-muted-foreground text-right">
             Coordinator: <span className="font-medium text-foreground">{client.assignedCoordinatorName || 'Unassigned'}</span>
           </div>
+          {user?.role === 'staff' && (
+            <InvitePortalDialog
+              linkedRecordType="client"
+              linkedRecordId={id}
+              recordName={`${client.firstName} ${client.lastName}`}
+            />
+          )}
+          {isStaff && (
+            <div className="flex items-center gap-2">
+              <EditClientDialog id={id} client={client} onSaved={() => refetch()} />
+              <DeleteEntityButton
+                entityLabel="Client"
+                testId="button-delete-client"
+                onDelete={() => deleteClient.mutateAsync({ id })}
+                onDeleted={() => navigate('/clients')}
+              />
+            </div>
+          )}
         </div>
       </div>
 
@@ -60,6 +92,7 @@ export default function ClientDetailPage() {
           <TabsTrigger value="authorizations" className="data-[state=active]:bg-transparent data-[state=active]:shadow-none data-[state=active]:border-b-2 data-[state=active]:border-primary rounded-none h-12 px-6">Authorizations ({authorizations.length})</TabsTrigger>
           <TabsTrigger value="invoices" className="data-[state=active]:bg-transparent data-[state=active]:shadow-none data-[state=active]:border-b-2 data-[state=active]:border-primary rounded-none h-12 px-6">Invoices ({invoices.length})</TabsTrigger>
           <TabsTrigger value="payments" className="data-[state=active]:bg-transparent data-[state=active]:shadow-none data-[state=active]:border-b-2 data-[state=active]:border-primary rounded-none h-12 px-6">Payments ({payments.length})</TabsTrigger>
+          <TabsTrigger value="fees" className="data-[state=active]:bg-transparent data-[state=active]:shadow-none data-[state=active]:border-b-2 data-[state=active]:border-primary rounded-none h-12 px-6">Fees ({feeList.length})</TabsTrigger>
           <TabsTrigger value="referrals" className="data-[state=active]:bg-transparent data-[state=active]:shadow-none data-[state=active]:border-b-2 data-[state=active]:border-primary rounded-none h-12 px-6">Referrals ({referrals.length})</TabsTrigger>
         </TabsList>
 
@@ -239,6 +272,45 @@ export default function ClientDetailPage() {
                   ))}
                   {payments.length === 0 && (
                     <TableRow><TableCell colSpan={6} className="text-center py-8 text-muted-foreground">No payments found.</TableCell></TableRow>
+                  )}
+                </TableBody>
+              </Table>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="fees" className="pt-6">
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-lg">Fees</CardTitle>
+              <CardDescription>
+                Fees auto-generated when payments are logged. The current 5% rule is an interim
+                placeholder pending CEPS confirmation.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="p-0">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Date</TableHead>
+                    <TableHead className="text-right">Amount</TableHead>
+                    <TableHead>Rule</TableHead>
+                    <TableHead>Status</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {feeList.map(fee => (
+                    <TableRow key={fee.id}>
+                      <TableCell className="whitespace-nowrap">
+                        {fee.createdAt ? format(new Date(fee.createdAt), 'MMM d, yyyy') : '-'}
+                      </TableCell>
+                      <TableCell className="text-right font-medium">${parseFloat(fee.amount).toFixed(2)}</TableCell>
+                      <TableCell className="text-xs text-muted-foreground font-mono">{fee.ruleApplied || '-'}</TableCell>
+                      <TableCell><Badge variant="outline">{fee.status}</Badge></TableCell>
+                    </TableRow>
+                  ))}
+                  {feeList.length === 0 && (
+                    <TableRow><TableCell colSpan={4} className="text-center py-8 text-muted-foreground">No fees found.</TableCell></TableRow>
                   )}
                 </TableBody>
               </Table>

@@ -1,6 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { useLocation, useParams } from 'wouter';
-import { useGetInvoice, useValidateInvoice, useUpdateInvoice, InvoiceValidationResult } from '@workspace/api-client-react';
+import { useGetInvoice, useValidateInvoice, useUpdateInvoice, useDeleteInvoice, InvoiceValidationResult } from '@workspace/api-client-react';
+import { useAuth } from '@/components/auth/auth-provider';
+import { EditInvoiceDialog } from '@/components/edit-invoice-dialog';
+import { DeleteEntityButton } from '@/components/delete-entity-button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -11,9 +14,13 @@ import { Textarea } from '@/components/ui/textarea';
 
 export default function InvoiceDetailPage() {
   const { id } = useParams<{ id: string }>();
+  const [, navigate] = useLocation();
+  const { user } = useAuth();
+  const isStaff = user?.role === 'staff';
   const { toast } = useToast();
   const [justification, setJustification] = useState('');
-  
+  const deleteInvoice = useDeleteInvoice();
+
   const { data: invoice, isLoading, refetch } = useGetInvoice(id, {
     query: { enabled: !!id, queryKey: ['invoice', id] }
   });
@@ -71,7 +78,20 @@ export default function InvoiceDetailPage() {
           <h1 className="text-3xl font-bold tracking-tight">Invoice Review</h1>
           <p className="text-muted-foreground mt-1">Service Month: {invoice.serviceMonth}</p>
         </div>
-        <Badge className="text-base px-3 py-1 uppercase">{invoice.status.replace('_', ' ')}</Badge>
+        <div className="flex items-center gap-2">
+          <Badge className="text-base px-3 py-1 uppercase">{invoice.status.replace('_', ' ')}</Badge>
+          {isStaff && (
+            <>
+              <EditInvoiceDialog id={id} invoice={invoice} onSaved={() => { refetch(); runValidation(); }} />
+              <DeleteEntityButton
+                entityLabel="Invoice"
+                testId="button-delete-invoice"
+                onDelete={() => deleteInvoice.mutateAsync({ id })}
+                onDeleted={() => navigate('/invoices')}
+              />
+            </>
+          )}
+        </div>
       </div>
 
       <div className="grid md:grid-cols-2 gap-6">

@@ -5,6 +5,7 @@ import {
   date,
   integer,
   numeric,
+  boolean,
   timestamp,
 } from "drizzle-orm/pg-core";
 import { clientsTable } from "./clients";
@@ -32,6 +33,9 @@ export const authorizationsTable = pgTable("authorizations", {
   status: text("status").notNull().default("pending"), // active | expired | pending | exhausted
   posPdfUrl: text("pos_pdf_url"),
   receivedDate: date("received_date", { mode: "string" }),
+  isDeleted: boolean("is_deleted").notNull().default(false),
+  deletedAt: timestamp("deleted_at", { withTimezone: true }),
+  deletedBy: uuid("deleted_by"),
   createdAt: timestamp("created_at", { withTimezone: true })
     .notNull()
     .defaultNow(),

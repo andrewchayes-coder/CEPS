@@ -13,7 +13,7 @@ import {
   ValidateInvoiceResponse,
 } from "@workspace/api-zod";
 import { requireAuth, requireStaff, audit } from "../lib/auth";
-import { invoiceJson, clientNameMap, vendorNameMap, authNumberMap, userNameMap } from "../lib/serializers";
+import { invoiceJson, clientNameMap, vendorNameMap, authNumberMap, userNameMap, notDeleted, diffDetail } from "../lib/serializers";
 
 const router: IRouter = Router();
 
@@ -40,7 +40,11 @@ router.get("/invoices", requireAuth, async (req, res): Promise<void> => {
     res.status(400).json({ error: query.error.message });
     return;
   }
-  let invoices = await db.select().from(invoicesTable).orderBy(desc(invoicesTable.createdAt));
+  let invoices = await db
+    .select()
+    .from(invoicesTable)
+    .where(notDeleted(invoicesTable))
+    .orderBy(desc(invoicesTable.createdAt));
   const u = req.user!;
   if (u.role === "vendor" && u.linkedRecordType === "vendor") {
     invoices = invoices.filter((i) => i.vendorId === u.linkedRecordId);
@@ -81,7 +85,10 @@ router.post("/invoices", requireAuth, async (req, res): Promise<void> => {
 
 router.get("/invoices/:id", requireAuth, async (req, res): Promise<void> => {
   const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
-  const [invoice] = await db.select().from(invoicesTable).where(eq(invoicesTable.id, id));
+  const [invoice] = await db
+    .select()
+    .from(invoicesTable)
+    .where(and(eq(invoicesTable.id, id), notDeleted(invoicesTable)));
   if (!invoice) {
     res.status(404).json({ error: "Invoice not found" });
     return;
@@ -105,17 +112,31 @@ router.patch("/invoices/:id", requireStaff, async (req, res): Promise<void> => {
     res.status(400).json({ error: parsed.error.message });
     return;
   }
+  const [before] = await db
+    .select()
+    .from(invoicesTable)
+    .where(and(eq(invoicesTable.id, id), notDeleted(invoicesTable)));
+  if (!before) {
+    res.status(404).json({ error: "Invoice not found" });
+    return;
+  }
   const updates: Record<string, unknown> = { ...parsed.data };
   if (parsed.data.status === "approved" || parsed.data.status === "rejected") {
     updates.reviewedBy = req.user!.id;
     updates.reviewedAt = new Date();
   }
-  const [invoice] = await db.update(invoicesTable).set(updates).where(eq(invoicesTable.id, id)).returning();
-  if (!invoice) {
-    res.status(404).json({ error: "Invoice not found" });
-    return;
-  }
-  await audit(req.user!.id, "update_invoice", "invoice", invoice.id, parsed.data.status ? `Status: ${parsed.data.status}` : undefined);
+  const [invoice] = await db
+    .update(invoicesTable)
+    .set(updates)
+    .where(and(eq(invoicesTable.id, id), notDeleted(invoicesTable)))
+    .returning();
+  await audit(
+    req.user!.id,
+    "update_invoice",
+    "invoice",
+    invoice.id,
+    diffDetail(before, parsed.data, Object.keys(parsed.data)),
+  );
   res.json(UpdateInvoiceResponse.parse((await enrich([invoice]))[0]));
 });
 
@@ -126,7 +147,10 @@ router.post("/invoices/:id/validate", requireStaff, async (req, res): Promise<vo
     res.status(400).json({ error: parsed.error.message });
     return;
   }
-  const [invoice] = await db.select().from(invoicesTable).where(eq(invoicesTable.id, id));
+  const [invoice] = await db
+    .select()
+    .from(invoicesTable)
+    .where(and(eq(invoicesTable.id, id), notDeleted(invoicesTable)));
   if (!invoice) {
     res.status(404).json({ error: "Invoice not found" });
     return;
@@ -134,7 +158,7 @@ router.post("/invoices/:id/validate", requireStaff, async (req, res): Promise<vo
 
   const checks: { check: string; passed: boolean; message: string }[] = [];
   const auth = invoice.authorizationId
-    ? (await db.select().from(authorizationsTable).where(eq(authorizationsTable.id, invoice.authorizationId)))[0]
+    ? (await db.select().from(authorizationsTable).where(and(eq(authorizationsTable.id, invoice.authorizationId), notDeleted(authorizationsTable))))[0]
     : undefined;
 
   // 1. Authorization active and not expired
@@ -194,6 +218,7 @@ router.post("/invoices/:id/validate", requireStaff, async (req, res): Promise<vo
           eq(paymentsTable.clientId, invoice.clientId),
           eq(paymentsTable.authorizationId, invoice.authorizationId),
           eq(paymentsTable.paymentMonth, invoice.serviceMonth),
+          notDeleted(paymentsTable),
         ),
       );
     if (dupPayments.length > 0) {
@@ -221,7 +246,7 @@ router.post("/invoices/:id/validate", requireStaff, async (req, res): Promise<vo
 
   // 5. Cumulative payments + this invoice within max period amount
   if (auth) {
-    const paid = await db.select().from(paymentsTable).where(eq(paymentsTable.authorizationId, auth.id));
+    const paid = await db.select().from(paymentsTable).where(and(eq(paymentsTable.authorizationId, auth.id), notDeleted(paymentsTable)));
     const totalPaid = paid.reduce((sum, p) => sum + Number(p.amount), 0);
     const wouldBe = totalPaid + Number(invoice.amountRequested);
     const within = wouldBe <= Number(auth.maxPeriodAmount);
@@ -241,6 +266,21 @@ router.post("/invoices/:id/validate", requireStaff, async (req, res): Promise<vo
   await db.update(invoicesTable).set({ status }).where(eq(invoicesTable.id, invoice.id));
   await audit(req.user!.id, "validate_invoice", "invoice", invoice.id, `Result: ${status}`);
   res.json(ValidateInvoiceResponse.parse({ valid, status, checks }));
+});
+
+router.delete("/invoices/:id", requireStaff, async (req, res): Promise<void> => {
+  const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+  const [invoice] = await db
+    .update(invoicesTable)
+    .set({ isDeleted: true, deletedAt: new Date(), deletedBy: req.user!.id })
+    .where(and(eq(invoicesTable.id, id), notDeleted(invoicesTable)))
+    .returning();
+  if (!invoice) {
+    res.status(404).json({ error: "Invoice not found" });
+    return;
+  }
+  await audit(req.user!.id, "delete_invoice", "invoice", invoice.id, `${invoice.serviceMonth} — $${invoice.amountRequested}`);
+  res.json({ ok: true });
 });
 
 export default router;

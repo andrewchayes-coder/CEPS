@@ -5,6 +5,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Skeleton } from '@/components/ui/skeleton';
 import { Download } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { downloadCSV } from '@/lib/csv';
 
 export default function ReportsPage() {
   const currentYear = new Date().getFullYear();
@@ -12,29 +13,16 @@ export default function ReportsPage() {
     query: { queryKey: ['vendorReport', currentYear] }
   });
 
-  const downloadCSV = () => {
+  const exportVendorPayments = () => {
     if (!report) return;
-    
-    const headers = ['Vendor Name', 'YTD Total Paid', 'W-9 Status'];
+    const headers = ['Vendor Name', 'W-9 Status', 'Payments', 'YTD Total Paid'];
     const rows = report.map((v: any) => [
       v.vendorName,
-      v.totalPaid,
-      v.einOnFile ? 'On File' : 'Pending'
+      v.einOnFile ? 'On File' : 'Pending',
+      v.paymentCount,
+      Number(v.totalPaid).toFixed(2),
     ]);
-    
-    const csvContent = [
-      headers.join(','),
-      ...rows.map((e: any[]) => e.join(','))
-    ].join('\n');
-    
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.setAttribute("href", url);
-    link.setAttribute("download", `vendor_payments_ytd_${currentYear}.csv`);
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+    downloadCSV(`vendor_payments_ytd_${currentYear}.csv`, headers, rows);
   };
 
   return (
@@ -52,7 +40,7 @@ export default function ReportsPage() {
             <CardTitle>Vendor Payments YTD ({currentYear})</CardTitle>
             <CardDescription>Summary of all payments issued to vendors this year.</CardDescription>
           </div>
-          <Button variant="outline" size="sm" onClick={downloadCSV} disabled={!report}>
+          <Button variant="outline" size="sm" onClick={exportVendorPayments} disabled={!report} data-testid="button-export-vendor-payments">
             <Download className="w-4 h-4 mr-2" /> Export CSV
           </Button>
         </CardHeader>

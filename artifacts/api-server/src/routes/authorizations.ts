@@ -1,5 +1,5 @@
 import { Router, type IRouter } from "express";
-import { eq, desc } from "drizzle-orm";
+import { eq, desc, and } from "drizzle-orm";
 import { anthropic } from "@workspace/integrations-anthropic-ai";
 import { db, authorizationsTable, referralsTable, vendorsTable } from "@workspace/db";
 import {
@@ -19,9 +19,20 @@ import {
   clientNameMap,
   vendorNameMap,
   authorizationTotalsPaid,
+  notDeleted,
+  diffDetail,
 } from "../lib/serializers";
 
 const router: IRouter = Router();
+
+// Normalize empty strings from the form to null for optional/numeric columns.
+function cleanAuthFields<T extends Record<string, unknown>>(obj: T): T {
+  const out = { ...obj };
+  for (const k of ["vendorId", "activityDescription", "monthlyAmount", "oneTimeAmount", "receivedDate", "posPdfUrl"] as const) {
+    if (out[k] === "") (out as Record<string, unknown>)[k] = null;
+  }
+  return out;
+}
 
 function derivePaymentType(serviceCode: string): "direct_payment" | "reimbursement" | "fee" {
   if (serviceCode === "459") return "direct_payment";
@@ -52,7 +63,11 @@ router.get("/authorizations", requireAuth, async (req, res): Promise<void> => {
     res.status(400).json({ error: query.error.message });
     return;
   }
-  let auths = await db.select().from(authorizationsTable).orderBy(desc(authorizationsTable.createdAt));
+  let auths = await db
+    .select()
+    .from(authorizationsTable)
+    .where(notDeleted(authorizationsTable))
+    .orderBy(desc(authorizationsTable.createdAt));
   const u = req.user!;
   if (u.role === "vendor" && u.linkedRecordType === "vendor") {
     auths = auths.filter((a) => a.vendorId === u.linkedRecordId);
@@ -98,7 +113,7 @@ router.post("/authorizations", requireStaff, async (req, res): Promise<void> => 
   const [auth] = await db
     .insert(authorizationsTable)
     .values({
-      ...values,
+      ...cleanAuthFields(values),
       paymentType: d.paymentType ?? derivePaymentType(d.serviceCode),
       status: d.status ?? "active",
     })
@@ -139,10 +154,28 @@ router.post("/authorizations", requireStaff, async (req, res): Promise<void> => 
 
 router.get("/authorizations/:id", requireAuth, async (req, res): Promise<void> => {
   const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
-  const [auth] = await db.select().from(authorizationsTable).where(eq(authorizationsTable.id, id));
+  const [auth] = await db
+    .select()
+    .from(authorizationsTable)
+    .where(and(eq(authorizationsTable.id, id), notDeleted(authorizationsTable)));
   if (!auth) {
     res.status(404).json({ error: "Authorization not found" });
     return;
+  }
+  // Per-role ownership, mirroring the GET /authorizations list scoping:
+  // staff/coordinator see all; parent/self only their linked client's auths;
+  // vendors only their own vendor's auths.
+  const u = req.user!;
+  if (u.role === "vendor" && u.linkedRecordType === "vendor") {
+    if (auth.vendorId !== u.linkedRecordId) {
+      res.status(403).json({ error: "Forbidden" });
+      return;
+    }
+  } else if ((u.role === "parent_guardian" || u.role === "self") && u.linkedRecordType === "client") {
+    if (auth.clientId !== u.linkedRecordId) {
+      res.status(403).json({ error: "Forbidden" });
+      return;
+    }
   }
   const totals = await authorizationTotalsPaid([auth.id]);
   const [clientNames, vendorNames] = await Promise.all([
@@ -167,13 +200,28 @@ router.patch("/authorizations/:id", requireStaff, async (req, res): Promise<void
     res.status(400).json({ error: parsed.error.message });
     return;
   }
-  const { acceptMaxAmountWarning: _accept, ...updates } = parsed.data;
-  const [auth] = await db.update(authorizationsTable).set(updates).where(eq(authorizationsTable.id, id)).returning();
-  if (!auth) {
+  const { acceptMaxAmountWarning: _accept, ...rawUpdates } = parsed.data;
+  const updates = cleanAuthFields(rawUpdates);
+  const [before] = await db
+    .select()
+    .from(authorizationsTable)
+    .where(and(eq(authorizationsTable.id, id), notDeleted(authorizationsTable)));
+  if (!before) {
     res.status(404).json({ error: "Authorization not found" });
     return;
   }
-  await audit(req.user!.id, "update_authorization", "authorization", auth.id);
+  const [auth] = await db
+    .update(authorizationsTable)
+    .set(updates)
+    .where(and(eq(authorizationsTable.id, id), notDeleted(authorizationsTable)))
+    .returning();
+  await audit(
+    req.user!.id,
+    "update_authorization",
+    "authorization",
+    auth.id,
+    diffDetail(before, updates, Object.keys(updates)),
+  );
   const totals = await authorizationTotalsPaid([auth.id]);
   const [clientNames, vendorNames] = await Promise.all([
     clientNameMap([auth.clientId]),
@@ -188,6 +236,21 @@ router.patch("/authorizations/:id", requireStaff, async (req, res): Promise<void
       }),
     ),
   );
+});
+
+router.delete("/authorizations/:id", requireStaff, async (req, res): Promise<void> => {
+  const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+  const [auth] = await db
+    .update(authorizationsTable)
+    .set({ isDeleted: true, deletedAt: new Date(), deletedBy: req.user!.id })
+    .where(and(eq(authorizationsTable.id, id), notDeleted(authorizationsTable)))
+    .returning();
+  if (!auth) {
+    res.status(404).json({ error: "Authorization not found" });
+    return;
+  }
+  await audit(req.user!.id, "delete_authorization", "authorization", auth.id, `Auth ${auth.authNumber}`);
+  res.json({ ok: true });
 });
 
 const PARSE_PROMPT = `You are extracting fields from a California Regional Center Purchase of Service (POS) authorization PDF. Return ONLY a JSON object (no markdown fences, no commentary) with these keys (use null when a value is not present):

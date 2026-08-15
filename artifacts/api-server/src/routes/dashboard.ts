@@ -17,19 +17,19 @@ import {
   GetVendorPaymentReportResponse,
 } from "@workspace/api-zod";
 import { requireAuth, requireStaff, iso } from "../lib/auth";
-import { userNameMap, authorizationTotalsPaid, effectiveAuthStatus } from "../lib/serializers";
+import { userNameMap, authorizationTotalsPaid, effectiveAuthStatus, notDeleted } from "../lib/serializers";
 
 const router: IRouter = Router();
 
 router.get("/dashboard/summary", requireAuth, async (req, res): Promise<void> => {
   const u = req.user!;
   let [clients, referrals, auths, invoices, payments, remits, vendors] = await Promise.all([
-    db.select().from(clientsTable),
+    db.select().from(clientsTable).where(notDeleted(clientsTable)),
     db.select().from(referralsTable),
-    db.select().from(authorizationsTable),
-    db.select().from(invoicesTable),
-    db.select().from(paymentsTable),
-    db.select().from(remittancesTable),
+    db.select().from(authorizationsTable).where(notDeleted(authorizationsTable)),
+    db.select().from(invoicesTable).where(notDeleted(invoicesTable)),
+    db.select().from(paymentsTable).where(notDeleted(paymentsTable)),
+    db.select().from(remittancesTable).where(notDeleted(remittancesTable)),
     db.select().from(vendorsTable),
   ]);
 
@@ -152,7 +152,7 @@ router.get("/reports/vendor-payments", requireStaff, async (req, res): Promise<v
   }
   const year = query.data.year ?? new Date().getFullYear();
   const [payments, vendors] = await Promise.all([
-    db.select().from(paymentsTable),
+    db.select().from(paymentsTable).where(notDeleted(paymentsTable)),
     db.select().from(vendorsTable),
   ]);
   const byVendor = new Map<string, { total: number; count: number }>();

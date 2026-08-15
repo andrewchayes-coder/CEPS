@@ -1,5 +1,8 @@
 import React, { useState } from 'react';
-import { useListPayments } from '@workspace/api-client-react';
+import { useListPayments, useDeletePayment } from '@workspace/api-client-react';
+import { useAuth } from '@/components/auth/auth-provider';
+import { CheckRegisterImport } from '@/components/check-register-import';
+import { DeleteEntityButton } from '@/components/delete-entity-button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Input } from '@/components/ui/input';
@@ -10,7 +13,10 @@ import { Skeleton } from '@/components/ui/skeleton';
 
 export default function PaymentsPage() {
   const [search, setSearch] = useState('');
-  const { data: payments, isLoading } = useListPayments();
+  const { data: payments, isLoading, refetch } = useListPayments();
+  const { user } = useAuth();
+  const isStaff = user?.role === 'staff';
+  const deletePayment = useDeletePayment();
 
   const filtered = payments?.filter(p => 
     p.vendorName?.toLowerCase().includes(search.toLowerCase()) ||
@@ -20,9 +26,12 @@ export default function PaymentsPage() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-3xl font-bold tracking-tight">Payments Log</h1>
-        <p className="text-muted-foreground mt-1">Record of checks issued from QuickBooks.</p>
+      <div className="flex items-start justify-between gap-4 flex-wrap">
+        <div>
+          <h1 className="text-3xl font-bold tracking-tight">Payments Log</h1>
+          <p className="text-muted-foreground mt-1">Record of checks issued from QuickBooks.</p>
+        </div>
+        {user?.role === 'staff' && <CheckRegisterImport onImported={() => refetch()} />}
       </div>
 
       <Card>
@@ -48,13 +57,14 @@ export default function PaymentsPage() {
                 <TableHead>Client</TableHead>
                 <TableHead className="text-right">Amount</TableHead>
                 <TableHead>Remitted</TableHead>
+                {isStaff && <TableHead className="text-right">Actions</TableHead>}
               </TableRow>
             </TableHeader>
             <TableBody>
               {isLoading ? (
-                <TableRow><TableCell colSpan={6} className="h-24 text-center"><Skeleton className="h-4 w-full max-w-sm mx-auto" /></TableCell></TableRow>
+                <TableRow><TableCell colSpan={isStaff ? 7 : 6} className="h-24 text-center"><Skeleton className="h-4 w-full max-w-sm mx-auto" /></TableCell></TableRow>
               ) : filtered?.length === 0 ? (
-                <TableRow><TableCell colSpan={6} className="h-24 text-center text-muted-foreground">No payments found.</TableCell></TableRow>
+                <TableRow><TableCell colSpan={isStaff ? 7 : 6} className="h-24 text-center text-muted-foreground">No payments found.</TableCell></TableRow>
               ) : (
                 filtered?.map(p => (
                   <TableRow key={p.id}>
@@ -66,6 +76,18 @@ export default function PaymentsPage() {
                     <TableCell>
                       {p.remitted ? <CheckCircle2 className="w-5 h-5 text-chart-5" /> : <span className="text-muted-foreground">-</span>}
                     </TableCell>
+                    {isStaff && (
+                      <TableCell className="text-right">
+                        <DeleteEntityButton
+                          variant="ghost"
+                          buttonLabel=""
+                          entityLabel="Payment"
+                          testId="button-delete-payment"
+                          onDelete={() => deletePayment.mutateAsync({ id: p.id })}
+                          onDeleted={() => refetch()}
+                        />
+                      </TableCell>
+                    )}
                   </TableRow>
                 ))
               )}

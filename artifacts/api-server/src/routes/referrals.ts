@@ -23,6 +23,7 @@ import {
 } from "@workspace/api-zod";
 import {
   requireAuth,
+  requireStaff,
   requireStaffOrCoordinator,
   audit,
   newToken,
@@ -218,6 +219,16 @@ router.patch("/referrals/:id", requireStaffOrCoordinator, async (req, res): Prom
     updates.altaAuthReceivedAt = altaAuthReceivedAt ? new Date(altaAuthReceivedAt) : null;
   }
   if (updates.parentEmail) updates.parentEmail = String(updates.parentEmail).trim().toLowerCase();
+  const [existing] = await db.select().from(referralsTable).where(eq(referralsTable.id, id));
+  if (!existing) {
+    res.status(404).json({ error: "Referral not found" });
+    return;
+  }
+  // Coordinators may only edit referrals they own (same rule as the list scoping).
+  if (req.user!.role === "service_coordinator" && existing.serviceCoordinatorId !== req.user!.id) {
+    res.status(403).json({ error: "Forbidden" });
+    return;
+  }
   const [referral] = await db.update(referralsTable).set(updates).where(eq(referralsTable.id, id)).returning();
   if (!referral) {
     res.status(404).json({ error: "Referral not found" });
@@ -237,6 +248,27 @@ router.patch("/referrals/:id", requireStaffOrCoordinator, async (req, res): Prom
       ),
     ),
   );
+});
+
+router.delete("/referrals/:id", requireStaff, async (req, res): Promise<void> => {
+  const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+  const [referral] = await db.select().from(referralsTable).where(eq(referralsTable.id, id));
+  if (!referral) {
+    res.status(404).json({ error: "Referral not found" });
+    return;
+  }
+  // A referral is "converted" once its case has gone active — deleting one at
+  // that point would orphan authorizations/invoices/payments. Block it.
+  if (referral.status === "active") {
+    res.status(409).json({
+      error: "This referral has been converted to an active client case and cannot be deleted. Close the case instead.",
+    });
+    return;
+  }
+  await db.delete(magicLinksTable).where(eq(magicLinksTable.referralId, id));
+  await db.delete(referralsTable).where(eq(referralsTable.id, id));
+  await audit(req.user!.id, "delete_referral", "referral", id);
+  res.json({ ok: true });
 });
 
 router.post("/referrals/:id/send-magic-link", requireStaffOrCoordinator, async (req, res): Promise<void> => {

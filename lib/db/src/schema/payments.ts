@@ -6,6 +6,7 @@ import {
   numeric,
   boolean,
   timestamp,
+  uniqueIndex,
 } from "drizzle-orm/pg-core";
 import { clientsTable } from "./clients";
 import { authorizationsTable } from "./authorizations";
@@ -31,9 +32,16 @@ export const paymentsTable = pgTable("payments", {
   source: text("source").notNull(), // quickbooks | manual
   loggedBy: uuid("logged_by").references(() => usersTable.id),
   remitted: boolean("remitted").notNull().default(false),
+  isDeleted: boolean("is_deleted").notNull().default(false),
+  deletedAt: timestamp("deleted_at", { withTimezone: true }),
+  deletedBy: uuid("deleted_by"),
   createdAt: timestamp("created_at", { withTimezone: true })
     .notNull()
     .defaultNow(),
-});
+}, (table) => ({
+  qbCheckNumberUnique: uniqueIndex("payments_qb_check_number_unique").on(
+    table.qbCheckNumber,
+  ),
+}));
 
 export type Payment = typeof paymentsTable.$inferSelect;

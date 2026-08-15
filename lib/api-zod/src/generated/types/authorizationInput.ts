@@ -26,6 +26,8 @@ export interface AuthorizationInput {
   units?: number;
   status?: AuthorizationInputStatus;
   receivedDate?: string;
+  /** Stored object path of the uploaded POS PDF */
+  posPdfUrl?: string;
   /** Set true to save despite the max-amount data-quality warning */
   acceptMaxAmountWarning?: boolean;
 }

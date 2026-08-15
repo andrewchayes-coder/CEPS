@@ -17,11 +17,108 @@ tags:
   - name: authorizations
   - name: invoices
   - name: payments
+  - name: fees
   - name: remittances
   - name: vendors
   - name: dashboard
   - name: audit
+  - name: Storage
 paths:
+  /storage/uploads/request-url:
+    post:
+      tags: [Storage]
+      operationId: requestUploadUrl
+      summary: Request a presigned URL for file upload
+      description: |
+        Returns a presigned GCS URL for direct upload. The client sends JSON
+        metadata here, then uploads the file directly to the returned URL.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UploadUrlRequest'
+      responses:
+        '200':
+          description: Presigned upload URL generated.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UploadUrlResponse'
+        '400':
+          description: Missing or invalid required fields.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '500':
+          description: Failed to generate upload URL.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+  /storage/public-objects/{filePath}:
+    get:
+      tags: [Storage]
+      operationId: getPublicObject
+      summary: Serve a public asset from PUBLIC_OBJECT_SEARCH_PATHS
+      parameters:
+        - name: filePath
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Object content streamed with correct Content-Type.
+          content:
+            '*/*':
+              schema:
+                type: string
+                format: binary
+        '404':
+          description: File not found.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '500':
+          description: Failed to serve public object.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+  /storage/objects/{objectPath}:
+    get:
+      tags: [Storage]
+      operationId: getStorageObject
+      summary: Serve an object entity from PRIVATE_OBJECT_DIR
+      parameters:
+        - name: objectPath
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Object content streamed with correct Content-Type.
+          content:
+            '*/*':
+              schema:
+                type: string
+                format: binary
+        '404':
+          description: Object not found.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '500':
+          description: Failed to serve object.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
   /healthz:
     get:
       operationId: healthCheck
@@ -115,6 +212,70 @@ paths:
               schema:
                 $ref: "#/components/schemas/SessionUser"
         "400": { description: Invalid or expired token }
+  /invites:
+    post:
+      operationId: createInvite
+      tags: [auth]
+      summary: Create a portal invite (staff only) — vendor / parent-guardian / self
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/InviteInput"
+      responses:
+        "201":
+          description: Invite created; URL returned for staff to share
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/InviteResult"
+        "400": { description: Invalid request or linked record not found }
+        "409": { description: A user with that email already exists }
+  /invites/{token}:
+    get:
+      operationId: getInvite
+      tags: [auth]
+      summary: Look up an invite by token (public, no session required)
+      parameters:
+        - name: token
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: Invite details
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/InviteInfo"
+        "404": { description: Invalid or expired invite }
+  /invites/{token}/accept:
+    post:
+      operationId: acceptInvite
+      tags: [auth]
+      summary: Accept an invite, set a password, and create a session (public)
+      parameters:
+        - name: token
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/InviteAcceptInput"
+      responses:
+        "200":
+          description: Account created and session started
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SessionUser"
+        "400": { description: Invalid request }
+        "404": { description: Invalid or expired invite }
+        "409": { description: A user with that email already exists }
   /users:
     get:
       operationId: listUsers
@@ -172,6 +333,24 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/User"
+    delete:
+      operationId: deleteUser
+      tags: [users]
+      summary: Deactivate a user (staff; cannot delete yourself)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: Deactivated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OkResult"
+        "400": { description: Cannot delete yourself }
+        "404": { description: Not found }
   /audit-log:
     get:
       operationId: listAuditLog
@@ -179,6 +358,18 @@ paths:
       summary: Per-user audit history (staff only)
       parameters:
         - name: userId
+          in: query
+          schema: { type: string }
+        - name: action
+          in: query
+          schema: { type: string }
+        - name: entityType
+          in: query
+          schema: { type: string }
+        - name: dateFrom
+          in: query
+          schema: { type: string }
+        - name: dateTo
           in: query
           schema: { type: string }
         - name: limit
@@ -269,6 +460,23 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Client"
+    delete:
+      operationId: deleteClient
+      tags: [clients]
+      summary: Soft-delete a client (staff)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: Deleted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OkResult"
+        "404": { description: Not found }
   /clients/{id}/case:
     get:
       operationId: getClientCase
@@ -366,6 +574,24 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Referral"
+    delete:
+      operationId: deleteReferral
+      tags: [referrals]
+      summary: Delete a referral (staff; blocked if converted to a client)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: Deleted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OkResult"
+        "404": { description: Not found }
+        "409": { description: Cannot delete a converted referral }
   /referrals/{id}/send-magic-link:
     post:
       operationId: sendReferralMagicLink
@@ -507,6 +733,23 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/AuthorizationResult"
+    delete:
+      operationId: deleteAuthorization
+      tags: [authorizations]
+      summary: Soft-delete an authorization (staff)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: Deleted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OkResult"
+        "404": { description: Not found }
   /authorizations/parse-pdf:
     post:
       operationId: parseAuthorizationPdf
@@ -605,6 +848,23 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Invoice"
+    delete:
+      operationId: deleteInvoice
+      tags: [invoices]
+      summary: Soft-delete an invoice (staff)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: Deleted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OkResult"
+        "404": { description: Not found }
   /invoices/{id}/validate:
     post:
       operationId: validateInvoice
@@ -668,6 +928,47 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Payment"
+  /payments/{id}:
+    patch:
+      operationId: updatePayment
+      tags: [payments]
+      summary: Update a payment (staff)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PaymentUpdate"
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Payment"
+        "404": { description: Not found }
+    delete:
+      operationId: deletePayment
+      tags: [payments]
+      summary: Soft-delete a payment (staff)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: Deleted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OkResult"
+        "404": { description: Not found }
   /payments/import:
     post:
       operationId: importCheckRegister
@@ -686,6 +987,83 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/CheckRegisterImportResult"
+  /fees:
+    get:
+      operationId: listFees
+      tags: [fees]
+      summary: List fees (scoped by role)
+      parameters:
+        - name: clientId
+          in: query
+          schema: { type: string }
+        - name: status
+          in: query
+          schema: { type: string }
+      responses:
+        "200":
+          description: Fees
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/Fee" }
+    post:
+      operationId: createFee
+      tags: [fees]
+      summary: Manually create/adjust a fee (staff)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/FeeInput"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Fee"
+  /fees/{id}:
+    patch:
+      operationId: updateFee
+      tags: [fees]
+      summary: Update a fee (staff)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/FeeUpdateInput"
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Fee"
+    delete:
+      operationId: deleteFee
+      tags: [fees]
+      summary: Soft-delete a fee (staff)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: Deleted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OkResult"
+        "404": { description: Not found }
   /remittances:
     get:
       operationId: listRemittances
@@ -723,6 +1101,47 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Remittance"
+  /remittances/{id}:
+    patch:
+      operationId: updateRemittance
+      tags: [remittances]
+      summary: Update a remittance (staff)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RemittanceUpdate"
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Remittance"
+        "404": { description: Not found }
+    delete:
+      operationId: deleteRemittance
+      tags: [remittances]
+      summary: Soft-delete a remittance (staff)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: Deleted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OkResult"
+        "404": { description: Not found }
   /remittances/{id}/match:
     post:
       operationId: matchRemittance
@@ -826,6 +1245,56 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Vendor"
+  /vendors/{id}/w9:
+    patch:
+      operationId: uploadVendorW9
+      tags: [vendors]
+      summary: Attach an uploaded W-9 document (staff, or the vendor's own account)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/VendorW9Input"
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Vendor"
+        "403": { description: Forbidden }
+        "404": { description: Not found }
+  /vendors/{id}/contact:
+    patch:
+      operationId: updateVendorContact
+      tags: [vendors]
+      summary: Update vendor contact fields (staff, or the vendor's own account)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/VendorContactInput"
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Vendor"
+        "403": { description: Forbidden }
+        "404": { description: Not found }
   /dashboard/summary:
     get:
       operationId: getDashboardSummary
@@ -857,6 +1326,41 @@ paths:
                 items: { $ref: "#/components/schemas/VendorPaymentSummary" }
 components:
   schemas:
+    UploadUrlRequest:
+      type: object
+      required: [name, size, contentType]
+      properties:
+        name:
+          type: string
+          minLength: 1
+          description: Original file name.
+        size:
+          type: integer
+          minimum: 1
+          description: File size in bytes.
+        contentType:
+          type: string
+          minLength: 1
+          description: MIME type of the file (e.g. `application/pdf`).
+    UploadUrlResponse:
+      type: object
+      required: [uploadURL, objectPath]
+      properties:
+        uploadURL:
+          type: string
+          format: uri
+          description: Presigned GCS URL for PUT upload.
+        objectPath:
+          type: string
+          description: Normalized object path (e.g. `/objects/uploads/uuid`). Store this in your database.
+        metadata:
+          $ref: '#/components/schemas/UploadUrlRequest'
+    ErrorEnvelope:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: string
     HealthStatus:
       type: object
       properties:
@@ -901,6 +1405,43 @@ components:
       properties:
         sent: { type: boolean }
         devLink: { type: ["string", "null"], description: "Development only: the link that would have been emailed" }
+    InviteInput:
+      type: object
+      required: [email, role, linkedRecordType, linkedRecordId]
+      properties:
+        email: { type: string }
+        role:
+          type: string
+          enum: [vendor, parent_guardian, self]
+        linkedRecordType:
+          type: string
+          enum: [client, vendor]
+        linkedRecordId: { type: string }
+    InviteResult:
+      type: object
+      required: [inviteUrl]
+      properties:
+        inviteUrl:
+          type: string
+          description: "Development only: the invite link for staff to share until email is set up"
+    InviteInfo:
+      type: object
+      required: [email, role, linkedRecordType, recordName]
+      properties:
+        email: { type: string }
+        role:
+          type: string
+          enum: [vendor, parent_guardian, self]
+        linkedRecordType:
+          type: string
+          enum: [client, vendor]
+        recordName: { type: string, description: "Display name of the linked vendor/client" }
+    InviteAcceptInput:
+      type: object
+      required: [password]
+      properties:
+        name: { type: string }
+        password: { type: string, minLength: 8 }
     User:
       type: object
       required: [id, name, email, role, active]
@@ -1180,6 +1721,7 @@ components:
         units: { type: integer }
         status: { type: string, enum: [active, expired, pending, exhausted] }
         receivedDate: { type: string }
+        posPdfUrl: { type: string, description: "Stored object path of the uploaded POS PDF" }
         acceptMaxAmountWarning: { type: boolean, description: "Set true to save despite the max-amount data-quality warning" }
     AuthorizationUpdate:
       type: object
@@ -1406,6 +1948,60 @@ components:
       required: [paymentId]
       properties:
         paymentId: { type: string }
+    Fee:
+      type: object
+      required: [id, clientId, amount, status]
+      properties:
+        id: { type: string }
+        clientId: { type: string }
+        clientName: { type: ["string", "null"] }
+        paymentId: { type: ["string", "null"] }
+        authorizationId: { type: ["string", "null"] }
+        amount: { type: string }
+        ruleApplied: { type: ["string", "null"] }
+        status: { type: string, enum: [pending, invoiced, collected, waived] }
+        notes: { type: ["string", "null"] }
+        createdBy: { type: ["string", "null"] }
+        createdAt: { type: ["string", "null"] }
+    FeeInput:
+      type: object
+      required: [clientId, amount]
+      properties:
+        clientId: { type: string }
+        paymentId: { type: ["string", "null"] }
+        authorizationId: { type: ["string", "null"] }
+        amount: { type: string }
+        ruleApplied: { type: string }
+        status: { type: string, enum: [pending, invoiced, collected, waived] }
+        notes: { type: string }
+    FeeUpdateInput:
+      type: object
+      properties:
+        amount: { type: string }
+        status: { type: string, enum: [pending, invoiced, collected, waived] }
+        notes: { type: string }
+    PaymentUpdate:
+      type: object
+      properties:
+        authorizationId: { type: ["string", "null"] }
+        vendorId: { type: ["string", "null"] }
+        invoiceId: { type: ["string", "null"] }
+        qbCheckNumber: { type: string }
+        checkDate: { type: string }
+        amount: { type: string }
+        paymentMonth: { type: ["string", "null"] }
+        paymentType: { type: string, enum: [direct_payment, reimbursement, fee] }
+    RemittanceUpdate:
+      type: object
+      properties:
+        authorizationId: { type: ["string", "null"] }
+        altaReference: { type: ["string", "null"] }
+        remittanceDate: { type: string }
+        amount: { type: string }
+        paymentMonth: { type: ["string", "null"] }
+        status: { type: string, enum: [pending, received, matched] }
+        source: { type: string, enum: [alta_regional, manual] }
+        remittanceBatchId: { type: ["string", "null"] }
     Vendor:
       type: object
       required: [id, name, w9Status, preferred, active]
@@ -1453,6 +2049,19 @@ components:
         w9DocumentUrl: { type: string }
         preferred: { type: boolean }
         active: { type: boolean }
+    VendorW9Input:
+      type: object
+      required: [w9DocumentUrl]
+      properties:
+        w9DocumentUrl: { type: string, description: "Stored object path of the uploaded W-9 (e.g. /objects/uploads/uuid)" }
+    VendorContactInput:
+      type: object
+      properties:
+        email: { type: string }
+        phone: { type: string }
+        contactPerson: { type: string }
+        billingAddress: { type: string }
+        serviceAddress: { type: string }
     StatusCount:
       type: object
       required: [status, count]

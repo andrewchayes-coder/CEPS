@@ -4,6 +4,7 @@ import {
   uuid,
   date,
   numeric,
+  boolean,
   timestamp,
 } from "drizzle-orm/pg-core";
 import { clientsTable } from "./clients";
@@ -34,6 +35,9 @@ export const invoicesTable = pgTable("invoices", {
   reviewedBy: uuid("reviewed_by").references(() => usersTable.id),
   reviewedAt: timestamp("reviewed_at", { withTimezone: true }),
   notes: text("notes"),
+  isDeleted: boolean("is_deleted").notNull().default(false),
+  deletedAt: timestamp("deleted_at", { withTimezone: true }),
+  deletedBy: uuid("deleted_by"),
   createdAt: timestamp("created_at", { withTimezone: true })
     .notNull()
     .defaultNow(),

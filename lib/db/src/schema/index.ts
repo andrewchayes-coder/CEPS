@@ -6,4 +6,5 @@ export * from "./authorizations";
 export * from "./invoices";
 export * from "./payments";
 export * from "./remittances";
+export * from "./fees";
 export * from "./audit";

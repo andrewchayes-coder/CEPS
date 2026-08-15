@@ -1,6 +1,9 @@
 import React from 'react';
 import { useLocation, useParams } from 'wouter';
-import { useGetReferral, useUpdateReferral, useSendReferralMagicLink } from '@workspace/api-client-react';
+import { useGetReferral, useUpdateReferral, useSendReferralMagicLink, useDeleteReferral } from '@workspace/api-client-react';
+import { useAuth } from '@/components/auth/auth-provider';
+import { EditReferralDialog } from '@/components/edit-referral-dialog';
+import { DeleteEntityButton } from '@/components/delete-entity-button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -13,7 +16,10 @@ import { Link } from 'wouter';
 export default function ReferralDetailPage() {
   const { id } = useParams<{ id: string }>();
   const [, setLocation] = useLocation();
+  const { user } = useAuth();
+  const isStaff = user?.role === 'staff';
   const { toast } = useToast();
+  const deleteReferral = useDeleteReferral();
 
   const { data: referral, isLoading, refetch } = useGetReferral(id, {
     query: {
@@ -62,10 +68,34 @@ export default function ReferralDetailPage() {
           <h1 className="text-3xl font-bold tracking-tight">Referral: {referral.clientName}</h1>
           <p className="text-muted-foreground mt-1">Submitted on {format(new Date(referral.referralDate), 'MMMM d, yyyy')}</p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex items-center gap-2">
           <Badge variant="outline" className="text-sm px-3 py-1">
             Status: <span className="font-semibold ml-1 capitalize">{referral.status.replace('_', ' ')}</span>
           </Badge>
+          {isStaff && (
+            <>
+              <EditReferralDialog id={id} referral={referral} onSaved={() => refetch()} />
+              <DeleteEntityButton
+                entityLabel="Referral"
+                testId="button-delete-referral"
+                suppressErrorToast
+                onDelete={async () => {
+                  try {
+                    return await deleteReferral.mutateAsync({ id });
+                  } catch (err) {
+                    toast({
+                      variant: 'destructive',
+                      title: 'Cannot delete referral',
+                      description:
+                        'This referral has been converted to an active client case and cannot be deleted.',
+                    });
+                    throw err;
+                  }
+                }}
+                onDeleted={() => setLocation('/referrals')}
+              />
+            </>
+          )}
         </div>
       </div>
 

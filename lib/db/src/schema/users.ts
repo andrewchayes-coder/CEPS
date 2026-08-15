@@ -39,13 +39,18 @@ export const sessionsTable = pgTable("sessions", {
 
 export type Session = typeof sessionsTable.$inferSelect;
 
-// Magic links: either a login link (email-based) or a referral e-signature link
+// Magic links: a login link (email-based), a referral e-signature link, or a
+// portal invite (staff-issued account provisioning for vendors/parents/self).
 export const magicLinksTable = pgTable("magic_links", {
   id: uuid("id").primaryKey().defaultRandom(),
   token: text("token").notNull().unique(),
   email: text("email").notNull(),
-  purpose: text("purpose").notNull(), // login | signature
+  purpose: text("purpose").notNull(), // login | signature | invite
   referralId: uuid("referral_id"),
+  // Invite-only fields: the role and linked record the accepted account gets.
+  inviteRole: text("invite_role"), // vendor | parent_guardian | self
+  linkedRecordType: text("linked_record_type"), // client | vendor
+  linkedRecordId: uuid("linked_record_id"),
   usedAt: timestamp("used_at", { withTimezone: true }),
   expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
   createdAt: timestamp("created_at", { withTimezone: true })

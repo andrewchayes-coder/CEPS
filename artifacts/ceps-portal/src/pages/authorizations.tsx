@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
-import { useListAuthorizations } from '@workspace/api-client-react';
+import { useListAuthorizations, useDeleteAuthorization } from '@workspace/api-client-react';
+import { DeleteEntityButton } from '@/components/delete-entity-button';
 import { Link } from 'wouter';
 import { format } from 'date-fns';
 import { 
@@ -15,9 +16,11 @@ import { useAuth } from '@/components/auth/auth-provider';
 
 export default function AuthorizationsPage() {
   const { user } = useAuth();
+  const isStaff = user?.role === 'staff';
   const [search, setSearch] = useState('');
 
-  const { data: auths, isLoading } = useListAuthorizations();
+  const { data: auths, isLoading, refetch } = useListAuthorizations();
+  const deleteAuthorization = useDeleteAuthorization();
 
   const filteredAuths = auths?.filter(a => 
     a.authNumber.toLowerCase().includes(search.toLowerCase()) ||
@@ -65,6 +68,7 @@ export default function AuthorizationsPage() {
                 <TableHead>Service Period</TableHead>
                 <TableHead className="text-right">Max Amount</TableHead>
                 <TableHead>Status</TableHead>
+                {isStaff && <TableHead className="text-right">Actions</TableHead>}
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -72,7 +76,7 @@ export default function AuthorizationsPage() {
                 <AuthsTableSkeleton />
               ) : filteredAuths?.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={6} className="h-24 text-center text-muted-foreground">
+                  <TableCell colSpan={isStaff ? 7 : 6} className="h-24 text-center text-muted-foreground">
                     No authorizations found.
                   </TableCell>
                 </TableRow>
@@ -106,6 +110,18 @@ export default function AuthorizationsPage() {
                           {auth.status}
                         </Badge>
                       </TableCell>
+                      {isStaff && (
+                        <TableCell className="text-right">
+                          <DeleteEntityButton
+                            variant="ghost"
+                            buttonLabel=""
+                            entityLabel="Authorization"
+                            testId={`button-delete-authorization`}
+                            onDelete={() => deleteAuthorization.mutateAsync({ id: auth.id })}
+                            onDeleted={() => refetch()}
+                          />
+                        </TableCell>
+                      )}
                     </TableRow>
                   );
                 })

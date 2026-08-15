@@ -1,4 +1,4 @@
-import { inArray, eq } from "drizzle-orm";
+import { inArray, eq, and, type Column, type SQL } from "drizzle-orm";
 import {
   db,
   clientsTable,
@@ -13,9 +13,36 @@ import {
   type Invoice,
   type Payment,
   type Remittance,
+  type Fee,
   type User,
 } from "@workspace/db";
 import { iso } from "./auth";
+
+// Soft-delete guard: `<table>.is_deleted = false`. Works for any table that has
+// the isDeleted/deletedAt/deletedBy columns. Passed directly to `.where(...)`,
+// or combined with `and(...)`.
+export function notDeleted(table: { isDeleted: Column }): SQL {
+  return eq(table.isDeleted, false);
+}
+
+// Build an audit detail string describing which fields changed, as JSON of
+// { field: [before, after] } — used for edit audit trails.
+export function diffDetail(
+  before: Record<string, unknown>,
+  after: Record<string, unknown>,
+  fields: string[],
+): string | undefined {
+  const changes: Record<string, [unknown, unknown]> = {};
+  for (const f of fields) {
+    if (!(f in after)) continue;
+    const b = before[f] ?? null;
+    const a = after[f] ?? null;
+    if (String(b) !== String(a)) changes[f] = [b, a];
+  }
+  const keys = Object.keys(changes);
+  if (keys.length === 0) return undefined;
+  return JSON.stringify(changes);
+}
 
 export async function clientNameMap(ids: (string | null)[]): Promise<Map<string, string>> {
   const unique = [...new Set(ids.filter((x): x is string => !!x))];
@@ -23,7 +50,7 @@ export async function clientNameMap(ids: (string | null)[]): Promise<Map<string,
   const rows = await db
     .select({ id: clientsTable.id, firstName: clientsTable.firstName, lastName: clientsTable.lastName })
     .from(clientsTable)
-    .where(inArray(clientsTable.id, unique));
+    .where(and(inArray(clientsTable.id, unique), notDeleted(clientsTable)));
   return new Map(rows.map((r) => [r.id, `${r.firstName} ${r.lastName}`]));
 }
 
@@ -53,7 +80,7 @@ export async function authNumberMap(ids: (string | null)[]): Promise<Map<string,
   const rows = await db
     .select({ id: authorizationsTable.id, authNumber: authorizationsTable.authNumber })
     .from(authorizationsTable)
-    .where(inArray(authorizationsTable.id, unique));
+    .where(and(inArray(authorizationsTable.id, unique), notDeleted(authorizationsTable)));
   return new Map(rows.map((r) => [r.id, r.authNumber]));
 }
 
@@ -107,7 +134,7 @@ export async function authorizationTotalsPaid(ids: string[]): Promise<Map<string
   const rows = await db
     .select({ authorizationId: paymentsTable.authorizationId, amount: paymentsTable.amount })
     .from(paymentsTable)
-    .where(inArray(paymentsTable.authorizationId, ids));
+    .where(and(inArray(paymentsTable.authorizationId, ids), notDeleted(paymentsTable)));
   const map = new Map<string, number>();
   for (const row of rows) {
     if (!row.authorizationId) continue;
@@ -236,6 +263,22 @@ export function remittanceJson(
   };
 }
 
+export function feeJson(f: Fee, opts: { clientName?: string | null } = {}) {
+  return {
+    id: f.id,
+    clientId: f.clientId,
+    clientName: opts.clientName ?? null,
+    paymentId: f.paymentId,
+    authorizationId: f.authorizationId,
+    amount: f.amount,
+    ruleApplied: f.ruleApplied,
+    status: f.status,
+    notes: f.notes,
+    createdBy: f.createdBy,
+    createdAt: iso(f.createdAt),
+  };
+}
+
 export function vendorJson(v: Vendor) {
   return {
     id: v.id,
@@ -271,6 +314,9 @@ export function userJson(u: User) {
 }
 
 export async function getClientOr404(id: string): Promise<Client | undefined> {
-  const [client] = await db.select().from(clientsTable).where(eq(clientsTable.id, id));
+  const [client] = await db
+    .select()
+    .from(clientsTable)
+    .where(and(eq(clientsTable.id, id), notDeleted(clientsTable)));
   return client;
 }

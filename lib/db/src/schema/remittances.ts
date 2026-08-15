@@ -30,6 +30,9 @@ export const remittancesTable = pgTable("remittances", {
   ),
   autoMatched: boolean("auto_matched").notNull().default(false),
   remittanceBatchId: text("remittance_batch_id"),
+  isDeleted: boolean("is_deleted").notNull().default(false),
+  deletedAt: timestamp("deleted_at", { withTimezone: true }),
+  deletedBy: uuid("deleted_by"),
   createdAt: timestamp("created_at", { withTimezone: true })
     .notNull()
     .defaultNow(),

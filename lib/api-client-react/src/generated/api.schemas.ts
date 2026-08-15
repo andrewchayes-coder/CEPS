@@ -5,6 +5,36 @@
  * CEPS Portal API — referral intake, authorizations, invoices, payments, remittances, vendors, reporting
  * OpenAPI spec version: 0.1.0
  */
+export interface UploadUrlRequest {
+  /**
+     * Original file name.
+     * @minLength 1
+     */
+  name: string;
+  /**
+     * File size in bytes.
+     * @minimum 1
+     */
+  size: number;
+  /**
+     * MIME type of the file (e.g. `application/pdf`).
+     * @minLength 1
+     */
+  contentType: string;
+}
+
+export interface UploadUrlResponse {
+  /** Presigned GCS URL for PUT upload. */
+  uploadURL: string;
+  /** Normalized object path (e.g. `/objects/uploads/uuid`). Store this in your database. */
+  objectPath: string;
+  metadata?: UploadUrlRequest;
+}
+
+export interface ErrorEnvelope {
+  error: string;
+}
+
 export interface HealthStatus {
   status: string;
 }
@@ -66,6 +96,66 @@ export interface MagicLinkResult {
      * @nullable
      */
   devLink?: string | null;
+}
+
+export type InviteInputRole = typeof InviteInputRole[keyof typeof InviteInputRole];
+
+
+export const InviteInputRole = {
+  vendor: 'vendor',
+  parent_guardian: 'parent_guardian',
+  self: 'self',
+} as const;
+
+export type InviteInputLinkedRecordType = typeof InviteInputLinkedRecordType[keyof typeof InviteInputLinkedRecordType];
+
+
+export const InviteInputLinkedRecordType = {
+  client: 'client',
+  vendor: 'vendor',
+} as const;
+
+export interface InviteInput {
+  email: string;
+  role: InviteInputRole;
+  linkedRecordType: InviteInputLinkedRecordType;
+  linkedRecordId: string;
+}
+
+export interface InviteResult {
+  /** Development only: the invite link for staff to share until email is set up */
+  inviteUrl: string;
+}
+
+export type InviteInfoRole = typeof InviteInfoRole[keyof typeof InviteInfoRole];
+
+
+export const InviteInfoRole = {
+  vendor: 'vendor',
+  parent_guardian: 'parent_guardian',
+  self: 'self',
+} as const;
+
+export type InviteInfoLinkedRecordType = typeof InviteInfoLinkedRecordType[keyof typeof InviteInfoLinkedRecordType];
+
+
+export const InviteInfoLinkedRecordType = {
+  client: 'client',
+  vendor: 'vendor',
+} as const;
+
+export interface InviteInfo {
+  email: string;
+  role: InviteInfoRole;
+  linkedRecordType: InviteInfoLinkedRecordType;
+  /** Display name of the linked vendor/client */
+  recordName: string;
+}
+
+export interface InviteAcceptInput {
+  name?: string;
+  /** @minLength 8 */
+  password: string;
 }
 
 export type UserRole = typeof UserRole[keyof typeof UserRole];
@@ -750,6 +840,8 @@ export interface AuthorizationInput {
   units?: number;
   status?: AuthorizationInputStatus;
   receivedDate?: string;
+  /** Stored object path of the uploaded POS PDF */
+  posPdfUrl?: string;
   /** Set true to save despite the max-amount data-quality warning */
   acceptMaxAmountWarning?: boolean;
 }
@@ -1011,6 +1103,131 @@ export interface RemittanceMatchInput {
   paymentId: string;
 }
 
+export type FeeStatus = typeof FeeStatus[keyof typeof FeeStatus];
+
+
+export const FeeStatus = {
+  pending: 'pending',
+  invoiced: 'invoiced',
+  collected: 'collected',
+  waived: 'waived',
+} as const;
+
+export interface Fee {
+  id: string;
+  clientId: string;
+  /** @nullable */
+  clientName?: string | null;
+  /** @nullable */
+  paymentId?: string | null;
+  /** @nullable */
+  authorizationId?: string | null;
+  amount: string;
+  /** @nullable */
+  ruleApplied?: string | null;
+  status: FeeStatus;
+  /** @nullable */
+  notes?: string | null;
+  /** @nullable */
+  createdBy?: string | null;
+  /** @nullable */
+  createdAt?: string | null;
+}
+
+export type FeeInputStatus = typeof FeeInputStatus[keyof typeof FeeInputStatus];
+
+
+export const FeeInputStatus = {
+  pending: 'pending',
+  invoiced: 'invoiced',
+  collected: 'collected',
+  waived: 'waived',
+} as const;
+
+export interface FeeInput {
+  clientId: string;
+  /** @nullable */
+  paymentId?: string | null;
+  /** @nullable */
+  authorizationId?: string | null;
+  amount: string;
+  ruleApplied?: string;
+  status?: FeeInputStatus;
+  notes?: string;
+}
+
+export type FeeUpdateInputStatus = typeof FeeUpdateInputStatus[keyof typeof FeeUpdateInputStatus];
+
+
+export const FeeUpdateInputStatus = {
+  pending: 'pending',
+  invoiced: 'invoiced',
+  collected: 'collected',
+  waived: 'waived',
+} as const;
+
+export interface FeeUpdateInput {
+  amount?: string;
+  status?: FeeUpdateInputStatus;
+  notes?: string;
+}
+
+export type PaymentUpdatePaymentType = typeof PaymentUpdatePaymentType[keyof typeof PaymentUpdatePaymentType];
+
+
+export const PaymentUpdatePaymentType = {
+  direct_payment: 'direct_payment',
+  reimbursement: 'reimbursement',
+  fee: 'fee',
+} as const;
+
+export interface PaymentUpdate {
+  /** @nullable */
+  authorizationId?: string | null;
+  /** @nullable */
+  vendorId?: string | null;
+  /** @nullable */
+  invoiceId?: string | null;
+  qbCheckNumber?: string;
+  checkDate?: string;
+  amount?: string;
+  /** @nullable */
+  paymentMonth?: string | null;
+  paymentType?: PaymentUpdatePaymentType;
+}
+
+export type RemittanceUpdateStatus = typeof RemittanceUpdateStatus[keyof typeof RemittanceUpdateStatus];
+
+
+export const RemittanceUpdateStatus = {
+  pending: 'pending',
+  received: 'received',
+  matched: 'matched',
+} as const;
+
+export type RemittanceUpdateSource = typeof RemittanceUpdateSource[keyof typeof RemittanceUpdateSource];
+
+
+export const RemittanceUpdateSource = {
+  alta_regional: 'alta_regional',
+  manual: 'manual',
+} as const;
+
+export interface RemittanceUpdate {
+  /** @nullable */
+  authorizationId?: string | null;
+  /** @nullable */
+  altaReference?: string | null;
+  remittanceDate?: string;
+  amount?: string;
+  /** @nullable */
+  paymentMonth?: string | null;
+  status?: RemittanceUpdateStatus;
+  source?: RemittanceUpdateSource;
+  /** @nullable */
+  remittanceBatchId?: string | null;
+}
+
 export type VendorW9Status = typeof VendorW9Status[keyof typeof VendorW9Status];
 
 
@@ -1092,6 +1309,19 @@ export interface VendorUpdate {
   active?: boolean;
 }
 
+export interface VendorW9Input {
+  /** Stored object path of the uploaded W-9 (e.g. /objects/uploads/uuid) */
+  w9DocumentUrl: string;
+}
+
+export interface VendorContactInput {
+  email?: string;
+  phone?: string;
+  contactPerson?: string;
+  billingAddress?: string;
+  serviceAddress?: string;
+}
+
 export interface StatusCount {
   status: string;
   count: number;
@@ -1149,6 +1379,10 @@ role?: string;
 
 export type ListAuditLogParams = {
 userId?: string;
+action?: string;
+entityType?: string;
+dateFrom?: string;
+dateTo?: string;
 limit?: number;
 };
 
@@ -1180,6 +1414,11 @@ export type ListPaymentsParams = {
 clientId?: string;
 vendorId?: string;
 authorizationId?: string;
+};
+
+export type ListFeesParams = {
+clientId?: string;
+status?: string;
 };
 
 export type ListRemittancesParams = {

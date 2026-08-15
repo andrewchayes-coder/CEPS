@@ -1,5 +1,5 @@
 import { Router, type IRouter } from "express";
-import { eq, or, ilike, desc } from "drizzle-orm";
+import { eq, or, ilike, desc, and } from "drizzle-orm";
 import {
   db,
   clientsTable,
@@ -19,7 +19,7 @@ import {
   UpdateClientResponse,
   GetClientCaseResponse,
 } from "@workspace/api-zod";
-import { requireAuth, requireStaffOrCoordinator, audit } from "../lib/auth";
+import { requireAuth, requireStaff, requireStaffOrCoordinator, audit } from "../lib/auth";
 import {
   clientJson,
   referralJson,
@@ -31,6 +31,8 @@ import {
   vendorNameMap,
   authNumberMap,
   authorizationTotalsPaid,
+  notDeleted,
+  diffDetail,
 } from "../lib/serializers";
 
 const router: IRouter = Router();
@@ -43,6 +45,23 @@ function scopeClientId(req: { user?: { role: string; linkedRecordType: string | 
   return null;
 }
 
+// The set of client IDs a vendor user is allowed to see: clients that have an
+// authorization linked to the vendor's record. Returns null when the user is
+// not a properly-linked vendor (i.e. this scope does not apply to them).
+async function vendorClientIds(req: {
+  user?: { role: string; linkedRecordType: string | null; linkedRecordId: string | null };
+}): Promise<Set<string> | null> {
+  const u = req.user;
+  if (!u || u.role !== "vendor" || u.linkedRecordType !== "vendor" || !u.linkedRecordId) {
+    return null;
+  }
+  const auths = await db
+    .select({ clientId: authorizationsTable.clientId })
+    .from(authorizationsTable)
+    .where(and(eq(authorizationsTable.vendorId, u.linkedRecordId), notDeleted(authorizationsTable)));
+  return new Set(auths.map((a) => a.clientId));
+}
+
 router.get("/clients", requireAuth, async (req, res): Promise<void> => {
   const query = ListClientsQueryParams.safeParse(req.query);
   if (!query.success) {
@@ -50,11 +69,14 @@ router.get("/clients", requireAuth, async (req, res): Promise<void> => {
     return;
   }
   const scoped = scopeClientId(req);
-  let clients = await db.select().from(clientsTable).orderBy(clientsTable.lastName);
+  const vendorIds = await vendorClientIds(req);
+  let clients = await db.select().from(clientsTable).where(notDeleted(clientsTable)).orderBy(clientsTable.lastName);
   if (scoped) clients = clients.filter((c) => c.id === scoped);
   if (req.user!.role === "service_coordinator") {
     clients = clients.filter((c) => c.assignedCoordinatorId === req.user!.id);
   }
+  // Vendors may only see clients they have an authorization for.
+  if (vendorIds) clients = clients.filter((c) => vendorIds.has(c.id));
   if (query.data.status) clients = clients.filter((c) => c.status === query.data.status);
   if (query.data.search) {
     const s = query.data.search.toLowerCase();
@@ -94,9 +116,22 @@ router.get("/clients/:id", requireAuth, async (req, res): Promise<void> => {
     res.status(403).json({ error: "Forbidden" });
     return;
   }
-  const [client] = await db.select().from(clientsTable).where(eq(clientsTable.id, id));
+  const vendorIds = await vendorClientIds(req);
+  if (vendorIds && !vendorIds.has(id)) {
+    res.status(403).json({ error: "Forbidden" });
+    return;
+  }
+  const [client] = await db
+    .select()
+    .from(clientsTable)
+    .where(and(eq(clientsTable.id, id), notDeleted(clientsTable)));
   if (!client) {
     res.status(404).json({ error: "Client not found" });
+    return;
+  }
+  // Coordinators may only see clients assigned to them (same rule as the list).
+  if (req.user!.role === "service_coordinator" && client.assignedCoordinatorId !== req.user!.id) {
+    res.status(403).json({ error: "Forbidden" });
     return;
   }
   const names = await userNameMap([client.assignedCoordinatorId]);
@@ -114,18 +149,47 @@ router.patch("/clients/:id", requireStaffOrCoordinator, async (req, res): Promis
     res.status(400).json({ error: parsed.error.message });
     return;
   }
-  const [client] = await db.update(clientsTable).set(parsed.data).where(eq(clientsTable.id, id)).returning();
-  if (!client) {
+  const [before] = await db
+    .select()
+    .from(clientsTable)
+    .where(and(eq(clientsTable.id, id), notDeleted(clientsTable)));
+  if (!before) {
     res.status(404).json({ error: "Client not found" });
     return;
   }
-  await audit(req.user!.id, "update_client", "client", client.id);
+  const [client] = await db
+    .update(clientsTable)
+    .set(parsed.data)
+    .where(and(eq(clientsTable.id, id), notDeleted(clientsTable)))
+    .returning();
+  await audit(
+    req.user!.id,
+    "update_client",
+    "client",
+    client.id,
+    diffDetail(before, parsed.data, Object.keys(parsed.data)),
+  );
   const names = await userNameMap([client.assignedCoordinatorId]);
   res.json(
     UpdateClientResponse.parse(
       clientJson(client, client.assignedCoordinatorId ? names.get(client.assignedCoordinatorId) : null),
     ),
   );
+});
+
+router.delete("/clients/:id", requireStaff, async (req, res): Promise<void> => {
+  const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+  const [client] = await db
+    .update(clientsTable)
+    .set({ isDeleted: true, deletedAt: new Date(), deletedBy: req.user!.id })
+    .where(and(eq(clientsTable.id, id), notDeleted(clientsTable)))
+    .returning();
+  if (!client) {
+    res.status(404).json({ error: "Client not found" });
+    return;
+  }
+  await audit(req.user!.id, "delete_client", "client", client.id, `${client.firstName} ${client.lastName}`);
+  res.json({ ok: true });
 });
 
 router.get("/clients/:id/case", requireAuth, async (req, res): Promise<void> => {
@@ -135,17 +199,30 @@ router.get("/clients/:id/case", requireAuth, async (req, res): Promise<void> => 
     res.status(403).json({ error: "Forbidden" });
     return;
   }
-  const [client] = await db.select().from(clientsTable).where(eq(clientsTable.id, id));
+  const allowedVendorClientIds = await vendorClientIds(req);
+  if (allowedVendorClientIds && !allowedVendorClientIds.has(id)) {
+    res.status(403).json({ error: "Forbidden" });
+    return;
+  }
+  const [client] = await db
+    .select()
+    .from(clientsTable)
+    .where(and(eq(clientsTable.id, id), notDeleted(clientsTable)));
   if (!client) {
     res.status(404).json({ error: "Client not found" });
     return;
   }
+  // Coordinators may only see clients assigned to them (same rule as the list).
+  if (req.user!.role === "service_coordinator" && client.assignedCoordinatorId !== req.user!.id) {
+    res.status(403).json({ error: "Forbidden" });
+    return;
+  }
   const [referrals, authorizations, invoices, payments, remittances] = await Promise.all([
     db.select().from(referralsTable).where(eq(referralsTable.clientId, id)).orderBy(desc(referralsTable.createdAt)),
-    db.select().from(authorizationsTable).where(eq(authorizationsTable.clientId, id)),
-    db.select().from(invoicesTable).where(eq(invoicesTable.clientId, id)).orderBy(desc(invoicesTable.createdAt)),
-    db.select().from(paymentsTable).where(eq(paymentsTable.clientId, id)).orderBy(desc(paymentsTable.checkDate)),
-    db.select().from(remittancesTable).where(eq(remittancesTable.clientId, id)),
+    db.select().from(authorizationsTable).where(and(eq(authorizationsTable.clientId, id), notDeleted(authorizationsTable))),
+    db.select().from(invoicesTable).where(and(eq(invoicesTable.clientId, id), notDeleted(invoicesTable))).orderBy(desc(invoicesTable.createdAt)),
+    db.select().from(paymentsTable).where(and(eq(paymentsTable.clientId, id), notDeleted(paymentsTable))).orderBy(desc(paymentsTable.checkDate)),
+    db.select().from(remittancesTable).where(and(eq(remittancesTable.clientId, id), notDeleted(remittancesTable))),
   ]);
   const clientName = `${client.firstName} ${client.lastName}`;
   const vendorIds = [

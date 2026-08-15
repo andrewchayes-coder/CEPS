@@ -32,8 +32,16 @@ import type {
   ClientInput,
   ClientUpdate,
   DashboardSummary,
+  ErrorEnvelope,
+  Fee,
+  FeeInput,
+  FeeUpdateInput,
   GetVendorPaymentReportParams,
   HealthStatus,
+  InviteAcceptInput,
+  InviteInfo,
+  InviteInput,
+  InviteResult,
   Invoice,
   InvoiceInput,
   InvoiceUpdate,
@@ -42,6 +50,7 @@ import type {
   ListAuditLogParams,
   ListAuthorizationsParams,
   ListClientsParams,
+  ListFeesParams,
   ListInvoicesParams,
   ListPaymentsParams,
   ListReferralsParams,
@@ -55,6 +64,7 @@ import type {
   OkResult,
   Payment,
   PaymentInput,
+  PaymentUpdate,
   PosParseResult,
   PosPdfInput,
   Referral,
@@ -63,16 +73,21 @@ import type {
   Remittance,
   RemittanceInput,
   RemittanceMatchInput,
+  RemittanceUpdate,
   SessionUser,
   SignatureInput,
   SignaturePage,
+  UploadUrlRequest,
+  UploadUrlResponse,
   User,
   UserInput,
   UserUpdate,
   Vendor,
+  VendorContactInput,
   VendorInput,
   VendorPaymentSummary,
-  VendorUpdate
+  VendorUpdate,
+  VendorW9Input
 } from './api.schemas';
 
 import { customFetch } from '../custom-fetch';
@@ -101,6 +116,233 @@ const withQueryKey = <T extends object, K>(query: T, queryKey: K): T & { queryKe
   }
   return result;
 };
+
+export const getRequestUploadUrlUrl = () => {
+
+
+
+
+  return `/api/storage/uploads/request-url`
+}
+
+/**
+ * Returns a presigned GCS URL for direct upload. The client sends JSON
+ * metadata here, then uploads the file directly to the returned URL.
+ * @summary Request a presigned URL for file upload
+ */
+export const requestUploadUrl = async (uploadUrlRequest: UploadUrlRequest, options?: Parameters<typeof customFetch>[1]): Promise<UploadUrlResponse> => {
+
+  return customFetch<UploadUrlResponse>(getRequestUploadUrlUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(uploadUrlRequest)
+  }
+);}
+
+
+
+
+
+export const getRequestUploadUrlMutationOptions = <TError = ErrorType<ErrorEnvelope>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof requestUploadUrl>>, TError,{data: BodyType<UploadUrlRequest>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof requestUploadUrl>>, TError,{data: BodyType<UploadUrlRequest>}, TContext> => {
+
+const mutationKey = ['requestUploadUrl'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof requestUploadUrl>>, {data: BodyType<UploadUrlRequest>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  requestUploadUrl(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type RequestUploadUrlMutationResult = NonNullable<Awaited<ReturnType<typeof requestUploadUrl>>>
+    export type RequestUploadUrlMutationBody = BodyType<UploadUrlRequest>
+    export type RequestUploadUrlMutationError = ErrorType<ErrorEnvelope>
+
+    /**
+ * @summary Request a presigned URL for file upload
+ */
+export const useRequestUploadUrl = <TError = ErrorType<ErrorEnvelope>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof requestUploadUrl>>, TError,{data: BodyType<UploadUrlRequest>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof requestUploadUrl>>,
+        TError,
+        {data: BodyType<UploadUrlRequest>},
+        TContext
+      > => {
+      return useMutation(getRequestUploadUrlMutationOptions(options));
+    }
+
+export const getGetPublicObjectUrl = (filePath: string,) => {
+
+
+
+
+  return `/api/storage/public-objects/${filePath}`
+}
+
+/**
+ * @summary Serve a public asset from PUBLIC_OBJECT_SEARCH_PATHS
+ */
+export const getPublicObject = async (filePath: string, options?: Parameters<typeof customFetch>[1]): Promise<Blob> => {
+
+  return customFetch<Blob>(getGetPublicObjectUrl(filePath),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetPublicObjectQueryKey = (filePath: string,) => {
+    return [
+    `/api/storage/public-objects/${filePath}`
+    ] as const;
+    }
+
+
+export const getGetPublicObjectQueryOptions = <TData = Awaited<ReturnType<typeof getPublicObject>>, TError = ErrorType<ErrorEnvelope>>(filePath: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getPublicObject>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetPublicObjectQueryKey(filePath);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getPublicObject>>> = ({ signal }) => getPublicObject(filePath, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: filePath !== null && filePath !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getPublicObject>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetPublicObjectQueryResult = NonNullable<Awaited<ReturnType<typeof getPublicObject>>>
+export type GetPublicObjectQueryError = ErrorType<ErrorEnvelope>
+
+
+/**
+ * @summary Serve a public asset from PUBLIC_OBJECT_SEARCH_PATHS
+ */
+
+export function useGetPublicObject<TData = Awaited<ReturnType<typeof getPublicObject>>, TError = ErrorType<ErrorEnvelope>>(
+ filePath: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getPublicObject>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetPublicObjectQueryOptions(filePath,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getGetStorageObjectUrl = (objectPath: string,) => {
+
+
+
+
+  return `/api/storage/objects/${objectPath}`
+}
+
+/**
+ * @summary Serve an object entity from PRIVATE_OBJECT_DIR
+ */
+export const getStorageObject = async (objectPath: string, options?: Parameters<typeof customFetch>[1]): Promise<Blob> => {
+
+  return customFetch<Blob>(getGetStorageObjectUrl(objectPath),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetStorageObjectQueryKey = (objectPath: string,) => {
+    return [
+    `/api/storage/objects/${objectPath}`
+    ] as const;
+    }
+
+
+export const getGetStorageObjectQueryOptions = <TData = Awaited<ReturnType<typeof getStorageObject>>, TError = ErrorType<ErrorEnvelope>>(objectPath: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getStorageObject>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetStorageObjectQueryKey(objectPath);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getStorageObject>>> = ({ signal }) => getStorageObject(objectPath, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: objectPath !== null && objectPath !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getStorageObject>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetStorageObjectQueryResult = NonNullable<Awaited<ReturnType<typeof getStorageObject>>>
+export type GetStorageObjectQueryError = ErrorType<ErrorEnvelope>
+
+
+/**
+ * @summary Serve an object entity from PRIVATE_OBJECT_DIR
+ */
+
+export function useGetStorageObject<TData = Awaited<ReturnType<typeof getStorageObject>>, TError = ErrorType<ErrorEnvelope>>(
+ objectPath: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getStorageObject>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetStorageObjectQueryOptions(objectPath,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
 
 export const getHealthCheckUrl = () => {
 
@@ -540,6 +782,226 @@ export const useConsumeMagicLink = <TError = ErrorType<void>,
       return useMutation(getConsumeMagicLinkMutationOptions(options));
     }
 
+export const getCreateInviteUrl = () => {
+
+
+
+
+  return `/api/invites`
+}
+
+/**
+ * @summary Create a portal invite (staff only) — vendor / parent-guardian / self
+ */
+export const createInvite = async (inviteInput: InviteInput, options?: Parameters<typeof customFetch>[1]): Promise<InviteResult> => {
+
+  return customFetch<InviteResult>(getCreateInviteUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(inviteInput)
+  }
+);}
+
+
+
+
+
+export const getCreateInviteMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createInvite>>, TError,{data: BodyType<InviteInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof createInvite>>, TError,{data: BodyType<InviteInput>}, TContext> => {
+
+const mutationKey = ['createInvite'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof createInvite>>, {data: BodyType<InviteInput>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  createInvite(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type CreateInviteMutationResult = NonNullable<Awaited<ReturnType<typeof createInvite>>>
+    export type CreateInviteMutationBody = BodyType<InviteInput>
+    export type CreateInviteMutationError = ErrorType<void>
+
+    /**
+ * @summary Create a portal invite (staff only) — vendor / parent-guardian / self
+ */
+export const useCreateInvite = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createInvite>>, TError,{data: BodyType<InviteInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof createInvite>>,
+        TError,
+        {data: BodyType<InviteInput>},
+        TContext
+      > => {
+      return useMutation(getCreateInviteMutationOptions(options));
+    }
+
+export const getGetInviteUrl = (token: string,) => {
+
+
+
+
+  return `/api/invites/${token}`
+}
+
+/**
+ * @summary Look up an invite by token (public, no session required)
+ */
+export const getInvite = async (token: string, options?: Parameters<typeof customFetch>[1]): Promise<InviteInfo> => {
+
+  return customFetch<InviteInfo>(getGetInviteUrl(token),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetInviteQueryKey = (token: string,) => {
+    return [
+    `/api/invites/${token}`
+    ] as const;
+    }
+
+
+export const getGetInviteQueryOptions = <TData = Awaited<ReturnType<typeof getInvite>>, TError = ErrorType<void>>(token: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getInvite>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetInviteQueryKey(token);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getInvite>>> = ({ signal }) => getInvite(token, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: token !== null && token !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getInvite>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetInviteQueryResult = NonNullable<Awaited<ReturnType<typeof getInvite>>>
+export type GetInviteQueryError = ErrorType<void>
+
+
+/**
+ * @summary Look up an invite by token (public, no session required)
+ */
+
+export function useGetInvite<TData = Awaited<ReturnType<typeof getInvite>>, TError = ErrorType<void>>(
+ token: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getInvite>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetInviteQueryOptions(token,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getAcceptInviteUrl = (token: string,) => {
+
+
+
+
+  return `/api/invites/${token}/accept`
+}
+
+/**
+ * @summary Accept an invite, set a password, and create a session (public)
+ */
+export const acceptInvite = async (token: string,
+    inviteAcceptInput: InviteAcceptInput, options?: Parameters<typeof customFetch>[1]): Promise<SessionUser> => {
+
+  return customFetch<SessionUser>(getAcceptInviteUrl(token),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(inviteAcceptInput)
+  }
+);}
+
+
+
+
+
+export const getAcceptInviteMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof acceptInvite>>, TError,{token: string;data: BodyType<InviteAcceptInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof acceptInvite>>, TError,{token: string;data: BodyType<InviteAcceptInput>}, TContext> => {
+
+const mutationKey = ['acceptInvite'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof acceptInvite>>, {token: string;data: BodyType<InviteAcceptInput>}> = (props) => {
+          const {token,data} = props ?? {};
+
+          return  acceptInvite(token,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type AcceptInviteMutationResult = NonNullable<Awaited<ReturnType<typeof acceptInvite>>>
+    export type AcceptInviteMutationBody = BodyType<InviteAcceptInput>
+    export type AcceptInviteMutationError = ErrorType<void>
+
+    /**
+ * @summary Accept an invite, set a password, and create a session (public)
+ */
+export const useAcceptInvite = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof acceptInvite>>, TError,{token: string;data: BodyType<InviteAcceptInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof acceptInvite>>,
+        TError,
+        {token: string;data: BodyType<InviteAcceptInput>},
+        TContext
+      > => {
+      return useMutation(getAcceptInviteMutationOptions(options));
+    }
+
 export const getListUsersUrl = (params?: ListUsersParams,) => {
   const normalizedParams = new URLSearchParams();
 
@@ -765,6 +1227,77 @@ export const useUpdateUser = <TError = ErrorType<unknown>,
         TContext
       > => {
       return useMutation(getUpdateUserMutationOptions(options));
+    }
+
+export const getDeleteUserUrl = (id: string,) => {
+
+
+
+
+  return `/api/users/${id}`
+}
+
+/**
+ * @summary Deactivate a user (staff; cannot delete yourself)
+ */
+export const deleteUser = async (id: string, options?: Parameters<typeof customFetch>[1]): Promise<OkResult> => {
+
+  return customFetch<OkResult>(getDeleteUserUrl(id),
+  {
+    ...options,
+    method: 'DELETE'
+
+
+  }
+);}
+
+
+
+
+
+export const getDeleteUserMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteUser>>, TError,{id: string}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof deleteUser>>, TError,{id: string}, TContext> => {
+
+const mutationKey = ['deleteUser'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof deleteUser>>, {id: string}> = (props) => {
+          const {id} = props ?? {};
+
+          return  deleteUser(id,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type DeleteUserMutationResult = NonNullable<Awaited<ReturnType<typeof deleteUser>>>
+
+    export type DeleteUserMutationError = ErrorType<void>
+
+    /**
+ * @summary Deactivate a user (staff; cannot delete yourself)
+ */
+export const useDeleteUser = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteUser>>, TError,{id: string}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof deleteUser>>,
+        TError,
+        {id: string},
+        TContext
+      > => {
+      return useMutation(getDeleteUserMutationOptions(options));
     }
 
 export const getListAuditLogUrl = (params?: ListAuditLogParams,) => {
@@ -1155,6 +1688,77 @@ export const useUpdateClient = <TError = ErrorType<unknown>,
       return useMutation(getUpdateClientMutationOptions(options));
     }
 
+export const getDeleteClientUrl = (id: string,) => {
+
+
+
+
+  return `/api/clients/${id}`
+}
+
+/**
+ * @summary Soft-delete a client (staff)
+ */
+export const deleteClient = async (id: string, options?: Parameters<typeof customFetch>[1]): Promise<OkResult> => {
+
+  return customFetch<OkResult>(getDeleteClientUrl(id),
+  {
+    ...options,
+    method: 'DELETE'
+
+
+  }
+);}
+
+
+
+
+
+export const getDeleteClientMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteClient>>, TError,{id: string}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof deleteClient>>, TError,{id: string}, TContext> => {
+
+const mutationKey = ['deleteClient'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof deleteClient>>, {id: string}> = (props) => {
+          const {id} = props ?? {};
+
+          return  deleteClient(id,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type DeleteClientMutationResult = NonNullable<Awaited<ReturnType<typeof deleteClient>>>
+
+    export type DeleteClientMutationError = ErrorType<void>
+
+    /**
+ * @summary Soft-delete a client (staff)
+ */
+export const useDeleteClient = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteClient>>, TError,{id: string}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof deleteClient>>,
+        TError,
+        {id: string},
+        TContext
+      > => {
+      return useMutation(getDeleteClientMutationOptions(options));
+    }
+
 export const getGetClientCaseUrl = (id: string,) => {
 
 
@@ -1534,6 +2138,77 @@ export const useUpdateReferral = <TError = ErrorType<unknown>,
         TContext
       > => {
       return useMutation(getUpdateReferralMutationOptions(options));
+    }
+
+export const getDeleteReferralUrl = (id: string,) => {
+
+
+
+
+  return `/api/referrals/${id}`
+}
+
+/**
+ * @summary Delete a referral (staff; blocked if converted to a client)
+ */
+export const deleteReferral = async (id: string, options?: Parameters<typeof customFetch>[1]): Promise<OkResult> => {
+
+  return customFetch<OkResult>(getDeleteReferralUrl(id),
+  {
+    ...options,
+    method: 'DELETE'
+
+
+  }
+);}
+
+
+
+
+
+export const getDeleteReferralMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteReferral>>, TError,{id: string}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof deleteReferral>>, TError,{id: string}, TContext> => {
+
+const mutationKey = ['deleteReferral'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof deleteReferral>>, {id: string}> = (props) => {
+          const {id} = props ?? {};
+
+          return  deleteReferral(id,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type DeleteReferralMutationResult = NonNullable<Awaited<ReturnType<typeof deleteReferral>>>
+
+    export type DeleteReferralMutationError = ErrorType<void>
+
+    /**
+ * @summary Delete a referral (staff; blocked if converted to a client)
+ */
+export const useDeleteReferral = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteReferral>>, TError,{id: string}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof deleteReferral>>,
+        TError,
+        {id: string},
+        TContext
+      > => {
+      return useMutation(getDeleteReferralMutationOptions(options));
     }
 
 export const getSendReferralMagicLinkUrl = (id: string,) => {
@@ -2060,6 +2735,77 @@ export const useUpdateAuthorization = <TError = ErrorType<unknown>,
       return useMutation(getUpdateAuthorizationMutationOptions(options));
     }
 
+export const getDeleteAuthorizationUrl = (id: string,) => {
+
+
+
+
+  return `/api/authorizations/${id}`
+}
+
+/**
+ * @summary Soft-delete an authorization (staff)
+ */
+export const deleteAuthorization = async (id: string, options?: Parameters<typeof customFetch>[1]): Promise<OkResult> => {
+
+  return customFetch<OkResult>(getDeleteAuthorizationUrl(id),
+  {
+    ...options,
+    method: 'DELETE'
+
+
+  }
+);}
+
+
+
+
+
+export const getDeleteAuthorizationMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteAuthorization>>, TError,{id: string}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof deleteAuthorization>>, TError,{id: string}, TContext> => {
+
+const mutationKey = ['deleteAuthorization'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof deleteAuthorization>>, {id: string}> = (props) => {
+          const {id} = props ?? {};
+
+          return  deleteAuthorization(id,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type DeleteAuthorizationMutationResult = NonNullable<Awaited<ReturnType<typeof deleteAuthorization>>>
+
+    export type DeleteAuthorizationMutationError = ErrorType<void>
+
+    /**
+ * @summary Soft-delete an authorization (staff)
+ */
+export const useDeleteAuthorization = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteAuthorization>>, TError,{id: string}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof deleteAuthorization>>,
+        TError,
+        {id: string},
+        TContext
+      > => {
+      return useMutation(getDeleteAuthorizationMutationOptions(options));
+    }
+
 export const getParseAuthorizationPdfUrl = () => {
 
 
@@ -2435,6 +3181,77 @@ export const useUpdateInvoice = <TError = ErrorType<unknown>,
       return useMutation(getUpdateInvoiceMutationOptions(options));
     }
 
+export const getDeleteInvoiceUrl = (id: string,) => {
+
+
+
+
+  return `/api/invoices/${id}`
+}
+
+/**
+ * @summary Soft-delete an invoice (staff)
+ */
+export const deleteInvoice = async (id: string, options?: Parameters<typeof customFetch>[1]): Promise<OkResult> => {
+
+  return customFetch<OkResult>(getDeleteInvoiceUrl(id),
+  {
+    ...options,
+    method: 'DELETE'
+
+
+  }
+);}
+
+
+
+
+
+export const getDeleteInvoiceMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteInvoice>>, TError,{id: string}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof deleteInvoice>>, TError,{id: string}, TContext> => {
+
+const mutationKey = ['deleteInvoice'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof deleteInvoice>>, {id: string}> = (props) => {
+          const {id} = props ?? {};
+
+          return  deleteInvoice(id,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type DeleteInvoiceMutationResult = NonNullable<Awaited<ReturnType<typeof deleteInvoice>>>
+
+    export type DeleteInvoiceMutationError = ErrorType<void>
+
+    /**
+ * @summary Soft-delete an invoice (staff)
+ */
+export const useDeleteInvoice = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteInvoice>>, TError,{id: string}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof deleteInvoice>>,
+        TError,
+        {id: string},
+        TContext
+      > => {
+      return useMutation(getDeleteInvoiceMutationOptions(options));
+    }
+
 export const getValidateInvoiceUrl = (id: string,) => {
 
 
@@ -2662,6 +3479,149 @@ export const useCreatePayment = <TError = ErrorType<unknown>,
       return useMutation(getCreatePaymentMutationOptions(options));
     }
 
+export const getUpdatePaymentUrl = (id: string,) => {
+
+
+
+
+  return `/api/payments/${id}`
+}
+
+/**
+ * @summary Update a payment (staff)
+ */
+export const updatePayment = async (id: string,
+    paymentUpdate: PaymentUpdate, options?: Parameters<typeof customFetch>[1]): Promise<Payment> => {
+
+  return customFetch<Payment>(getUpdatePaymentUrl(id),
+  {
+    ...options,
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(paymentUpdate)
+  }
+);}
+
+
+
+
+
+export const getUpdatePaymentMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updatePayment>>, TError,{id: string;data: BodyType<PaymentUpdate>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof updatePayment>>, TError,{id: string;data: BodyType<PaymentUpdate>}, TContext> => {
+
+const mutationKey = ['updatePayment'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof updatePayment>>, {id: string;data: BodyType<PaymentUpdate>}> = (props) => {
+          const {id,data} = props ?? {};
+
+          return  updatePayment(id,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type UpdatePaymentMutationResult = NonNullable<Awaited<ReturnType<typeof updatePayment>>>
+    export type UpdatePaymentMutationBody = BodyType<PaymentUpdate>
+    export type UpdatePaymentMutationError = ErrorType<void>
+
+    /**
+ * @summary Update a payment (staff)
+ */
+export const useUpdatePayment = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updatePayment>>, TError,{id: string;data: BodyType<PaymentUpdate>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof updatePayment>>,
+        TError,
+        {id: string;data: BodyType<PaymentUpdate>},
+        TContext
+      > => {
+      return useMutation(getUpdatePaymentMutationOptions(options));
+    }
+
+export const getDeletePaymentUrl = (id: string,) => {
+
+
+
+
+  return `/api/payments/${id}`
+}
+
+/**
+ * @summary Soft-delete a payment (staff)
+ */
+export const deletePayment = async (id: string, options?: Parameters<typeof customFetch>[1]): Promise<OkResult> => {
+
+  return customFetch<OkResult>(getDeletePaymentUrl(id),
+  {
+    ...options,
+    method: 'DELETE'
+
+
+  }
+);}
+
+
+
+
+
+export const getDeletePaymentMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deletePayment>>, TError,{id: string}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof deletePayment>>, TError,{id: string}, TContext> => {
+
+const mutationKey = ['deletePayment'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof deletePayment>>, {id: string}> = (props) => {
+          const {id} = props ?? {};
+
+          return  deletePayment(id,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type DeletePaymentMutationResult = NonNullable<Awaited<ReturnType<typeof deletePayment>>>
+
+    export type DeletePaymentMutationError = ErrorType<void>
+
+    /**
+ * @summary Soft-delete a payment (staff)
+ */
+export const useDeletePayment = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deletePayment>>, TError,{id: string}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof deletePayment>>,
+        TError,
+        {id: string},
+        TContext
+      > => {
+      return useMutation(getDeletePaymentMutationOptions(options));
+    }
+
 export const getImportCheckRegisterUrl = () => {
 
 
@@ -2731,6 +3691,304 @@ export const useImportCheckRegister = <TError = ErrorType<unknown>,
         TContext
       > => {
       return useMutation(getImportCheckRegisterMutationOptions(options));
+    }
+
+export const getListFeesUrl = (params?: ListFeesParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/fees?${stringifiedParams}` : `/api/fees`
+}
+
+/**
+ * @summary List fees (scoped by role)
+ */
+export const listFees = async (params?: ListFeesParams, options?: Parameters<typeof customFetch>[1]): Promise<Fee[]> => {
+
+  return customFetch<Fee[]>(getListFeesUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListFeesQueryKey = (params?: ListFeesParams,) => {
+    return [
+    `/api/fees`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getListFeesQueryOptions = <TData = Awaited<ReturnType<typeof listFees>>, TError = ErrorType<unknown>>(params?: ListFeesParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listFees>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListFeesQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listFees>>> = ({ signal }) => listFees(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listFees>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListFeesQueryResult = NonNullable<Awaited<ReturnType<typeof listFees>>>
+export type ListFeesQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary List fees (scoped by role)
+ */
+
+export function useListFees<TData = Awaited<ReturnType<typeof listFees>>, TError = ErrorType<unknown>>(
+ params?: ListFeesParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listFees>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListFeesQueryOptions(params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getCreateFeeUrl = () => {
+
+
+
+
+  return `/api/fees`
+}
+
+/**
+ * @summary Manually create/adjust a fee (staff)
+ */
+export const createFee = async (feeInput: FeeInput, options?: Parameters<typeof customFetch>[1]): Promise<Fee> => {
+
+  return customFetch<Fee>(getCreateFeeUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(feeInput)
+  }
+);}
+
+
+
+
+
+export const getCreateFeeMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createFee>>, TError,{data: BodyType<FeeInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof createFee>>, TError,{data: BodyType<FeeInput>}, TContext> => {
+
+const mutationKey = ['createFee'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof createFee>>, {data: BodyType<FeeInput>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  createFee(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type CreateFeeMutationResult = NonNullable<Awaited<ReturnType<typeof createFee>>>
+    export type CreateFeeMutationBody = BodyType<FeeInput>
+    export type CreateFeeMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Manually create/adjust a fee (staff)
+ */
+export const useCreateFee = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createFee>>, TError,{data: BodyType<FeeInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof createFee>>,
+        TError,
+        {data: BodyType<FeeInput>},
+        TContext
+      > => {
+      return useMutation(getCreateFeeMutationOptions(options));
+    }
+
+export const getUpdateFeeUrl = (id: string,) => {
+
+
+
+
+  return `/api/fees/${id}`
+}
+
+/**
+ * @summary Update a fee (staff)
+ */
+export const updateFee = async (id: string,
+    feeUpdateInput: FeeUpdateInput, options?: Parameters<typeof customFetch>[1]): Promise<Fee> => {
+
+  return customFetch<Fee>(getUpdateFeeUrl(id),
+  {
+    ...options,
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(feeUpdateInput)
+  }
+);}
+
+
+
+
+
+export const getUpdateFeeMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateFee>>, TError,{id: string;data: BodyType<FeeUpdateInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof updateFee>>, TError,{id: string;data: BodyType<FeeUpdateInput>}, TContext> => {
+
+const mutationKey = ['updateFee'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof updateFee>>, {id: string;data: BodyType<FeeUpdateInput>}> = (props) => {
+          const {id,data} = props ?? {};
+
+          return  updateFee(id,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type UpdateFeeMutationResult = NonNullable<Awaited<ReturnType<typeof updateFee>>>
+    export type UpdateFeeMutationBody = BodyType<FeeUpdateInput>
+    export type UpdateFeeMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Update a fee (staff)
+ */
+export const useUpdateFee = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateFee>>, TError,{id: string;data: BodyType<FeeUpdateInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof updateFee>>,
+        TError,
+        {id: string;data: BodyType<FeeUpdateInput>},
+        TContext
+      > => {
+      return useMutation(getUpdateFeeMutationOptions(options));
+    }
+
+export const getDeleteFeeUrl = (id: string,) => {
+
+
+
+
+  return `/api/fees/${id}`
+}
+
+/**
+ * @summary Soft-delete a fee (staff)
+ */
+export const deleteFee = async (id: string, options?: Parameters<typeof customFetch>[1]): Promise<OkResult> => {
+
+  return customFetch<OkResult>(getDeleteFeeUrl(id),
+  {
+    ...options,
+    method: 'DELETE'
+
+
+  }
+);}
+
+
+
+
+
+export const getDeleteFeeMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteFee>>, TError,{id: string}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof deleteFee>>, TError,{id: string}, TContext> => {
+
+const mutationKey = ['deleteFee'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof deleteFee>>, {id: string}> = (props) => {
+          const {id} = props ?? {};
+
+          return  deleteFee(id,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type DeleteFeeMutationResult = NonNullable<Awaited<ReturnType<typeof deleteFee>>>
+
+    export type DeleteFeeMutationError = ErrorType<void>
+
+    /**
+ * @summary Soft-delete a fee (staff)
+ */
+export const useDeleteFee = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteFee>>, TError,{id: string}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof deleteFee>>,
+        TError,
+        {id: string},
+        TContext
+      > => {
+      return useMutation(getDeleteFeeMutationOptions(options));
     }
 
 export const getListRemittancesUrl = (params?: ListRemittancesParams,) => {
@@ -2886,6 +4144,149 @@ export const useCreateRemittance = <TError = ErrorType<unknown>,
         TContext
       > => {
       return useMutation(getCreateRemittanceMutationOptions(options));
+    }
+
+export const getUpdateRemittanceUrl = (id: string,) => {
+
+
+
+
+  return `/api/remittances/${id}`
+}
+
+/**
+ * @summary Update a remittance (staff)
+ */
+export const updateRemittance = async (id: string,
+    remittanceUpdate: RemittanceUpdate, options?: Parameters<typeof customFetch>[1]): Promise<Remittance> => {
+
+  return customFetch<Remittance>(getUpdateRemittanceUrl(id),
+  {
+    ...options,
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(remittanceUpdate)
+  }
+);}
+
+
+
+
+
+export const getUpdateRemittanceMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateRemittance>>, TError,{id: string;data: BodyType<RemittanceUpdate>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof updateRemittance>>, TError,{id: string;data: BodyType<RemittanceUpdate>}, TContext> => {
+
+const mutationKey = ['updateRemittance'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof updateRemittance>>, {id: string;data: BodyType<RemittanceUpdate>}> = (props) => {
+          const {id,data} = props ?? {};
+
+          return  updateRemittance(id,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type UpdateRemittanceMutationResult = NonNullable<Awaited<ReturnType<typeof updateRemittance>>>
+    export type UpdateRemittanceMutationBody = BodyType<RemittanceUpdate>
+    export type UpdateRemittanceMutationError = ErrorType<void>
+
+    /**
+ * @summary Update a remittance (staff)
+ */
+export const useUpdateRemittance = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateRemittance>>, TError,{id: string;data: BodyType<RemittanceUpdate>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof updateRemittance>>,
+        TError,
+        {id: string;data: BodyType<RemittanceUpdate>},
+        TContext
+      > => {
+      return useMutation(getUpdateRemittanceMutationOptions(options));
+    }
+
+export const getDeleteRemittanceUrl = (id: string,) => {
+
+
+
+
+  return `/api/remittances/${id}`
+}
+
+/**
+ * @summary Soft-delete a remittance (staff)
+ */
+export const deleteRemittance = async (id: string, options?: Parameters<typeof customFetch>[1]): Promise<OkResult> => {
+
+  return customFetch<OkResult>(getDeleteRemittanceUrl(id),
+  {
+    ...options,
+    method: 'DELETE'
+
+
+  }
+);}
+
+
+
+
+
+export const getDeleteRemittanceMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteRemittance>>, TError,{id: string}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof deleteRemittance>>, TError,{id: string}, TContext> => {
+
+const mutationKey = ['deleteRemittance'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof deleteRemittance>>, {id: string}> = (props) => {
+          const {id} = props ?? {};
+
+          return  deleteRemittance(id,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type DeleteRemittanceMutationResult = NonNullable<Awaited<ReturnType<typeof deleteRemittance>>>
+
+    export type DeleteRemittanceMutationError = ErrorType<void>
+
+    /**
+ * @summary Soft-delete a remittance (staff)
+ */
+export const useDeleteRemittance = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteRemittance>>, TError,{id: string}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof deleteRemittance>>,
+        TError,
+        {id: string},
+        TContext
+      > => {
+      return useMutation(getDeleteRemittanceMutationOptions(options));
     }
 
 export const getMatchRemittanceUrl = (id: string,) => {
@@ -3262,6 +4663,150 @@ export const useUpdateVendor = <TError = ErrorType<unknown>,
         TContext
       > => {
       return useMutation(getUpdateVendorMutationOptions(options));
+    }
+
+export const getUploadVendorW9Url = (id: string,) => {
+
+
+
+
+  return `/api/vendors/${id}/w9`
+}
+
+/**
+ * @summary Attach an uploaded W-9 document (staff, or the vendor's own account)
+ */
+export const uploadVendorW9 = async (id: string,
+    vendorW9Input: VendorW9Input, options?: Parameters<typeof customFetch>[1]): Promise<Vendor> => {
+
+  return customFetch<Vendor>(getUploadVendorW9Url(id),
+  {
+    ...options,
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(vendorW9Input)
+  }
+);}
+
+
+
+
+
+export const getUploadVendorW9MutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof uploadVendorW9>>, TError,{id: string;data: BodyType<VendorW9Input>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof uploadVendorW9>>, TError,{id: string;data: BodyType<VendorW9Input>}, TContext> => {
+
+const mutationKey = ['uploadVendorW9'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof uploadVendorW9>>, {id: string;data: BodyType<VendorW9Input>}> = (props) => {
+          const {id,data} = props ?? {};
+
+          return  uploadVendorW9(id,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type UploadVendorW9MutationResult = NonNullable<Awaited<ReturnType<typeof uploadVendorW9>>>
+    export type UploadVendorW9MutationBody = BodyType<VendorW9Input>
+    export type UploadVendorW9MutationError = ErrorType<void>
+
+    /**
+ * @summary Attach an uploaded W-9 document (staff, or the vendor's own account)
+ */
+export const useUploadVendorW9 = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof uploadVendorW9>>, TError,{id: string;data: BodyType<VendorW9Input>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof uploadVendorW9>>,
+        TError,
+        {id: string;data: BodyType<VendorW9Input>},
+        TContext
+      > => {
+      return useMutation(getUploadVendorW9MutationOptions(options));
+    }
+
+export const getUpdateVendorContactUrl = (id: string,) => {
+
+
+
+
+  return `/api/vendors/${id}/contact`
+}
+
+/**
+ * @summary Update vendor contact fields (staff, or the vendor's own account)
+ */
+export const updateVendorContact = async (id: string,
+    vendorContactInput: VendorContactInput, options?: Parameters<typeof customFetch>[1]): Promise<Vendor> => {
+
+  return customFetch<Vendor>(getUpdateVendorContactUrl(id),
+  {
+    ...options,
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(vendorContactInput)
+  }
+);}
+
+
+
+
+
+export const getUpdateVendorContactMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateVendorContact>>, TError,{id: string;data: BodyType<VendorContactInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof updateVendorContact>>, TError,{id: string;data: BodyType<VendorContactInput>}, TContext> => {
+
+const mutationKey = ['updateVendorContact'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof updateVendorContact>>, {id: string;data: BodyType<VendorContactInput>}> = (props) => {
+          const {id,data} = props ?? {};
+
+          return  updateVendorContact(id,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type UpdateVendorContactMutationResult = NonNullable<Awaited<ReturnType<typeof updateVendorContact>>>
+    export type UpdateVendorContactMutationBody = BodyType<VendorContactInput>
+    export type UpdateVendorContactMutationError = ErrorType<void>
+
+    /**
+ * @summary Update vendor contact fields (staff, or the vendor's own account)
+ */
+export const useUpdateVendorContact = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateVendorContact>>, TError,{id: string;data: BodyType<VendorContactInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof updateVendorContact>>,
+        TError,
+        {id: string;data: BodyType<VendorContactInput>},
+        TContext
+      > => {
+      return useMutation(getUpdateVendorContactMutationOptions(options));
     }
 
 export const getGetDashboardSummaryUrl = () => {

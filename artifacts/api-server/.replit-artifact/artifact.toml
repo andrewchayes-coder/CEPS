@@ -21,8 +21,9 @@ args = ["pnpm", "--filter", "@workspace/api-server", "run", "build"]
 NODE_ENV = "production"
 
 [services.production.run]
-# Production schema is managed by Replit's publish flow (dev->prod schema diff);
-# do NOT run migrations here — replaying them against an already-synced prod DB fails.
+# Production schema is applied by Replit's Publish flow (dev->prod schema diff);
+# do NOT run migrations here -- a deploy-time migrate step conflicts with the
+# publish sync (replays DDL that already exists) and can fail the deploy.
 args = ["node", "--enable-source-maps", "artifacts/api-server/dist/index.mjs"]
 
 [services.production.run.env]

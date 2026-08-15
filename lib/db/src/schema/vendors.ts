@@ -5,7 +5,9 @@ import {
   boolean,
   timestamp,
   index,
+  uniqueIndex,
 } from "drizzle-orm/pg-core";
+import { sql } from "drizzle-orm";
 
 export const vendorsTable = pgTable("vendors", {
   id: uuid("id").primaryKey().defaultRandom(),
@@ -30,6 +32,11 @@ export const vendorsTable = pgTable("vendors", {
   nameIdx: index("vendors_name_idx").on(table.name),
   w9StatusIdx: index("vendors_w9_status_idx").on(table.w9Status),
   activeIdx: index("vendors_active_idx").on(table.active),
+  // Natural-key uniqueness for bulk import: vendor name is the dedupe key, so a
+  // race between two concurrent imports of the same name can't insert twice.
+  // Case-insensitive (lower(name)) — mirrors the case-insensitive name matching
+  // the import's FK resolver uses.
+  nameLowerUnique: uniqueIndex("vendors_name_lower_unique").on(sql`lower(${table.name})`),
 }));
 
 export type Vendor = typeof vendorsTable.$inferSelect;

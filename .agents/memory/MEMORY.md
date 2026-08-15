@@ -4,4 +4,5 @@
 - [Invoice validation lifecycle](invoice-validation.md) — invoice detail page auto re-runs /validate on view+save; a material PATCH resets status to pending_review first. Status seen in UI is freshly computed, not stale.
 - [DB migrations, not push](db-migrations.md) — schema changes go db:generate + db:migrate (lib/db/migrations); runner auto-stamps baseline on push-built DBs; deploy step not wired yet.
 - [Duplicate-payment rule](duplicate-payment-rule.md) — shared checkDuplicatePayment + pg advisory xact lock; overrides legitimately allow dup triples, so never add a unique index on client/auth/month.
+- [Import dedupe & natural keys](import-dedupe-keys.md) — fingerprints hash pre-resolution source strings, not UUIDs; vendors/auth natural keys DB-unique; historical imports skip fee gen; Alta parser columns interim.
 - [List endpoint pagination](list-pagination.md) — all 7 list endpoints use {items,total} + limit/offset SQL pattern (audit-log is the reference, envelope key differs: entries).

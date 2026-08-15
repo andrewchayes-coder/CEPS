@@ -22,6 +22,7 @@ tags:
   - name: vendors
   - name: dashboard
   - name: audit
+  - name: import
   - name: Storage
 paths:
   /storage/uploads/request-url:
@@ -1074,6 +1075,78 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/CheckRegisterImportResult"
+  /import/{entity}/template:
+    get:
+      operationId: getImportTemplate
+      tags: [import]
+      summary: Download a CSV import template for an entity (generated from the field registry)
+      parameters:
+        - name: entity
+          in: path
+          required: true
+          schema:
+            type: string
+            enum: [clients, vendors, authorizations, payments, remittances]
+      responses:
+        "200":
+          description: CSV template (header row with required fields marked, plus an example row)
+          content:
+            text/csv:
+              schema:
+                type: string
+        "404": { description: Unknown import entity }
+  /import/{entity}/validate:
+    post:
+      operationId: validateImport
+      tags: [import]
+      summary: Dry-run a CSV import — per-row validation, FK resolution, duplicate preview (no writes)
+      parameters:
+        - name: entity
+          in: path
+          required: true
+          schema:
+            type: string
+            enum: [clients, vendors, authorizations, payments, remittances]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ImportValidateInput"
+      responses:
+        "200":
+          description: Per-row validation outcome and preview summary
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ImportValidateResult"
+        "404": { description: Unknown import entity }
+  /import/{entity}/commit:
+    post:
+      operationId: commitImport
+      tags: [import]
+      summary: Commit a CSV import — transactional per-row insert, duplicates skipped, audit-logged
+      parameters:
+        - name: entity
+          in: path
+          required: true
+          schema:
+            type: string
+            enum: [clients, vendors, authorizations, payments, remittances]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ImportCommitInput"
+      responses:
+        "200":
+          description: Per-row commit outcome (imported / skipped-duplicate / errored counts + detail)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ImportCommitResult"
+        "404": { description: Unknown import entity }
   /fees:
     get:
       operationId: listFees
@@ -1162,6 +1235,10 @@ paths:
           schema: { type: string }
         - name: status
           in: query
+          schema: { type: string }
+        - name: remittanceBatchId
+          in: query
+          description: Filter to line items imported from one Alta report (batch).
           schema: { type: string }
         - name: limit
           in: query
@@ -1263,6 +1340,27 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Remittance"
+  /remittances/import:
+    post:
+      operationId: importAltaRemittances
+      tags: [remittances]
+      summary: >-
+        Import an Alta Payment Detail Report — parsed rows become remittance
+        line items sharing one generated remittanceBatchId, each auto-matched to
+        a payment like a manual entry.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AltaRemittanceImportInput"
+      responses:
+        "200":
+          description: Import outcome per row (all imported rows share one batch id)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AltaRemittanceImportResult"
   /vendors:
     get:
       operationId: listVendors
@@ -1433,6 +1531,129 @@ paths:
               schema:
                 type: array
                 items: { $ref: "#/components/schemas/VendorPaymentSummary" }
+  /reports/pending-authorizations:
+    get:
+      operationId: getPendingAuthReport
+      tags: [dashboard]
+      summary: Referrals/cases waiting on POS authorization from Alta (staff only)
+      parameters:
+        - name: coordinatorId
+          in: query
+          schema: { type: string }
+        - name: search
+          in: query
+          schema: { type: string }
+        - name: limit
+          in: query
+          schema: { type: integer }
+        - name: offset
+          in: query
+          schema: { type: integer }
+      responses:
+        "200":
+          description: Pending-authorization rows
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items, total]
+                properties:
+                  items:
+                    type: array
+                    items: { $ref: "#/components/schemas/PendingAuthRow" }
+                  total: { type: integer }
+  /reports/case-status:
+    get:
+      operationId: getCaseStatusReport
+      tags: [dashboard]
+      summary: Program-level case status overview as a list (staff only)
+      parameters:
+        - name: status
+          in: query
+          schema: { type: string }
+        - name: coordinatorId
+          in: query
+          schema: { type: string }
+        - name: search
+          in: query
+          schema: { type: string }
+        - name: limit
+          in: query
+          schema: { type: integer }
+        - name: offset
+          in: query
+          schema: { type: integer }
+      responses:
+        "200":
+          description: Case status rows
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items, total]
+                properties:
+                  items:
+                    type: array
+                    items: { $ref: "#/components/schemas/CaseStatusRow" }
+                  total: { type: integer }
+  /reports/missing-documents:
+    get:
+      operationId: getMissingDocumentsReport
+      tags: [dashboard]
+      summary: Missing document alerts — no W-9, no parent signature, no auth PDF (staff only)
+      parameters:
+        - name: docType
+          in: query
+          description: Filter by document type (w9, signature, auth_pdf)
+          schema: { type: string }
+        - name: limit
+          in: query
+          schema: { type: integer }
+        - name: offset
+          in: query
+          schema: { type: integer }
+      responses:
+        "200":
+          description: Missing-document rows
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items, total]
+                properties:
+                  items:
+                    type: array
+                    items: { $ref: "#/components/schemas/MissingDocumentRow" }
+                  total: { type: integer }
+  /reports/expiring-authorizations:
+    get:
+      operationId: getExpiringAuthReport
+      tags: [dashboard]
+      summary: Authorizations expiring soon (staff only)
+      parameters:
+        - name: withinDays
+          in: query
+          description: Only include authorizations expiring within this many days (default 30).
+          schema: { type: integer }
+        - name: limit
+          in: query
+          schema: { type: integer }
+        - name: offset
+          in: query
+          schema: { type: integer }
+      responses:
+        "200":
+          description: Expiring-authorization rows
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items, total]
+                properties:
+                  items:
+                    type: array
+                    items: { $ref: "#/components/schemas/ExpiringAuthRow" }
+                  total: { type: integer }
 components:
   schemas:
     UploadUrlRequest:
@@ -1972,7 +2193,7 @@ components:
         amount: { type: string }
         paymentMonth: { type: ["string", "null"] }
         paymentType: { type: string, enum: [direct_payment, reimbursement, fee] }
-        source: { type: string, enum: [quickbooks, manual] }
+        source: { type: string, enum: [quickbooks, manual, historical_import] }
         loggedBy: { type: ["string", "null"] }
         remitted: { type: ["boolean", "null"] }
         createdAt: { type: ["string", "null"] }
@@ -2036,6 +2257,70 @@ components:
         results:
           type: array
           items: { $ref: "#/components/schemas/CheckRegisterImportRowResult" }
+    ImportValidateInput:
+      type: object
+      required: [csvText]
+      properties:
+        csvText:
+          type: string
+          description: Raw text of the uploaded CSV. Parsed and validated server-side against the entity's field registry.
+    ImportRowValidation:
+      type: object
+      required: [rowNumber, status]
+      properties:
+        rowNumber: { type: integer }
+        status: { type: string, enum: [valid, duplicate, error] }
+        errors:
+          type: array
+          items: { type: string }
+        warnings:
+          type: array
+          items: { type: string }
+        message: { type: ["string", "null"] }
+    ImportValidateResult:
+      type: object
+      required: [entity, totalRows, validRows, errorRows, duplicateRows, results]
+      properties:
+        entity: { type: string, enum: [clients, vendors, authorizations, payments, remittances] }
+        headerError:
+          type: ["string", "null"]
+          description: Set when required columns are missing from the header; no rows validated.
+        totalRows: { type: integer }
+        validRows: { type: integer }
+        errorRows: { type: integer }
+        duplicateRows: { type: integer }
+        results:
+          type: array
+          items: { $ref: "#/components/schemas/ImportRowValidation" }
+    ImportCommitInput:
+      type: object
+      required: [csvText]
+      properties:
+        csvText:
+          type: string
+          description: Raw CSV text. Re-validated server-side before commit; failing rows are skipped and reported.
+    ImportCommitRowResult:
+      type: object
+      required: [rowNumber, status]
+      properties:
+        rowNumber: { type: integer }
+        status: { type: string, enum: [imported, skipped_duplicate, error] }
+        id: { type: ["string", "null"] }
+        message: { type: ["string", "null"] }
+        errors:
+          type: array
+          items: { type: string }
+    ImportCommitResult:
+      type: object
+      required: [entity, imported, skippedDuplicate, errored, results]
+      properties:
+        entity: { type: string, enum: [clients, vendors, authorizations, payments, remittances] }
+        imported: { type: integer }
+        skippedDuplicate: { type: integer }
+        errored: { type: integer }
+        results:
+          type: array
+          items: { $ref: "#/components/schemas/ImportCommitRowResult" }
     Remittance:
       type: object
       required: [id, clientId, remittanceDate, amount, status, source, autoMatched]
@@ -2071,6 +2356,52 @@ components:
       required: [paymentId]
       properties:
         paymentId: { type: string }
+    AltaRemittanceImportInput:
+      type: object
+      required: [csvText]
+      properties:
+        csvText:
+          type: string
+          description: >-
+            Raw text of the uploaded Alta Payment Detail Report CSV. Parsed
+            server-side by the isolated altaRemittanceParser (interim column
+            mapping — pending a real sample).
+        reportReference:
+          type: string
+          description: Optional Alta report/check reference stamped onto every line.
+    AltaRemittanceImportRowResult:
+      type: object
+      required: [rowNumber, outcome]
+      properties:
+        rowNumber: { type: integer }
+        uciNumber: { type: ["string", "null"] }
+        outcome: { type: string, enum: [auto_matched, needs_manual_match, skipped_duplicate, errored] }
+        message: { type: ["string", "null"] }
+        remittanceId: { type: ["string", "null"] }
+        matchedPaymentId: { type: ["string", "null"] }
+    AltaRemittanceImportResult:
+      type: object
+      required: [remittanceBatchId, parsed, imported, errored, autoMatched, needsManualMatch, skippedDuplicate, results]
+      properties:
+        remittanceBatchId: { type: string }
+        parsed: { type: integer, description: "Data rows successfully parsed from the CSV." }
+        imported: { type: integer }
+        errored: { type: integer }
+        autoMatched: { type: integer }
+        needsManualMatch: { type: integer }
+        skippedDuplicate:
+          type: integer
+          description: Rows already imported from a prior upload of the same report row (matched by source-row fingerprint) — skipped, not re-inserted.
+        headerError:
+          type: ["string", "null"]
+          description: Set when the required Alta columns could not be located; no rows imported.
+        parseProblems:
+          type: array
+          description: Per-row CSV parse problems (bad/missing required fields) — those rows were skipped before import.
+          items: { type: string }
+        results:
+          type: array
+          items: { $ref: "#/components/schemas/AltaRemittanceImportRowResult" }
     Fee:
       type: object
       required: [id, clientId, amount, status]
@@ -2233,3 +2564,51 @@ components:
         totalPaid: { type: string }
         paymentCount: { type: integer }
         year: { type: integer }
+    PendingAuthRow:
+      type: object
+      required: [referralId, clientId, referralDate, daysWaiting]
+      properties:
+        referralId: { type: string }
+        clientId: { type: string }
+        clientName: { type: ["string", "null"] }
+        referralDate: { type: string }
+        daysWaiting: { type: integer }
+        coordinatorId: { type: ["string", "null"] }
+        coordinatorName: { type: ["string", "null"] }
+    CaseStatusRow:
+      type: object
+      required: [referralId, clientId, status, referralDate]
+      properties:
+        referralId: { type: string }
+        clientId: { type: string }
+        clientName: { type: ["string", "null"] }
+        status: { type: string }
+        referralDate: { type: string }
+        coordinatorId: { type: ["string", "null"] }
+        coordinatorName: { type: ["string", "null"] }
+        createdAt: { type: ["string", "null"] }
+    MissingDocumentRow:
+      type: object
+      required: [docType, entityType, entityId, entityName, description]
+      properties:
+        docType: { type: string, enum: [w9, signature, auth_pdf] }
+        entityType: { type: string }
+        entityId: { type: string }
+        entityName: { type: string }
+        description: { type: string }
+        clientId: { type: ["string", "null"] }
+        clientName: { type: ["string", "null"] }
+    ExpiringAuthRow:
+      type: object
+      required: [authorizationId, authNumber, servicePeriodEnd, daysUntilExpiry]
+      properties:
+        authorizationId: { type: string }
+        authNumber: { type: string }
+        clientId: { type: ["string", "null"] }
+        clientName: { type: ["string", "null"] }
+        vendorId: { type: ["string", "null"] }
+        vendorName: { type: ["string", "null"] }
+        serviceCode: { type: ["string", "null"] }
+        servicePeriodEnd: { type: string }
+        daysUntilExpiry: { type: integer }
+        maxPeriodAmount: { type: ["string", "null"] }

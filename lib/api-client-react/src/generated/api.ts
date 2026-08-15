@@ -20,6 +20,8 @@ import type {
 } from '@tanstack/react-query';
 
 import type {
+  AltaRemittanceImportInput,
+  AltaRemittanceImportResult,
   Authorization,
   AuthorizationInput,
   AuthorizationResult,
@@ -36,8 +38,20 @@ import type {
   Fee,
   FeeInput,
   FeeUpdateInput,
+  GetCaseStatusReport200,
+  GetCaseStatusReportParams,
+  GetExpiringAuthReport200,
+  GetExpiringAuthReportParams,
+  GetMissingDocumentsReport200,
+  GetMissingDocumentsReportParams,
+  GetPendingAuthReport200,
+  GetPendingAuthReportParams,
   GetVendorPaymentReportParams,
   HealthStatus,
+  ImportCommitInput,
+  ImportCommitResult,
+  ImportValidateInput,
+  ImportValidateResult,
   InviteAcceptInput,
   InviteInfo,
   InviteInput,
@@ -3701,6 +3715,227 @@ export const useImportCheckRegister = <TError = ErrorType<unknown>,
       return useMutation(getImportCheckRegisterMutationOptions(options));
     }
 
+export const getGetImportTemplateUrl = (entity: 'clients' | 'vendors' | 'authorizations' | 'payments' | 'remittances',) => {
+
+
+
+
+  return `/api/import/${entity}/template`
+}
+
+/**
+ * @summary Download a CSV import template for an entity (generated from the field registry)
+ */
+export const getImportTemplate = async (entity: 'clients' | 'vendors' | 'authorizations' | 'payments' | 'remittances', options?: Parameters<typeof customFetch>[1]): Promise<string> => {
+
+  return customFetch<string>(getGetImportTemplateUrl(entity),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetImportTemplateQueryKey = (entity: 'clients' | 'vendors' | 'authorizations' | 'payments' | 'remittances',) => {
+    return [
+    `/api/import/${entity}/template`
+    ] as const;
+    }
+
+
+export const getGetImportTemplateQueryOptions = <TData = Awaited<ReturnType<typeof getImportTemplate>>, TError = ErrorType<void>>(entity: 'clients' | 'vendors' | 'authorizations' | 'payments' | 'remittances', options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getImportTemplate>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetImportTemplateQueryKey(entity);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getImportTemplate>>> = ({ signal }) => getImportTemplate(entity, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: entity !== null && entity !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getImportTemplate>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetImportTemplateQueryResult = NonNullable<Awaited<ReturnType<typeof getImportTemplate>>>
+export type GetImportTemplateQueryError = ErrorType<void>
+
+
+/**
+ * @summary Download a CSV import template for an entity (generated from the field registry)
+ */
+
+export function useGetImportTemplate<TData = Awaited<ReturnType<typeof getImportTemplate>>, TError = ErrorType<void>>(
+ entity: 'clients' | 'vendors' | 'authorizations' | 'payments' | 'remittances', options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getImportTemplate>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetImportTemplateQueryOptions(entity,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getValidateImportUrl = (entity: 'clients' | 'vendors' | 'authorizations' | 'payments' | 'remittances',) => {
+
+
+
+
+  return `/api/import/${entity}/validate`
+}
+
+/**
+ * @summary Dry-run a CSV import — per-row validation, FK resolution, duplicate preview (no writes)
+ */
+export const validateImport = async (entity: 'clients' | 'vendors' | 'authorizations' | 'payments' | 'remittances',
+    importValidateInput: ImportValidateInput, options?: Parameters<typeof customFetch>[1]): Promise<ImportValidateResult> => {
+
+  return customFetch<ImportValidateResult>(getValidateImportUrl(entity),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(importValidateInput)
+  }
+);}
+
+
+
+
+
+export const getValidateImportMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof validateImport>>, TError,{entity: 'clients' | 'vendors' | 'authorizations' | 'payments' | 'remittances';data: BodyType<ImportValidateInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof validateImport>>, TError,{entity: 'clients' | 'vendors' | 'authorizations' | 'payments' | 'remittances';data: BodyType<ImportValidateInput>}, TContext> => {
+
+const mutationKey = ['validateImport'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof validateImport>>, {entity: 'clients' | 'vendors' | 'authorizations' | 'payments' | 'remittances';data: BodyType<ImportValidateInput>}> = (props) => {
+          const {entity,data} = props ?? {};
+
+          return  validateImport(entity,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type ValidateImportMutationResult = NonNullable<Awaited<ReturnType<typeof validateImport>>>
+    export type ValidateImportMutationBody = BodyType<ImportValidateInput>
+    export type ValidateImportMutationError = ErrorType<void>
+
+    /**
+ * @summary Dry-run a CSV import — per-row validation, FK resolution, duplicate preview (no writes)
+ */
+export const useValidateImport = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof validateImport>>, TError,{entity: 'clients' | 'vendors' | 'authorizations' | 'payments' | 'remittances';data: BodyType<ImportValidateInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof validateImport>>,
+        TError,
+        {entity: 'clients' | 'vendors' | 'authorizations' | 'payments' | 'remittances';data: BodyType<ImportValidateInput>},
+        TContext
+      > => {
+      return useMutation(getValidateImportMutationOptions(options));
+    }
+
+export const getCommitImportUrl = (entity: 'clients' | 'vendors' | 'authorizations' | 'payments' | 'remittances',) => {
+
+
+
+
+  return `/api/import/${entity}/commit`
+}
+
+/**
+ * @summary Commit a CSV import — transactional per-row insert, duplicates skipped, audit-logged
+ */
+export const commitImport = async (entity: 'clients' | 'vendors' | 'authorizations' | 'payments' | 'remittances',
+    importCommitInput: ImportCommitInput, options?: Parameters<typeof customFetch>[1]): Promise<ImportCommitResult> => {
+
+  return customFetch<ImportCommitResult>(getCommitImportUrl(entity),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(importCommitInput)
+  }
+);}
+
+
+
+
+
+export const getCommitImportMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof commitImport>>, TError,{entity: 'clients' | 'vendors' | 'authorizations' | 'payments' | 'remittances';data: BodyType<ImportCommitInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof commitImport>>, TError,{entity: 'clients' | 'vendors' | 'authorizations' | 'payments' | 'remittances';data: BodyType<ImportCommitInput>}, TContext> => {
+
+const mutationKey = ['commitImport'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof commitImport>>, {entity: 'clients' | 'vendors' | 'authorizations' | 'payments' | 'remittances';data: BodyType<ImportCommitInput>}> = (props) => {
+          const {entity,data} = props ?? {};
+
+          return  commitImport(entity,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type CommitImportMutationResult = NonNullable<Awaited<ReturnType<typeof commitImport>>>
+    export type CommitImportMutationBody = BodyType<ImportCommitInput>
+    export type CommitImportMutationError = ErrorType<void>
+
+    /**
+ * @summary Commit a CSV import — transactional per-row insert, duplicates skipped, audit-logged
+ */
+export const useCommitImport = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof commitImport>>, TError,{entity: 'clients' | 'vendors' | 'authorizations' | 'payments' | 'remittances';data: BodyType<ImportCommitInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof commitImport>>,
+        TError,
+        {entity: 'clients' | 'vendors' | 'authorizations' | 'payments' | 'remittances';data: BodyType<ImportCommitInput>},
+        TContext
+      > => {
+      return useMutation(getCommitImportMutationOptions(options));
+    }
+
 export const getListFeesUrl = (params?: ListFeesParams,) => {
   const normalizedParams = new URLSearchParams();
 
@@ -4369,6 +4604,77 @@ export const useMatchRemittance = <TError = ErrorType<unknown>,
       return useMutation(getMatchRemittanceMutationOptions(options));
     }
 
+export const getImportAltaRemittancesUrl = () => {
+
+
+
+
+  return `/api/remittances/import`
+}
+
+/**
+ * @summary Import an Alta Payment Detail Report — parsed rows become remittance line items sharing one generated remittanceBatchId, each auto-matched to a payment like a manual entry.
+ */
+export const importAltaRemittances = async (altaRemittanceImportInput: AltaRemittanceImportInput, options?: Parameters<typeof customFetch>[1]): Promise<AltaRemittanceImportResult> => {
+
+  return customFetch<AltaRemittanceImportResult>(getImportAltaRemittancesUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(altaRemittanceImportInput)
+  }
+);}
+
+
+
+
+
+export const getImportAltaRemittancesMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof importAltaRemittances>>, TError,{data: BodyType<AltaRemittanceImportInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof importAltaRemittances>>, TError,{data: BodyType<AltaRemittanceImportInput>}, TContext> => {
+
+const mutationKey = ['importAltaRemittances'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof importAltaRemittances>>, {data: BodyType<AltaRemittanceImportInput>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  importAltaRemittances(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type ImportAltaRemittancesMutationResult = NonNullable<Awaited<ReturnType<typeof importAltaRemittances>>>
+    export type ImportAltaRemittancesMutationBody = BodyType<AltaRemittanceImportInput>
+    export type ImportAltaRemittancesMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Import an Alta Payment Detail Report — parsed rows become remittance line items sharing one generated remittanceBatchId, each auto-matched to a payment like a manual entry.
+ */
+export const useImportAltaRemittances = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof importAltaRemittances>>, TError,{data: BodyType<AltaRemittanceImportInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof importAltaRemittances>>,
+        TError,
+        {data: BodyType<AltaRemittanceImportInput>},
+        TContext
+      > => {
+      return useMutation(getImportAltaRemittancesMutationOptions(options));
+    }
+
 export const getListVendorsUrl = (params?: ListVendorsParams,) => {
   const normalizedParams = new URLSearchParams();
 
@@ -4966,6 +5272,342 @@ export function useGetVendorPaymentReport<TData = Awaited<ReturnType<typeof getV
  ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
 
   const queryOptions = getGetVendorPaymentReportQueryOptions(params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getGetPendingAuthReportUrl = (params?: GetPendingAuthReportParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/reports/pending-authorizations?${stringifiedParams}` : `/api/reports/pending-authorizations`
+}
+
+/**
+ * @summary Referrals/cases waiting on POS authorization from Alta (staff only)
+ */
+export const getPendingAuthReport = async (params?: GetPendingAuthReportParams, options?: Parameters<typeof customFetch>[1]): Promise<GetPendingAuthReport200> => {
+
+  return customFetch<GetPendingAuthReport200>(getGetPendingAuthReportUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetPendingAuthReportQueryKey = (params?: GetPendingAuthReportParams,) => {
+    return [
+    `/api/reports/pending-authorizations`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getGetPendingAuthReportQueryOptions = <TData = Awaited<ReturnType<typeof getPendingAuthReport>>, TError = ErrorType<unknown>>(params?: GetPendingAuthReportParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getPendingAuthReport>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetPendingAuthReportQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getPendingAuthReport>>> = ({ signal }) => getPendingAuthReport(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getPendingAuthReport>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetPendingAuthReportQueryResult = NonNullable<Awaited<ReturnType<typeof getPendingAuthReport>>>
+export type GetPendingAuthReportQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary Referrals/cases waiting on POS authorization from Alta (staff only)
+ */
+
+export function useGetPendingAuthReport<TData = Awaited<ReturnType<typeof getPendingAuthReport>>, TError = ErrorType<unknown>>(
+ params?: GetPendingAuthReportParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getPendingAuthReport>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetPendingAuthReportQueryOptions(params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getGetCaseStatusReportUrl = (params?: GetCaseStatusReportParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/reports/case-status?${stringifiedParams}` : `/api/reports/case-status`
+}
+
+/**
+ * @summary Program-level case status overview as a list (staff only)
+ */
+export const getCaseStatusReport = async (params?: GetCaseStatusReportParams, options?: Parameters<typeof customFetch>[1]): Promise<GetCaseStatusReport200> => {
+
+  return customFetch<GetCaseStatusReport200>(getGetCaseStatusReportUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetCaseStatusReportQueryKey = (params?: GetCaseStatusReportParams,) => {
+    return [
+    `/api/reports/case-status`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getGetCaseStatusReportQueryOptions = <TData = Awaited<ReturnType<typeof getCaseStatusReport>>, TError = ErrorType<unknown>>(params?: GetCaseStatusReportParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getCaseStatusReport>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetCaseStatusReportQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getCaseStatusReport>>> = ({ signal }) => getCaseStatusReport(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getCaseStatusReport>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetCaseStatusReportQueryResult = NonNullable<Awaited<ReturnType<typeof getCaseStatusReport>>>
+export type GetCaseStatusReportQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary Program-level case status overview as a list (staff only)
+ */
+
+export function useGetCaseStatusReport<TData = Awaited<ReturnType<typeof getCaseStatusReport>>, TError = ErrorType<unknown>>(
+ params?: GetCaseStatusReportParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getCaseStatusReport>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetCaseStatusReportQueryOptions(params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getGetMissingDocumentsReportUrl = (params?: GetMissingDocumentsReportParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/reports/missing-documents?${stringifiedParams}` : `/api/reports/missing-documents`
+}
+
+/**
+ * @summary Missing document alerts — no W-9, no parent signature, no auth PDF (staff only)
+ */
+export const getMissingDocumentsReport = async (params?: GetMissingDocumentsReportParams, options?: Parameters<typeof customFetch>[1]): Promise<GetMissingDocumentsReport200> => {
+
+  return customFetch<GetMissingDocumentsReport200>(getGetMissingDocumentsReportUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetMissingDocumentsReportQueryKey = (params?: GetMissingDocumentsReportParams,) => {
+    return [
+    `/api/reports/missing-documents`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getGetMissingDocumentsReportQueryOptions = <TData = Awaited<ReturnType<typeof getMissingDocumentsReport>>, TError = ErrorType<unknown>>(params?: GetMissingDocumentsReportParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getMissingDocumentsReport>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetMissingDocumentsReportQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getMissingDocumentsReport>>> = ({ signal }) => getMissingDocumentsReport(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getMissingDocumentsReport>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetMissingDocumentsReportQueryResult = NonNullable<Awaited<ReturnType<typeof getMissingDocumentsReport>>>
+export type GetMissingDocumentsReportQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary Missing document alerts — no W-9, no parent signature, no auth PDF (staff only)
+ */
+
+export function useGetMissingDocumentsReport<TData = Awaited<ReturnType<typeof getMissingDocumentsReport>>, TError = ErrorType<unknown>>(
+ params?: GetMissingDocumentsReportParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getMissingDocumentsReport>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetMissingDocumentsReportQueryOptions(params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getGetExpiringAuthReportUrl = (params?: GetExpiringAuthReportParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/reports/expiring-authorizations?${stringifiedParams}` : `/api/reports/expiring-authorizations`
+}
+
+/**
+ * @summary Authorizations expiring soon (staff only)
+ */
+export const getExpiringAuthReport = async (params?: GetExpiringAuthReportParams, options?: Parameters<typeof customFetch>[1]): Promise<GetExpiringAuthReport200> => {
+
+  return customFetch<GetExpiringAuthReport200>(getGetExpiringAuthReportUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetExpiringAuthReportQueryKey = (params?: GetExpiringAuthReportParams,) => {
+    return [
+    `/api/reports/expiring-authorizations`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getGetExpiringAuthReportQueryOptions = <TData = Awaited<ReturnType<typeof getExpiringAuthReport>>, TError = ErrorType<unknown>>(params?: GetExpiringAuthReportParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getExpiringAuthReport>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetExpiringAuthReportQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getExpiringAuthReport>>> = ({ signal }) => getExpiringAuthReport(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getExpiringAuthReport>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetExpiringAuthReportQueryResult = NonNullable<Awaited<ReturnType<typeof getExpiringAuthReport>>>
+export type GetExpiringAuthReportQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary Authorizations expiring soon (staff only)
+ */
+
+export function useGetExpiringAuthReport<TData = Awaited<ReturnType<typeof getExpiringAuthReport>>, TError = ErrorType<unknown>>(
+ params?: GetExpiringAuthReportParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getExpiringAuthReport>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetExpiringAuthReportQueryOptions(params,options)
 
   const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
 

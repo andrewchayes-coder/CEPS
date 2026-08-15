@@ -1,6 +1,7 @@
 import { Router, type IRouter } from "express";
-import { eq, and, desc, ilike, count, sql, type SQL } from "drizzle-orm";
-import { db, paymentsTable, clientsTable, remittancesTable, feesTable } from "@workspace/db";
+import { randomUUID } from "node:crypto";
+import { eq, and, desc, ilike, count, sql, inArray, type SQL } from "drizzle-orm";
+import { db, paymentsTable, clientsTable, remittancesTable, feesTable, authorizationsTable } from "@workspace/db";
 import {
   ListPaymentsQueryParams,
   ListPaymentsResponse,
@@ -18,11 +19,14 @@ import {
   UpdateRemittanceResponse,
   MatchRemittanceBody,
   MatchRemittanceResponse,
+  ImportAltaRemittancesBody,
+  ImportAltaRemittancesResponse,
 } from "@workspace/api-zod";
 import { requireAuth, requireStaff, audit } from "../lib/auth";
 import { paymentJson, remittanceJson, clientNameMap, vendorNameMap, authNumberMap, notDeleted, diffDetail } from "../lib/serializers";
 import { checkDuplicatePayment, lockDuplicatePaymentKey } from "../lib/paymentDuplicateCheck";
 import { money } from "../lib/money";
+import { parseAltaRemittanceCsv, altaRowFingerprint } from "../lib/altaRemittanceParser";
 
 const router: IRouter = Router();
 
@@ -427,6 +431,39 @@ router.delete("/payments/:id", requireStaff, async (req, res): Promise<void> => 
 
 // --- Remittances ---
 
+// Sentinel thrown inside a row transaction when the source-row fingerprint
+// already exists (re-uploaded report row). Throwing aborts the transaction so
+// any conditional `remitted` claim made before the conflicting insert is rolled
+// back; the caller catches it and reports the row as skipped_duplicate.
+class DuplicateFingerprint extends Error {}
+
+// Shared auto-match logic (the same rule behind POST /remittances and
+// POST /remittances/:id/match): an unremitted payment for the SAME client whose
+// amount equals the remittance amount, and — when a service month is provided —
+// whose paymentMonth also matches. Extracted so the Alta batch import matches
+// imported line items exactly like manually-entered ones (no duplication).
+// Pass a `tx` to run inside a transaction. Candidate payments may be supplied to
+// avoid re-querying per row when importing a batch.
+async function findMatchingPayment(
+  args: { clientId: string; amount: string; paymentMonth?: string | null },
+  database: typeof db = db,
+  candidates?: (typeof paymentsTable.$inferSelect)[],
+): Promise<typeof paymentsTable.$inferSelect | undefined> {
+  const pool =
+    candidates ??
+    (await database
+      .select()
+      .from(paymentsTable)
+      .where(and(eq(paymentsTable.clientId, args.clientId), eq(paymentsTable.remitted, false), notDeleted(paymentsTable))));
+  return pool.find(
+    (p) =>
+      p.clientId === args.clientId &&
+      !p.remitted &&
+      money(p.amount).equals(money(args.amount)) &&
+      (!args.paymentMonth || p.paymentMonth === args.paymentMonth),
+  );
+}
+
 async function enrichRemittances(rows: (typeof remittancesTable.$inferSelect)[]) {
   const [clientNames, authNums] = await Promise.all([
     clientNameMap(rows.map((r) => r.clientId)),
@@ -460,6 +497,7 @@ router.get("/remittances", requireAuth, async (req, res): Promise<void> => {
   // Query-string filters
   if (query.data.clientId) conditions.push(eq(remittancesTable.clientId, query.data.clientId));
   if (query.data.status) conditions.push(eq(remittancesTable.status, query.data.status));
+  if (query.data.remittanceBatchId) conditions.push(eq(remittancesTable.remittanceBatchId, query.data.remittanceBatchId));
   const where = and(...conditions);
   const limit = Math.min(Math.max(query.data.limit ?? 50, 1), 1000);
   const offset = Math.max(query.data.offset ?? 0, 0);
@@ -483,15 +521,11 @@ router.post("/remittances", requireStaff, async (req, res): Promise<void> => {
     return;
   }
   // Auto-match: unremitted payment for the same client with the same amount (and month when provided)
-  const candidates = await db
-    .select()
-    .from(paymentsTable)
-    .where(and(eq(paymentsTable.clientId, parsed.data.clientId), eq(paymentsTable.remitted, false), notDeleted(paymentsTable)));
-  const match = candidates.find(
-    (p) =>
-      money(p.amount).equals(money(parsed.data.amount)) &&
-      (!parsed.data.paymentMonth || p.paymentMonth === parsed.data.paymentMonth),
-  );
+  const match = await findMatchingPayment({
+    clientId: parsed.data.clientId,
+    amount: parsed.data.amount,
+    paymentMonth: parsed.data.paymentMonth,
+  });
   const [remittance] = await db
     .insert(remittancesTable)
     .values({
@@ -532,6 +566,210 @@ router.post("/remittances/:id/match", requireStaff, async (req, res): Promise<vo
   await db.update(paymentsTable).set({ remitted: true }).where(eq(paymentsTable.id, payment.id));
   await audit(req.user!.id, "match_remittance", "remittance", remittance.id, `Matched to check ${payment.qbCheckNumber}`);
   res.json(MatchRemittanceResponse.parse((await enrichRemittances([remittance]))[0]));
+});
+
+// Alta "Payment Detail Report" batch import. One uploaded report can cover many
+// clients/months; every imported line item shares ONE generated
+// remittanceBatchId so staff can see which lines came from the same Alta
+// payment. Rows are resolved by UCI (client) and, when present, auth number
+// scoped to that client — unresolvable rows are reported as row errors, never
+// guessed. After insert, each row runs the SAME auto-match logic as manual
+// entry (findMatchingPayment) so imported remittances match Payments like
+// manual ones. CSV parsing/column mapping is isolated in
+// src/lib/altaRemittanceParser.ts (interim_..._pending_confirmation).
+router.post("/remittances/import", requireStaff, async (req, res): Promise<void> => {
+  const parsed = ImportAltaRemittancesBody.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: parsed.error.message });
+    return;
+  }
+  const remittanceBatchId = randomUUID();
+  const reportReference = parsed.data.reportReference?.trim() || null;
+
+  // Parse the uploaded CSV with the ISOLATED interim column mapping. A header
+  // error means the required Alta columns weren't found — nothing is imported.
+  const { rows: parsedRows, problems: parseProblems, headerError } = parseAltaRemittanceCsv(parsed.data.csvText);
+  if (headerError) {
+    res.json(
+      ImportAltaRemittancesResponse.parse({
+        remittanceBatchId,
+        parsed: 0,
+        imported: 0,
+        errored: 0,
+        autoMatched: 0,
+        needsManualMatch: 0,
+        skippedDuplicate: 0,
+        headerError,
+        parseProblems: [],
+        results: [],
+      }),
+    );
+    return;
+  }
+
+  // Resolve clients by UCI up front (one query), then authorizations for the
+  // resolved clients (one query) so per-row resolution is in-memory.
+  const uciNeedles = Array.from(new Set(parsedRows.map((r) => r.uciNumber.trim()).filter(Boolean)));
+  const clients = uciNeedles.length
+    ? await db.select().from(clientsTable).where(and(inArray(clientsTable.uciNumber, uciNeedles), notDeleted(clientsTable)))
+    : [];
+  const clientByUci = new Map(clients.map((c) => [c.uciNumber, c] as const));
+  const clientIds = clients.map((c) => c.id);
+  const auths = clientIds.length
+    ? await db.select().from(authorizationsTable).where(and(inArray(authorizationsTable.clientId, clientIds), notDeleted(authorizationsTable)))
+    : [];
+  // Key authorizations by clientId + authNumber so an auth number is only ever
+  // resolved within its own client's scope.
+  const authByClientAndNumber = new Map(auths.map((a) => [`${a.clientId}::${a.authNumber}`, a] as const));
+
+  const results: {
+    rowNumber: number;
+    uciNumber?: string | null;
+    outcome: "auto_matched" | "needs_manual_match" | "skipped_duplicate" | "errored";
+    message?: string | null;
+    remittanceId?: string | null;
+    matchedPaymentId?: string | null;
+  }[] = [];
+  let imported = 0;
+  let errored = 0;
+  let autoMatched = 0;
+  let needsManualMatch = 0;
+  let skippedDuplicate = 0;
+
+  for (const row of parsedRows) {
+    const uci = row.uciNumber.trim();
+    const client = clientByUci.get(uci);
+    if (!client) {
+      errored++;
+      results.push({ rowNumber: row.rowNumber, uciNumber: uci, outcome: "errored", message: `No client found for UCI "${uci}". Row not imported.` });
+      continue;
+    }
+    // Resolve authorization (optional) scoped to this client. A provided but
+    // unresolvable auth number is a hard row error — never guess.
+    let authorizationId: string | null = null;
+    const authNeedle = row.authNumber?.trim();
+    if (authNeedle) {
+      const auth = authByClientAndNumber.get(`${client.id}::${authNeedle}`);
+      if (!auth) {
+        errored++;
+        results.push({
+          rowNumber: row.rowNumber,
+          uciNumber: uci,
+          outcome: "errored",
+          message: `Authorization "${authNeedle}" not found for ${client.firstName} ${client.lastName}. Row not imported.`,
+        });
+        continue;
+      }
+      authorizationId = auth.id;
+    }
+
+    const paymentMonth = row.serviceMonth?.trim() || null;
+    // Idempotency: fingerprint the normalized source row so a re-uploaded report
+    // is detected as a duplicate instead of re-inserted (unique partial index on
+    // remittances.sourceRowFingerprint enforces this at the DB level too).
+    const fingerprint = altaRowFingerprint({
+      uciNumber: row.uciNumber,
+      authNumber: row.authNumber,
+      serviceMonth: row.serviceMonth,
+      amount: row.amount,
+      checkNumber: row.checkNumber,
+      remittanceDate: row.remittanceDate,
+    });
+
+    // Insert the remittance + claim its matched payment atomically so a matched
+    // remittance and its payment's `remitted` flag can never diverge, and two
+    // concurrent imports can't both claim the same payment. Uses the DB unique
+    // index (ON CONFLICT DO NOTHING) so a racing duplicate upload is skipped
+    // rather than double-inserted.
+    const outcome = await db.transaction(async (tx) => {
+      const txDb = tx as unknown as typeof db;
+      // Race-safe claim: find a candidate, then CONDITIONALLY flip remitted only
+      // if it is still false (RETURNING id). A concurrent import that already
+      // claimed it gets no row back and this remittance falls back to
+      // needs_manual_match rather than double-matching one payment.
+      const candidate = await findMatchingPayment({ clientId: client.id, amount: row.amount, paymentMonth }, txDb);
+      let claimedPayment: typeof paymentsTable.$inferSelect | undefined;
+      if (candidate) {
+        const [claimed] = await tx
+          .update(paymentsTable)
+          .set({ remitted: true })
+          .where(and(eq(paymentsTable.id, candidate.id), eq(paymentsTable.remitted, false)))
+          .returning();
+        if (claimed) claimedPayment = candidate;
+      }
+      const [r] = await tx
+        .insert(remittancesTable)
+        .values({
+          clientId: client.id,
+          authorizationId,
+          altaReference: reportReference ?? row.checkNumber?.trim() ?? null,
+          remittanceDate: row.remittanceDate,
+          amount: row.amount,
+          paymentMonth,
+          status: claimedPayment ? "matched" : "received",
+          source: "alta_regional",
+          matchedPaymentId: claimedPayment?.id ?? null,
+          autoMatched: !!claimedPayment,
+          remittanceBatchId,
+          sourceRowFingerprint: fingerprint,
+        })
+        // The only unique constraint that can conflict on this insert is the
+        // partial fingerprint index; no target is passed because drizzle can't
+        // express a partial-index target cleanly and there is no other unique
+        // key on remittances to accidentally swallow.
+        .onConflictDoNothing()
+        .returning();
+      // No row returned → fingerprint conflict → this exact report row already
+      // exists. Nothing was claimed inside this tx (the insert never happened
+      // after the conflict), but we may have flipped `remitted`; roll that back
+      // by throwing so the whole tx aborts, then re-detect as a duplicate.
+      if (!r) {
+        // The conditional claim above ran before the conflicting insert; abort
+        // the transaction so the (unwanted) remitted flip is undone.
+        throw new DuplicateFingerprint();
+      }
+      return { remittance: r, match: claimedPayment };
+    }).catch((err) => {
+      if (err instanceof DuplicateFingerprint) return "duplicate" as const;
+      throw err;
+    });
+
+    if (outcome === "duplicate") {
+      skippedDuplicate++;
+      results.push({ rowNumber: row.rowNumber, uciNumber: uci, outcome: "skipped_duplicate", message: "This report row was already imported (matched by source-row fingerprint). Skipped." });
+      continue;
+    }
+    imported++;
+    if (outcome.match) {
+      autoMatched++;
+      results.push({ rowNumber: row.rowNumber, uciNumber: uci, outcome: "auto_matched", message: `Auto-matched to check ${outcome.match.qbCheckNumber}.`, remittanceId: outcome.remittance.id, matchedPaymentId: outcome.match.id });
+    } else {
+      needsManualMatch++;
+      results.push({ rowNumber: row.rowNumber, uciNumber: uci, outcome: "needs_manual_match", message: "No automatic match — flagged for manual matching.", remittanceId: outcome.remittance.id });
+    }
+  }
+
+  await audit(
+    req.user!.id,
+    "import_alta_remittances",
+    "remittance",
+    undefined,
+    `Batch ${remittanceBatchId}${reportReference ? ` (${reportReference})` : ""}: ${parsedRows.length} parsed, ${imported} imported, ${errored} errored, ${autoMatched} auto-matched, ${needsManualMatch} need manual match, ${skippedDuplicate} skipped as duplicate`,
+  );
+  res.json(
+    ImportAltaRemittancesResponse.parse({
+      remittanceBatchId,
+      parsed: parsedRows.length,
+      imported,
+      errored,
+      autoMatched,
+      needsManualMatch,
+      skippedDuplicate,
+      headerError: null,
+      parseProblems,
+      results,
+    }),
+  );
 });
 
 router.patch("/remittances/:id", requireStaff, async (req, res): Promise<void> => {

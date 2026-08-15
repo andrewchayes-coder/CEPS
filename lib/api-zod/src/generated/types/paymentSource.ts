@@ -12,4 +12,5 @@ export type PaymentSource = typeof PaymentSource[keyof typeof PaymentSource];
 export const PaymentSource = {
   quickbooks: 'quickbooks',
   manual: 'manual',
+  historical_import: 'historical_import',
 } as const;

@@ -94,6 +94,11 @@ export default function DashboardPage() {
               <p className="text-xs text-muted-foreground mt-1">
                 {pendingReferrals} pending processing
               </p>
+              {user?.role === 'staff' && (
+                <Link href="/reports?tab=case-status" className="text-xs text-primary hover:underline mt-2 inline-block" data-testid="link-tile-case-status">
+                  View case status →
+                </Link>
+              )}
             </CardContent>
           </Card>
         )}
@@ -124,6 +129,14 @@ export default function DashboardPage() {
               <p className="text-xs text-muted-foreground mt-1">
                 {summary.totals.vendorsMissingW9} vendors missing W-9
               </p>
+              <div className="flex gap-3 mt-2">
+                <Link href="/reports?tab=expiring-auth" className="text-xs text-primary hover:underline inline-block" data-testid="link-tile-expiring-auth">
+                  Expiring →
+                </Link>
+                <Link href="/reports?tab=missing-docs&docType=w9" className="text-xs text-primary hover:underline inline-block" data-testid="link-tile-missing-w9">
+                  Missing W-9 →
+                </Link>
+              </div>
             </CardContent>
           </Card>
         )}
@@ -297,9 +310,11 @@ function getAlertIconColor(type: string) {
 
 function getAlertLink(type: string) {
   switch (type) {
-    case 'expiring_authorization': return '/authorizations?filter=expiring';
-    case 'pending_w9': return '/vendors?filter=missing_w9';
-    case 'pending_signature': return '/referrals?status=pending_signature';
+    case 'expiring_authorization': return '/reports?tab=expiring-auth';
+    case 'missing_document': return '/reports?tab=missing-docs';
+    case 'pending_w9': return '/reports?tab=missing-docs&docType=w9';
+    case 'pending_signature': return '/reports?tab=missing-docs&docType=signature';
+    case 'unmatched_remittance': return '/remittances';
     default: return '/';
   }
 }

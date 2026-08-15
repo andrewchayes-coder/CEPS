@@ -1,5 +1,5 @@
 import { Router, type IRouter } from "express";
-import { desc, eq } from "drizzle-orm";
+import { desc, asc, eq, and, or, count, isNull, lte, gte, sql, type SQL } from "drizzle-orm";
 import {
   db,
   clientsTable,
@@ -15,13 +15,31 @@ import {
   GetDashboardSummaryResponse,
   GetVendorPaymentReportQueryParams,
   GetVendorPaymentReportResponse,
+  GetPendingAuthReportQueryParams,
+  GetPendingAuthReportResponse,
+  GetCaseStatusReportQueryParams,
+  GetCaseStatusReportResponse,
+  GetMissingDocumentsReportQueryParams,
+  GetMissingDocumentsReportResponse,
+  GetExpiringAuthReportQueryParams,
+  GetExpiringAuthReportResponse,
 } from "@workspace/api-zod";
 import { requireAuth, requireStaff, iso } from "../lib/auth";
-import { userNameMap, authorizationTotalsPaid, effectiveAuthStatus, notDeleted } from "../lib/serializers";
+import { userNameMap, clientNameMap, vendorNameMap, authorizationTotalsPaid, effectiveAuthStatus, notDeleted } from "../lib/serializers";
 import { money, sumMoney } from "../lib/money";
 import Decimal from "decimal.js";
 
 const router: IRouter = Router();
+
+// Escape LIKE/ILIKE wildcards so a raw search term matches literally.
+const escapeLike = (s: string) => s.replace(/[\\%_]/g, (c) => `\\${c}`);
+
+// Parameterized ILIKE over the client's full name (`first_name || ' ' || last_name`).
+// Callers must join clientsTable. Value is bound (no interpolation) so it is safe.
+function clientNameLike(search: string): SQL {
+  const pattern = `%${escapeLike(search)}%`;
+  return sql`(${clientsTable.firstName} || ' ' || ${clientsTable.lastName}) ILIKE ${pattern}`;
+}
 
 router.get("/dashboard/summary", requireAuth, async (req, res): Promise<void> => {
   const u = req.user!;
@@ -183,6 +201,247 @@ router.get("/reports/vendor-payments", requireStaff, async (req, res): Promise<v
     })
     .sort((a, b) => money(b.totalPaid).comparedTo(money(a.totalPaid)));
   res.json(GetVendorPaymentReportResponse.parse(rows));
+});
+
+// "Pending Authorization Tracker" — referrals/cases waiting on POS authorization
+// from Alta. Uses the SQL-WHERE + {items,total} pagination pattern. Staff only.
+router.get("/reports/pending-authorizations", requireStaff, async (req, res): Promise<void> => {
+  const query = GetPendingAuthReportQueryParams.safeParse(req.query);
+  if (!query.success) {
+    res.status(400).json({ error: query.error.message });
+    return;
+  }
+  const conditions: SQL[] = [eq(referralsTable.status, "pending_auth")];
+  if (query.data.coordinatorId) conditions.push(eq(referralsTable.serviceCoordinatorId, query.data.coordinatorId));
+  // Client-name search runs in SQL (ilike over `first_name || ' ' || last_name`)
+  // via a join, so limit/offset and the count both reflect the filter.
+  if (query.data.search) conditions.push(clientNameLike(query.data.search));
+  const where = and(...conditions);
+  const limit = Math.min(Math.max(query.data.limit ?? 50, 1), 1000);
+  const offset = Math.max(query.data.offset ?? 0, 0);
+  const [[{ total }], referrals] = await Promise.all([
+    db
+      .select({ total: count() })
+      .from(referralsTable)
+      .innerJoin(clientsTable, eq(referralsTable.clientId, clientsTable.id))
+      .where(where),
+    db
+      .select({ r: referralsTable })
+      .from(referralsTable)
+      .innerJoin(clientsTable, eq(referralsTable.clientId, clientsTable.id))
+      .where(where)
+      .orderBy(asc(referralsTable.referralDate), desc(referralsTable.id))
+      .limit(limit)
+      .offset(offset)
+      .then((rows) => rows.map((row) => row.r)),
+  ]);
+  const [clientNames, coordNames] = await Promise.all([
+    clientNameMap(referrals.map((r) => r.clientId)),
+    userNameMap(referrals.map((r) => r.serviceCoordinatorId)),
+  ]);
+  const today = Date.now();
+  const items = referrals.map((r) => {
+    const start = new Date(`${r.referralDate}T00:00:00Z`).getTime();
+    const daysWaiting = Math.max(0, Math.floor((today - start) / 86400000));
+    return {
+      referralId: r.id,
+      clientId: r.clientId,
+      clientName: clientNames.get(r.clientId) ?? null,
+      referralDate: r.referralDate,
+      daysWaiting,
+      coordinatorId: r.serviceCoordinatorId,
+      coordinatorName: r.serviceCoordinatorId ? (coordNames.get(r.serviceCoordinatorId) ?? null) : null,
+    };
+  });
+  res.json(GetPendingAuthReportResponse.parse({ items, total }));
+});
+
+// "Program-Level Case Status Overview" — cases broken out by status stage as a
+// list. SQL-WHERE + {items,total} pagination. Staff only.
+router.get("/reports/case-status", requireStaff, async (req, res): Promise<void> => {
+  const query = GetCaseStatusReportQueryParams.safeParse(req.query);
+  if (!query.success) {
+    res.status(400).json({ error: query.error.message });
+    return;
+  }
+  const conditions: SQL[] = [];
+  if (query.data.status) conditions.push(eq(referralsTable.status, query.data.status));
+  if (query.data.coordinatorId) conditions.push(eq(referralsTable.serviceCoordinatorId, query.data.coordinatorId));
+  // Client-name search runs in SQL via the clients join so limit/offset and
+  // the count both reflect the filter.
+  if (query.data.search) conditions.push(clientNameLike(query.data.search));
+  const where = conditions.length ? and(...conditions) : undefined;
+  const limit = Math.min(Math.max(query.data.limit ?? 50, 1), 1000);
+  const offset = Math.max(query.data.offset ?? 0, 0);
+  const [[{ total }], referrals] = await Promise.all([
+    db
+      .select({ total: count() })
+      .from(referralsTable)
+      .innerJoin(clientsTable, eq(referralsTable.clientId, clientsTable.id))
+      .where(where),
+    db
+      .select({ r: referralsTable })
+      .from(referralsTable)
+      .innerJoin(clientsTable, eq(referralsTable.clientId, clientsTable.id))
+      .where(where)
+      .orderBy(desc(referralsTable.createdAt), desc(referralsTable.id))
+      .limit(limit)
+      .offset(offset)
+      .then((rows) => rows.map((row) => row.r)),
+  ]);
+  const [clientNames, coordNames] = await Promise.all([
+    clientNameMap(referrals.map((r) => r.clientId)),
+    userNameMap(referrals.map((r) => r.serviceCoordinatorId)),
+  ]);
+  const items = referrals.map((r) => ({
+    referralId: r.id,
+    clientId: r.clientId,
+    clientName: clientNames.get(r.clientId) ?? null,
+    status: r.status,
+    referralDate: r.referralDate,
+    coordinatorId: r.serviceCoordinatorId,
+    coordinatorName: r.serviceCoordinatorId ? (coordNames.get(r.serviceCoordinatorId) ?? null) : null,
+    createdAt: iso(r.createdAt),
+  }));
+  res.json(GetCaseStatusReportResponse.parse({ items, total }));
+});
+
+// "Missing Document Alerts" — no W-9 (vendors), no parent signature (referrals),
+// no auth PDF (authorizations). Assembled across tables, filterable by docType,
+// then paginated in-memory over the combined set. Staff only.
+router.get("/reports/missing-documents", requireStaff, async (req, res): Promise<void> => {
+  const query = GetMissingDocumentsReportQueryParams.safeParse(req.query);
+  if (!query.success) {
+    res.status(400).json({ error: query.error.message });
+    return;
+  }
+  const docType = query.data.docType;
+  const rows: {
+    docType: "w9" | "signature" | "auth_pdf";
+    entityType: string;
+    entityId: string;
+    entityName: string;
+    description: string;
+    clientId: string | null;
+    clientName: string | null;
+  }[] = [];
+
+  if (!docType || docType === "w9") {
+    const vendors = await db
+      .select()
+      .from(vendorsTable)
+      .where(and(eq(vendorsTable.active, true), or(isNull(vendorsTable.w9Status), eq(vendorsTable.w9Status, "pending"), eq(vendorsTable.w9Status, "expired"))!));
+    for (const v of vendors) {
+      rows.push({
+        docType: "w9",
+        entityType: "vendor",
+        entityId: v.id,
+        entityName: v.name,
+        description: `No W-9 on file (status: ${v.w9Status}) — payments are blocked.`,
+        clientId: null,
+        clientName: null,
+      });
+    }
+  }
+
+  if (!docType || docType === "signature") {
+    const referrals = await db
+      .select()
+      .from(referralsTable)
+      .where(and(eq(referralsTable.status, "pending_signature"), isNull(referralsTable.parentSignedAt)));
+    const clientNames = await clientNameMap(referrals.map((r) => r.clientId));
+    for (const r of referrals) {
+      rows.push({
+        docType: "signature",
+        entityType: "referral",
+        entityId: r.id,
+        entityName: clientNames.get(r.clientId) ?? r.id,
+        description: "Waiting on parent/guardian e-signature.",
+        clientId: r.clientId,
+        clientName: clientNames.get(r.clientId) ?? null,
+      });
+    }
+  }
+
+  if (!docType || docType === "auth_pdf") {
+    const auths = await db
+      .select()
+      .from(authorizationsTable)
+      .where(and(notDeleted(authorizationsTable), or(isNull(authorizationsTable.posPdfUrl), eq(authorizationsTable.posPdfUrl, ""))!));
+    const [clientNames, vendorNames] = await Promise.all([
+      clientNameMap(auths.map((a) => a.clientId)),
+      vendorNameMap(auths.map((a) => a.vendorId)),
+    ]);
+    for (const a of auths) {
+      rows.push({
+        docType: "auth_pdf",
+        entityType: "authorization",
+        entityId: a.id,
+        entityName: a.authNumber,
+        description: `Authorization ${a.authNumber}${a.vendorId ? ` (${vendorNames.get(a.vendorId) ?? "vendor"})` : ""} has no POS PDF attached.`,
+        clientId: a.clientId,
+        clientName: clientNames.get(a.clientId) ?? null,
+      });
+    }
+  }
+
+  const total = rows.length;
+  const limit = Math.min(Math.max(query.data.limit ?? 50, 1), 1000);
+  const offset = Math.max(query.data.offset ?? 0, 0);
+  const items = rows.slice(offset, offset + limit);
+  res.json(GetMissingDocumentsReportResponse.parse({ items, total }));
+});
+
+// "Expiring Authorization Alerts" — active authorizations whose service period
+// ends within `withinDays` (default 30). Date window filtered in SQL; effective
+// status computed with payment totals so exhausted/expired are excluded. Staff only.
+router.get("/reports/expiring-authorizations", requireStaff, async (req, res): Promise<void> => {
+  const query = GetExpiringAuthReportQueryParams.safeParse(req.query);
+  if (!query.success) {
+    res.status(400).json({ error: query.error.message });
+    return;
+  }
+  const withinDays = Math.min(Math.max(query.data.withinDays ?? 30, 0), 3650);
+  const today = new Date().toISOString().slice(0, 10);
+  const horizon = new Date(Date.now() + withinDays * 86400000).toISOString().slice(0, 10);
+  const where = and(
+    notDeleted(authorizationsTable),
+    gte(authorizationsTable.servicePeriodEnd, today),
+    lte(authorizationsTable.servicePeriodEnd, horizon),
+  );
+  const auths = await db
+    .select()
+    .from(authorizationsTable)
+    .where(where)
+    .orderBy(asc(authorizationsTable.servicePeriodEnd), asc(authorizationsTable.id));
+  const totals = await authorizationTotalsPaid(auths.map((a) => a.id));
+  // Only truly active authorizations (not pending/exhausted) count as "expiring".
+  const active = auths.filter((a) => effectiveAuthStatus(a, totals.get(a.id) ?? 0) === "active");
+  const [clientNames, vendorNames] = await Promise.all([
+    clientNameMap(active.map((a) => a.clientId)),
+    vendorNameMap(active.map((a) => a.vendorId)),
+  ]);
+  const now = Date.now();
+  const rows = active.map((a) => {
+    const end = new Date(`${a.servicePeriodEnd}T00:00:00Z`).getTime();
+    return {
+      authorizationId: a.id,
+      authNumber: a.authNumber,
+      clientId: a.clientId,
+      clientName: clientNames.get(a.clientId) ?? null,
+      vendorId: a.vendorId,
+      vendorName: a.vendorId ? (vendorNames.get(a.vendorId) ?? null) : null,
+      serviceCode: a.serviceCode,
+      servicePeriodEnd: a.servicePeriodEnd,
+      daysUntilExpiry: Math.ceil((end - now) / 86400000),
+      maxPeriodAmount: a.maxPeriodAmount,
+    };
+  });
+  const total = rows.length;
+  const limit = Math.min(Math.max(query.data.limit ?? 50, 1), 1000);
+  const offset = Math.max(query.data.offset ?? 0, 0);
+  const items = rows.slice(offset, offset + limit);
+  res.json(GetExpiringAuthReportResponse.parse({ items, total }));
 });
 
 export default router;

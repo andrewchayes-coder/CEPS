@@ -627,7 +627,7 @@ export const GetClientCaseResponse = zod.object({
   "amount": zod.string(),
   "paymentMonth": zod.string().nullish(),
   "paymentType": zod.enum(['direct_payment', 'reimbursement', 'fee']),
-  "source": zod.enum(['quickbooks', 'manual']),
+  "source": zod.enum(['quickbooks', 'manual', 'historical_import']),
   "loggedBy": zod.string().nullish(),
   "remitted": zod.boolean().nullish(),
   "createdAt": zod.string().nullish()
@@ -1465,7 +1465,7 @@ export const ListPaymentsResponse = zod.object({
   "amount": zod.string(),
   "paymentMonth": zod.string().nullish(),
   "paymentType": zod.enum(['direct_payment', 'reimbursement', 'fee']),
-  "source": zod.enum(['quickbooks', 'manual']),
+  "source": zod.enum(['quickbooks', 'manual', 'historical_import']),
   "loggedBy": zod.string().nullish(),
   "remitted": zod.boolean().nullish(),
   "createdAt": zod.string().nullish()
@@ -1505,7 +1505,7 @@ export const CreatePaymentResponse = zod.object({
   "amount": zod.string(),
   "paymentMonth": zod.string().nullish(),
   "paymentType": zod.enum(['direct_payment', 'reimbursement', 'fee']),
-  "source": zod.enum(['quickbooks', 'manual']),
+  "source": zod.enum(['quickbooks', 'manual', 'historical_import']),
   "loggedBy": zod.string().nullish(),
   "remitted": zod.boolean().nullish(),
   "createdAt": zod.string().nullish()
@@ -1546,7 +1546,7 @@ export const UpdatePaymentResponse = zod.object({
   "amount": zod.string(),
   "paymentMonth": zod.string().nullish(),
   "paymentType": zod.enum(['direct_payment', 'reimbursement', 'fee']),
-  "source": zod.enum(['quickbooks', 'manual']),
+  "source": zod.enum(['quickbooks', 'manual', 'historical_import']),
   "loggedBy": zod.string().nullish(),
   "remitted": zod.boolean().nullish(),
   "createdAt": zod.string().nullish()
@@ -1588,6 +1588,70 @@ export const ImportCheckRegisterResponse = zod.object({
   "outcome": zod.enum(['imported', 'skipped_duplicate', 'flagged_duplicate', 'unmatched']),
   "message": zod.string().nullish(),
   "paymentId": zod.string().nullish()
+}))
+})
+
+
+/**
+ * @summary Download a CSV import template for an entity (generated from the field registry)
+ */
+export const GetImportTemplateParams = zod.object({
+  "entity": zod.enum(['clients', 'vendors', 'authorizations', 'payments', 'remittances'])
+})
+
+export const GetImportTemplateResponse = zod.unknown()
+
+
+/**
+ * @summary Dry-run a CSV import — per-row validation, FK resolution, duplicate preview (no writes)
+ */
+export const ValidateImportParams = zod.object({
+  "entity": zod.enum(['clients', 'vendors', 'authorizations', 'payments', 'remittances'])
+})
+
+export const ValidateImportBody = zod.object({
+  "csvText": zod.string().describe('Raw text of the uploaded CSV. Parsed and validated server-side against the entity\'s field registry.')
+})
+
+export const ValidateImportResponse = zod.object({
+  "entity": zod.enum(['clients', 'vendors', 'authorizations', 'payments', 'remittances']),
+  "headerError": zod.string().nullish().describe('Set when required columns are missing from the header; no rows validated.'),
+  "totalRows": zod.int(),
+  "validRows": zod.int(),
+  "errorRows": zod.int(),
+  "duplicateRows": zod.int(),
+  "results": zod.array(zod.object({
+  "rowNumber": zod.int(),
+  "status": zod.enum(['valid', 'duplicate', 'error']),
+  "errors": zod.array(zod.string()).optional(),
+  "warnings": zod.array(zod.string()).optional(),
+  "message": zod.string().nullish()
+}))
+})
+
+
+/**
+ * @summary Commit a CSV import — transactional per-row insert, duplicates skipped, audit-logged
+ */
+export const CommitImportParams = zod.object({
+  "entity": zod.enum(['clients', 'vendors', 'authorizations', 'payments', 'remittances'])
+})
+
+export const CommitImportBody = zod.object({
+  "csvText": zod.string().describe('Raw CSV text. Re-validated server-side before commit; failing rows are skipped and reported.')
+})
+
+export const CommitImportResponse = zod.object({
+  "entity": zod.enum(['clients', 'vendors', 'authorizations', 'payments', 'remittances']),
+  "imported": zod.int(),
+  "skippedDuplicate": zod.int(),
+  "errored": zod.int(),
+  "results": zod.array(zod.object({
+  "rowNumber": zod.int(),
+  "status": zod.enum(['imported', 'skipped_duplicate', 'error']),
+  "id": zod.string().nullish(),
+  "message": zod.string().nullish(),
+  "errors": zod.array(zod.string()).optional()
 }))
 })
 
@@ -1690,6 +1754,7 @@ export const DeleteFeeResponse = zod.object({
 export const ListRemittancesQueryParams = zod.object({
   "clientId": zod.coerce.string().optional(),
   "status": zod.coerce.string().optional(),
+  "remittanceBatchId": zod.coerce.string().optional().describe('Filter to line items imported from one Alta report (batch).'),
   "limit": zod.coerce.number().int().optional(),
   "offset": zod.coerce.number().int().optional()
 })
@@ -1821,6 +1886,35 @@ export const MatchRemittanceResponse = zod.object({
   "matchedPaymentId": zod.string().nullish(),
   "autoMatched": zod.boolean(),
   "remittanceBatchId": zod.string().nullish()
+})
+
+
+/**
+ * @summary Import an Alta Payment Detail Report — parsed rows become remittance line items sharing one generated remittanceBatchId, each auto-matched to a payment like a manual entry.
+ */
+export const ImportAltaRemittancesBody = zod.object({
+  "csvText": zod.string().describe('Raw text of the uploaded Alta Payment Detail Report CSV. Parsed server-side by the isolated altaRemittanceParser (interim column mapping — pending a real sample).'),
+  "reportReference": zod.string().optional().describe('Optional Alta report\/check reference stamped onto every line.')
+})
+
+export const ImportAltaRemittancesResponse = zod.object({
+  "remittanceBatchId": zod.string(),
+  "parsed": zod.int().describe('Data rows successfully parsed from the CSV.'),
+  "imported": zod.int(),
+  "errored": zod.int(),
+  "autoMatched": zod.int(),
+  "needsManualMatch": zod.int(),
+  "skippedDuplicate": zod.int().describe('Rows already imported from a prior upload of the same report row (matched by source-row fingerprint) — skipped, not re-inserted.'),
+  "headerError": zod.string().nullish().describe('Set when the required Alta columns could not be located; no rows imported.'),
+  "parseProblems": zod.array(zod.string()).optional().describe('Per-row CSV parse problems (bad\/missing required fields) — those rows were skipped before import.'),
+  "results": zod.array(zod.object({
+  "rowNumber": zod.int(),
+  "uciNumber": zod.string().nullish(),
+  "outcome": zod.enum(['auto_matched', 'needs_manual_match', 'skipped_duplicate', 'errored']),
+  "message": zod.string().nullish(),
+  "remittanceId": zod.string().nullish(),
+  "matchedPaymentId": zod.string().nullish()
+}))
 })
 
 
@@ -2068,5 +2162,104 @@ export const GetVendorPaymentReportResponseItem = zod.object({
   "year": zod.int()
 })
 export const GetVendorPaymentReportResponse = zod.array(GetVendorPaymentReportResponseItem)
+
+
+/**
+ * @summary Referrals/cases waiting on POS authorization from Alta (staff only)
+ */
+export const GetPendingAuthReportQueryParams = zod.object({
+  "coordinatorId": zod.coerce.string().optional(),
+  "search": zod.coerce.string().optional(),
+  "limit": zod.coerce.number().int().optional(),
+  "offset": zod.coerce.number().int().optional()
+})
+
+export const GetPendingAuthReportResponse = zod.object({
+  "items": zod.array(zod.object({
+  "referralId": zod.string(),
+  "clientId": zod.string(),
+  "clientName": zod.string().nullish(),
+  "referralDate": zod.string(),
+  "daysWaiting": zod.int(),
+  "coordinatorId": zod.string().nullish(),
+  "coordinatorName": zod.string().nullish()
+})),
+  "total": zod.int()
+})
+
+
+/**
+ * @summary Program-level case status overview as a list (staff only)
+ */
+export const GetCaseStatusReportQueryParams = zod.object({
+  "status": zod.coerce.string().optional(),
+  "coordinatorId": zod.coerce.string().optional(),
+  "search": zod.coerce.string().optional(),
+  "limit": zod.coerce.number().int().optional(),
+  "offset": zod.coerce.number().int().optional()
+})
+
+export const GetCaseStatusReportResponse = zod.object({
+  "items": zod.array(zod.object({
+  "referralId": zod.string(),
+  "clientId": zod.string(),
+  "clientName": zod.string().nullish(),
+  "status": zod.string(),
+  "referralDate": zod.string(),
+  "coordinatorId": zod.string().nullish(),
+  "coordinatorName": zod.string().nullish(),
+  "createdAt": zod.string().nullish()
+})),
+  "total": zod.int()
+})
+
+
+/**
+ * @summary Missing document alerts — no W-9, no parent signature, no auth PDF (staff only)
+ */
+export const GetMissingDocumentsReportQueryParams = zod.object({
+  "docType": zod.coerce.string().optional().describe('Filter by document type (w9, signature, auth_pdf)'),
+  "limit": zod.coerce.number().int().optional(),
+  "offset": zod.coerce.number().int().optional()
+})
+
+export const GetMissingDocumentsReportResponse = zod.object({
+  "items": zod.array(zod.object({
+  "docType": zod.enum(['w9', 'signature', 'auth_pdf']),
+  "entityType": zod.string(),
+  "entityId": zod.string(),
+  "entityName": zod.string(),
+  "description": zod.string(),
+  "clientId": zod.string().nullish(),
+  "clientName": zod.string().nullish()
+})),
+  "total": zod.int()
+})
+
+
+/**
+ * @summary Authorizations expiring soon (staff only)
+ */
+export const GetExpiringAuthReportQueryParams = zod.object({
+  "withinDays": zod.coerce.number().int().optional().describe('Only include authorizations expiring within this many days (default 30).'),
+  "limit": zod.coerce.number().int().optional(),
+  "offset": zod.coerce.number().int().optional()
+})
+
+export const GetExpiringAuthReportResponse = zod.object({
+  "items": zod.array(zod.object({
+  "authorizationId": zod.string(),
+  "authNumber": zod.string(),
+  "clientId": zod.string().nullish(),
+  "clientName": zod.string().nullish(),
+  "vendorId": zod.string().nullish(),
+  "vendorName": zod.string().nullish(),
+  "serviceCode": zod.string().nullish(),
+  "servicePeriodEnd": zod.string(),
+  "daysUntilExpiry": zod.int(),
+  "maxPeriodAmount": zod.string().nullish()
+})),
+  "total": zod.int()
+})
 
 

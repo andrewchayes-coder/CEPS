@@ -9,6 +9,10 @@
 export type ListRemittancesParams = {
 clientId?: string;
 status?: string;
+/**
+ * Filter to line items imported from one Alta report (batch).
+ */
+remittanceBatchId?: string;
 limit?: number;
 offset?: number;
 };

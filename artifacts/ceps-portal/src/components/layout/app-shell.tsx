@@ -16,7 +16,8 @@ import {
   FolderSync,
   PieChart,
   BookOpen,
-  ScrollText
+  ScrollText,
+  Upload
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
@@ -38,6 +39,7 @@ const navItems: NavItem[] = [
   { title: 'Remittances', href: '/remittances', icon: FolderSync, roles: ['staff'] },
   { title: 'Vendors', href: '/vendors', icon: Building2, roles: ['staff'] },
   { title: 'Reports', href: '/reports', icon: PieChart, roles: ['staff', 'service_coordinator', 'vendor'] },
+  { title: 'Bulk Import', href: '/admin/import', icon: Upload, roles: ['staff'] },
   { title: 'Users', href: '/admin/users', icon: Settings, roles: ['staff'] },
   { title: 'Audit Log', href: '/audit-log', icon: ScrollText, roles: ['staff'] },
   { title: 'Help & Docs', href: '/help', icon: BookOpen, roles: ['staff', 'service_coordinator', 'vendor', 'parent_guardian', 'self'] },

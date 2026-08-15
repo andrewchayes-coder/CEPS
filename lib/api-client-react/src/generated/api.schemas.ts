@@ -631,6 +631,7 @@ export type PaymentSource = typeof PaymentSource[keyof typeof PaymentSource];
 export const PaymentSource = {
   quickbooks: 'quickbooks',
   manual: 'manual',
+  historical_import: 'historical_import',
 } as const;
 
 export interface Payment {
@@ -1101,6 +1102,97 @@ export interface CheckRegisterImportResult {
   results: CheckRegisterImportRowResult[];
 }
 
+export interface ImportValidateInput {
+  /** Raw text of the uploaded CSV. Parsed and validated server-side against the entity's field registry. */
+  csvText: string;
+}
+
+export type ImportRowValidationStatus = typeof ImportRowValidationStatus[keyof typeof ImportRowValidationStatus];
+
+
+export const ImportRowValidationStatus = {
+  valid: 'valid',
+  duplicate: 'duplicate',
+  error: 'error',
+} as const;
+
+export interface ImportRowValidation {
+  rowNumber: number;
+  status: ImportRowValidationStatus;
+  errors?: string[];
+  warnings?: string[];
+  /** @nullable */
+  message?: string | null;
+}
+
+export type ImportValidateResultEntity = typeof ImportValidateResultEntity[keyof typeof ImportValidateResultEntity];
+
+
+export const ImportValidateResultEntity = {
+  clients: 'clients',
+  vendors: 'vendors',
+  authorizations: 'authorizations',
+  payments: 'payments',
+  remittances: 'remittances',
+} as const;
+
+export interface ImportValidateResult {
+  entity: ImportValidateResultEntity;
+  /**
+     * Set when required columns are missing from the header; no rows validated.
+     * @nullable
+     */
+  headerError?: string | null;
+  totalRows: number;
+  validRows: number;
+  errorRows: number;
+  duplicateRows: number;
+  results: ImportRowValidation[];
+}
+
+export interface ImportCommitInput {
+  /** Raw CSV text. Re-validated server-side before commit; failing rows are skipped and reported. */
+  csvText: string;
+}
+
+export type ImportCommitRowResultStatus = typeof ImportCommitRowResultStatus[keyof typeof ImportCommitRowResultStatus];
+
+
+export const ImportCommitRowResultStatus = {
+  imported: 'imported',
+  skipped_duplicate: 'skipped_duplicate',
+  error: 'error',
+} as const;
+
+export interface ImportCommitRowResult {
+  rowNumber: number;
+  status: ImportCommitRowResultStatus;
+  /** @nullable */
+  id?: string | null;
+  /** @nullable */
+  message?: string | null;
+  errors?: string[];
+}
+
+export type ImportCommitResultEntity = typeof ImportCommitResultEntity[keyof typeof ImportCommitResultEntity];
+
+
+export const ImportCommitResultEntity = {
+  clients: 'clients',
+  vendors: 'vendors',
+  authorizations: 'authorizations',
+  payments: 'payments',
+  remittances: 'remittances',
+} as const;
+
+export interface ImportCommitResult {
+  entity: ImportCommitResultEntity;
+  imported: number;
+  skippedDuplicate: number;
+  errored: number;
+  results: ImportCommitRowResult[];
+}
+
 export type RemittanceInputSource = typeof RemittanceInputSource[keyof typeof RemittanceInputSource];
 
 
@@ -1123,6 +1215,56 @@ export interface RemittanceInput {
 
 export interface RemittanceMatchInput {
   paymentId: string;
+}
+
+export interface AltaRemittanceImportInput {
+  /** Raw text of the uploaded Alta Payment Detail Report CSV. Parsed server-side by the isolated altaRemittanceParser (interim column mapping — pending a real sample). */
+  csvText: string;
+  /** Optional Alta report/check reference stamped onto every line. */
+  reportReference?: string;
+}
+
+export type AltaRemittanceImportRowResultOutcome = typeof AltaRemittanceImportRowResultOutcome[keyof typeof AltaRemittanceImportRowResultOutcome];
+
+
+export const AltaRemittanceImportRowResultOutcome = {
+  auto_matched: 'auto_matched',
+  needs_manual_match: 'needs_manual_match',
+  skipped_duplicate: 'skipped_duplicate',
+  errored: 'errored',
+} as const;
+
+export interface AltaRemittanceImportRowResult {
+  rowNumber: number;
+  /** @nullable */
+  uciNumber?: string | null;
+  outcome: AltaRemittanceImportRowResultOutcome;
+  /** @nullable */
+  message?: string | null;
+  /** @nullable */
+  remittanceId?: string | null;
+  /** @nullable */
+  matchedPaymentId?: string | null;
+}
+
+export interface AltaRemittanceImportResult {
+  remittanceBatchId: string;
+  /** Data rows successfully parsed from the CSV. */
+  parsed: number;
+  imported: number;
+  errored: number;
+  autoMatched: number;
+  needsManualMatch: number;
+  /** Rows already imported from a prior upload of the same report row (matched by source-row fingerprint) — skipped, not re-inserted. */
+  skippedDuplicate: number;
+  /**
+     * Set when the required Alta columns could not be located; no rows imported.
+     * @nullable
+     */
+  headerError?: string | null;
+  /** Per-row CSV parse problems (bad/missing required fields) — those rows were skipped before import. */
+  parseProblems?: string[];
+  results: AltaRemittanceImportRowResult[];
 }
 
 export type FeeStatus = typeof FeeStatus[keyof typeof FeeStatus];
@@ -1399,6 +1541,74 @@ export interface VendorPaymentSummary {
   year: number;
 }
 
+export interface PendingAuthRow {
+  referralId: string;
+  clientId: string;
+  /** @nullable */
+  clientName?: string | null;
+  referralDate: string;
+  daysWaiting: number;
+  /** @nullable */
+  coordinatorId?: string | null;
+  /** @nullable */
+  coordinatorName?: string | null;
+}
+
+export interface CaseStatusRow {
+  referralId: string;
+  clientId: string;
+  /** @nullable */
+  clientName?: string | null;
+  status: string;
+  referralDate: string;
+  /** @nullable */
+  coordinatorId?: string | null;
+  /** @nullable */
+  coordinatorName?: string | null;
+  /** @nullable */
+  createdAt?: string | null;
+}
+
+export type MissingDocumentRowDocType = typeof MissingDocumentRowDocType[keyof typeof MissingDocumentRowDocType];
+
+
+export const MissingDocumentRowDocType = {
+  w9: 'w9',
+  signature: 'signature',
+  auth_pdf: 'auth_pdf',
+} as const;
+
+export interface MissingDocumentRow {
+  docType: MissingDocumentRowDocType;
+  entityType: string;
+  entityId: string;
+  entityName: string;
+  description: string;
+  /** @nullable */
+  clientId?: string | null;
+  /** @nullable */
+  clientName?: string | null;
+}
+
+export interface ExpiringAuthRow {
+  authorizationId: string;
+  authNumber: string;
+  /** @nullable */
+  clientId?: string | null;
+  /** @nullable */
+  clientName?: string | null;
+  /** @nullable */
+  vendorId?: string | null;
+  /** @nullable */
+  vendorName?: string | null;
+  /** @nullable */
+  serviceCode?: string | null;
+  servicePeriodEnd: string;
+  daysUntilExpiry: number;
+  /** @nullable */
+  maxPeriodAmount?: string | null;
+}
+
 export type ListUsersParams = {
 role?: string;
 };
@@ -1493,6 +1703,10 @@ status?: string;
 export type ListRemittancesParams = {
 clientId?: string;
 status?: string;
+/**
+ * Filter to line items imported from one Alta report (batch).
+ */
+remittanceBatchId?: string;
 limit?: number;
 offset?: number;
 };
@@ -1517,5 +1731,58 @@ export type ListVendors200 = {
 
 export type GetVendorPaymentReportParams = {
 year?: number;
+};
+
+export type GetPendingAuthReportParams = {
+coordinatorId?: string;
+search?: string;
+limit?: number;
+offset?: number;
+};
+
+export type GetPendingAuthReport200 = {
+  items: PendingAuthRow[];
+  total: number;
+};
+
+export type GetCaseStatusReportParams = {
+status?: string;
+coordinatorId?: string;
+search?: string;
+limit?: number;
+offset?: number;
+};
+
+export type GetCaseStatusReport200 = {
+  items: CaseStatusRow[];
+  total: number;
+};
+
+export type GetMissingDocumentsReportParams = {
+/**
+ * Filter by document type (w9, signature, auth_pdf)
+ */
+docType?: string;
+limit?: number;
+offset?: number;
+};
+
+export type GetMissingDocumentsReport200 = {
+  items: MissingDocumentRow[];
+  total: number;
+};
+
+export type GetExpiringAuthReportParams = {
+/**
+ * Only include authorizations expiring within this many days (default 30).
+ */
+withinDays?: number;
+limit?: number;
+offset?: number;
+};
+
+export type GetExpiringAuthReport200 = {
+  items: ExpiringAuthRow[];
+  total: number;
 };
 

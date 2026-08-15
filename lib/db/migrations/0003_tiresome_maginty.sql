@@ -1,0 +1,2 @@
+ALTER TABLE "remittances" ADD COLUMN "source_row_fingerprint" text;--> statement-breakpoint
+CREATE UNIQUE INDEX "remittances_source_row_fingerprint_unique" ON "remittances" USING btree ("source_row_fingerprint") WHERE "remittances"."source_row_fingerprint" IS NOT NULL;

@@ -5,7 +5,12 @@
  */
 export function escapeCSVField(value: unknown): string {
   if (value === null || value === undefined) return '';
-  const str = String(value);
+  let str = String(value);
+  // CSV formula-injection guard: neutralize cells a spreadsheet would evaluate
+  // as a formula (start with = + - @, tab, or CR) by prefixing an apostrophe.
+  if (/^[=+\-@\t\r]/.test(str)) {
+    str = `'${str}`;
+  }
   if (/[",\r\n]/.test(str)) {
     return `"${str.replace(/"/g, '""')}"`;
   }

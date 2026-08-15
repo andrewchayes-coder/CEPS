@@ -7,7 +7,9 @@ import {
   boolean,
   timestamp,
   index,
+  uniqueIndex,
 } from "drizzle-orm/pg-core";
+import { sql } from "drizzle-orm";
 import { clientsTable } from "./clients";
 import { authorizationsTable } from "./authorizations";
 import { paymentsTable } from "./payments";
@@ -31,6 +33,10 @@ export const remittancesTable = pgTable("remittances", {
   ),
   autoMatched: boolean("auto_matched").notNull().default(false),
   remittanceBatchId: text("remittance_batch_id"),
+  // sha256 of the normalized Alta source report row (uci|authNumber|serviceMonth
+  // |amount|checkNumber|paymentDate). Lets a re-uploaded report be detected as a
+  // duplicate row instead of re-inserted. Null for manually-entered remittances.
+  sourceRowFingerprint: text("source_row_fingerprint"),
   isDeleted: boolean("is_deleted").notNull().default(false),
   deletedAt: timestamp("deleted_at", { withTimezone: true }),
   deletedBy: uuid("deleted_by"),
@@ -43,6 +49,12 @@ export const remittancesTable = pgTable("remittances", {
   clientIdIdx: index("remittances_client_id_idx").on(table.clientId),
   statusIdx: index("remittances_status_idx").on(table.status),
   createdAtIdx: index("remittances_created_at_idx").on(table.createdAt.desc()),
+  // Idempotency for Alta report re-uploads: at most one remittance per source
+  // report row. Partial (WHERE fingerprint IS NOT NULL) so manually-entered
+  // remittances — which carry no fingerprint — are unaffected.
+  sourceRowFingerprintUnique: uniqueIndex("remittances_source_row_fingerprint_unique")
+    .on(table.sourceRowFingerprint)
+    .where(sql`${table.sourceRowFingerprint} IS NOT NULL`),
 }));
 
 export type Remittance = typeof remittancesTable.$inferSelect;

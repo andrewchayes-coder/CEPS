@@ -22,3 +22,28 @@ export function sumMoney(values: MoneyInput[]): Decimal {
 export function formatMoney(value: MoneyInput): string {
   return money(value).toFixed(2);
 }
+
+/**
+ * Validate a monetary string as a finite, positive amount with at most two
+ * decimal places, using the Decimal path (never Number(), which admits
+ * Infinity, exponents like "1e3", NaN, and float drift). Returns the canonical
+ * fixed(2) string on success, or null when the value is not a clean money
+ * amount. `raw` should already have $ and thousands-separators stripped.
+ *
+ * Shared by the Alta remittance parser and the bulk-import field registry so
+ * every money field in the app validates amounts the same way.
+ */
+export function validatePositiveMoney(raw: string): string | null {
+  const t = raw.trim();
+  // Plain decimal only: optional leading digits, optional single dot, 0-2
+  // trailing decimals. Rejects signs, exponents, Infinity, and 3+ decimals.
+  if (!/^\d+(\.\d{1,2})?$|^\.\d{1,2}$/.test(t)) return null;
+  let dec;
+  try {
+    dec = money(t);
+  } catch {
+    return null;
+  }
+  if (!dec.isFinite() || dec.isNegative() || dec.isZero()) return null;
+  return dec.toFixed(2);
+}

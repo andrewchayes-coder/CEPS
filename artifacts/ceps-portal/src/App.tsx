@@ -36,6 +36,7 @@ import VendorsPage from '@/pages/vendors';
 import VendorDetailPage from '@/pages/vendors/[id]';
 import ReportsPage from '@/pages/reports';
 import UsersPage from '@/pages/admin/users';
+import AdminImportPage from '@/pages/admin/import';
 import AuditLogPage from '@/pages/audit-log';
 import HelpPage from '@/pages/help';
 
@@ -79,6 +80,7 @@ function ProtectedRoutes() {
         <Route path="/vendors/:id" component={VendorDetailPage} />
         <Route path="/reports" component={ReportsPage} />
         <Route path="/admin/users" component={UsersPage} />
+        <Route path="/admin/import" component={AdminImportPage} />
         <Route path="/audit-log" component={AuditLogPage} />
         <Route path="/help" component={HelpPage} />
         <Route component={NotFound} />

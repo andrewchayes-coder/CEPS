@@ -1,21 +1,39 @@
-import React, { useState } from 'react';
-import { useListRemittances, useDeleteRemittance } from '@workspace/api-client-react';
+import React, { useMemo, useState } from 'react';
+import { useListRemittances, useDeleteRemittance, type AltaRemittanceImportResult } from '@workspace/api-client-react';
 import { useAuth } from '@/components/auth/auth-provider';
 import { DeleteEntityButton } from '@/components/delete-entity-button';
 import { EditRemittanceDialog } from '@/components/edit-remittance-dialog';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { AltaRemittanceImport } from '@/components/alta-remittance-import';
+import { Card, CardContent } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
 import { format } from 'date-fns';
-import { ChevronLeft, ChevronRight } from 'lucide-react';
+import { ChevronLeft, ChevronRight, X } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
 
 const PAGE_SIZE = 50;
 
+// Assign a stable short label + color per batch id so line items from the same
+// Alta report are visually grouped in the list.
+const BATCH_BADGE_CLASSES = [
+  'bg-blue-100 text-blue-800',
+  'bg-purple-100 text-purple-800',
+  'bg-teal-100 text-teal-800',
+  'bg-orange-100 text-orange-800',
+  'bg-pink-100 text-pink-800',
+  'bg-indigo-100 text-indigo-800',
+];
+
 export default function RemittancesPage() {
   const [page, setPage] = useState(0);
-  const params = { limit: PAGE_SIZE, offset: page * PAGE_SIZE };
+  const [batchFilter, setBatchFilter] = useState<string>('');
+  const params = {
+    limit: PAGE_SIZE,
+    offset: page * PAGE_SIZE,
+    ...(batchFilter ? { remittanceBatchId: batchFilter } : {}),
+  };
   const { data, isLoading, refetch } = useListRemittances(params, {
     query: { queryKey: ['remittances', params] },
   });
@@ -26,12 +44,71 @@ export default function RemittancesPage() {
   const isStaff = user?.role === 'staff';
   const deleteRemittance = useDeleteRemittance();
 
+  // Map each batch id present on the current page to a stable badge index.
+  const batchColorIndex = useMemo(() => {
+    const map = new Map<string, number>();
+    let next = 0;
+    for (const r of remittances ?? []) {
+      if (r.remittanceBatchId && !map.has(r.remittanceBatchId)) {
+        map.set(r.remittanceBatchId, next++ % BATCH_BADGE_CLASSES.length);
+      }
+    }
+    return map;
+  }, [remittances]);
+
+  const onImported = (result: AltaRemittanceImportResult) => {
+    // Jump straight to the freshly-imported batch so staff see its line items.
+    setBatchFilter(result.remittanceBatchId);
+    setPage(0);
+    refetch();
+  };
+
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-3xl font-bold tracking-tight">Alta Remittances</h1>
-        <p className="text-muted-foreground mt-1">Reconciliation of funds received from Alta Regional Center.</p>
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <h1 className="text-3xl font-bold tracking-tight">Alta Remittances</h1>
+          <p className="text-muted-foreground mt-1">Reconciliation of funds received from Alta Regional Center.</p>
+        </div>
+        {isStaff && <AltaRemittanceImport onImported={onImported} />}
       </div>
+
+      {batchFilter && (
+        <div className="flex items-center gap-2" data-testid="banner-batch-filter">
+          <Badge variant="outline" className="font-mono">
+            Batch: {batchFilter.slice(0, 8)}…
+          </Badge>
+          <span className="text-sm text-muted-foreground">Showing only line items from this Alta report.</span>
+          <Button
+            variant="ghost"
+            size="sm"
+            data-testid="button-clear-batch-filter"
+            onClick={() => {
+              setBatchFilter('');
+              setPage(0);
+            }}
+          >
+            <X className="w-4 h-4 mr-1" /> Clear
+          </Button>
+        </div>
+      )}
+
+      {isStaff && !batchFilter && (
+        <div className="flex items-center gap-2">
+          <Input
+            className="max-w-xs"
+            placeholder="Filter by Alta batch id…"
+            data-testid="input-batch-filter"
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') {
+                setBatchFilter((e.target as HTMLInputElement).value.trim());
+                setPage(0);
+              }
+            }}
+          />
+          <span className="text-xs text-muted-foreground">Press Enter to filter to one uploaded report.</span>
+        </div>
+      )}
 
       <Card>
         <CardContent className="p-0">
@@ -40,6 +117,7 @@ export default function RemittancesPage() {
               <TableRow>
                 <TableHead>Date Received</TableHead>
                 <TableHead>Reference</TableHead>
+                <TableHead>Batch</TableHead>
                 <TableHead>Client</TableHead>
                 <TableHead>Auth #</TableHead>
                 <TableHead className="text-right">Amount</TableHead>
@@ -49,14 +127,29 @@ export default function RemittancesPage() {
             </TableHeader>
             <TableBody>
               {isLoading ? (
-                <TableRow><TableCell colSpan={isStaff ? 7 : 6} className="h-24 text-center"><Skeleton className="h-4 w-full max-w-sm mx-auto" /></TableCell></TableRow>
+                <TableRow><TableCell colSpan={isStaff ? 8 : 7} className="h-24 text-center"><Skeleton className="h-4 w-full max-w-sm mx-auto" /></TableCell></TableRow>
               ) : remittances?.length === 0 ? (
-                <TableRow><TableCell colSpan={isStaff ? 7 : 6} className="h-24 text-center text-muted-foreground">No remittances found.</TableCell></TableRow>
+                <TableRow><TableCell colSpan={isStaff ? 8 : 7} className="h-24 text-center text-muted-foreground">No remittances found.</TableCell></TableRow>
               ) : (
                 remittances?.map(r => (
                   <TableRow key={r.id}>
                     <TableCell className="whitespace-nowrap">{format(new Date(r.remittanceDate), 'MMM d, yyyy')}</TableCell>
                     <TableCell className="font-mono text-sm">{r.altaReference}</TableCell>
+                    <TableCell>
+                      {r.remittanceBatchId ? (
+                        <button
+                          type="button"
+                          data-testid="badge-batch"
+                          onClick={() => { setBatchFilter(r.remittanceBatchId!); setPage(0); }}
+                          title={`Filter to Alta batch ${r.remittanceBatchId}`}
+                          className={`rounded px-2 py-0.5 text-xs font-mono ${BATCH_BADGE_CLASSES[batchColorIndex.get(r.remittanceBatchId) ?? 0]}`}
+                        >
+                          {r.remittanceBatchId.slice(0, 8)}
+                        </button>
+                      ) : (
+                        <span className="text-xs text-muted-foreground">—</span>
+                      )}
+                    </TableCell>
                     <TableCell>{r.clientName}</TableCell>
                     <TableCell className="text-muted-foreground">{r.authNumber}</TableCell>
                     <TableCell className="text-right font-medium">${parseFloat(r.amount).toFixed(2)}</TableCell>

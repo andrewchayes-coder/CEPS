@@ -12,6 +12,7 @@ import feesRouter from "./fees";
 import vendorsRouter from "./vendors";
 import dashboardRouter from "./dashboard";
 import storageRouter from "./storage";
+import importsRouter from "./imports";
 
 const router: IRouter = Router();
 
@@ -28,5 +29,6 @@ router.use(feesRouter);
 router.use(vendorsRouter);
 router.use(dashboardRouter);
 router.use(storageRouter);
+router.use(importsRouter);
 
 export default router;

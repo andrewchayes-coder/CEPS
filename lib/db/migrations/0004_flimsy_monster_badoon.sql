@@ -1,0 +1,2 @@
+CREATE UNIQUE INDEX "vendors_name_lower_unique" ON "vendors" USING btree (lower("name"));--> statement-breakpoint
+CREATE UNIQUE INDEX "authorizations_client_id_auth_number_unique" ON "authorizations" USING btree ("client_id","auth_number") WHERE "authorizations"."is_deleted" = false;

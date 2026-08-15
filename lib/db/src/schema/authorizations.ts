@@ -8,7 +8,9 @@ import {
   boolean,
   timestamp,
   index,
+  uniqueIndex,
 } from "drizzle-orm/pg-core";
+import { sql } from "drizzle-orm";
 import { clientsTable } from "./clients";
 import { vendorsTable } from "./vendors";
 
@@ -49,6 +51,13 @@ export const authorizationsTable = pgTable("authorizations", {
   createdAtIdx: index("authorizations_created_at_idx").on(
     table.createdAt.desc(),
   ),
+  // Natural-key uniqueness for bulk import: an authorization number is unique
+  // WITHIN a client. Partial (WHERE not deleted) so a soft-deleted auth can be
+  // re-created and so a race between concurrent imports of the same
+  // (client, number) is caught at the DB instead of double-inserting.
+  clientAuthNumberUnique: uniqueIndex("authorizations_client_id_auth_number_unique")
+    .on(table.clientId, table.authNumber)
+    .where(sql`${table.isDeleted} = false`),
 }));
 
 export type Authorization = typeof authorizationsTable.$inferSelect;

@@ -9,6 +9,7 @@ import {
   vendorsTable,
   paymentsTable,
   feesTable,
+  remittancesTable,
 } from "@workspace/db";
 import app from "../app";
 import { newToken } from "../lib/auth";
@@ -320,5 +321,161 @@ describe("GET /payments soft-deleted client filtering", () => {
     expect(byClientId.status).toBe(200);
     expect(byClientId.body.total).toBe(0);
     expect(byClientId.body.items).toEqual([]);
+  });
+});
+
+describe("GET /remittances soft-deleted client filtering", () => {
+  // Isolated client + remittance so the soft-delete doesn't affect the shared
+  // fixtures. Mirrors the payments soft-delete suite above.
+  let sdRClientId: string;
+  let sdRemittanceId: string;
+
+  beforeAll(async () => {
+    const [c] = await db
+      .insert(clientsTable)
+      .values({
+        firstName: "RemSD",
+        lastName: `RemSDClient${nonce}`,
+        dateOfBirth: "2000-01-01",
+        uciNumber: `${nonce}-uciRSD`,
+      })
+      .returning();
+    sdRClientId = c.id;
+
+    const [r] = await db
+      .insert(remittancesTable)
+      .values({
+        clientId: sdRClientId,
+        amount: "150.00",
+        remittanceDate: "2026-01-20",
+        status: "received",
+        source: "alta_regional",
+      })
+      .returning();
+    sdRemittanceId = r.id;
+  });
+
+  afterAll(async () => {
+    await db.delete(remittancesTable).where(eq(remittancesTable.id, sdRemittanceId));
+    await db.delete(clientsTable).where(eq(clientsTable.id, sdRClientId));
+  });
+
+  it("remittance is found by clientId before soft-delete", async () => {
+    const res = await request(app)
+      .get("/api/remittances")
+      .query({ clientId: sdRClientId, limit: 1000 })
+      .set("Cookie", staffCookie);
+    expect(res.status).toBe(200);
+    expect(res.body.total).toBe(1);
+    expect(res.body.items[0].id).toBe(sdRemittanceId);
+  });
+
+  it("soft-deleted client's remittances are excluded from all query paths", async () => {
+    // Soft-delete the client directly in the DB.
+    await db
+      .update(clientsTable)
+      .set({ isDeleted: true, deletedAt: new Date(), deletedBy: staffId })
+      .where(eq(clientsTable.id, sdRClientId));
+
+    // 1. Filtering by clientId must return nothing.
+    const byClientId = await request(app)
+      .get("/api/remittances")
+      .query({ clientId: sdRClientId, limit: 1000 })
+      .set("Cookie", staffCookie);
+    expect(byClientId.status).toBe(200);
+    expect(byClientId.body.total).toBe(0);
+    expect(byClientId.body.items).toEqual([]);
+
+    // 2. Unfiltered list must not include the remittance either — the outer
+    //    active-client predicate hides it regardless of filter path.
+    const unfiltered = await request(app)
+      .get("/api/remittances")
+      .query({ limit: 1000 })
+      .set("Cookie", staffCookie);
+    expect(unfiltered.status).toBe(200);
+    const ids = unfiltered.body.items.map((r: { id: string }) => r.id);
+    expect(ids).not.toContain(sdRemittanceId);
+  });
+});
+
+describe("GET /payments inactive vendor filtering", () => {
+  // Isolated vendor + client + payment so deactivating the vendor doesn't
+  // affect the shared fixtures in the outer beforeAll.
+  let ivVendorId: string;
+  let ivClientId: string;
+  let ivPaymentId: string;
+
+  beforeAll(async () => {
+    const [v] = await db
+      .insert(vendorsTable)
+      .values({ name: `${nonce}-iv-vendor` })
+      .returning();
+    ivVendorId = v.id;
+
+    const [c] = await db
+      .insert(clientsTable)
+      .values({
+        firstName: "IVTest",
+        lastName: `IVClient${nonce}`,
+        dateOfBirth: "2000-01-01",
+        uciNumber: `${nonce}-uciIV`,
+      })
+      .returning();
+    ivClientId = c.id;
+
+    const [p] = await db
+      .insert(paymentsTable)
+      .values({
+        clientId: ivClientId,
+        vendorId: ivVendorId,
+        qbCheckNumber: `${nonce}-iv-chk`,
+        checkDate: "2026-01-15",
+        amount: "300.00",
+        paymentType: "direct_payment",
+        source: "manual",
+      })
+      .returning();
+    ivPaymentId = p.id;
+  });
+
+  afterAll(async () => {
+    await db.delete(feesTable).where(eq(feesTable.clientId, ivClientId));
+    await db.delete(paymentsTable).where(eq(paymentsTable.id, ivPaymentId));
+    await db.delete(clientsTable).where(eq(clientsTable.id, ivClientId));
+    await db.delete(vendorsTable).where(eq(vendorsTable.id, ivVendorId));
+  });
+
+  it("payment is visible before vendor is deactivated", async () => {
+    const res = await get(staffCookie, { vendorId: ivVendorId, limit: 1000 });
+    expect(res.status).toBe(200);
+    expect(res.body.total).toBe(1);
+    expect(res.body.items[0].id).toBe(ivPaymentId);
+  });
+
+  it("inactive vendor's payments are excluded from all query paths", async () => {
+    // Deactivate the vendor directly in the DB.
+    await db
+      .update(vendorsTable)
+      .set({ active: false })
+      .where(eq(vendorsTable.id, ivVendorId));
+
+    // 1. vendorId filter must return nothing.
+    const byVendorId = await get(staffCookie, { vendorId: ivVendorId, limit: 1000 });
+    expect(byVendorId.status).toBe(200);
+    expect(byVendorId.body.total).toBe(0);
+    expect(byVendorId.body.items).toEqual([]);
+
+    // 2. clientId filter must also return nothing — the outer active-vendor
+    //    predicate hides the payment regardless of how the filter is expressed.
+    const byClientId = await get(staffCookie, { clientId: ivClientId, limit: 1000 });
+    expect(byClientId.status).toBe(200);
+    expect(byClientId.body.total).toBe(0);
+    expect(byClientId.body.items).toEqual([]);
+
+    // 3. Unfiltered list must not include the payment either.
+    const unfiltered = await get(staffCookie, { limit: 1000 });
+    expect(unfiltered.status).toBe(200);
+    const ids = unfiltered.body.items.map((p: { id: string }) => p.id);
+    expect(ids).not.toContain(ivPaymentId);
   });
 });

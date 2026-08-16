@@ -88,6 +88,11 @@ router.get("/payments", requireAuth, async (req, res): Promise<void> => {
     // This mirrors the invoices/authorizations pattern and ensures a client's
     // payments are invisible the moment the client is soft-deleted.
     sql`${paymentsTable.clientId} in (select id from clients where is_deleted = false)`,
+    // Exclude payments linked to inactive vendors. vendorId is nullable (payments
+    // without a vendor are always visible), so the guard allows NULL through and
+    // only filters out payments whose vendor has active = false. Parentheses are
+    // required so the OR does not escape the outer AND chain.
+    sql`(${paymentsTable.vendorId} is null or ${paymentsTable.vendorId} in (select id from vendors where active = true))`,
   ];
   // Role scoping — mirrors the audit-log SQL-WHERE pattern:
   // vendors see only their own payments; parent/self only their linked client's.
@@ -498,7 +503,13 @@ router.get("/remittances", requireAuth, async (req, res): Promise<void> => {
     res.status(400).json({ error: query.error.message });
     return;
   }
-  const conditions: SQL[] = [notDeleted(remittancesTable)];
+  const conditions: SQL[] = [
+    notDeleted(remittancesTable),
+    // Exclude remittances belonging to soft-deleted clients — mirrors the
+    // payments route pattern so a client's remittances vanish the moment the
+    // client is soft-deleted, regardless of which query-string filter is used.
+    sql`${remittancesTable.clientId} in (select id from clients where is_deleted = false)`,
+  ];
   // Role scoping — mirrors the payments/audit-log SQL-WHERE pattern:
   // parent/self see only their linked client's remittances; vendors see none.
   const u = req.user!;

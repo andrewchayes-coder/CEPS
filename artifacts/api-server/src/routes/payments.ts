@@ -524,6 +524,13 @@ router.get("/remittances", requireAuth, async (req, res): Promise<void> => {
   if (query.data.clientId) conditions.push(eq(remittancesTable.clientId, query.data.clientId));
   if (query.data.status) conditions.push(eq(remittancesTable.status, query.data.status));
   if (query.data.remittanceBatchId) conditions.push(eq(remittancesTable.remittanceBatchId, query.data.remittanceBatchId));
+  if (query.data.search) {
+    const escapeLike = (s: string) => s.replace(/[\\%_]/g, (c) => `\\${c}`);
+    const like = `%${escapeLike(query.data.search)}%`;
+    conditions.push(
+      sql`${remittancesTable.clientId} in (select id from clients where (first_name || ' ' || last_name) ilike ${like} and is_deleted = false)`,
+    );
+  }
   const where = and(...conditions);
   const limit = Math.min(Math.max(query.data.limit ?? 50, 1), 1000);
   const offset = Math.max(query.data.offset ?? 0, 0);

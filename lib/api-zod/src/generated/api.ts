@@ -1758,6 +1758,7 @@ export const ListRemittancesQueryParams = zod.object({
   "clientId": zod.coerce.string().optional(),
   "status": zod.coerce.string().optional(),
   "remittanceBatchId": zod.coerce.string().optional().describe('Filter to line items imported from one Alta report (batch).'),
+  "search": zod.coerce.string().optional(),
   "limit": zod.coerce.number().int().optional(),
   "offset": zod.coerce.number().int().optional()
 })

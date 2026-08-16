@@ -398,6 +398,96 @@ describe("GET /remittances soft-deleted client filtering", () => {
   });
 });
 
+describe("GET /remittances search by client name", () => {
+  // Isolated fixtures so this suite does not interfere with others.
+  let srClientId: string;
+  let srClientIdB: string;
+  let srRemittanceId: string;
+  let srDeletedClientId: string;
+  let srDeletedRemittanceId: string;
+
+  beforeAll(async () => {
+    const [ca] = await db
+      .insert(clientsTable)
+      .values({ firstName: "SRFirst", lastName: `SRMatch${nonce}`, dateOfBirth: "2000-01-01", uciNumber: `${nonce}-uciSRA` })
+      .returning();
+    srClientId = ca.id;
+
+    const [cb] = await db
+      .insert(clientsTable)
+      .values({ firstName: "SROther", lastName: `SROther${nonce}`, dateOfBirth: "2000-01-01", uciNumber: `${nonce}-uciSRB` })
+      .returning();
+    srClientIdB = cb.id;
+
+    const [r] = await db
+      .insert(remittancesTable)
+      .values({ clientId: srClientId, amount: "250.00", remittanceDate: "2026-03-01", status: "received", source: "manual" })
+      .returning();
+    srRemittanceId = r.id;
+
+    // A second remittance for unmatched client — must not appear in search for srClientId.
+    await db.insert(remittancesTable).values({ clientId: srClientIdB, amount: "99.00", remittanceDate: "2026-03-01", status: "received", source: "manual" });
+
+    // Soft-deleted client with a remittance — must never appear in search results.
+    const [cd] = await db
+      .insert(clientsTable)
+      .values({ firstName: "SRDel", lastName: `SRDeleted${nonce}`, dateOfBirth: "2000-01-01", uciNumber: `${nonce}-uciSRD` })
+      .returning();
+    srDeletedClientId = cd.id;
+
+    const [rd] = await db
+      .insert(remittancesTable)
+      .values({ clientId: srDeletedClientId, amount: "77.00", remittanceDate: "2026-03-01", status: "received", source: "manual" })
+      .returning();
+    srDeletedRemittanceId = rd.id;
+
+    // Soft-delete the third client before any tests run.
+    await db
+      .update(clientsTable)
+      .set({ isDeleted: true, deletedAt: new Date(), deletedBy: staffId })
+      .where(eq(clientsTable.id, srDeletedClientId));
+  });
+
+  afterAll(async () => {
+    await db.delete(remittancesTable).where(inArray(remittancesTable.clientId, [srClientId, srClientIdB, srDeletedClientId]));
+    await db.delete(clientsTable).where(inArray(clientsTable.id, [srClientId, srClientIdB, srDeletedClientId]));
+  });
+
+  it("search matches client last name (ilike) and returns matching remittances", async () => {
+    const res = await request(app)
+      .get("/api/remittances")
+      .query({ search: `SRMatch${nonce}`, limit: 1000 })
+      .set("Cookie", staffCookie);
+    expect(res.status).toBe(200);
+    expect(res.body.total).toBeGreaterThanOrEqual(1);
+    const ids = res.body.items.map((r: { id: string }) => r.id);
+    expect(ids).toContain(srRemittanceId);
+    for (const r of res.body.items) expect(r.clientId).toBe(srClientId);
+  });
+
+  it("search excludes remittances whose client does not match", async () => {
+    const res = await request(app)
+      .get("/api/remittances")
+      .query({ search: `SRMatch${nonce}`, limit: 1000 })
+      .set("Cookie", staffCookie);
+    expect(res.status).toBe(200);
+    const ids = res.body.items.map((r: { id: string }) => r.id);
+    expect(ids).not.toContain(srClientIdB);
+  });
+
+  it("search excludes soft-deleted clients", async () => {
+    const res = await request(app)
+      .get("/api/remittances")
+      .query({ search: `SRDeleted${nonce}`, limit: 1000 })
+      .set("Cookie", staffCookie);
+    expect(res.status).toBe(200);
+    expect(res.body.total).toBe(0);
+    expect(res.body.items).toEqual([]);
+    const ids = res.body.items.map((r: { id: string }) => r.id);
+    expect(ids).not.toContain(srDeletedRemittanceId);
+  });
+});
+
 describe("GET /payments inactive vendor filtering", () => {
   // Isolated vendor + client + payment so deactivating the vendor doesn't
   // affect the shared fixtures in the outer beforeAll.

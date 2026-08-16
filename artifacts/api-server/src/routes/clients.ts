@@ -167,8 +167,41 @@ router.get("/clients/:id", requireAuth, async (req, res): Promise<void> => {
   );
 });
 
-router.patch("/clients/:id", requireStaffOrCoordinator, async (req, res): Promise<void> => {
+/**
+ * Fields a parent/guardian or self-advocate may edit on their own linked
+ * client record: name spelling, contact info, and family-rep contact info.
+ * Case-management fields (status, UCI, DOB, coordinator, …) stay staff-only.
+ */
+const FAMILY_EDITABLE_FIELDS = new Set([
+  "firstName",
+  "lastName",
+  "address",
+  "phone",
+  "email",
+  "preferredLanguage",
+  "familyRepName",
+  "familyRepPhone",
+  "familyRepEmail",
+  "familyRepAddress",
+]);
+
+router.patch("/clients/:id", requireAuth, async (req, res): Promise<void> => {
   const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+  const role = req.user!.role;
+  if (role !== "staff" && role !== "service_coordinator") {
+    // Parents/guardians and self-advocates may edit ONLY their own linked
+    // client record, and only contact/spelling fields.
+    const scoped = scopeClientId(req);
+    if (!scoped || scoped !== id) {
+      res.status(403).json({ error: "Forbidden" });
+      return;
+    }
+    const disallowed = Object.keys(req.body ?? {}).filter((k) => !FAMILY_EDITABLE_FIELDS.has(k));
+    if (disallowed.length > 0) {
+      res.status(403).json({ error: `You may only update contact information (not: ${disallowed.join(", ")})` });
+      return;
+    }
+  }
   const parsed = UpdateClientBody.safeParse(req.body);
   if (!parsed.success) {
     res.status(400).json({ error: parsed.error.message });

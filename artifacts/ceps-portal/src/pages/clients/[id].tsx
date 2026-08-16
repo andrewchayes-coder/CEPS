@@ -4,6 +4,7 @@ import { useGetClientCase, useListFees, useDeleteClient, useDeleteFee } from '@w
 import { useAuth } from '@/components/auth/auth-provider';
 import { InvitePortalDialog } from '@/components/invite-portal-dialog';
 import { EditClientDialog } from '@/components/edit-client-dialog';
+import { EditContactInfoDialog } from '@/components/edit-contact-info-dialog';
 import { EditFeeDialog } from '@/components/edit-fee-dialog';
 import { DeleteEntityButton } from '@/components/delete-entity-button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -74,6 +75,14 @@ export default function ClientDetailPage() {
               linkedRecordType="client"
               linkedRecordId={id}
               recordName={`${client.firstName} ${client.lastName}`}
+            />
+          )}
+          {(user?.role === 'parent_guardian' || user?.role === 'self') && (
+            <EditContactInfoDialog
+              id={id}
+              client={client}
+              isGuardian={user.role === 'parent_guardian'}
+              onSaved={() => refetch()}
             />
           )}
           {isStaff && (

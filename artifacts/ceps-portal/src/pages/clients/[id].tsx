@@ -11,7 +11,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { ArrowLeft, User, FileText, FileCheck, Receipt, CreditCard, FolderSync, AlertCircle, CheckCircle2 } from 'lucide-react';
+import { ArrowLeft, User, FileText, FileCheck, Receipt, CreditCard, FolderSync, AlertCircle, CheckCircle2, Phone, Mail, MapPin } from 'lucide-react';
 import { Link } from 'wouter';
 import { format } from 'date-fns';
 import { Progress } from '@/components/ui/progress';
@@ -22,6 +22,7 @@ export default function ClientDetailPage() {
   const [, navigate] = useLocation();
   const { user } = useAuth();
   const isStaff = user?.role === 'staff';
+  const isFamily = user?.role === 'parent_guardian' || user?.role === 'self';
   const deleteClient = useDeleteClient();
   const deleteFee = useDeleteFee();
   const { data: caseData, isLoading, refetch } = useGetClientCase(id, {
@@ -33,7 +34,7 @@ export default function ClientDetailPage() {
 
   const { data: fees, refetch: refetchFees } = useListFees(
     { clientId: id },
-    { query: { enabled: !!id, queryKey: ['fees', id] } },
+    { query: { enabled: !!id && !isFamily, queryKey: ['fees', id] } },
   );
 
   if (isLoading) return <div className="p-8 text-center">Loading case record...</div>;
@@ -51,16 +52,27 @@ export default function ClientDetailPage() {
       )}
 
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-card p-6 rounded-lg border shadow-sm">
-        <div className="flex items-center gap-4">
-          <div className="h-16 w-16 bg-primary/10 rounded-full flex items-center justify-center">
+        <div className="flex items-center gap-4 min-w-0">
+          <div className="h-16 w-16 bg-primary/10 rounded-full flex items-center justify-center shrink-0">
             <User className="h-8 w-8 text-primary" />
           </div>
-          <div>
+          <div className="min-w-0">
             <h1 className="text-2xl font-bold tracking-tight">{client.firstName} {client.lastName}</h1>
             <div className="flex items-center gap-3 mt-1 text-sm text-muted-foreground">
               <span className="font-mono bg-muted px-1.5 py-0.5 rounded">UCI: {client.uciNumber}</span>
               <span>DOB: {client.dateOfBirth}</span>
             </div>
+            {isFamily && (
+              <div className="mt-2 text-sm text-muted-foreground space-y-0.5" data-testid="header-contact-info">
+                <div className="flex flex-wrap items-center gap-x-4 gap-y-0.5">
+                  {client.phone && <span className="flex items-center gap-1.5"><Phone className="w-3.5 h-3.5" /> {client.phone}</span>}
+                  {client.email && <span className="flex items-center gap-1.5 break-all"><Mail className="w-3.5 h-3.5 shrink-0" /> {client.email}</span>}
+                </div>
+                {client.address && (
+                  <div className="flex items-center gap-1.5"><MapPin className="w-3.5 h-3.5" /> {client.address}</div>
+                )}
+              </div>
+            )}
           </div>
         </div>
         <div className="flex flex-col items-end gap-2">
@@ -105,7 +117,9 @@ export default function ClientDetailPage() {
           <TabsTrigger value="authorizations" className="data-[state=active]:bg-transparent data-[state=active]:shadow-none data-[state=active]:border-b-2 data-[state=active]:border-primary rounded-none h-12 px-6">Authorizations ({authorizations.length})</TabsTrigger>
           <TabsTrigger value="invoices" className="data-[state=active]:bg-transparent data-[state=active]:shadow-none data-[state=active]:border-b-2 data-[state=active]:border-primary rounded-none h-12 px-6">Invoices ({invoices.length})</TabsTrigger>
           <TabsTrigger value="payments" className="data-[state=active]:bg-transparent data-[state=active]:shadow-none data-[state=active]:border-b-2 data-[state=active]:border-primary rounded-none h-12 px-6">Payments ({payments.length})</TabsTrigger>
-          <TabsTrigger value="fees" className="data-[state=active]:bg-transparent data-[state=active]:shadow-none data-[state=active]:border-b-2 data-[state=active]:border-primary rounded-none h-12 px-6">Fees ({feeList.length})</TabsTrigger>
+          {!isFamily && (
+            <TabsTrigger value="fees" className="data-[state=active]:bg-transparent data-[state=active]:shadow-none data-[state=active]:border-b-2 data-[state=active]:border-primary rounded-none h-12 px-6">Fees ({feeList.length})</TabsTrigger>
+          )}
           <TabsTrigger value="referrals" className="data-[state=active]:bg-transparent data-[state=active]:shadow-none data-[state=active]:border-b-2 data-[state=active]:border-primary rounded-none h-12 px-6">Referrals ({referrals.length})</TabsTrigger>
         </TabsList>
 
@@ -292,6 +306,7 @@ export default function ClientDetailPage() {
           </Card>
         </TabsContent>
 
+        {!isFamily && (
         <TabsContent value="fees" className="pt-6">
           <Card>
             <CardHeader>
@@ -344,6 +359,7 @@ export default function ClientDetailPage() {
             </CardContent>
           </Card>
         </TabsContent>
+        )}
 
         <TabsContent value="referrals" className="pt-6">
           <Card>

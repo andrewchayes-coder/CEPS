@@ -10,9 +10,12 @@ import { newToken } from "../lib/auth";
 const nonce = `clfe${Date.now().toString(36)}`;
 
 let parentUserId: string;
+let coordUserId: string;
+let staffUserId: string;
 let clientA: string; // parent's linked client
 let clientB: string; // another client
 let parentCookie: string;
+let staffCookie: string;
 
 async function session(userId: string) {
   const token = newToken();
@@ -48,6 +51,29 @@ beforeAll(async () => {
     .returning();
   clientB = b.id;
 
+  const [coord] = await db
+    .insert(usersTable)
+    .values({
+      name: "FE Coordinator",
+      email: `${nonce}-coord@test.local`,
+      phone: "(916) 555-0042",
+      role: "service_coordinator",
+    })
+    .returning();
+  coordUserId = coord.id;
+  await db.update(clientsTable).set({ assignedCoordinatorId: coordUserId }).where(inArray(clientsTable.id, [clientA]));
+
+  const [staff] = await db
+    .insert(usersTable)
+    .values({
+      name: "FE Staff",
+      email: `${nonce}-staff@test.local`,
+      role: "staff",
+    })
+    .returning();
+  staffUserId = staff.id;
+  staffCookie = await session(staffUserId);
+
   const [parent] = await db
     .insert(usersTable)
     .values({
@@ -63,10 +89,29 @@ beforeAll(async () => {
 });
 
 afterAll(async () => {
-  await db.delete(auditLogTable).where(inArray(auditLogTable.userId, [parentUserId]));
-  await db.delete(sessionsTable).where(inArray(sessionsTable.userId, [parentUserId]));
-  await db.delete(usersTable).where(inArray(usersTable.id, [parentUserId]));
+  const userIds = [parentUserId, coordUserId, staffUserId];
+  await db.delete(auditLogTable).where(inArray(auditLogTable.userId, userIds));
+  await db.delete(sessionsTable).where(inArray(sessionsTable.userId, userIds));
   await db.delete(clientsTable).where(inArray(clientsTable.id, [clientA, clientB]));
+  await db.delete(usersTable).where(inArray(usersTable.id, userIds));
+});
+
+describe("GET /clients/:id/case coordinator contact disclosure", () => {
+  it("includes coordinator email/phone for the family user", async () => {
+    const res = await request(app).get(`/api/clients/${clientA}/case`).set("Cookie", parentCookie);
+    expect(res.status).toBe(200);
+    expect(res.body.client.assignedCoordinatorName).toBe("FE Coordinator");
+    expect(res.body.client.assignedCoordinatorEmail).toBe(`${nonce}-coord@test.local`);
+    expect(res.body.client.assignedCoordinatorPhone).toBe("(916) 555-0042");
+  });
+
+  it("omits coordinator email/phone for non-family roles", async () => {
+    const res = await request(app).get(`/api/clients/${clientA}/case`).set("Cookie", staffCookie);
+    expect(res.status).toBe(200);
+    expect(res.body.client.assignedCoordinatorName).toBe("FE Coordinator");
+    expect(res.body.client.assignedCoordinatorEmail).toBeNull();
+    expect(res.body.client.assignedCoordinatorPhone).toBeNull();
+  });
 });
 
 describe("PATCH /clients/:id as parent_guardian", () => {

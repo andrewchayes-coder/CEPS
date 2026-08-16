@@ -295,6 +295,10 @@ export interface Client {
   /** @nullable */
   assignedCoordinatorName?: string | null;
   /** @nullable */
+  assignedCoordinatorEmail?: string | null;
+  /** @nullable */
+  assignedCoordinatorPhone?: string | null;
+  /** @nullable */
   isMinor?: boolean | null;
   /** @nullable */
   familyRepName?: string | null;
@@ -1710,6 +1714,10 @@ status?: string;
  * Filter to line items imported from one Alta report (batch).
  */
 remittanceBatchId?: string;
+/**
+ * Case-insensitive match on client name.
+ */
+search?: string;
 limit?: number;
 offset?: number;
 };

@@ -1249,6 +1249,10 @@ paths:
           in: query
           description: Filter to line items imported from one Alta report (batch).
           schema: { type: string }
+        - name: search
+          in: query
+          description: Case-insensitive match on client name.
+          schema: { type: string }
         - name: limit
           in: query
           schema: { type: integer }
@@ -1852,6 +1856,8 @@ components:
         preferredLanguage: { type: ["string", "null"] }
         assignedCoordinatorId: { type: ["string", "null"] }
         assignedCoordinatorName: { type: ["string", "null"] }
+        assignedCoordinatorEmail: { type: ["string", "null"] }
+        assignedCoordinatorPhone: { type: ["string", "null"] }
         isMinor: { type: ["boolean", "null"] }
         familyRepName: { type: ["string", "null"] }
         familyRepPhone: { type: ["string", "null"] }

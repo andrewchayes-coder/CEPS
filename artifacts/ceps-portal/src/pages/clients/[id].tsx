@@ -81,6 +81,16 @@ export default function ClientDetailPage() {
           </Badge>
           <div className="text-sm text-muted-foreground text-right">
             Coordinator: <span className="font-medium text-foreground">{client.assignedCoordinatorName || 'Unassigned'}</span>
+            {isFamily && (client.assignedCoordinatorEmail || client.assignedCoordinatorPhone) && (
+              <div className="mt-0.5 space-y-0.5" data-testid="coordinator-contact-info">
+                {client.assignedCoordinatorPhone && (
+                  <div className="flex items-center justify-end gap-1.5"><Phone className="w-3.5 h-3.5 shrink-0" /> {client.assignedCoordinatorPhone}</div>
+                )}
+                {client.assignedCoordinatorEmail && (
+                  <div className="flex items-center justify-end gap-1.5 break-all"><Mail className="w-3.5 h-3.5 shrink-0" /> {client.assignedCoordinatorEmail}</div>
+                )}
+              </div>
+            )}
           </div>
           {user?.role === 'staff' && (
             <InvitePortalDialog

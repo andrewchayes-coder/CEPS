@@ -13,6 +13,10 @@ status?: string;
  * Filter to line items imported from one Alta report (batch).
  */
 remittanceBatchId?: string;
+/**
+ * Case-insensitive match on client name.
+ */
+search?: string;
 limit?: number;
 offset?: number;
 };

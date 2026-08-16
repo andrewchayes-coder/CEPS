@@ -86,7 +86,23 @@ export async function authNumberMap(ids: (string | null)[]): Promise<Map<string,
   return new Map(rows.map((r) => [r.id, r.authNumber]));
 }
 
-export function clientJson(c: Client, coordinatorName?: string | null) {
+export async function userContactMap(
+  ids: (string | null)[],
+): Promise<Map<string, { name: string; email: string; phone: string | null }>> {
+  const unique = [...new Set(ids.filter((x): x is string => !!x))];
+  if (unique.length === 0) return new Map();
+  const rows = await db
+    .select({ id: usersTable.id, name: usersTable.name, email: usersTable.email, phone: usersTable.phone })
+    .from(usersTable)
+    .where(inArray(usersTable.id, unique));
+  return new Map(rows.map((r) => [r.id, { name: r.name, email: r.email, phone: r.phone }]));
+}
+
+export function clientJson(
+  c: Client,
+  coordinatorName?: string | null,
+  coordinatorContact?: { email: string; phone: string | null } | null,
+) {
   return {
     id: c.id,
     firstName: c.firstName,
@@ -101,6 +117,8 @@ export function clientJson(c: Client, coordinatorName?: string | null) {
     preferredLanguage: c.preferredLanguage,
     assignedCoordinatorId: c.assignedCoordinatorId,
     assignedCoordinatorName: coordinatorName ?? null,
+    assignedCoordinatorEmail: coordinatorContact?.email ?? null,
+    assignedCoordinatorPhone: coordinatorContact?.phone ?? null,
     isMinor: c.isMinor,
     familyRepName: c.familyRepName,
     familyRepPhone: c.familyRepPhone,

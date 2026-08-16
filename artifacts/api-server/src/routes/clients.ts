@@ -22,6 +22,7 @@ import {
 import { requireAuth, requireStaff, requireStaffOrCoordinator, audit } from "../lib/auth";
 import {
   clientJson,
+  userContactMap,
   referralJson,
   authorizationJson,
   invoiceJson,
@@ -288,15 +289,24 @@ router.get("/clients/:id/case", requireAuth, async (req, res): Promise<void> => 
     ...invoices.map((i) => i.vendorId),
     ...payments.map((p) => p.vendorId),
   ];
-  const [vendorNames, coordNames, totals] = await Promise.all([
+  const [vendorNames, coordContacts, totals] = await Promise.all([
     vendorNameMap(vendorIds),
-    userNameMap([client.assignedCoordinatorId, ...referrals.map((r) => r.serviceCoordinatorId)]),
+    userContactMap([client.assignedCoordinatorId, ...referrals.map((r) => r.serviceCoordinatorId)]),
     authorizationTotalsPaid(authorizations.map((a) => a.id)),
   ]);
+  const coordNames = new Map([...coordContacts].map(([id, c]) => [id, c.name]));
   const authNums = new Map(authorizations.map((a) => [a.id, a.authNumber]));
   res.json(
     GetClientCaseResponse.parse({
-      client: clientJson(client, client.assignedCoordinatorId ? coordNames.get(client.assignedCoordinatorId) : null),
+      client: clientJson(
+        client,
+        client.assignedCoordinatorId ? coordNames.get(client.assignedCoordinatorId) : null,
+        // Coordinator contact info is family-facing only — never disclosed to
+        // vendors (or other roles) even though they can view the case.
+        (req.user!.role === "parent_guardian" || req.user!.role === "self") && client.assignedCoordinatorId
+          ? coordContacts.get(client.assignedCoordinatorId) ?? null
+          : null,
+      ),
       referrals: referrals.map((r) =>
         referralJson(r, clientName, r.serviceCoordinatorId ? coordNames.get(r.serviceCoordinatorId) : null),
       ),

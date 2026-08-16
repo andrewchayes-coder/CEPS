@@ -29,6 +29,10 @@ export interface Client {
   /** @nullable */
   assignedCoordinatorName?: string | null;
   /** @nullable */
+  assignedCoordinatorEmail?: string | null;
+  /** @nullable */
+  assignedCoordinatorPhone?: string | null;
+  /** @nullable */
   isMinor?: boolean | null;
   /** @nullable */
   familyRepName?: string | null;

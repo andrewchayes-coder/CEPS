@@ -71,7 +71,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     user.linkedRecordId
   ) {
     filteredNavItems.splice(1, 0, {
-      title: user.role === 'parent_guardian' ? 'My Child' : 'My Info',
+      title: user.role === 'parent_guardian' ? 'Recipient' : 'My Info',
       href: `/clients/${user.linkedRecordId}`,
       icon: Users,
       roles: [user.role],

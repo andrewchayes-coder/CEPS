@@ -14,7 +14,7 @@ status?: string;
  */
 remittanceBatchId?: string;
 /**
- * Case-insensitive match on client name.
+ * Filter by client name (case-insensitive partial match).
  */
 search?: string;
 limit?: number;

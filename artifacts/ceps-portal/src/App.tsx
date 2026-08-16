@@ -39,6 +39,7 @@ import UsersPage from '@/pages/admin/users';
 import AdminImportPage from '@/pages/admin/import';
 import AuditLogPage from '@/pages/audit-log';
 import HelpPage from '@/pages/help';
+import AccountPage from '@/pages/account';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -83,6 +84,7 @@ function ProtectedRoutes() {
         <Route path="/admin/import" component={AdminImportPage} />
         <Route path="/audit-log" component={AuditLogPage} />
         <Route path="/help" component={HelpPage} />
+        <Route path="/account" component={AccountPage} />
         <Route component={NotFound} />
       </Switch>
     </AppShell>

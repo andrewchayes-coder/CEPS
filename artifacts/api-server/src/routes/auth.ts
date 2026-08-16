@@ -1,5 +1,5 @@
 import { Router, type IRouter } from "express";
-import { eq, and, isNull, gt } from "drizzle-orm";
+import { eq, and, isNull, gt, ne } from "drizzle-orm";
 import { db, usersTable, magicLinksTable } from "@workspace/db";
 import {
   LoginBody,
@@ -9,6 +9,8 @@ import {
   ConsumeMagicLinkBody,
   ConsumeMagicLinkResponse,
   GetCurrentUserResponse,
+  UpdateMeBody,
+  UpdateMeResponse,
 } from "@workspace/api-zod";
 import {
   verifyPassword,
@@ -52,6 +54,58 @@ router.get("/auth/me", async (req, res): Promise<void> => {
     return;
   }
   res.json(GetCurrentUserResponse.parse(sessionUserJson(user)));
+});
+
+router.patch("/auth/me", async (req, res): Promise<void> => {
+  const user = await getSessionUser(req);
+  if (!user) {
+    res.status(401).json({ error: "Not authenticated" });
+    return;
+  }
+  const parsed = UpdateMeBody.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: parsed.error.message });
+    return;
+  }
+  const { name, email } = parsed.data;
+  if (!name && !email) {
+    res.status(400).json({ error: "Provide at least name or email to update" });
+    return;
+  }
+
+  const updates: Record<string, unknown> = {};
+
+  if (name !== undefined) {
+    const trimmedName = name.trim();
+    if (trimmedName.length === 0) {
+      res.status(400).json({ error: "Name cannot be blank" });
+      return;
+    }
+    updates.name = trimmedName;
+  }
+  if (email !== undefined) {
+    const normalized = email.trim().toLowerCase();
+    // Check uniqueness — exclude this user's own row
+    const [conflict] = await db
+      .select({ id: usersTable.id })
+      .from(usersTable)
+      .where(and(eq(usersTable.email, normalized), ne(usersTable.id, user.id)));
+    if (conflict) {
+      res.status(409).json({ error: "That email address is already in use by another account" });
+      return;
+    }
+    updates.email = normalized;
+  }
+
+  const [updated] = await db
+    .update(usersTable)
+    .set(updates)
+    .where(eq(usersTable.id, user.id))
+    .returning();
+
+  await audit(user.id, "update_self", "user", user.id, JSON.stringify(Object.keys(updates)));
+
+  res.json(UpdateMeResponse.parse(sessionUserJson(updated)));
 });
 
 router.post("/auth/magic-link/request", async (req, res): Promise<void> => {

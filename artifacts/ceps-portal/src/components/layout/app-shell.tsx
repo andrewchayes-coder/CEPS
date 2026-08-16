@@ -17,7 +17,8 @@ import {
   PieChart,
   BookOpen,
   ScrollText,
-  Upload
+  Upload,
+  UserCog
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
@@ -108,14 +109,28 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         </div>
 
         <div className="p-4 border-t shrink-0">
-          <div className="mb-4">
+          <div className="mb-3">
             <p className="text-sm font-medium text-foreground truncate">{user?.name}</p>
             <p className="text-xs text-muted-foreground truncate capitalize">{user?.role.replace('_', ' ')}</p>
           </div>
-          <Button variant="outline" className="w-full justify-start text-muted-foreground" onClick={handleLogout}>
-            <LogOut className="w-4 h-4 mr-2" />
-            Sign Out
-          </Button>
+          <div className="flex flex-col gap-1">
+            <Link
+              href="/account"
+              className={cn(
+                "flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium transition-colors",
+                location === '/account'
+                  ? "bg-primary text-primary-foreground"
+                  : "text-muted-foreground hover:bg-secondary hover:text-foreground"
+              )}
+            >
+              <UserCog className="w-4 h-4 shrink-0" />
+              My Account
+            </Link>
+            <Button variant="outline" className="w-full justify-start text-muted-foreground" onClick={handleLogout}>
+              <LogOut className="w-4 h-4 mr-2" />
+              Sign Out
+            </Button>
+          </div>
         </div>
       </aside>
 

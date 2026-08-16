@@ -108,6 +108,27 @@ export const GetCurrentUserResponse = zod.object({
 
 
 /**
+ * @summary Update current user's own display name and/or login email
+ */
+
+
+
+export const UpdateMeBody = zod.object({
+  "name": zod.string().min(1).optional(),
+  "email": zod.email().optional()
+})
+
+export const UpdateMeResponse = zod.object({
+  "id": zod.string(),
+  "name": zod.string(),
+  "email": zod.string(),
+  "role": zod.enum(['staff', 'service_coordinator', 'parent_guardian', 'self', 'vendor']),
+  "linkedRecordId": zod.string().nullish(),
+  "linkedRecordType": zod.union([zod.literal('client'),zod.literal('vendor'),zod.literal(null)]).nullish()
+})
+
+
+/**
  * @summary Request a magic sign-in link (parents/guardians, self, vendors)
  */
 export const RequestMagicLinkBody = zod.object({
@@ -1768,7 +1789,7 @@ export const ListRemittancesQueryParams = zod.object({
   "clientId": zod.coerce.string().optional(),
   "status": zod.coerce.string().optional(),
   "remittanceBatchId": zod.coerce.string().optional().describe('Filter to line items imported from one Alta report (batch).'),
-  "search": zod.coerce.string().optional().describe('Case-insensitive match on client name.'),
+  "search": zod.coerce.string().optional().describe('Filter by client name (case-insensitive partial match).'),
   "limit": zod.coerce.number().int().optional(),
   "offset": zod.coerce.number().int().optional()
 })

@@ -156,6 +156,7 @@ export * from './sessionUserRole';
 export * from './signatureInput';
 export * from './signaturePage';
 export * from './statusCount';
+export * from './updateMeInput';
 export * from './uploadUrlRequest';
 export * from './uploadUrlResponse';
 export * from './user';

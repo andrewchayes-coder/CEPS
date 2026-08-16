@@ -176,6 +176,26 @@ paths:
               schema:
                 $ref: "#/components/schemas/SessionUser"
         "401": { description: Not authenticated }
+    patch:
+      operationId: updateMe
+      tags: [auth]
+      summary: Update current user's own display name and/or login email
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateMeInput"
+      responses:
+        "200":
+          description: Updated session user
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SessionUser"
+        "400": { description: Validation error }
+        "401": { description: Not authenticated }
+        "409": { description: Email already in use by another account }
   /auth/magic-link/request:
     post:
       operationId: requestMagicLink
@@ -1251,7 +1271,7 @@ paths:
           schema: { type: string }
         - name: search
           in: query
-          description: Case-insensitive match on client name.
+          description: Filter by client name (case-insensitive partial match).
           schema: { type: string }
         - name: limit
           in: query
@@ -1734,6 +1754,12 @@ components:
           enum: [staff, service_coordinator, parent_guardian, self, vendor]
         linkedRecordId: { type: ["string", "null"] }
         linkedRecordType: { type: ["string", "null"], enum: [client, vendor, null] }
+    UpdateMeInput:
+      type: object
+      properties:
+        name: { type: string, minLength: 1 }
+        email: { type: string, format: email }
+      minProperties: 1
     MagicLinkRequestInput:
       type: object
       required: [email]

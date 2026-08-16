@@ -81,6 +81,12 @@ export interface SessionUser {
   linkedRecordType?: SessionUserLinkedRecordType;
 }
 
+export interface UpdateMeInput {
+  /** @minLength 1 */
+  name?: string;
+  email?: string;
+}
+
 export interface MagicLinkRequestInput {
   email: string;
 }
@@ -1715,7 +1721,7 @@ status?: string;
  */
 remittanceBatchId?: string;
 /**
- * Case-insensitive match on client name.
+ * Filter by client name (case-insensitive partial match).
  */
 search?: string;
 limit?: number;

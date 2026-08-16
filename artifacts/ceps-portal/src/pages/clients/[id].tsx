@@ -34,7 +34,7 @@ export default function ClientDetailPage() {
 
   const { data: fees, refetch: refetchFees } = useListFees(
     { clientId: id },
-    { query: { enabled: !!id && !isFamily, queryKey: ['fees', id] } },
+    { query: { enabled: !!id, queryKey: ['fees', id] } },
   );
 
   if (isLoading) return <div className="p-8 text-center">Loading case record...</div>;
@@ -127,9 +127,7 @@ export default function ClientDetailPage() {
           <TabsTrigger value="authorizations" className="data-[state=active]:bg-transparent data-[state=active]:shadow-none data-[state=active]:border-b-2 data-[state=active]:border-primary rounded-none h-12 px-6">Authorizations ({authorizations.length})</TabsTrigger>
           <TabsTrigger value="invoices" className="data-[state=active]:bg-transparent data-[state=active]:shadow-none data-[state=active]:border-b-2 data-[state=active]:border-primary rounded-none h-12 px-6">Invoices ({invoices.length})</TabsTrigger>
           <TabsTrigger value="payments" className="data-[state=active]:bg-transparent data-[state=active]:shadow-none data-[state=active]:border-b-2 data-[state=active]:border-primary rounded-none h-12 px-6">Payments ({payments.length})</TabsTrigger>
-          {!isFamily && (
-            <TabsTrigger value="fees" className="data-[state=active]:bg-transparent data-[state=active]:shadow-none data-[state=active]:border-b-2 data-[state=active]:border-primary rounded-none h-12 px-6">Fees ({feeList.length})</TabsTrigger>
-          )}
+          <TabsTrigger value="fees" className="data-[state=active]:bg-transparent data-[state=active]:shadow-none data-[state=active]:border-b-2 data-[state=active]:border-primary rounded-none h-12 px-6">Fees ({feeList.length})</TabsTrigger>
           <TabsTrigger value="referrals" className="data-[state=active]:bg-transparent data-[state=active]:shadow-none data-[state=active]:border-b-2 data-[state=active]:border-primary rounded-none h-12 px-6">Referrals ({referrals.length})</TabsTrigger>
         </TabsList>
 
@@ -316,7 +314,6 @@ export default function ClientDetailPage() {
           </Card>
         </TabsContent>
 
-        {!isFamily && (
         <TabsContent value="fees" className="pt-6">
           <Card>
             <CardHeader>
@@ -369,7 +366,6 @@ export default function ClientDetailPage() {
             </CardContent>
           </Card>
         </TabsContent>
-        )}
 
         <TabsContent value="referrals" className="pt-6">
           <Card>

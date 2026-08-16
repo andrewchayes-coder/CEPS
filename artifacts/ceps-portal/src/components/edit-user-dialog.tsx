@@ -26,6 +26,7 @@ type UserLike = {
   name: string;
   email: string;
   role: string;
+  phone?: string | null;
 };
 
 type Props = {
@@ -42,6 +43,7 @@ export function EditUserDialog({ id, user, onSaved }: Props) {
     name: user.name,
     email: user.email,
     role: user.role,
+    phone: user.phone ?? '',
   });
 
   const set = (k: string, v: string) => setForm((p) => ({ ...p, [k]: v }));
@@ -54,6 +56,7 @@ export function EditUserDialog({ id, user, onSaved }: Props) {
           name: form.name,
           email: form.email,
           role: form.role as UserUpdateRole,
+          phone: form.phone || undefined,
         } as any,
       },
       {
@@ -82,7 +85,7 @@ export function EditUserDialog({ id, user, onSaved }: Props) {
       <DialogContent className="max-w-md">
         <DialogHeader>
           <DialogTitle>Edit User</DialogTitle>
-          <DialogDescription>Update the user's name, email, and role.</DialogDescription>
+          <DialogDescription>Update the user's name, email, phone, and role.</DialogDescription>
         </DialogHeader>
         <div className="space-y-4 py-2">
           <div className="space-y-2">
@@ -92,6 +95,10 @@ export function EditUserDialog({ id, user, onSaved }: Props) {
           <div className="space-y-2">
             <Label>Email</Label>
             <Input type="email" value={form.email} onChange={(e) => set('email', e.target.value)} data-testid="input-edit-user-email" />
+          </div>
+          <div className="space-y-2">
+            <Label>Phone</Label>
+            <Input type="tel" placeholder="(555) 555-5555" value={form.phone} onChange={(e) => set('phone', e.target.value)} data-testid="input-edit-user-phone" />
           </div>
           <div className="space-y-2">
             <Label>Role</Label>

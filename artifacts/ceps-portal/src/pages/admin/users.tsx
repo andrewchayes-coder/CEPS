@@ -34,6 +34,7 @@ import { Plus } from 'lucide-react';
 const userSchema = z.object({
   name: z.string().min(1, 'Name is required'),
   email: z.string().email('Valid email is required'),
+  phone: z.string().optional(),
   role: z.enum(['staff', 'service_coordinator']),
   password: z.string().min(8, 'Password must be at least 8 characters').optional().or(z.literal('')),
 });
@@ -103,6 +104,7 @@ export default function UsersPage() {
     defaultValues: {
       name: '',
       email: '',
+      phone: '',
       role: 'staff',
       password: '',
     }
@@ -113,6 +115,7 @@ export default function UsersPage() {
       data: {
         name: data.name,
         email: data.email,
+        phone: data.phone || undefined,
         role: data.role as UserInputRole,
         password: data.password || undefined
       }
@@ -159,6 +162,9 @@ export default function UsersPage() {
                 )} />
                 <FormField control={form.control} name="email" render={({ field }) => (
                   <FormItem><FormLabel>Email</FormLabel><FormControl><Input type="email" {...field} /></FormControl><FormMessage /></FormItem>
+                )} />
+                <FormField control={form.control} name="phone" render={({ field }) => (
+                  <FormItem><FormLabel>Phone <span className="text-muted-foreground font-normal">(optional)</span></FormLabel><FormControl><Input type="tel" placeholder="(555) 555-5555" {...field} /></FormControl><FormMessage /></FormItem>
                 )} />
                 <FormField control={form.control} name="role" render={({ field }) => (
                   <FormItem>
@@ -225,7 +231,7 @@ export default function UsersPage() {
                     </TableCell>
                     <TableCell className="text-right">
                       <div className="flex items-center justify-end gap-2">
-                        <EditUserDialog id={u.id} user={{ name: u.name, email: u.email, role: u.role }} onSaved={refetch} />
+                        <EditUserDialog id={u.id} user={{ name: u.name, email: u.email, role: u.role, phone: u.phone }} onSaved={refetch} />
                         {u.active && !isSelf && (
                           <AlertDialog>
                             <AlertDialogTrigger asChild>

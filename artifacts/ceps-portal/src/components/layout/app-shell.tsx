@@ -111,7 +111,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         <div className="p-4 border-t shrink-0">
           <div className="mb-3">
             <p className="text-sm font-medium text-foreground truncate">{user?.name}</p>
-            <p className="text-xs text-muted-foreground truncate capitalize">{user?.role.replace('_', ' ')}</p>
+            <p className="text-xs text-muted-foreground truncate capitalize">{user?.role === 'staff' ? 'admin' : user?.role.replace('_', ' ')}</p>
           </div>
           <div className="flex flex-col gap-1">
             <Link

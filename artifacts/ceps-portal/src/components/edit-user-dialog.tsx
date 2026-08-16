@@ -98,7 +98,7 @@ export function EditUserDialog({ id, user, onSaved }: Props) {
             <Select value={form.role} onValueChange={(v) => set('role', v)}>
               <SelectTrigger data-testid="select-edit-user-role"><SelectValue /></SelectTrigger>
               <SelectContent>
-                <SelectItem value="staff">Staff (Full Access)</SelectItem>
+                <SelectItem value="staff">Admin (Full Access)</SelectItem>
                 <SelectItem value="service_coordinator">Service Coordinator</SelectItem>
               </SelectContent>
             </Select>

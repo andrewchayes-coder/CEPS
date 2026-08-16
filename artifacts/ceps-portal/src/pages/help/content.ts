@@ -26,7 +26,7 @@ export interface RoleDoc {
 export const roleDocs: RoleDoc[] = [
   {
     role: 'staff',
-    label: 'CEPS Staff',
+    label: 'CEPS Admin',
     overview:
       'CEPS staff administer the entire payee support program: intake of new referrals, client records, vendor management, purchase-of-service authorizations, invoice review, payment recording, Alta remittance reconciliation, and user administration.',
     stories: [

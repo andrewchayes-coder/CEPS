@@ -213,7 +213,7 @@ export default function LoginPage() {
               onClick={() => quickLogin('staff@ceps.example')}
               data-testid="button-quick-login-staff"
             >
-              CEPS Staff
+              CEPS Admin
             </Button>
             <Button
               variant="outline"

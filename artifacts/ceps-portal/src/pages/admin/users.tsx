@@ -138,7 +138,7 @@ export default function UsersPage() {
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
           <h1 className="text-3xl font-bold tracking-tight">User Management</h1>
-          <p className="text-muted-foreground mt-1">Manage staff and coordinator access.</p>
+          <p className="text-muted-foreground mt-1">Manage admin and coordinator access.</p>
         </div>
 
         <Dialog open={open} onOpenChange={setOpen}>
@@ -150,7 +150,7 @@ export default function UsersPage() {
           <DialogContent>
             <DialogHeader>
               <DialogTitle>Add New User</DialogTitle>
-              <DialogDescription>Create a new staff or coordinator account.</DialogDescription>
+              <DialogDescription>Create a new admin or coordinator account.</DialogDescription>
             </DialogHeader>
             <Form {...form}>
               <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
@@ -166,7 +166,7 @@ export default function UsersPage() {
                     <Select onValueChange={field.onChange} defaultValue={field.value}>
                       <FormControl><SelectTrigger><SelectValue /></SelectTrigger></FormControl>
                       <SelectContent>
-                        <SelectItem value="staff">Staff (Full Access)</SelectItem>
+                        <SelectItem value="staff">Admin (Full Access)</SelectItem>
                         <SelectItem value="service_coordinator">Service Coordinator</SelectItem>
                       </SelectContent>
                     </Select>
@@ -214,7 +214,7 @@ export default function UsersPage() {
                   <TableRow key={u.id}>
                     <TableCell className="font-medium">{u.name}</TableCell>
                     <TableCell>{u.email}</TableCell>
-                    <TableCell className="capitalize">{u.role.replace('_', ' ')}</TableCell>
+                    <TableCell className="capitalize">{u.role === 'staff' ? 'admin' : u.role.replace('_', ' ')}</TableCell>
                     <TableCell>
                       <Badge variant="outline" className={u.active ? "text-chart-5 border-chart-5/20" : "text-muted-foreground"}>
                         {u.active ? 'Active' : 'Inactive'}

@@ -7,6 +7,7 @@ import { EditClientDialog } from '@/components/edit-client-dialog';
 import { EditContactInfoDialog } from '@/components/edit-contact-info-dialog';
 import { EditFeeDialog } from '@/components/edit-fee-dialog';
 import { DeleteEntityButton } from '@/components/delete-entity-button';
+import { VendorLink } from '@/components/entity-links';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -184,8 +185,14 @@ export default function ClientDetailPage() {
                       <CardContent className="p-4">
                         <div className="flex justify-between items-start mb-2">
                           <div>
-                            <p className="font-semibold text-primary">{auth.authNumber}</p>
-                            <p className="text-xs text-muted-foreground line-clamp-1">{auth.vendorName}</p>
+                            <p className="font-semibold">
+                              <Link href={`/authorizations/${auth.id}`} className="text-primary hover:underline" data-testid="link-overview-authorization">
+                                {auth.authNumber}
+                              </Link>
+                            </p>
+                            <p className="text-xs text-muted-foreground line-clamp-1">
+                              <VendorLink id={auth.vendorId} name={auth.vendorName} className="text-xs text-muted-foreground hover:underline" />
+                            </p>
                           </div>
                           <Badge variant="outline">{auth.serviceCode}</Badge>
                         </div>
@@ -227,8 +234,12 @@ export default function ClientDetailPage() {
                 <TableBody>
                   {authorizations.map(auth => (
                     <TableRow key={auth.id}>
-                      <TableCell className="font-medium text-primary">{auth.authNumber}</TableCell>
-                      <TableCell>{auth.vendorName}</TableCell>
+                      <TableCell className="font-medium">
+                        <Link href={`/authorizations/${auth.id}`} className="text-primary hover:underline" data-testid="link-client-authorization">
+                          {auth.authNumber}
+                        </Link>
+                      </TableCell>
+                      <TableCell><VendorLink id={auth.vendorId} name={auth.vendorName} /></TableCell>
                       <TableCell>{auth.serviceCode}</TableCell>
                       <TableCell className="text-xs whitespace-nowrap">
                         {format(new Date(auth.servicePeriodStart), 'MM/dd/yy')} - {format(new Date(auth.servicePeriodEnd), 'MM/dd/yy')}
@@ -264,9 +275,17 @@ export default function ClientDetailPage() {
                 <TableBody>
                   {invoices.map(inv => (
                     <TableRow key={inv.id}>
-                      <TableCell className="font-medium">{inv.serviceMonth}</TableCell>
-                      <TableCell>{inv.vendorName}</TableCell>
-                      <TableCell className="text-muted-foreground">{inv.authNumber}</TableCell>
+                      <TableCell className="font-medium">
+                        <Link href={`/invoices/${inv.id}`} className="text-primary hover:underline" data-testid="link-client-invoice">
+                          {inv.serviceMonth}
+                        </Link>
+                      </TableCell>
+                      <TableCell><VendorLink id={inv.vendorId} name={inv.vendorName} /></TableCell>
+                      <TableCell className="text-muted-foreground">
+                        {inv.authorizationId ? (
+                          <Link href={`/authorizations/${inv.authorizationId}`} className="text-primary hover:underline">{inv.authNumber}</Link>
+                        ) : inv.authNumber}
+                      </TableCell>
                       <TableCell className="text-right">${parseFloat(inv.amountRequested).toFixed(2)}</TableCell>
                       <TableCell><Badge variant="outline">{inv.status}</Badge></TableCell>
                     </TableRow>
@@ -298,9 +317,17 @@ export default function ClientDetailPage() {
                   {payments.map(p => (
                     <TableRow key={p.id}>
                       <TableCell className="whitespace-nowrap">{format(new Date(p.checkDate), 'MMM d, yyyy')}</TableCell>
-                      <TableCell className="font-mono text-sm">{p.qbCheckNumber}</TableCell>
-                      <TableCell>{p.vendorName}</TableCell>
-                      <TableCell className="text-muted-foreground">{p.authNumber}</TableCell>
+                      <TableCell className="font-mono text-sm">
+                        <Link href={`/payments/${p.id}`} className="text-primary hover:underline" data-testid="link-client-payment">
+                          {p.qbCheckNumber}
+                        </Link>
+                      </TableCell>
+                      <TableCell><VendorLink id={p.vendorId} name={p.vendorName} /></TableCell>
+                      <TableCell className="text-muted-foreground">
+                        {p.authorizationId ? (
+                          <Link href={`/authorizations/${p.authorizationId}`} className="text-primary hover:underline">{p.authNumber}</Link>
+                        ) : p.authNumber}
+                      </TableCell>
                       <TableCell className="text-right font-medium">${parseFloat(p.amount).toFixed(2)}</TableCell>
                       <TableCell>{p.remitted ? <CheckCircle2 className="w-4 h-4 text-chart-5" /> : '-'}</TableCell>
                     </TableRow>

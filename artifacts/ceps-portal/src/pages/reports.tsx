@@ -10,6 +10,7 @@ import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { downloadCSV } from '@/lib/csv';
 import { formatMoney } from '@/lib/utils';
+import { ClientLink, VendorLink } from '@/components/entity-links';
 import PendingAuthReport from './reports/pending-auth-report';
 import CaseStatusReport from './reports/case-status-report';
 import MissingDocumentsReport from './reports/missing-documents-report';
@@ -20,6 +21,10 @@ const VALID_TABS = ['vendor-payments', 'case-status', 'pending-auth', 'missing-d
 export default function ReportsPage() {
   const { user } = useAuth();
   const isStaff = user?.role === 'staff';
+  const isCoordinator = user?.role === 'service_coordinator';
+  // Coordinators get the two caseload-scoped operational reports; staff get all.
+  const showPendingAuth = isStaff || isCoordinator;
+  const showExpiringAuth = isStaff || isCoordinator;
   const [searchParams, setSearchParams] = useSearchParams();
   const tabParam = searchParams.get('tab') ?? '';
   const activeTab = VALID_TABS.includes(tabParam) ? tabParam : 'vendor-payments';
@@ -45,29 +50,33 @@ export default function ReportsPage() {
         <TabsList className="flex flex-wrap h-auto">
           <TabsTrigger value="vendor-payments" data-testid="tab-vendor-payments">Vendor Payments</TabsTrigger>
           {isStaff && <TabsTrigger value="case-status" data-testid="tab-case-status">Case Status</TabsTrigger>}
-          {isStaff && <TabsTrigger value="pending-auth" data-testid="tab-pending-auth">Pending Authorization</TabsTrigger>}
+          {showPendingAuth && <TabsTrigger value="pending-auth" data-testid="tab-pending-auth">Pending Authorization</TabsTrigger>}
           {isStaff && <TabsTrigger value="missing-docs" data-testid="tab-missing-docs">Missing Documents</TabsTrigger>}
-          {isStaff && <TabsTrigger value="expiring-auth" data-testid="tab-expiring-auth">Expiring Authorizations</TabsTrigger>}
+          {showExpiringAuth && <TabsTrigger value="expiring-auth" data-testid="tab-expiring-auth">Expiring Authorizations</TabsTrigger>}
         </TabsList>
 
         <TabsContent value="vendor-payments">
           <VendorPaymentsReport />
         </TabsContent>
         {isStaff && (
-          <>
-            <TabsContent value="case-status">
-              <CaseStatusReport initialStatus={statusParam} />
-            </TabsContent>
-            <TabsContent value="pending-auth">
-              <PendingAuthReport />
-            </TabsContent>
-            <TabsContent value="missing-docs">
-              <MissingDocumentsReport initialDocType={docTypeParam} />
-            </TabsContent>
-            <TabsContent value="expiring-auth">
-              <ExpiringAuthReport />
-            </TabsContent>
-          </>
+          <TabsContent value="case-status">
+            <CaseStatusReport initialStatus={statusParam} />
+          </TabsContent>
+        )}
+        {showPendingAuth && (
+          <TabsContent value="pending-auth">
+            <PendingAuthReport />
+          </TabsContent>
+        )}
+        {isStaff && (
+          <TabsContent value="missing-docs">
+            <MissingDocumentsReport initialDocType={docTypeParam} />
+          </TabsContent>
+        )}
+        {showExpiringAuth && (
+          <TabsContent value="expiring-auth">
+            <ExpiringAuthReport />
+          </TabsContent>
         )}
       </Tabs>
     </div>
@@ -79,7 +88,7 @@ function VendorPaymentsReport() {
   const { data: report, isLoading } = useGetVendorPaymentReport({ year: currentYear }, {
     query: { queryKey: ['vendorReport', currentYear] },
   });
-  const { data: summary } = useGetDashboardSummary({ query: { queryKey: ['dashboardSummary'] } });
+  const { data: summary, isLoading: summaryLoading } = useGetDashboardSummary({ query: { queryKey: ['dashboardSummary'] } });
 
   const exportVendorPayments = () => {
     if (!report) return;
@@ -123,6 +132,49 @@ function VendorPaymentsReport() {
             <Download className="w-4 h-4 mr-2" /> Export CSV
           </Button>
         </CardHeader>
+        <CardContent className="pt-6">
+          {summaryLoading || !summary ? (
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4">
+              {Array.from({ length: 6 }).map((_, i) => (
+                <div key={i} className="space-y-2">
+                  <Skeleton className="h-8 w-16" />
+                  <Skeleton className="h-3 w-24" />
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="space-y-6" data-testid="dashboard-summary-stats">
+              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4">
+                {[
+                  { label: 'Active Clients', value: summary.totals.activeClients, testid: 'stat-active-clients' },
+                  { label: 'Active Authorizations', value: summary.totals.activeAuthorizations, testid: 'stat-active-authorizations' },
+                  { label: 'Pending Invoices', value: summary.totals.pendingInvoices, testid: 'stat-pending-invoices' },
+                  { label: 'Vendors Missing W-9', value: summary.totals.vendorsMissingW9, testid: 'stat-vendors-missing-w9' },
+                  { label: 'Payments This Month', value: summary.totals.paymentsThisMonth ?? '—', testid: 'stat-payments-this-month' },
+                  { label: 'Unmatched Remittances', value: summary.totals.unmatchedRemittances ?? '—', testid: 'stat-unmatched-remittances' },
+                ].map((stat) => (
+                  <div key={stat.testid}>
+                    <div className="text-2xl font-bold" data-testid={stat.testid}>{stat.value}</div>
+                    <p className="text-xs text-muted-foreground mt-1">{stat.label}</p>
+                  </div>
+                ))}
+              </div>
+              {summary.referralsByStatus.length > 0 && (
+                <div>
+                  <h3 className="text-sm font-medium mb-3">Cases by Status</h3>
+                  <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4">
+                    {summary.referralsByStatus.map((s) => (
+                      <div key={s.status} data-testid={`stat-case-status-${s.status}`}>
+                        <div className="text-2xl font-bold">{s.count}</div>
+                        <p className="text-xs text-muted-foreground mt-1 capitalize">{s.status.replace(/_/g, ' ')}</p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+        </CardContent>
       </Card>
 
       <Card>
@@ -152,7 +204,7 @@ function VendorPaymentsReport() {
               ) : (
                 report?.map((v: any, i: number) => (
                   <TableRow key={i}>
-                    <TableCell className="font-medium">{v.vendorName}</TableCell>
+                    <TableCell className="font-medium"><VendorLink id={v.vendorId} name={v.vendorName} /></TableCell>
                     <TableCell className="capitalize text-muted-foreground">{v.einOnFile ? 'On File' : 'Pending'}</TableCell>
                     <TableCell className="text-right font-bold text-primary">${formatMoney(v.totalPaid)}</TableCell>
                   </TableRow>

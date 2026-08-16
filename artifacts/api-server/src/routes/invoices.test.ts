@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { inArray, eq } from "drizzle-orm";
-import { db, usersTable, sessionsTable, clientsTable, invoicesTable, authorizationsTable, paymentsTable, auditLogTable } from "@workspace/db";
+import { db, usersTable, sessionsTable, clientsTable, invoicesTable, authorizationsTable, paymentsTable, auditLogTable, vendorsTable } from "@workspace/db";
 import request from "supertest";
 import app from "../app";
 import { newToken } from "../lib/auth";
@@ -33,15 +33,45 @@ beforeAll(async () => {
   cookie = `ceps_session=${token}`;
 });
 
+const vendorIds: string[] = [];
+
 afterAll(async () => {
   await db.delete(paymentsTable).where(eq(paymentsTable.clientId, clientId));
   await db.delete(invoicesTable).where(eq(invoicesTable.clientId, clientId));
   await db.delete(authorizationsTable).where(eq(authorizationsTable.clientId, clientId));
   await db.delete(auditLogTable).where(eq(auditLogTable.userId, staffId));
   await db.delete(sessionsTable).where(eq(sessionsTable.userId, staffId));
+  if (vendorIds.length) await db.delete(vendorsTable).where(inArray(vendorsTable.id, vendorIds));
   await db.delete(clientsTable).where(eq(clientsTable.id, clientId));
   await db.delete(usersTable).where(inArray(usersTable.id, [staffId]));
 });
+
+async function makeVendor(active: boolean) {
+  const [vendor] = await db
+    .insert(vendorsTable)
+    .values({ name: `${nonce}-vendor-${vendorIds.length}`, active })
+    .returning();
+  vendorIds.push(vendor.id);
+  return vendor;
+}
+
+async function makeInvoiceForVendor(authId: string, vendorId: string, amountRequested = "100.00", serviceMonth = "2026-01") {
+  const [inv] = await db
+    .insert(invoicesTable)
+    .values({
+      clientId,
+      authorizationId: authId,
+      vendorId,
+      submittedByRole: "staff",
+      submittedDate: "2026-01-01",
+      serviceMonth,
+      amountRequested,
+      paymentType: "direct_payment",
+      status: "pending_review",
+    })
+    .returning();
+  return inv;
+}
 
 let authCounter = 0;
 
@@ -218,5 +248,29 @@ describe("POST /invoices/:id/validate decimal-safe money math", () => {
     const resOver = await request(app).post(`/api/invoices/${over.id}/validate`).set("Cookie", cookie).send({});
     expect(resOver.status).toBe(200);
     expect(checkOf(resOver.body, "within_max_period_amount").passed).toBe(false);
+  });
+});
+
+describe("POST /invoices/:id/validate vendor_active check", () => {
+  it("passes vendor_active when the invoice's vendor is active", async () => {
+    const auth = await makeAuth({ oneTimeAmount: "100.00", maxPeriodAmount: "1000000.00" });
+    const vendor = await makeVendor(true);
+    const inv = await makeInvoiceForVendor(auth.id, vendor.id);
+    const res = await request(app).post(`/api/invoices/${inv.id}/validate`).set("Cookie", cookie).send({});
+    expect(res.status).toBe(200);
+    expect(checkOf(res.body, "vendor_active").passed).toBe(true);
+  });
+
+  it("fails vendor_active when the invoice's vendor is deactivated", async () => {
+    const auth = await makeAuth({ oneTimeAmount: "100.00", maxPeriodAmount: "1000000.00" });
+    const vendor = await makeVendor(false);
+    const inv = await makeInvoiceForVendor(auth.id, vendor.id);
+    const res = await request(app).post(`/api/invoices/${inv.id}/validate`).set("Cookie", cookie).send({});
+    expect(res.status).toBe(200);
+    const check = checkOf(res.body, "vendor_active");
+    expect(check.passed).toBe(false);
+    expect(check.message).toContain("deactivated");
+    // A deactivated vendor makes the whole validation fail.
+    expect(res.body.valid).toBe(false);
   });
 });

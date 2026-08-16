@@ -4,6 +4,7 @@ import { useGetInvoice, useValidateInvoice, useUpdateInvoice, useDeleteInvoice, 
 import { useAuth } from '@/components/auth/auth-provider';
 import { EditInvoiceDialog } from '@/components/edit-invoice-dialog';
 import { DeleteEntityButton } from '@/components/delete-entity-button';
+import { ClientLink, VendorLink } from '@/components/entity-links';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -115,9 +116,13 @@ export default function InvoiceDetailPage() {
           </CardHeader>
           <CardContent className="space-y-4 text-sm">
             <dl className="grid grid-cols-3 gap-2">
-              <dt className="text-muted-foreground">Client:</dt><dd className="col-span-2 font-medium">{invoice.clientName}</dd>
-              <dt className="text-muted-foreground">Vendor:</dt><dd className="col-span-2">{invoice.vendorName}</dd>
-              <dt className="text-muted-foreground">Auth Number:</dt><dd className="col-span-2 font-mono">{invoice.authNumber}</dd>
+              <dt className="text-muted-foreground">Client:</dt><dd className="col-span-2 font-medium"><ClientLink id={invoice.clientId} name={invoice.clientName} /></dd>
+              <dt className="text-muted-foreground">Vendor:</dt><dd className="col-span-2"><VendorLink id={invoice.vendorId} name={invoice.vendorName} /></dd>
+              <dt className="text-muted-foreground">Auth Number:</dt><dd className="col-span-2 font-mono">
+                {invoice.authorizationId && invoice.authNumber ? (
+                  <Link href={`/authorizations/${invoice.authorizationId}`} className="text-primary hover:underline">{invoice.authNumber}</Link>
+                ) : invoice.authNumber}
+              </dd>
               <dt className="text-muted-foreground">Amount:</dt><dd className="col-span-2 font-bold text-lg">${parseFloat(invoice.amountRequested).toFixed(2)}</dd>
               <dt className="text-muted-foreground mt-2">Submitted By:</dt><dd className="col-span-2 mt-2 capitalize">{invoice.submittedByRole}</dd>
             </dl>

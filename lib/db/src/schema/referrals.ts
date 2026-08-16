@@ -31,6 +31,11 @@ export const referralsTable = pgTable("referrals", {
     withTimezone: true,
   }),
   serviceFrequency: text("service_frequency"), // one_time | monthly
+  // Diagnosis / eligibility (optional, staff- or coordinator-supplied)
+  diagnosis: text("diagnosis"),
+  eligibilityCategory: text("eligibility_category"),
+  // Single supporting-document URL, mirroring invoices.documentUrl
+  supportingDocumentUrl: text("supporting_document_url"),
   notes: text("notes"),
   createdAt: timestamp("created_at", { withTimezone: true })
     .notNull()

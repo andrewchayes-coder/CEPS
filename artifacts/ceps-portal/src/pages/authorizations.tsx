@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { useListAuthorizations, useDeleteAuthorization } from '@workspace/api-client-react';
 import { DeleteEntityButton } from '@/components/delete-entity-button';
 import { EditAuthorizationDialog } from '@/components/edit-authorization-dialog';
+import { ClientLink, VendorLink } from '@/components/entity-links';
 import { Link } from 'wouter';
 import { format } from 'date-fns';
 import { 
@@ -94,11 +95,13 @@ export default function AuthorizationsPage() {
                   
                   return (
                     <TableRow key={auth.id} className={isExpiring ? 'bg-chart-1/5' : ''}>
-                      <TableCell className="font-medium text-primary">
-                        {auth.authNumber}
+                      <TableCell className="font-medium">
+                        <Link href={`/authorizations/${auth.id}`} className="text-primary hover:underline" data-testid="link-authorization">
+                          {auth.authNumber}
+                        </Link>
                       </TableCell>
-                      <TableCell>{auth.clientName}</TableCell>
-                      <TableCell>{auth.vendorName}</TableCell>
+                      <TableCell><ClientLink id={auth.clientId} name={auth.clientName} /></TableCell>
+                      <TableCell><VendorLink id={auth.vendorId} name={auth.vendorName} /></TableCell>
                       <TableCell className="text-sm whitespace-nowrap">
                         {format(new Date(auth.servicePeriodStart), 'MM/dd/yy')} - {format(new Date(auth.servicePeriodEnd), 'MM/dd/yy')}
                         {isExpiring && (

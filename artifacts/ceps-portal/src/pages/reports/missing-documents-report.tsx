@@ -11,6 +11,8 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Download } from 'lucide-react';
+import { Link } from 'wouter';
+import { ClientLink, VendorLink } from '@/components/entity-links';
 import { downloadCSV } from '@/lib/csv';
 import { useToast } from '@/hooks/use-toast';
 import { PAGE_SIZE, ReportPagination } from './report-pagination';
@@ -116,8 +118,18 @@ export default function MissingDocumentsReport({ initialDocType }: { initialDocT
               items.map((r: any, i: number) => (
                 <TableRow key={`${r.entityType}-${r.entityId}-${r.docType}`} data-testid={`row-missing-doc-${i}`}>
                   <TableCell><Badge variant="outline" className="bg-destructive/10 text-destructive border-destructive/20">{DOC_LABELS[r.docType] ?? r.docType}</Badge></TableCell>
-                  <TableCell className="font-medium">{r.entityName}</TableCell>
-                  <TableCell className="text-muted-foreground">{r.clientName ?? '—'}</TableCell>
+                  <TableCell className="font-medium">
+                    {r.entityType === 'vendor' ? (
+                      <VendorLink id={r.entityId} name={r.entityName} />
+                    ) : r.entityType === 'authorization' ? (
+                      <Link href={`/authorizations/${r.entityId}`} className="text-primary hover:underline">{r.entityName}</Link>
+                    ) : r.entityType === 'referral' ? (
+                      <Link href={`/referrals/${r.entityId}`} className="text-primary hover:underline">{r.entityName}</Link>
+                    ) : (
+                      r.entityName
+                    )}
+                  </TableCell>
+                  <TableCell className="text-muted-foreground"><ClientLink id={r.clientId} name={r.clientName} className="text-muted-foreground hover:underline" /></TableCell>
                   <TableCell className="text-muted-foreground">{r.description}</TableCell>
                 </TableRow>
               ))

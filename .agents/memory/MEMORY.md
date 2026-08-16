@@ -6,4 +6,6 @@
 - [Duplicate-payment rule](duplicate-payment-rule.md) — shared checkDuplicatePayment + pg advisory xact lock; overrides legitimately allow dup triples, so never add a unique index on client/auth/month.
 - [Import dedupe & natural keys](import-dedupe-keys.md) — fingerprints hash pre-resolution source strings, not UUIDs; vendors/auth natural keys DB-unique; historical imports skip fee gen; Alta parser columns interim.
 - [Spec-codegen drift](spec-codegen-drift.md) — never hand-edit generated api-zod/client files; codegen wipes them. Add params to openapi.yaml or the next regen silently disables route filters.
+- [Parallel subagents share the worktree](parallel-subagent-worktree.md) — forbid git stash/commit in subagents; check `git stash list` after parallel waves or edits get stranded.
+- [zod.coerce.boolean query params](zod-coerce-boolean.md) — generated boolean query params coerce "false"→true; hand-parse raw req.query string + add a "false" regression test.
 - [List endpoint pagination](list-pagination.md) — all 7 list endpoints use {items,total} + limit/offset SQL pattern (audit-log is the reference, envelope key differs: entries).

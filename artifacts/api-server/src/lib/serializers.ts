@@ -144,6 +144,9 @@ export function referralJson(r: Referral, clientName?: string | null, coordinato
     signedByName: r.signedByName,
     altaAuthReceivedAt: iso(r.altaAuthReceivedAt),
     serviceFrequency: r.serviceFrequency,
+    diagnosis: r.diagnosis,
+    eligibilityCategory: r.eligibilityCategory,
+    supportingDocumentUrl: r.supportingDocumentUrl,
     notes: r.notes,
     createdAt: iso(r.createdAt),
   };

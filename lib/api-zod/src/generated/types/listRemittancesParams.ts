@@ -14,6 +14,10 @@ status?: string;
  */
 remittanceBatchId?: string;
 /**
+ * Filter by auto-match flag.
+ */
+autoMatched?: boolean;
+/**
  * Filter by client name (case-insensitive partial match).
  */
 search?: string;

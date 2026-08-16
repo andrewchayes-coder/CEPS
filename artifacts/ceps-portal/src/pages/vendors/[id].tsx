@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useLocation, useParams } from 'wouter';
 import { useGetVendor, useUpdateVendor, useUpdateVendorContact, useUploadVendorW9 } from '@workspace/api-client-react';
 import { FileUpload } from '@/components/file-upload';
+import { VendorBusinessProfile } from '@/components/vendor-business-profile';
 import { useAuth } from '@/components/auth/auth-provider';
 import { InvitePortalDialog } from '@/components/invite-portal-dialog';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -178,13 +179,15 @@ export default function VendorDetailPage() {
         </div>
       </div>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Vendor Profile</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          {!isVendorUser && (
-            <>
+      {isVendorUser ? (
+        <VendorBusinessProfile id={id} contactCardTitle="Vendor Profile" />
+      ) : (
+        <>
+          <Card>
+            <CardHeader>
+              <CardTitle>Vendor Profile</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
               <div className="space-y-2">
                 <label className="text-sm font-medium">Business Name</label>
                 <Input value={formData.name || ''} onChange={e => handleChange('name', e.target.value)} />
@@ -207,99 +210,97 @@ export default function VendorDetailPage() {
                   </Select>
                 </div>
               </div>
-            </>
-          )}
 
-          <div className="space-y-2">
-            <label className="text-sm font-medium">Contact Person</label>
-            <Input value={formData.contactPerson || ''} onChange={e => handleChange('contactPerson', e.target.value)} />
-          </div>
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Contact Person</label>
+                <Input value={formData.contactPerson || ''} onChange={e => handleChange('contactPerson', e.target.value)} />
+              </div>
 
-          <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <label className="text-sm font-medium">Email</label>
-              <Input type="email" value={formData.email || ''} onChange={e => handleChange('email', e.target.value)} />
-            </div>
-            <div className="space-y-2">
-              <label className="text-sm font-medium">Phone</label>
-              <Input type="tel" value={formData.phone || ''} onChange={e => handleChange('phone', e.target.value)} />
-            </div>
-          </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">Email</label>
+                  <Input type="email" value={formData.email || ''} onChange={e => handleChange('email', e.target.value)} />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">Phone</label>
+                  <Input type="tel" value={formData.phone || ''} onChange={e => handleChange('phone', e.target.value)} />
+                </div>
+              </div>
 
-          <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <label className="text-sm font-medium">Billing Address</label>
-              <Input value={formData.billingAddress || ''} onChange={e => handleChange('billingAddress', e.target.value)} />
-            </div>
-            <div className="space-y-2">
-              <label className="text-sm font-medium">Service Address</label>
-              <Input value={formData.serviceAddress || ''} onChange={e => handleChange('serviceAddress', e.target.value)} />
-            </div>
-          </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">Billing Address</label>
+                  <Input value={formData.billingAddress || ''} onChange={e => handleChange('billingAddress', e.target.value)} />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">Service Address</label>
+                  <Input value={formData.serviceAddress || ''} onChange={e => handleChange('serviceAddress', e.target.value)} />
+                </div>
+              </div>
 
-          <div className="pt-4 flex gap-4">
-            <Button onClick={handleSave} disabled={saving}>
-              <Save className="w-4 h-4 mr-2" /> Save Changes
-            </Button>
-          </div>
-        </CardContent>
-      </Card>
+              <div className="pt-4 flex gap-4">
+                <Button onClick={handleSave} disabled={saving}>
+                  <Save className="w-4 h-4 mr-2" /> Save Changes
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>W-9 Document</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          {vendor.w9DocumentUrl ? (
-            <div className="flex items-center justify-between rounded-md border p-3 text-sm">
-              <span className="flex items-center gap-2">
-                <FileText className="w-4 h-4 text-muted-foreground" />
-                W-9 on file
-                <Badge variant="secondary" className="capitalize">{vendor.w9Status.replace('_', ' ')}</Badge>
-              </span>
-              <Button
-                variant="outline"
-                size="sm"
-                data-testid="link-view-w9"
-                onClick={async () => {
-                  // Fetch with credentials and open a blob URL: a plain href in
-                  // a new top-level tab doesn't carry the partitioned session
-                  // cookie, so the request would 401.
-                  const res = await fetch(`${import.meta.env.BASE_URL}api/storage${vendor.w9DocumentUrl}`, { credentials: 'include' });
-                  if (!res.ok) return;
-                  const blobUrl = URL.createObjectURL(await res.blob());
-                  window.open(blobUrl, '_blank', 'noopener');
-                  setTimeout(() => URL.revokeObjectURL(blobUrl), 60_000);
+          <Card>
+            <CardHeader>
+              <CardTitle>W-9 Document</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {vendor.w9DocumentUrl ? (
+                <div className="flex items-center justify-between rounded-md border p-3 text-sm">
+                  <span className="flex items-center gap-2">
+                    <FileText className="w-4 h-4 text-muted-foreground" />
+                    W-9 on file
+                    <Badge variant="secondary" className="capitalize">{vendor.w9Status.replace('_', ' ')}</Badge>
+                  </span>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    data-testid="link-view-w9"
+                    onClick={async () => {
+                      // Fetch with credentials and open a blob URL: a plain href in
+                      // a new top-level tab doesn't carry the partitioned session
+                      // cookie, so the request would 401.
+                      const res = await fetch(`${import.meta.env.BASE_URL}api/storage${vendor.w9DocumentUrl}`, { credentials: 'include' });
+                      if (!res.ok) return;
+                      const blobUrl = URL.createObjectURL(await res.blob());
+                      window.open(blobUrl, '_blank', 'noopener');
+                      setTimeout(() => URL.revokeObjectURL(blobUrl), 60_000);
+                    }}
+                  >
+                    <ExternalLink className="w-4 h-4 mr-1" /> View / Download
+                  </Button>
+                </div>
+              ) : (
+                <p className="text-sm text-muted-foreground">No W-9 uploaded yet.</p>
+              )}
+              <FileUpload
+                accept=".pdf"
+                label="Drag & drop the signed W-9 PDF here, or click to browse"
+                onUploaded={(r) => {
+                  uploadW9.mutate(
+                    { id, data: { w9DocumentUrl: r.objectPath } },
+                    {
+                      onSuccess: () => {
+                        toast({ title: 'W-9 Uploaded', description: 'The W-9 is now on file.' });
+                        refetch();
+                      },
+                      onError: () => {
+                        toast({ variant: 'destructive', title: 'Error', description: 'Could not attach the W-9.' });
+                      },
+                    },
+                  );
                 }}
-              >
-                <ExternalLink className="w-4 h-4 mr-1" /> View / Download
-              </Button>
-            </div>
-          ) : (
-            <p className="text-sm text-muted-foreground">No W-9 uploaded yet.</p>
-          )}
-          {(user?.role === 'staff' || user?.role === 'vendor') && (
-            <FileUpload
-              accept=".pdf"
-              label="Drag & drop the signed W-9 PDF here, or click to browse"
-              onUploaded={(r) => {
-                uploadW9.mutate(
-                  { id, data: { w9DocumentUrl: r.objectPath } },
-                  {
-                    onSuccess: () => {
-                      toast({ title: 'W-9 Uploaded', description: 'The W-9 is now on file.' });
-                      refetch();
-                    },
-                    onError: () => {
-                      toast({ variant: 'destructive', title: 'Error', description: 'Could not attach the W-9.' });
-                    },
-                  },
-                );
-              }}
-            />
-          )}
-        </CardContent>
-      </Card>
+              />
+            </CardContent>
+          </Card>
+        </>
+      )}
     </div>
   );
 }

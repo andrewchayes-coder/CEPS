@@ -3,8 +3,11 @@ import { useListRemittances, useDeleteRemittance, type AltaRemittanceImportResul
 import { useAuth } from '@/components/auth/auth-provider';
 import { DeleteEntityButton } from '@/components/delete-entity-button';
 import { EditRemittanceDialog } from '@/components/edit-remittance-dialog';
+import { ClientLink } from '@/components/entity-links';
+import { Link } from 'wouter';
 import { AltaRemittanceImport } from '@/components/alta-remittance-import';
 import { Card, CardContent } from '@/components/ui/card';
+import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -26,13 +29,22 @@ const BATCH_BADGE_CLASSES = [
   'bg-indigo-100 text-indigo-800',
 ];
 
+type RemittanceTab = 'all' | 'needs_manual_match';
+
 export default function RemittancesPage() {
   const [page, setPage] = useState(0);
   const [batchFilter, setBatchFilter] = useState<string>('');
+  const [tab, setTab] = useState<RemittanceTab>('all');
+  const { user } = useAuth();
+  const isStaff = user?.role === 'staff';
+  // "Needs Manual Match" is a staff-only triage view: imported rows that landed
+  // as status "received" without an automatic payment match (autoMatched=false).
+  const triage = isStaff && tab === 'needs_manual_match';
   const params = {
     limit: PAGE_SIZE,
     offset: page * PAGE_SIZE,
     ...(batchFilter ? { remittanceBatchId: batchFilter } : {}),
+    ...(triage ? { status: 'received', autoMatched: false } : {}),
   };
   const { data, isLoading, refetch } = useListRemittances(params, {
     query: { queryKey: ['remittances', params] },
@@ -40,9 +52,12 @@ export default function RemittancesPage() {
   const remittances = data?.items;
   const total = data?.total ?? 0;
   const pageCount = Math.max(1, Math.ceil(total / PAGE_SIZE));
-  const { user } = useAuth();
-  const isStaff = user?.role === 'staff';
   const deleteRemittance = useDeleteRemittance();
+
+  const onTabChange = (value: string) => {
+    setTab(value === 'needs_manual_match' ? 'needs_manual_match' : 'all');
+    setPage(0);
+  };
 
   // Map each batch id present on the current page to a stable badge index.
   const batchColorIndex = useMemo(() => {
@@ -72,6 +87,34 @@ export default function RemittancesPage() {
         </div>
         {isStaff && <AltaRemittanceImport onImported={onImported} />}
       </div>
+
+      {isStaff && (
+        <Tabs value={tab} onValueChange={onTabChange}>
+          <TabsList>
+            <TabsTrigger value="all" data-testid="tab-remittances-all">
+              All Remittances
+            </TabsTrigger>
+            <TabsTrigger value="needs_manual_match" data-testid="tab-remittances-needs-manual-match">
+              Needs Manual Match
+              {triage && total > 0 && (
+                <Badge
+                  variant="secondary"
+                  className="ml-2"
+                  data-testid="badge-needs-manual-match-count"
+                >
+                  {total}
+                </Badge>
+              )}
+            </TabsTrigger>
+          </TabsList>
+        </Tabs>
+      )}
+
+      {triage && (
+        <p className="text-sm text-muted-foreground" data-testid="text-triage-help">
+          Imported remittances with no automatic payment match. Open a row to match it manually.
+        </p>
+      )}
 
       {batchFilter && (
         <div className="flex items-center gap-2" data-testid="banner-batch-filter">
@@ -134,7 +177,11 @@ export default function RemittancesPage() {
                 remittances?.map(r => (
                   <TableRow key={r.id}>
                     <TableCell className="whitespace-nowrap">{format(new Date(r.remittanceDate), 'MMM d, yyyy')}</TableCell>
-                    <TableCell className="font-mono text-sm">{r.altaReference}</TableCell>
+                    <TableCell className="font-mono text-sm">
+                      <Link href={`/remittances/${r.id}`} className="text-primary hover:underline" data-testid="link-remittance">
+                        {r.altaReference || 'View'}
+                      </Link>
+                    </TableCell>
                     <TableCell>
                       {r.remittanceBatchId ? (
                         <button
@@ -150,8 +197,12 @@ export default function RemittancesPage() {
                         <span className="text-xs text-muted-foreground">—</span>
                       )}
                     </TableCell>
-                    <TableCell>{r.clientName}</TableCell>
-                    <TableCell className="text-muted-foreground">{r.authNumber}</TableCell>
+                    <TableCell><ClientLink id={r.clientId} name={r.clientName} /></TableCell>
+                    <TableCell className="text-muted-foreground">
+                      {r.authorizationId ? (
+                        <Link href={`/authorizations/${r.authorizationId}`} className="text-primary hover:underline">{r.authNumber}</Link>
+                      ) : r.authNumber}
+                    </TableCell>
                     <TableCell className="text-right font-medium">${parseFloat(r.amount).toFixed(2)}</TableCell>
                     <TableCell>
                       <Badge variant="outline" className={

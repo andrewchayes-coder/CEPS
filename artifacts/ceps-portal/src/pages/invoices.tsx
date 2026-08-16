@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useListInvoices } from '@workspace/api-client-react';
 import { Link } from 'wouter';
+import { ClientLink, VendorLink } from '@/components/entity-links';
 import { 
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow 
 } from '@/components/ui/table';
@@ -85,9 +86,13 @@ export default function InvoicesPage() {
                 invoices?.map((invoice) => (
                   <TableRow key={invoice.id}>
                     <TableCell className="font-medium whitespace-nowrap">{invoice.serviceMonth}</TableCell>
-                    <TableCell>{invoice.vendorName}</TableCell>
-                    <TableCell>{invoice.clientName}</TableCell>
-                    <TableCell className="text-muted-foreground">{invoice.authNumber}</TableCell>
+                    <TableCell><VendorLink id={invoice.vendorId} name={invoice.vendorName} /></TableCell>
+                    <TableCell><ClientLink id={invoice.clientId} name={invoice.clientName} /></TableCell>
+                    <TableCell className="text-muted-foreground">
+                      {invoice.authorizationId ? (
+                        <Link href={`/authorizations/${invoice.authorizationId}`} className="text-primary hover:underline">{invoice.authNumber}</Link>
+                      ) : invoice.authNumber}
+                    </TableCell>
                     <TableCell className="text-right font-medium">${parseFloat(invoice.amountRequested).toFixed(2)}</TableCell>
                     <TableCell>
                       <StatusBadge status={invoice.status} />

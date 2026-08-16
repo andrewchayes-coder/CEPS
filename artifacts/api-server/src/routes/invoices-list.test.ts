@@ -20,13 +20,15 @@ const nonce = `invls${Date.now().toString(36)}`;
 let staffId: string;
 let vendorUserId: string;
 let parentUserId: string;
+let coordUserId: string;
 let vendorId: string;
 let otherVendorId: string;
-let clientA: string; // the parent user's linked client
-let clientB: string; // a different client
+let clientA: string; // the parent user's linked client + the coordinator's caseload
+let clientB: string; // a different client (not in the coordinator's caseload)
 let staffCookie: string;
 let vendorCookie: string;
 let parentCookie: string;
+let coordCookie: string;
 
 let monthCounter = 0;
 const nextMonth = () => `2026-${String((monthCounter++ % 12) + 1).padStart(2, "0")}`;
@@ -113,9 +115,22 @@ beforeAll(async () => {
     .returning();
   parentUserId = parentUser.id;
 
+  const [coordUser] = await db
+    .insert(usersTable)
+    .values({
+      name: "IL Coordinator User",
+      email: `${nonce}-cooruser@test.local`,
+      role: "service_coordinator",
+    })
+    .returning();
+  coordUserId = coordUser.id;
+  // Put clientA (but NOT clientB) in the coordinator's caseload.
+  await db.update(clientsTable).set({ assignedCoordinatorId: coordUserId }).where(inArray(clientsTable.id, [clientA]));
+
   staffCookie = await session(staffId);
   vendorCookie = await session(vendorUserId);
   parentCookie = await session(parentUserId);
+  coordCookie = await session(coordUserId);
 
   // Invoice matrix:
   //  - clientA + our vendor    (visible to parentUser AND vendorUser)
@@ -130,9 +145,12 @@ beforeAll(async () => {
 
 afterAll(async () => {
   await db.delete(invoicesTable).where(inArray(invoicesTable.clientId, [clientA, clientB]));
-  await db.delete(sessionsTable).where(inArray(sessionsTable.userId, [staffId, vendorUserId, parentUserId]));
-  await db.delete(usersTable).where(inArray(usersTable.id, [staffId, vendorUserId, parentUserId]));
+  await db.delete(sessionsTable).where(inArray(sessionsTable.userId, [staffId, vendorUserId, parentUserId, coordUserId]));
+  // Delete clients before users: clients.assignedCoordinatorId FK-references
+  // the coordinator user, so the user rows can't be removed while the client
+  // still points at them.
   await db.delete(clientsTable).where(inArray(clientsTable.id, [clientA, clientB]));
+  await db.delete(usersTable).where(inArray(usersTable.id, [staffId, vendorUserId, parentUserId, coordUserId]));
   await db.delete(vendorsTable).where(inArray(vendorsTable.id, [vendorId, otherVendorId]));
 });
 
@@ -213,6 +231,20 @@ describe("GET /invoices SQL-level role scoping", () => {
 
   it("parent scoping cannot be widened by a clientId filter for another client", async () => {
     const res = await get(parentCookie, { clientId: clientB, limit: 1000 });
+    expect(res.body.total).toBe(0);
+    expect(res.body.items).toEqual([]);
+  });
+
+  it("service coordinators only see invoices for clients in their caseload", async () => {
+    // clientA is in the coordinator's caseload (2 invoices); clientB is not.
+    const res = await get(coordCookie, { limit: 1000 });
+    expect(res.status).toBe(200);
+    expect(res.body.total).toBe(2);
+    for (const i of res.body.items) expect(i.clientId).toBe(clientA);
+  });
+
+  it("coordinator scoping cannot be widened by a clientId filter for a client outside the caseload", async () => {
+    const res = await get(coordCookie, { clientId: clientB, limit: 1000 });
     expect(res.body.total).toBe(0);
     expect(res.body.items).toEqual([]);
   });

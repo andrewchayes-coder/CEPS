@@ -597,6 +597,9 @@ export const GetClientCaseResponse = zod.object({
   "signedByName": zod.string().nullish(),
   "altaAuthReceivedAt": zod.string().nullish(),
   "serviceFrequency": zod.union([zod.literal('one_time'),zod.literal('monthly'),zod.literal(null)]).nullish(),
+  "diagnosis": zod.string().nullish(),
+  "eligibilityCategory": zod.string().nullish(),
+  "supportingDocumentUrl": zod.string().nullish(),
   "notes": zod.string().nullish(),
   "createdAt": zod.string().nullish()
 })),
@@ -749,6 +752,9 @@ export const ListReferralsResponse = zod.object({
   "signedByName": zod.string().nullish(),
   "altaAuthReceivedAt": zod.string().nullish(),
   "serviceFrequency": zod.union([zod.literal('one_time'),zod.literal('monthly'),zod.literal(null)]).nullish(),
+  "diagnosis": zod.string().nullish(),
+  "eligibilityCategory": zod.string().nullish(),
+  "supportingDocumentUrl": zod.string().nullish(),
   "notes": zod.string().nullish(),
   "createdAt": zod.string().nullish()
 })),
@@ -803,6 +809,9 @@ export const CreateReferralBody = zod.object({
   "submittedVia": zod.enum(['portal', 'staff_manual_entry']).optional(),
   "parentEmail": zod.string().optional(),
   "serviceFrequency": zod.enum(['one_time', 'monthly']).optional(),
+  "diagnosis": zod.string().optional(),
+  "eligibilityCategory": zod.string().optional(),
+  "supportingDocumentUrl": zod.string().optional(),
   "notes": zod.string().optional()
 })
 
@@ -860,6 +869,9 @@ export const CreateReferralResponse = zod.object({
   "signedByName": zod.string().nullish(),
   "altaAuthReceivedAt": zod.string().nullish(),
   "serviceFrequency": zod.union([zod.literal('one_time'),zod.literal('monthly'),zod.literal(null)]).nullish(),
+  "diagnosis": zod.string().nullish(),
+  "eligibilityCategory": zod.string().nullish(),
+  "supportingDocumentUrl": zod.string().nullish(),
   "notes": zod.string().nullish(),
   "createdAt": zod.string().nullish()
 })
@@ -926,6 +938,9 @@ export const GetReferralResponse = zod.object({
   "signedByName": zod.string().nullish(),
   "altaAuthReceivedAt": zod.string().nullish(),
   "serviceFrequency": zod.union([zod.literal('one_time'),zod.literal('monthly'),zod.literal(null)]).nullish(),
+  "diagnosis": zod.string().nullish(),
+  "eligibilityCategory": zod.string().nullish(),
+  "supportingDocumentUrl": zod.string().nullish(),
   "notes": zod.string().nullish(),
   "createdAt": zod.string().nullish()
 })
@@ -943,6 +958,9 @@ export const UpdateReferralBody = zod.object({
   "serviceCoordinatorId": zod.string().nullish(),
   "parentEmail": zod.string().optional(),
   "serviceFrequency": zod.enum(['one_time', 'monthly']).optional(),
+  "diagnosis": zod.string().nullish(),
+  "eligibilityCategory": zod.string().nullish(),
+  "supportingDocumentUrl": zod.string().nullish(),
   "notes": zod.string().optional(),
   "altaAuthReceivedAt": zod.string().nullish()
 })
@@ -1001,6 +1019,9 @@ export const UpdateReferralResponse = zod.object({
   "signedByName": zod.string().nullish(),
   "altaAuthReceivedAt": zod.string().nullish(),
   "serviceFrequency": zod.union([zod.literal('one_time'),zod.literal('monthly'),zod.literal(null)]).nullish(),
+  "diagnosis": zod.string().nullish(),
+  "eligibilityCategory": zod.string().nullish(),
+  "supportingDocumentUrl": zod.string().nullish(),
   "notes": zod.string().nullish(),
   "createdAt": zod.string().nullish()
 })
@@ -1058,17 +1079,21 @@ export const SubmitSignatureParams = zod.object({
 })
 
 
+export const submitSignatureBodyPasswordMin = 8;
+
 
 
 export const SubmitSignatureBody = zod.object({
   "typedName": zod.string().min(1),
   "agreed": zod.boolean(),
-  "createAccount": zod.boolean().optional(),
-  "password": zod.string().optional()
-})
+  "createAccount": zod.boolean().optional().describe('Opt in to creating a portal account for the signer'),
+  "password": zod.string().min(submitSignatureBodyPasswordMin).optional().describe('Portal account password (required and >= 8 chars when createAccount is true)')
+}).describe('Typed-name e-signature payload. When createAccount is true a portal account is created for the signer and password becomes required and must be at least 8 characters. If createAccount is true but password is missing or shorter than 8 characters the request is rejected with 400 and the signature is NOT recorded (the token stays valid). Because this is a conditional requirement OpenAPI cannot express fully, the rule is enforced by a zod refinement in the handler.')
 
 export const SubmitSignatureResponse = zod.object({
-  "ok": zod.boolean()
+  "ok": zod.boolean(),
+  "accountCreated": zod.boolean().describe('True when a portal account was created for the signer. False when no account was requested, or when account creation was skipped because a user with this email already exists. The signature itself is always recorded when ok is true.'),
+  "accountCreationError": zod.string().nullish().describe('Human-readable reason account creation was skipped, or null.')
 })
 
 
@@ -1547,6 +1572,34 @@ export const CreatePaymentResponse = zod.object({
 
 
 /**
+ * @summary Payment detail (scoped by role)
+ */
+export const GetPaymentParams = zod.object({
+  "id": zod.coerce.string()
+})
+
+export const GetPaymentResponse = zod.object({
+  "id": zod.string(),
+  "clientId": zod.string(),
+  "clientName": zod.string().nullish(),
+  "authorizationId": zod.string().nullish(),
+  "authNumber": zod.string().nullish(),
+  "vendorId": zod.string().nullish(),
+  "vendorName": zod.string().nullish(),
+  "invoiceId": zod.string().nullish(),
+  "qbCheckNumber": zod.string(),
+  "checkDate": zod.string(),
+  "amount": zod.string(),
+  "paymentMonth": zod.string().nullish(),
+  "paymentType": zod.enum(['direct_payment', 'reimbursement', 'fee']),
+  "source": zod.enum(['quickbooks', 'manual', 'historical_import']),
+  "loggedBy": zod.string().nullish(),
+  "remitted": zod.boolean().nullish(),
+  "createdAt": zod.string().nullish()
+})
+
+
+/**
  * @summary Update a payment (staff)
  */
 export const UpdatePaymentParams = zod.object({
@@ -1789,6 +1842,7 @@ export const ListRemittancesQueryParams = zod.object({
   "clientId": zod.coerce.string().optional(),
   "status": zod.coerce.string().optional(),
   "remittanceBatchId": zod.coerce.string().optional().describe('Filter to line items imported from one Alta report (batch).'),
+  "autoMatched": zod.coerce.boolean().optional().describe('Filter by auto-match flag.'),
   "search": zod.coerce.string().optional().describe('Filter by client name (case-insensitive partial match).'),
   "limit": zod.coerce.number().int().optional(),
   "offset": zod.coerce.number().int().optional()
@@ -1830,6 +1884,31 @@ export const CreateRemittanceBody = zod.object({
 })
 
 export const CreateRemittanceResponse = zod.object({
+  "id": zod.string(),
+  "clientId": zod.string(),
+  "clientName": zod.string().nullish(),
+  "authorizationId": zod.string().nullish(),
+  "authNumber": zod.string().nullish(),
+  "altaReference": zod.string().nullish(),
+  "remittanceDate": zod.string(),
+  "amount": zod.string(),
+  "paymentMonth": zod.string().nullish(),
+  "status": zod.enum(['pending', 'received', 'matched']),
+  "source": zod.enum(['alta_regional', 'manual']),
+  "matchedPaymentId": zod.string().nullish(),
+  "autoMatched": zod.boolean(),
+  "remittanceBatchId": zod.string().nullish()
+})
+
+
+/**
+ * @summary Remittance detail (scoped by role)
+ */
+export const GetRemittanceParams = zod.object({
+  "id": zod.coerce.string()
+})
+
+export const GetRemittanceResponse = zod.object({
   "id": zod.string(),
   "clientId": zod.string(),
   "clientName": zod.string().nullish(),

@@ -5,6 +5,7 @@ import * as z from 'zod';
 import { useUpdateMe, useGetCurrentUser, getGetCurrentUserQueryKey } from '@workspace/api-client-react';
 import { useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/components/auth/auth-provider';
+import { VendorBusinessProfile } from '@/components/vendor-business-profile';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { Input } from '@/components/ui/input';
@@ -62,6 +63,10 @@ export default function AccountPage() {
     );
   };
 
+  // A vendor's account is their business record; surface the self-service
+  // Business Profile & W-9 section here since there is no sidebar path to it.
+  const isVendor = user?.role === 'vendor' && user?.linkedRecordType === 'vendor' && !!user?.linkedRecordId;
+
   return (
     <div className="max-w-lg">
       <h1 className="text-2xl font-semibold mb-6">My Account</h1>
@@ -109,6 +114,15 @@ export default function AccountPage() {
           </Form>
         </CardContent>
       </Card>
+
+      {isVendor && user?.linkedRecordId && (
+        <div className="mt-6" data-testid="account-vendor-business-profile">
+          <VendorBusinessProfile
+            id={user.linkedRecordId}
+            contactCardTitle="Business Profile & W-9"
+          />
+        </div>
+      )}
     </div>
   );
 }

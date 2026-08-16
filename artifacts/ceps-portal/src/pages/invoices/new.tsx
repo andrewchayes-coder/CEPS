@@ -2,7 +2,7 @@ import React from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
-import { useCreateInvoice, useListClients, useListVendors, InvoiceInputPaymentType } from '@workspace/api-client-react';
+import { useCreateInvoice, useListClients, useListVendors, useListAuthorizations, InvoiceInputPaymentType } from '@workspace/api-client-react';
 import { useLocation } from 'wouter';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -47,6 +47,38 @@ export default function InvoiceNewPage() {
       notes: ''
     }
   });
+
+  const selectedClientId = form.watch('clientId');
+
+  // Only fetch authorizations once a client is chosen so we can narrow the
+  // vendor list to vendors that actually have an authorization for the client.
+  const { data: authorizationsData } = useListAuthorizations(
+    { clientId: selectedClientId, limit: 1000 },
+    { query: { enabled: !!selectedClientId, queryKey: ['authorizations', { clientId: selectedClientId }] } }
+  );
+
+  // Vendor ids that have at least one authorization for the selected client.
+  const allowedVendorIds = React.useMemo(() => {
+    const ids = new Set<string>();
+    for (const auth of authorizationsData?.items ?? []) {
+      if (auth.vendorId) ids.add(auth.vendorId);
+    }
+    return ids;
+  }, [authorizationsData]);
+
+  const filteredVendors = React.useMemo(() => {
+    if (!selectedClientId) return [];
+    return (vendors ?? []).filter(v => allowedVendorIds.has(v.id));
+  }, [vendors, allowedVendorIds, selectedClientId]);
+
+  // If the previously-selected vendor is no longer valid for the current client
+  // (e.g. after switching clients), clear it so we never submit a mismatch.
+  React.useEffect(() => {
+    const currentVendorId = form.getValues('vendorId');
+    if (currentVendorId && !allowedVendorIds.has(currentVendorId)) {
+      form.setValue('vendorId', '');
+    }
+  }, [allowedVendorIds, form]);
 
   const onSubmit = (data: z.infer<typeof formSchema>) => {
     createInvoice.mutate({
@@ -105,10 +137,22 @@ export default function InvoiceNewPage() {
                 <FormField control={form.control} name="vendorId" render={({ field }) => (
                   <FormItem>
                     <FormLabel>Vendor</FormLabel>
-                    <Select onValueChange={field.onChange} defaultValue={field.value}>
-                      <FormControl><SelectTrigger><SelectValue placeholder={vendorsLoading ? "Loading..." : "Select vendor"} /></SelectTrigger></FormControl>
+                    <Select onValueChange={field.onChange} value={field.value} disabled={!selectedClientId}>
+                      <FormControl>
+                        <SelectTrigger>
+                          <SelectValue placeholder={
+                            !selectedClientId
+                              ? "Select a client first"
+                              : vendorsLoading
+                                ? "Loading..."
+                                : filteredVendors.length === 0
+                                  ? "No authorized vendors"
+                                  : "Select vendor"
+                          } />
+                        </SelectTrigger>
+                      </FormControl>
                       <SelectContent>
-                        {vendors?.map(v => <SelectItem key={v.id} value={v.id}>{v.name}</SelectItem>)}
+                        {filteredVendors.map(v => <SelectItem key={v.id} value={v.id}>{v.name}</SelectItem>)}
                       </SelectContent>
                     </Select>
                     <FormMessage />

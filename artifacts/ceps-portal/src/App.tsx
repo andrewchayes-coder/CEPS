@@ -27,11 +27,14 @@ import ClientsPage from '@/pages/clients';
 import ClientDetailPage from '@/pages/clients/[id]';
 import AuthorizationsPage from '@/pages/authorizations';
 import AuthorizationNewPage from '@/pages/authorizations/new';
+import AuthorizationDetailPage from '@/pages/authorizations/[id]';
 import InvoicesPage from '@/pages/invoices';
 import InvoiceNewPage from '@/pages/invoices/new';
 import InvoiceDetailPage from '@/pages/invoices/[id]';
 import PaymentsPage from '@/pages/payments';
+import PaymentDetailPage from '@/pages/payments/[id]';
 import RemittancesPage from '@/pages/remittances';
+import RemittanceDetailPage from '@/pages/remittances/[id]';
 import VendorsPage from '@/pages/vendors';
 import VendorDetailPage from '@/pages/vendors/[id]';
 import ReportsPage from '@/pages/reports';
@@ -72,11 +75,14 @@ function ProtectedRoutes() {
         <Route path="/clients/:id" component={ClientDetailPage} />
         <Route path="/authorizations" component={AuthorizationsPage} />
         <Route path="/authorizations/new" component={AuthorizationNewPage} />
+        <Route path="/authorizations/:id" component={AuthorizationDetailPage} />
         <Route path="/invoices" component={InvoicesPage} />
         <Route path="/invoices/new" component={InvoiceNewPage} />
         <Route path="/invoices/:id" component={InvoiceDetailPage} />
         <Route path="/payments" component={PaymentsPage} />
+        <Route path="/payments/:id" component={PaymentDetailPage} />
         <Route path="/remittances" component={RemittancesPage} />
+        <Route path="/remittances/:id" component={RemittanceDetailPage} />
         <Route path="/vendors" component={VendorsPage} />
         <Route path="/vendors/:id" component={VendorDetailPage} />
         <Route path="/reports" component={ReportsPage} />

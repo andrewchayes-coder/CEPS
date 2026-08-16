@@ -11,6 +11,8 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Download } from 'lucide-react';
+import { Link } from 'wouter';
+import { ClientLink, VendorLink } from '@/components/entity-links';
 import { downloadCSV } from '@/lib/csv';
 import { formatMoney } from '@/lib/utils';
 import { useToast } from '@/hooks/use-toast';
@@ -119,9 +121,11 @@ export default function ExpiringAuthReport() {
             ) : (
               items.map((r: any) => (
                 <TableRow key={r.authorizationId} data-testid={`row-expiring-auth-${r.authorizationId}`}>
-                  <TableCell className="font-mono text-xs">{r.authNumber}</TableCell>
-                  <TableCell className="font-medium">{r.clientName ?? '—'}</TableCell>
-                  <TableCell className="text-muted-foreground">{r.vendorName ?? '—'}</TableCell>
+                  <TableCell className="font-mono text-xs">
+                    <Link href={`/authorizations/${r.authorizationId}`} className="text-primary hover:underline">{r.authNumber}</Link>
+                  </TableCell>
+                  <TableCell className="font-medium"><ClientLink id={r.clientId} name={r.clientName} /></TableCell>
+                  <TableCell className="text-muted-foreground"><VendorLink id={r.vendorId} name={r.vendorName} className="text-muted-foreground hover:underline" /></TableCell>
                   <TableCell className="text-muted-foreground">{r.servicePeriodEnd}</TableCell>
                   <TableCell className="text-right">
                     <Badge variant="outline" className="bg-chart-1/10 text-chart-1 border-chart-1/20">{r.daysUntilExpiry}</Badge>

@@ -1,5 +1,5 @@
 import { Router, type IRouter } from "express";
-import { desc, asc, eq, and, or, count, isNull, lte, gte, sql, type SQL } from "drizzle-orm";
+import { desc, asc, eq, and, or, count, isNull, inArray, lte, gte, sql, type SQL } from "drizzle-orm";
 import {
   db,
   clientsTable,
@@ -24,7 +24,7 @@ import {
   GetExpiringAuthReportQueryParams,
   GetExpiringAuthReportResponse,
 } from "@workspace/api-zod";
-import { requireAuth, requireStaff, iso } from "../lib/auth";
+import { requireAuth, requireStaff, requireStaffOrCoordinator, iso } from "../lib/auth";
 import { userNameMap, clientNameMap, vendorNameMap, authorizationTotalsPaid, effectiveAuthStatus, notDeleted } from "../lib/serializers";
 import { money, sumMoney } from "../lib/money";
 import Decimal from "decimal.js";
@@ -166,17 +166,29 @@ router.get("/dashboard/summary", requireAuth, async (req, res): Promise<void> =>
   );
 });
 
-router.get("/reports/vendor-payments", requireStaff, async (req, res): Promise<void> => {
+router.get("/reports/vendor-payments", requireAuth, async (req, res): Promise<void> => {
+  const u = req.user!;
   const query = GetVendorPaymentReportQueryParams.safeParse(req.query);
   if (!query.success) {
     res.status(400).json({ error: query.error.message });
     return;
   }
+  const isVendorUser = u.role === "vendor" && u.linkedRecordType === "vendor" && !!u.linkedRecordId;
+  // Staff see all vendors; a vendor user sees only their own record. Other roles
+  // (coordinator/parent/self) have no vendor totals to report — return empty.
+  if (u.role !== "staff" && !isVendorUser) {
+    res.json(GetVendorPaymentReportResponse.parse([]));
+    return;
+  }
   const year = query.data.year ?? new Date().getFullYear();
-  const [payments, vendors] = await Promise.all([
+  let [payments, vendors] = await Promise.all([
     db.select().from(paymentsTable).where(notDeleted(paymentsTable)),
     db.select().from(vendorsTable),
   ]);
+  if (isVendorUser) {
+    payments = payments.filter((p) => p.vendorId === u.linkedRecordId);
+    vendors = vendors.filter((v) => v.id === u.linkedRecordId);
+  }
   const byVendor = new Map<string, { total: Decimal; count: number }>();
   for (const p of payments) {
     if (!p.vendorId) continue;
@@ -204,15 +216,23 @@ router.get("/reports/vendor-payments", requireStaff, async (req, res): Promise<v
 });
 
 // "Pending Authorization Tracker" — referrals/cases waiting on POS authorization
-// from Alta. Uses the SQL-WHERE + {items,total} pagination pattern. Staff only.
-router.get("/reports/pending-authorizations", requireStaff, async (req, res): Promise<void> => {
+// from Alta. Uses the SQL-WHERE + {items,total} pagination pattern. Staff, and
+// service coordinators scoped to their own caseload (clients assigned to them).
+router.get("/reports/pending-authorizations", requireStaffOrCoordinator, async (req, res): Promise<void> => {
   const query = GetPendingAuthReportQueryParams.safeParse(req.query);
   if (!query.success) {
     res.status(400).json({ error: query.error.message });
     return;
   }
+  const u = req.user!;
   const conditions: SQL[] = [eq(referralsTable.status, "pending_auth")];
-  if (query.data.coordinatorId) conditions.push(eq(referralsTable.serviceCoordinatorId, query.data.coordinatorId));
+  // Coordinators only see cases in their caseload (clients assigned to them);
+  // their explicit coordinatorId filter is ignored in favor of the hard scope.
+  if (u.role === "service_coordinator") {
+    conditions.push(eq(clientsTable.assignedCoordinatorId, u.id));
+  } else if (query.data.coordinatorId) {
+    conditions.push(eq(referralsTable.serviceCoordinatorId, query.data.coordinatorId));
+  }
   // Client-name search runs in SQL (ilike over `first_name || ' ' || last_name`)
   // via a join, so limit/offset and the count both reflect the filter.
   if (query.data.search) conditions.push(clientNameLike(query.data.search));
@@ -395,20 +415,35 @@ router.get("/reports/missing-documents", requireStaff, async (req, res): Promise
 // "Expiring Authorization Alerts" — active authorizations whose service period
 // ends within `withinDays` (default 30). Date window filtered in SQL; effective
 // status computed with payment totals so exhausted/expired are excluded. Staff only.
-router.get("/reports/expiring-authorizations", requireStaff, async (req, res): Promise<void> => {
+router.get("/reports/expiring-authorizations", requireStaffOrCoordinator, async (req, res): Promise<void> => {
   const query = GetExpiringAuthReportQueryParams.safeParse(req.query);
   if (!query.success) {
     res.status(400).json({ error: query.error.message });
     return;
   }
+  const u = req.user!;
   const withinDays = Math.min(Math.max(query.data.withinDays ?? 30, 0), 3650);
   const today = new Date().toISOString().slice(0, 10);
   const horizon = new Date(Date.now() + withinDays * 86400000).toISOString().slice(0, 10);
-  const where = and(
+  const conditions: SQL[] = [
     notDeleted(authorizationsTable),
     gte(authorizationsTable.servicePeriodEnd, today),
     lte(authorizationsTable.servicePeriodEnd, horizon),
-  );
+  ];
+  // Coordinators only see authorizations for clients in their caseload.
+  if (u.role === "service_coordinator") {
+    const myClients = await db
+      .select({ id: clientsTable.id })
+      .from(clientsTable)
+      .where(and(eq(clientsTable.assignedCoordinatorId, u.id), notDeleted(clientsTable)));
+    const ids = myClients.map((c) => c.id);
+    if (ids.length === 0) {
+      res.json(GetExpiringAuthReportResponse.parse({ items: [], total: 0 }));
+      return;
+    }
+    conditions.push(inArray(authorizationsTable.clientId, ids));
+  }
+  const where = and(...conditions);
   const auths = await db
     .select()
     .from(authorizationsTable)

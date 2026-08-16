@@ -14,6 +14,12 @@ export interface ReferralUpdate {
   serviceCoordinatorId?: string | null;
   parentEmail?: string;
   serviceFrequency?: ReferralUpdateServiceFrequency;
+  /** @nullable */
+  diagnosis?: string | null;
+  /** @nullable */
+  eligibilityCategory?: string | null;
+  /** @nullable */
+  supportingDocumentUrl?: string | null;
   notes?: string;
   /** @nullable */
   altaAuthReceivedAt?: string | null;

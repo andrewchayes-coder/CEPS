@@ -228,11 +228,13 @@ export default function DashboardPage() {
               )}
             </div>
           </CardContent>
-          <CardFooter className="border-t pt-4">
-            <Button variant="outline" className="w-full" asChild>
-              <Link href="/reports">View All Reports</Link>
-            </Button>
-          </CardFooter>
+          {user?.role !== 'parent_guardian' && user?.role !== 'self' && (
+            <CardFooter className="border-t pt-4">
+              <Button variant="outline" className="w-full" asChild>
+                <Link href="/reports">View All Reports</Link>
+              </Button>
+            </CardFooter>
+          )}
         </Card>
 
         {/* Action Center */}

@@ -199,7 +199,7 @@ afterAll(async () => {
   await db.delete(clientsTable).where(inArray(clientsTable.id, [clientA, clientB, clientC]));
 });
 
-describe("reports endpoints are staff-only", () => {
+describe("reports endpoints require authentication", () => {
   const paths = [
     "/api/reports/pending-authorizations",
     "/api/reports/case-status",
@@ -211,9 +211,28 @@ describe("reports endpoints are staff-only", () => {
       const res = await request(app).get(p);
       expect(res.status).toBe(401);
     });
+  }
+});
+
+describe("reports endpoint role gating", () => {
+  // case-status and missing-documents remain staff-only.
+  const staffOnly = ["/api/reports/case-status", "/api/reports/missing-documents"];
+  for (const p of staffOnly) {
     it(`rejects non-staff ${p}`, async () => {
       const res = await request(app).get(p).set("Cookie", coordCookie);
       expect(res.status).toBe(403);
+      const res2 = await request(app).get(p).set("Cookie", parentCookie);
+      expect(res2.status).toBe(403);
+    });
+  }
+
+  // pending-authorizations and expiring-authorizations are open to coordinators
+  // (caseload-scoped) but still closed to parent/guardian.
+  const coordAllowed = ["/api/reports/pending-authorizations", "/api/reports/expiring-authorizations"];
+  for (const p of coordAllowed) {
+    it(`allows coordinators but rejects parent/guardian ${p}`, async () => {
+      const res = await request(app).get(p).query({ limit: 1000 }).set("Cookie", coordCookie);
+      expect(res.status).toBe(200);
       const res2 = await request(app).get(p).set("Cookie", parentCookie);
       expect(res2.status).toBe(403);
     });
@@ -349,6 +368,99 @@ describe("GET /reports/missing-documents", () => {
     expect(res.status).toBe(200);
     for (const r of res.body.items) expect(r.docType).toBe("auth_pdf");
     expect(res.body.items.some((r: any) => createdAuthIds.includes(r.entityId))).toBe(true);
+  });
+});
+
+describe("coordinator caseload scoping", () => {
+  // A coordinator only sees pending-auth referrals and expiring authorizations
+  // for clients where clients.assignedCoordinatorId === their user id.
+  let scopedCoordId: string;
+  let scopedCoordCookie: string;
+  let ownClient: string; // assigned to scopedCoord
+  let foreignClient: string; // assigned to otherCoord
+  const localAuthIds: string[] = [];
+  const localReferralIds: string[] = [];
+
+  async function insertScopedAuth(clientId: string, servicePeriodEnd: string): Promise<string> {
+    const [a] = await db
+      .insert(authorizationsTable)
+      .values({
+        clientId,
+        vendorId: vendorOk,
+        authNumber: `${nonce}-sc${localAuthIds.length}`,
+        serviceCode: "459",
+        paymentType: "direct_payment",
+        servicePeriodStart: "2026-01-01",
+        servicePeriodEnd,
+        maxPeriodAmount: "1000.00",
+        status: "active",
+      })
+      .returning();
+    localAuthIds.push(a.id);
+    return a.id;
+  }
+
+  beforeAll(async () => {
+    const [sc] = await db
+      .insert(usersTable)
+      .values({ name: "RP ScopedCoord", email: `${nonce}-sc@test.local`, role: "service_coordinator" })
+      .returning();
+    scopedCoordId = sc.id;
+    scopedCoordCookie = await session(scopedCoordId);
+
+    const [oc] = await db
+      .insert(clientsTable)
+      .values({ firstName: "RP", lastName: "OwnClient", dateOfBirth: "2000-01-01", uciNumber: `${nonce}-uciOwn`, assignedCoordinatorId: scopedCoordId })
+      .returning();
+    ownClient = oc.id;
+    const [fc] = await db
+      .insert(clientsTable)
+      .values({ firstName: "RP", lastName: "ForeignClient", dateOfBirth: "2000-01-01", uciNumber: `${nonce}-uciForeign`, assignedCoordinatorId: otherCoordId })
+      .returning();
+    foreignClient = fc.id;
+
+    // pending_auth referrals: one on the coordinator's own client, one foreign.
+    const r1 = await insertReferral({ clientId: ownClient, coordinatorId: scopedCoordId, status: "pending_auth", referralDate: "2026-04-01" });
+    const r2 = await insertReferral({ clientId: foreignClient, coordinatorId: otherCoordId, status: "pending_auth", referralDate: "2026-04-02" });
+    localReferralIds.push(r1.id, r2.id);
+
+    // expiring authorizations (~10 days out): own vs foreign client.
+    await insertScopedAuth(ownClient, soonEnd);
+    await insertScopedAuth(foreignClient, soonEnd);
+  });
+
+  afterAll(async () => {
+    if (localAuthIds.length) await db.delete(authorizationsTable).where(inArray(authorizationsTable.id, localAuthIds));
+    if (localReferralIds.length) await db.delete(referralsTable).where(inArray(referralsTable.id, localReferralIds));
+    await db.delete(clientsTable).where(inArray(clientsTable.id, [ownClient, foreignClient]));
+    await db.delete(sessionsTable).where(inArray(sessionsTable.userId, [scopedCoordId]));
+    await db.delete(usersTable).where(inArray(usersTable.id, [scopedCoordId]));
+  });
+
+  it("pending-authorizations returns only the coordinator's caseload", async () => {
+    const res = await request(app).get("/api/reports/pending-authorizations").query({ limit: 1000 }).set("Cookie", scopedCoordCookie);
+    expect(res.status).toBe(200);
+    const ids = res.body.items.map((r: any) => r.clientId);
+    expect(ids).toContain(ownClient);
+    expect(ids).not.toContain(foreignClient);
+  });
+
+  it("pending-authorizations ignores an attempt to filter to another coordinator's caseload", async () => {
+    const res = await request(app)
+      .get("/api/reports/pending-authorizations")
+      .query({ coordinatorId: otherCoordId, limit: 1000 })
+      .set("Cookie", scopedCoordCookie);
+    expect(res.status).toBe(200);
+    const ids = res.body.items.map((r: any) => r.clientId);
+    expect(ids).not.toContain(foreignClient);
+  });
+
+  it("expiring-authorizations returns only the coordinator's caseload", async () => {
+    const res = await request(app).get("/api/reports/expiring-authorizations").query({ withinDays: 30, limit: 1000 }).set("Cookie", scopedCoordCookie);
+    expect(res.status).toBe(200);
+    const clientIds = res.body.items.map((r: any) => r.clientId);
+    expect(clientIds).toContain(ownClient);
+    expect(clientIds).not.toContain(foreignClient);
   });
 });
 

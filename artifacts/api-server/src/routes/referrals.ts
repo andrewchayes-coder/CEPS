@@ -181,6 +181,9 @@ router.post("/referrals", requireStaffOrCoordinator, async (req, res): Promise<v
   }
 
   const parentEmail = parsed.data.parentEmail?.trim().toLowerCase() || null;
+  // Portal sends '' for untouched optional fields — normalize to null.
+  const emptyToNull = (v: string | undefined | null): string | null =>
+    v == null || v === "" ? null : v;
   const [referral] = await db
     .insert(referralsTable)
     .values({
@@ -192,6 +195,9 @@ router.post("/referrals", requireStaffOrCoordinator, async (req, res): Promise<v
       intakeFields: f,
       parentEmail,
       serviceFrequency: parsed.data.serviceFrequency,
+      diagnosis: emptyToNull(parsed.data.diagnosis),
+      eligibilityCategory: emptyToNull(parsed.data.eligibilityCategory),
+      supportingDocumentUrl: emptyToNull(parsed.data.supportingDocumentUrl),
       notes: parsed.data.notes,
     })
     .returning();
@@ -250,6 +256,10 @@ router.patch("/referrals/:id", requireStaffOrCoordinator, async (req, res): Prom
   const updates: Record<string, unknown> = { ...rest };
   if (altaAuthReceivedAt !== undefined) {
     updates.altaAuthReceivedAt = altaAuthReceivedAt ? new Date(altaAuthReceivedAt) : null;
+  }
+  // Portal sends '' for untouched optional fields — normalize to null.
+  for (const k of ["diagnosis", "eligibilityCategory", "supportingDocumentUrl"] as const) {
+    if (updates[k] === "") updates[k] = null;
   }
   if (updates.parentEmail) updates.parentEmail = String(updates.parentEmail).trim().toLowerCase();
   const [existing] = await db.select().from(referralsTable).where(eq(referralsTable.id, id));
@@ -375,6 +385,16 @@ router.post("/signature/:token", async (req, res): Promise<void> => {
     res.status(400).json({ error: "You must agree to the service terms to sign" });
     return;
   }
+  // Conditional requirement OpenAPI can't fully express (documented on the
+  // SignatureInput schema): when opting into account creation the signer must
+  // supply a password of at least 8 characters. Reject BEFORE loading/consuming
+  // the token or recording the signature so the link stays valid for a retry.
+  if (parsed.data.createAccount && (!parsed.data.password || parsed.data.password.length < 8)) {
+    res.status(400).json({
+      error: "To create a portal account you must set a password of at least 8 characters.",
+    });
+    return;
+  }
   const link = await loadSignatureLink(token);
   if (!link || !link.referralId || link.usedAt) {
     res.status(404).json({ error: "This signature link is invalid, expired, or already used" });
@@ -400,10 +420,18 @@ router.post("/signature/:token", async (req, res): Promise<void> => {
     .where(eq(referralsTable.id, referral.id));
   await db.update(magicLinksTable).set({ usedAt: new Date() }).where(eq(magicLinksTable.id, link.id));
 
-  // Optional account creation for the signer
+  // Optional account creation for the signer. The signature is already recorded
+  // above; if a user with this email already exists we do NOT silently skip —
+  // we sign anyway and report accountCreated=false with an explicit reason so
+  // the UI can be honest with the signer.
+  let accountCreated = false;
+  let accountCreationError: string | null = null;
   if (parsed.data.createAccount && parsed.data.password) {
     const [existing] = await db.select().from(usersTable).where(eq(usersTable.email, link.email));
-    if (!existing) {
+    if (existing) {
+      accountCreationError =
+        "An account with this email already exists. Use Forgot password to sign in, or contact CEPS for help.";
+    } else {
       const [client] = await db.select().from(clientsTable).where(eq(clientsTable.id, referral.clientId));
       await db.insert(usersTable).values({
         name: parsed.data.typedName,
@@ -414,10 +442,11 @@ router.post("/signature/:token", async (req, res): Promise<void> => {
         linkedRecordType: "client",
         accountCreatedAt: new Date(),
       });
+      accountCreated = true;
     }
   }
   await audit(null, "signature_submitted", "referral", referral.id, `Signed by ${parsed.data.typedName}`);
-  res.json(SubmitSignatureResponse.parse({ ok: true }));
+  res.json(SubmitSignatureResponse.parse({ ok: true, accountCreated, accountCreationError }));
 });
 
 export default router;

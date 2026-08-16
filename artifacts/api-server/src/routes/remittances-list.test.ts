@@ -17,12 +17,15 @@ import { newToken } from "../lib/auth";
 const nonce = `remls${Date.now().toString(36)}`;
 
 let staffId: string;
+let coordId: string;
 let vendorUserId: string;
 let parentUserId: string;
 let vendorId: string;
-let clientA: string; // the parent user's linked client
-let clientB: string; // a different client
+let clientA: string; // the parent user's linked client, coordinator's caseload
+let clientB: string; // a different client, outside the coordinator's caseload
+let clientC: string; // used for autoMatched-flag filter tests
 let staffCookie: string;
+let coordCookie: string;
 let vendorCookie: string;
 let parentCookie: string;
 
@@ -39,7 +42,7 @@ async function session(userId: string) {
   return `ceps_session=${token}`;
 }
 
-async function insertRemittance(opts: { clientId: string; status?: string }) {
+async function insertRemittance(opts: { clientId: string; status?: string; autoMatched?: boolean }) {
   const [r] = await db
     .insert(remittancesTable)
     .values({
@@ -49,6 +52,7 @@ async function insertRemittance(opts: { clientId: string; status?: string }) {
       amount: "100.00",
       status: opts.status ?? "received",
       source: "manual",
+      ...(opts.autoMatched !== undefined ? { autoMatched: opts.autoMatched } : {}),
     })
     .returning();
   return r;
@@ -65,12 +69,18 @@ beforeAll(async () => {
     .returning();
   staffId = staff.id;
 
+  const [coord] = await db
+    .insert(usersTable)
+    .values({ name: "RL Coord", email: `${nonce}-coord@test.local`, role: "service_coordinator" })
+    .returning();
+  coordId = coord.id;
+
   const [vendor] = await db.insert(vendorsTable).values({ name: `${nonce}-vendor` }).returning();
   vendorId = vendor.id;
 
   const [ca] = await db
     .insert(clientsTable)
-    .values({ firstName: "RL", lastName: "ClientA", dateOfBirth: "2000-01-01", uciNumber: `${nonce}-uciA` })
+    .values({ firstName: "RL", lastName: "ClientA", dateOfBirth: "2000-01-01", uciNumber: `${nonce}-uciA`, assignedCoordinatorId: coordId })
     .returning();
   clientA = ca.id;
   const [cb] = await db
@@ -78,6 +88,11 @@ beforeAll(async () => {
     .values({ firstName: "RL", lastName: "ClientB", dateOfBirth: "2000-01-01", uciNumber: `${nonce}-uciB` })
     .returning();
   clientB = cb.id;
+  const [cc] = await db
+    .insert(clientsTable)
+    .values({ firstName: "RL", lastName: "ClientC", dateOfBirth: "2000-01-01", uciNumber: `${nonce}-uciC` })
+    .returning();
+  clientC = cc.id;
 
   const [vendorUser] = await db
     .insert(usersTable)
@@ -104,6 +119,7 @@ beforeAll(async () => {
   parentUserId = parentUser.id;
 
   staffCookie = await session(staffId);
+  coordCookie = await session(coordId);
   vendorCookie = await session(vendorUserId);
   parentCookie = await session(parentUserId);
 
@@ -114,13 +130,22 @@ beforeAll(async () => {
   await insertRemittance({ clientId: clientA, status: "received" });
   await insertRemittance({ clientId: clientB, status: "received" });
   await insertRemittance({ clientId: clientB, status: "received" });
+
+  // clientC drives the "needs manual match" triage filter (status=received &
+  // autoMatched=false). One unmatched row plus two rows that should be
+  // excluded: an auto-matched received row and a fully matched row.
+  await insertRemittance({ clientId: clientC, status: "received", autoMatched: false });
+  await insertRemittance({ clientId: clientC, status: "received", autoMatched: true });
+  await insertRemittance({ clientId: clientC, status: "matched", autoMatched: true });
 });
 
 afterAll(async () => {
-  await db.delete(remittancesTable).where(inArray(remittancesTable.clientId, [clientA, clientB]));
-  await db.delete(sessionsTable).where(inArray(sessionsTable.userId, [staffId, vendorUserId, parentUserId]));
-  await db.delete(usersTable).where(inArray(usersTable.id, [staffId, vendorUserId, parentUserId]));
-  await db.delete(clientsTable).where(inArray(clientsTable.id, [clientA, clientB]));
+  await db.delete(remittancesTable).where(inArray(remittancesTable.clientId, [clientA, clientB, clientC]));
+  await db.delete(sessionsTable).where(inArray(sessionsTable.userId, [staffId, coordId, vendorUserId, parentUserId]));
+  // Clients reference the coordinator via assigned_coordinator_id FK, so delete
+  // clients before the users they point at.
+  await db.delete(clientsTable).where(inArray(clientsTable.id, [clientA, clientB, clientC]));
+  await db.delete(usersTable).where(inArray(usersTable.id, [staffId, coordId, vendorUserId, parentUserId]));
   await db.delete(vendorsTable).where(inArray(vendorsTable.id, [vendorId]));
 });
 
@@ -198,6 +223,22 @@ describe("GET /remittances SQL-level role scoping", () => {
     expect(res.body.total).toBe(0);
     expect(res.body.items).toEqual([]);
   });
+
+  it("service coordinators only see remittances for clients in their caseload", async () => {
+    const res = await get(coordCookie, { limit: 1000 });
+    expect(res.status).toBe(200);
+    // clientA is assigned to the coordinator; clientB/clientC are not.
+    for (const r of res.body.items) expect(r.clientId).toBe(clientA);
+    const ids = res.body.items.map((r: { clientId: string }) => r.clientId);
+    expect(ids).not.toContain(clientB);
+    expect(ids).not.toContain(clientC);
+  });
+
+  it("coordinator scoping cannot be widened by a clientId filter for a client outside the caseload", async () => {
+    const res = await get(coordCookie, { clientId: clientB, limit: 1000 });
+    expect(res.body.total).toBe(0);
+    expect(res.body.items).toEqual([]);
+  });
 });
 
 describe("GET /remittances filters", () => {
@@ -205,5 +246,35 @@ describe("GET /remittances filters", () => {
     const res = await get(staffCookie, { clientId: clientA, status: "matched", limit: 1000 });
     expect(res.body.total).toBe(1);
     expect(res.body.items[0].status).toBe("matched");
+  });
+
+  it("triage view: status=received & autoMatched=false returns only unmatched rows", async () => {
+    const res = await get(staffCookie, {
+      clientId: clientC,
+      status: "received",
+      autoMatched: "false",
+      limit: 1000,
+    });
+    expect(res.status).toBe(200);
+    expect(res.body.total).toBe(1);
+    for (const r of res.body.items) {
+      expect(r.status).toBe("received");
+      expect(r.autoMatched).toBe(false);
+    }
+  });
+
+  it("autoMatched=true excludes the unmatched received row", async () => {
+    const res = await get(staffCookie, { clientId: clientC, autoMatched: "true", limit: 1000 });
+    expect(res.status).toBe(200);
+    for (const r of res.body.items) expect(r.autoMatched).toBe(true);
+    // clientC has two auto-matched rows (one received, one matched).
+    expect(res.body.total).toBe(2);
+  });
+
+  it("autoMatched=false ('false' string is not coerced to true)", async () => {
+    const res = await get(staffCookie, { clientId: clientC, autoMatched: "false", limit: 1000 });
+    expect(res.status).toBe(200);
+    for (const r of res.body.items) expect(r.autoMatched).toBe(false);
+    expect(res.body.total).toBe(1);
   });
 });

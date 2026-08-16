@@ -495,6 +495,12 @@ export interface Referral {
   /** @nullable */
   serviceFrequency?: ReferralServiceFrequency;
   /** @nullable */
+  diagnosis?: string | null;
+  /** @nullable */
+  eligibilityCategory?: string | null;
+  /** @nullable */
+  supportingDocumentUrl?: string | null;
+  /** @nullable */
   notes?: string | null;
   /** @nullable */
   createdAt?: string | null;
@@ -745,6 +751,9 @@ export interface ReferralInput {
   submittedVia?: ReferralInputSubmittedVia;
   parentEmail?: string;
   serviceFrequency?: ReferralInputServiceFrequency;
+  diagnosis?: string;
+  eligibilityCategory?: string;
+  supportingDocumentUrl?: string;
   notes?: string;
 }
 
@@ -775,6 +784,12 @@ export interface ReferralUpdate {
   serviceCoordinatorId?: string | null;
   parentEmail?: string;
   serviceFrequency?: ReferralUpdateServiceFrequency;
+  /** @nullable */
+  diagnosis?: string | null;
+  /** @nullable */
+  eligibilityCategory?: string | null;
+  /** @nullable */
+  supportingDocumentUrl?: string | null;
   notes?: string;
   /** @nullable */
   altaAuthReceivedAt?: string | null;
@@ -796,12 +811,31 @@ export interface SignaturePage {
   alreadySigned: boolean;
 }
 
+/**
+ * Typed-name e-signature payload. When createAccount is true a portal account is created for the signer and password becomes required and must be at least 8 characters. If createAccount is true but password is missing or shorter than 8 characters the request is rejected with 400 and the signature is NOT recorded (the token stays valid). Because this is a conditional requirement OpenAPI cannot express fully, the rule is enforced by a zod refinement in the handler.
+ */
 export interface SignatureInput {
   /** @minLength 1 */
   typedName: string;
   agreed: boolean;
+  /** Opt in to creating a portal account for the signer */
   createAccount?: boolean;
+  /**
+     * Portal account password (required and >= 8 chars when createAccount is true)
+     * @minLength 8
+     */
   password?: string;
+}
+
+export interface SignatureResult {
+  ok: boolean;
+  /** True when a portal account was created for the signer. False when no account was requested, or when account creation was skipped because a user with this email already exists. The signature itself is always recorded when ok is true. */
+  accountCreated: boolean;
+  /**
+     * Human-readable reason account creation was skipped, or null.
+     * @nullable
+     */
+  accountCreationError?: string | null;
 }
 
 export type AuthorizationInputServiceCode = typeof AuthorizationInputServiceCode[keyof typeof AuthorizationInputServiceCode];
@@ -1720,6 +1754,10 @@ status?: string;
  * Filter to line items imported from one Alta report (batch).
  */
 remittanceBatchId?: string;
+/**
+ * Filter by auto-match flag.
+ */
+autoMatched?: boolean;
 /**
  * Filter by client name (case-insensitive partial match).
  */

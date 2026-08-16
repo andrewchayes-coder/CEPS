@@ -7,6 +7,7 @@ import {
   ListPaymentsResponse,
   CreatePaymentBody,
   CreatePaymentResponse,
+  GetPaymentResponse,
   ImportCheckRegisterBody,
   ImportCheckRegisterResponse,
   UpdatePaymentBody,
@@ -15,6 +16,7 @@ import {
   ListRemittancesResponse,
   CreateRemittanceBody,
   CreateRemittanceResponse,
+  GetRemittanceResponse,
   UpdateRemittanceBody,
   UpdateRemittanceResponse,
   MatchRemittanceBody,
@@ -88,19 +90,25 @@ router.get("/payments", requireAuth, async (req, res): Promise<void> => {
     // This mirrors the invoices/authorizations pattern and ensures a client's
     // payments are invisible the moment the client is soft-deleted.
     sql`${paymentsTable.clientId} in (select id from clients where is_deleted = false)`,
-    // Exclude payments linked to inactive vendors. vendorId is nullable (payments
-    // without a vendor are always visible), so the guard allows NULL through and
-    // only filters out payments whose vendor has active = false. Parentheses are
-    // required so the OR does not escape the outer AND chain.
-    sql`(${paymentsTable.vendorId} is null or ${paymentsTable.vendorId} in (select id from vendors where active = true))`,
+    // NOTE: no vendor-active filter here. Historical payments must remain visible
+    // in the Payments Log regardless of whether their vendor is later
+    // deactivated (active = false). This mirrors the client case-record payments
+    // query, which has no vendor-active filter either. Only soft-delete filters
+    // and role scoping restrict visibility.
   ];
-  // Role scoping — mirrors the audit-log SQL-WHERE pattern:
-  // vendors see only their own payments; parent/self only their linked client's.
+  // Role scoping — mirrors the invoices/audit-log SQL-WHERE pattern:
+  // vendors see only their own payments; parent/self only their linked client's;
+  // service coordinators only payments for clients in their caseload
+  // (clients.assignedCoordinatorId = their user id).
   const u = req.user!;
   if (u.role === "vendor" && u.linkedRecordType === "vendor") {
     conditions.push(eq(paymentsTable.vendorId, u.linkedRecordId ?? ""));
   } else if ((u.role === "parent_guardian" || u.role === "self") && u.linkedRecordType === "client") {
     conditions.push(eq(paymentsTable.clientId, u.linkedRecordId ?? ""));
+  } else if (u.role === "service_coordinator") {
+    conditions.push(
+      sql`${paymentsTable.clientId} in (select id from clients where assigned_coordinator_id = ${u.id} and is_deleted = false)`,
+    );
   }
   // Query-string filters
   if (query.data.clientId) conditions.push(eq(paymentsTable.clientId, query.data.clientId));
@@ -295,6 +303,49 @@ router.post("/payments/import", requireStaff, async (req, res): Promise<void> =>
   // duplicates + client/auth/month duplicates); the per-row `outcome` field
   // distinguishes skipped_duplicate from flagged_duplicate.
   res.json(ImportCheckRegisterResponse.parse({ imported, skipped: skipped + flagged, unmatched, results }));
+});
+
+router.get("/payments/:id", requireAuth, async (req, res): Promise<void> => {
+  const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+  const [payment] = await db
+    .select()
+    .from(paymentsTable)
+    .where(and(eq(paymentsTable.id, id), notDeleted(paymentsTable)));
+  if (!payment) {
+    res.status(404).json({ error: "Payment not found" });
+    return;
+  }
+  // Exclude payments belonging to soft-deleted clients (mirrors GET /payments).
+  const [activeClient] = await db
+    .select({ id: clientsTable.id, assignedCoordinatorId: clientsTable.assignedCoordinatorId })
+    .from(clientsTable)
+    .where(and(eq(clientsTable.id, payment.clientId), eq(clientsTable.isDeleted, false)));
+  if (!activeClient) {
+    res.status(404).json({ error: "Payment not found" });
+    return;
+  }
+  // Per-role ownership, mirroring the GET /payments list scoping:
+  // staff see all; coordinators only payments for clients in their caseload;
+  // parent/self only their linked client's payments; vendors only their own
+  // vendor's payments.
+  const u = req.user!;
+  if (u.role === "vendor" && u.linkedRecordType === "vendor") {
+    if (payment.vendorId !== u.linkedRecordId) {
+      res.status(403).json({ error: "Forbidden" });
+      return;
+    }
+  } else if ((u.role === "parent_guardian" || u.role === "self") && u.linkedRecordType === "client") {
+    if (payment.clientId !== u.linkedRecordId) {
+      res.status(403).json({ error: "Forbidden" });
+      return;
+    }
+  } else if (u.role === "service_coordinator") {
+    if (activeClient.assignedCoordinatorId !== u.id) {
+      res.status(403).json({ error: "Forbidden" });
+      return;
+    }
+  }
+  res.json(GetPaymentResponse.parse((await enrichPayments([payment]))[0]));
 });
 
 router.patch("/payments/:id", requireStaff, async (req, res): Promise<void> => {
@@ -510,11 +561,16 @@ router.get("/remittances", requireAuth, async (req, res): Promise<void> => {
     // client is soft-deleted, regardless of which query-string filter is used.
     sql`${remittancesTable.clientId} in (select id from clients where is_deleted = false)`,
   ];
-  // Role scoping — mirrors the payments/audit-log SQL-WHERE pattern:
-  // parent/self see only their linked client's remittances; vendors see none.
+  // Role scoping — mirrors the payments/invoices SQL-WHERE pattern:
+  // parent/self see only their linked client's remittances; service
+  // coordinators only remittances for clients in their caseload; vendors see none.
   const u = req.user!;
   if ((u.role === "parent_guardian" || u.role === "self") && u.linkedRecordType === "client") {
     conditions.push(eq(remittancesTable.clientId, u.linkedRecordId ?? ""));
+  } else if (u.role === "service_coordinator") {
+    conditions.push(
+      sql`${remittancesTable.clientId} in (select id from clients where assigned_coordinator_id = ${u.id} and is_deleted = false)`,
+    );
   } else if (u.role === "vendor") {
     // Vendors have no visibility into remittances — force an empty result set
     // without a JS-level short circuit so pagination/total stay SQL-driven.
@@ -524,6 +580,13 @@ router.get("/remittances", requireAuth, async (req, res): Promise<void> => {
   if (query.data.clientId) conditions.push(eq(remittancesTable.clientId, query.data.clientId));
   if (query.data.status) conditions.push(eq(remittancesTable.status, query.data.status));
   if (query.data.remittanceBatchId) conditions.push(eq(remittancesTable.remittanceBatchId, query.data.remittanceBatchId));
+  // Parse the autoMatched flag from the raw query string. The generated zod
+  // schema uses zod.coerce.boolean(), which turns any non-empty string
+  // (including "false") into true, so we interpret the literal here instead.
+  const rawAutoMatched = req.query.autoMatched;
+  if (typeof rawAutoMatched === "string" && (rawAutoMatched === "true" || rawAutoMatched === "false")) {
+    conditions.push(eq(remittancesTable.autoMatched, rawAutoMatched === "true"));
+  }
   if (query.data.search) {
     const escapeLike = (s: string) => s.replace(/[\\%_]/g, (c) => `\\${c}`);
     const like = `%${escapeLike(query.data.search)}%`;
@@ -803,6 +866,46 @@ router.post("/remittances/import", requireStaff, async (req, res): Promise<void>
       results,
     }),
   );
+});
+
+router.get("/remittances/:id", requireAuth, async (req, res): Promise<void> => {
+  const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+  const [remittance] = await db
+    .select()
+    .from(remittancesTable)
+    .where(and(eq(remittancesTable.id, id), notDeleted(remittancesTable)));
+  if (!remittance) {
+    res.status(404).json({ error: "Remittance not found" });
+    return;
+  }
+  // Exclude remittances belonging to soft-deleted clients (mirrors GET /remittances).
+  const [activeClient] = await db
+    .select({ id: clientsTable.id, assignedCoordinatorId: clientsTable.assignedCoordinatorId })
+    .from(clientsTable)
+    .where(and(eq(clientsTable.id, remittance.clientId), eq(clientsTable.isDeleted, false)));
+  if (!activeClient) {
+    res.status(404).json({ error: "Remittance not found" });
+    return;
+  }
+  // Per-role ownership, mirroring the GET /remittances list scoping:
+  // staff see all; coordinators only remittances for clients in their caseload;
+  // parent/self only their linked client's; vendors have no visibility.
+  const u = req.user!;
+  if (u.role === "vendor") {
+    res.status(403).json({ error: "Forbidden" });
+    return;
+  } else if ((u.role === "parent_guardian" || u.role === "self") && u.linkedRecordType === "client") {
+    if (remittance.clientId !== u.linkedRecordId) {
+      res.status(403).json({ error: "Forbidden" });
+      return;
+    }
+  } else if (u.role === "service_coordinator") {
+    if (activeClient.assignedCoordinatorId !== u.id) {
+      res.status(403).json({ error: "Forbidden" });
+      return;
+    }
+  }
+  res.json(GetRemittanceResponse.parse((await enrichRemittances([remittance]))[0]));
 });
 
 router.patch("/remittances/:id", requireStaff, async (req, res): Promise<void> => {

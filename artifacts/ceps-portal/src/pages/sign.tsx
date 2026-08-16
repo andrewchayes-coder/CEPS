@@ -18,6 +18,12 @@ export default function SignaturePage() {
   
   const [typedName, setTypedName] = useState('');
   const [agreed, setAgreed] = useState(false);
+  const [createAccount, setCreateAccount] = useState(false);
+  const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [submitted, setSubmitted] = useState(false);
+  const [accountRequested, setAccountRequested] = useState(false);
+  const [accountCreated, setAccountCreated] = useState(false);
   
   const { data: pageData, isLoading, error } = useGetSignaturePage(token!, {
     query: {
@@ -60,6 +66,47 @@ export default function SignaturePage() {
     );
   }
 
+  if (submitted) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-muted/30 p-4">
+        <Card className="w-full max-w-md text-center py-8 border-chart-5/20 bg-chart-5/5">
+          <CardHeader>
+            <div className="flex justify-center mb-4">
+              <CheckCircle2 className="w-12 h-12 text-chart-5" />
+            </div>
+            <CardTitle>Authorization Signed</CardTitle>
+            <CardDescription>
+              Thank you, {typedName}. Your signature has been submitted successfully.
+            </CardDescription>
+          </CardHeader>
+          {accountRequested && accountCreated && (
+            <CardContent className="space-y-4">
+              <p className="text-sm text-muted-foreground">
+                Your portal account has been created. You can now log in to track this
+                client's services, invoices, and payments.
+              </p>
+              <Button className="w-full" onClick={() => setLocation('/login')}>
+                Go to Login
+              </Button>
+            </CardContent>
+          )}
+          {accountRequested && !accountCreated && (
+            <CardContent className="space-y-4">
+              <p className="text-sm text-muted-foreground">
+                An account with this email already exists, so a new one was not
+                created. Use <span className="font-medium">Forgot password</span> to
+                sign in, or contact CEPS if you need help accessing your account.
+              </p>
+              <Button variant="outline" className="w-full" onClick={() => setLocation('/login')}>
+                Go to Login
+              </Button>
+            </CardContent>
+          )}
+        </Card>
+      </div>
+    );
+  }
+
   const handleSubmit = () => {
     if (!typedName.trim()) {
       toast({ variant: "destructive", title: "Name Required", description: "Please type your name to sign." });
@@ -69,18 +116,31 @@ export default function SignaturePage() {
       toast({ variant: "destructive", title: "Agreement Required", description: "You must check the agreement box." });
       return;
     }
+    if (createAccount) {
+      if (password.length < 8) {
+        toast({ variant: "destructive", title: "Password Too Short", description: "Password must be at least 8 characters." });
+        return;
+      }
+      if (password !== confirmPassword) {
+        toast({ variant: "destructive", title: "Passwords Don't Match", description: "Please re-enter your password." });
+        return;
+      }
+    }
 
-    submitSignature.mutate({ 
+    submitSignature.mutate({
       token: token!,
-      data: { typedName, agreed }
+      data: createAccount
+        ? { typedName, agreed, createAccount: true, password }
+        : { typedName, agreed },
     }, {
-      onSuccess: () => {
+      onSuccess: (result) => {
         toast({
           title: "Successfully Signed",
           description: "Thank you. The authorization has been submitted.",
         });
-        // Could reload to show the "already signed" state, or redirect
-        window.location.reload();
+        setAccountRequested(createAccount);
+        setAccountCreated(!!result?.accountCreated);
+        setSubmitted(true);
       },
       onError: () => {
         toast({
@@ -170,6 +230,66 @@ export default function SignaturePage() {
                 value={typedName}
                 onChange={(e) => setTypedName(e.target.value)}
               />
+            </div>
+
+            <Separator />
+
+            <div className="space-y-4 rounded-lg border p-4 bg-secondary/30">
+              <div className="flex items-start space-x-3">
+                <Checkbox
+                  id="create-account"
+                  checked={createAccount}
+                  onCheckedChange={(c) => setCreateAccount(c === true)}
+                  className="mt-1"
+                  data-testid="checkbox-create-account"
+                />
+                <div className="grid gap-1.5 leading-none">
+                  <label htmlFor="create-account" className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70">
+                    Create your portal account (optional)
+                  </label>
+                  <p className="text-sm text-muted-foreground">
+                    Set a password to log in and follow this client's services, invoices, and payments.
+                  </p>
+                </div>
+              </div>
+
+              {createAccount && (
+                <div className="grid sm:grid-cols-2 gap-4 pt-2">
+                  <div className="space-y-2">
+                    <Label htmlFor="account-name">Your Name</Label>
+                    <Input
+                      id="account-name"
+                      value={typedName}
+                      onChange={(e) => setTypedName(e.target.value)}
+                      placeholder="Full name"
+                      data-testid="input-account-name"
+                    />
+                  </div>
+                  <div className="hidden sm:block" />
+                  <div className="space-y-2">
+                    <Label htmlFor="account-password">Password</Label>
+                    <Input
+                      id="account-password"
+                      type="password"
+                      value={password}
+                      onChange={(e) => setPassword(e.target.value)}
+                      placeholder="At least 8 characters"
+                      data-testid="input-account-password"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="account-password-confirm">Confirm Password</Label>
+                    <Input
+                      id="account-password-confirm"
+                      type="password"
+                      value={confirmPassword}
+                      onChange={(e) => setConfirmPassword(e.target.value)}
+                      placeholder="Re-enter password"
+                      data-testid="input-account-password-confirm"
+                    />
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         </CardContent>

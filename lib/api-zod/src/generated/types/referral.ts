@@ -35,6 +35,12 @@ export interface Referral {
   /** @nullable */
   serviceFrequency?: ReferralServiceFrequency;
   /** @nullable */
+  diagnosis?: string | null;
+  /** @nullable */
+  eligibilityCategory?: string | null;
+  /** @nullable */
+  supportingDocumentUrl?: string | null;
+  /** @nullable */
   notes?: string | null;
   /** @nullable */
   createdAt?: string | null;

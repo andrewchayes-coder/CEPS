@@ -14,5 +14,8 @@ export interface ReferralInput {
   submittedVia?: ReferralInputSubmittedVia;
   parentEmail?: string;
   serviceFrequency?: ReferralInputServiceFrequency;
+  diagnosis?: string;
+  eligibilityCategory?: string;
+  supportingDocumentUrl?: string;
   notes?: string;
 }

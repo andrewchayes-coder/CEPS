@@ -1,6 +1,6 @@
 import { Router, type IRouter } from "express";
 import { eq, and, desc, sql, count, ilike, or, type SQL } from "drizzle-orm";
-import { db, invoicesTable, authorizationsTable, paymentsTable } from "@workspace/db";
+import { db, invoicesTable, authorizationsTable, paymentsTable, vendorsTable } from "@workspace/db";
 import { money } from "../lib/money";
 import {
   ListInvoicesQueryParams,
@@ -44,12 +44,18 @@ router.get("/invoices", requireAuth, async (req, res): Promise<void> => {
   }
   const conditions: SQL[] = [notDeleted(invoicesTable)];
   // Role scoping — mirrors the payments/audit-log SQL-WHERE pattern:
-  // vendors see only their own invoices; parent/self only their linked client's.
+  // vendors see only their own invoices; parent/self only their linked client's;
+  // service coordinators only invoices for clients in their caseload
+  // (clients.assignedCoordinatorId = their user id).
   const u = req.user!;
   if (u.role === "vendor" && u.linkedRecordType === "vendor") {
     conditions.push(eq(invoicesTable.vendorId, u.linkedRecordId ?? ""));
   } else if ((u.role === "parent_guardian" || u.role === "self") && u.linkedRecordType === "client") {
     conditions.push(eq(invoicesTable.clientId, u.linkedRecordId ?? ""));
+  } else if (u.role === "service_coordinator") {
+    conditions.push(
+      sql`${invoicesTable.clientId} in (select id from clients where assigned_coordinator_id = ${u.id} and is_deleted = false)`,
+    );
   }
   const escapeLike = (s: string) => s.replace(/[\\%_]/g, (c) => `\\${c}`);
   // Query-string filters
@@ -297,6 +303,20 @@ router.post("/invoices/:id/validate", requireStaff, async (req, res): Promise<vo
     });
   } else {
     checks.push({ check: "within_max_period_amount", passed: false, message: "Cannot verify the period maximum without a linked authorization." });
+  }
+
+  // 6. Vendor is currently active
+  const vendor = invoice.vendorId
+    ? (await db.select().from(vendorsTable).where(eq(vendorsTable.id, invoice.vendorId)))[0]
+    : undefined;
+  if (!invoice.vendorId) {
+    checks.push({ check: "vendor_active", passed: false, message: "No vendor is linked to this invoice." });
+  } else if (!vendor) {
+    checks.push({ check: "vendor_active", passed: false, message: "The linked vendor no longer exists." });
+  } else if (!vendor.active) {
+    checks.push({ check: "vendor_active", passed: false, message: `Vendor ${vendor.name} is deactivated and cannot be paid.` });
+  } else {
+    checks.push({ check: "vendor_active", passed: true, message: `Vendor ${vendor.name} is active.` });
   }
 
   const valid = checks.every((c) => c.passed);

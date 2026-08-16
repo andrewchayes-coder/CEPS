@@ -5,6 +5,8 @@ import { CheckRegisterImport } from '@/components/check-register-import';
 import { LogPaymentDialog } from '@/components/log-payment-dialog';
 import { DeleteEntityButton } from '@/components/delete-entity-button';
 import { EditPaymentDialog } from '@/components/edit-payment-dialog';
+import { ClientLink, VendorLink } from '@/components/entity-links';
+import { Link } from 'wouter';
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Input } from '@/components/ui/input';
@@ -92,9 +94,13 @@ export default function PaymentsPage() {
                 payments.map(p => (
                   <TableRow key={p.id}>
                     <TableCell className="whitespace-nowrap">{format(new Date(p.checkDate), 'MMM d, yyyy')}</TableCell>
-                    <TableCell className="font-mono text-sm">{p.qbCheckNumber}</TableCell>
-                    <TableCell>{p.vendorName}</TableCell>
-                    <TableCell className="text-muted-foreground">{p.clientName}</TableCell>
+                    <TableCell className="font-mono text-sm">
+                      <Link href={`/payments/${p.id}`} className="text-primary hover:underline" data-testid="link-payment">
+                        {p.qbCheckNumber}
+                      </Link>
+                    </TableCell>
+                    <TableCell><VendorLink id={p.vendorId} name={p.vendorName} /></TableCell>
+                    <TableCell className="text-muted-foreground"><ClientLink id={p.clientId} name={p.clientName} className="text-muted-foreground hover:underline" /></TableCell>
                     <TableCell className="text-right font-medium">${parseFloat(p.amount).toFixed(2)}</TableCell>
                     <TableCell>
                       {p.remitted ? <CheckCircle2 className="w-5 h-5 text-chart-5" /> : <span className="text-muted-foreground">-</span>}

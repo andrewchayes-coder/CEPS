@@ -10,6 +10,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
+import { ClientLink } from '@/components/entity-links';
 import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Download } from 'lucide-react';
@@ -162,7 +163,7 @@ export default function CaseStatusReport({ initialStatus }: { initialStatus?: st
             ) : (
               items.map((r: any) => (
                 <TableRow key={r.referralId} data-testid={`row-case-status-${r.referralId}`}>
-                  <TableCell className="font-medium">{r.clientName ?? '—'}</TableCell>
+                  <TableCell className="font-medium"><ClientLink id={r.clientId} name={r.clientName} /></TableCell>
                   <TableCell><Badge variant="secondary">{STATUS_LABELS[r.status] ?? r.status}</Badge></TableCell>
                   <TableCell className="text-muted-foreground">{r.referralDate}</TableCell>
                   <TableCell className="text-muted-foreground">{r.coordinatorName ?? '—'}</TableCell>

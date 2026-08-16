@@ -20,13 +20,15 @@ import { newToken } from "../lib/auth";
 const nonce = `payls${Date.now().toString(36)}`;
 
 let staffId: string;
+let coordId: string;
 let vendorUserId: string;
 let parentUserId: string;
 let vendorId: string;
 let otherVendorId: string;
-let clientA: string; // the parent user's linked client
-let clientB: string; // a different client
+let clientA: string; // the parent user's linked client, coordinator's caseload
+let clientB: string; // a different client, outside the coordinator's caseload
 let staffCookie: string;
+let coordCookie: string;
 let vendorCookie: string;
 let parentCookie: string;
 
@@ -76,6 +78,12 @@ beforeAll(async () => {
     .returning();
   staffId = staff.id;
 
+  const [coord] = await db
+    .insert(usersTable)
+    .values({ name: "PL Coord", email: `${nonce}-coord@test.local`, role: "service_coordinator" })
+    .returning();
+  coordId = coord.id;
+
   const [vendor] = await db.insert(vendorsTable).values({ name: `${nonce}-vendor` }).returning();
   vendorId = vendor.id;
   const [otherVendor] = await db.insert(vendorsTable).values({ name: `${nonce}-vendor2` }).returning();
@@ -83,7 +91,7 @@ beforeAll(async () => {
 
   const [ca] = await db
     .insert(clientsTable)
-    .values({ firstName: "PL", lastName: "ClientA", dateOfBirth: "2000-01-01", uciNumber: `${nonce}-uciA` })
+    .values({ firstName: "PL", lastName: "ClientA", dateOfBirth: "2000-01-01", uciNumber: `${nonce}-uciA`, assignedCoordinatorId: coordId })
     .returning();
   clientA = ca.id;
   const [cb] = await db
@@ -117,6 +125,7 @@ beforeAll(async () => {
   parentUserId = parentUser.id;
 
   staffCookie = await session(staffId);
+  coordCookie = await session(coordId);
   vendorCookie = await session(vendorUserId);
   parentCookie = await session(parentUserId);
 
@@ -134,9 +143,11 @@ beforeAll(async () => {
 afterAll(async () => {
   await db.delete(feesTable).where(inArray(feesTable.clientId, [clientA, clientB]));
   await db.delete(paymentsTable).where(inArray(paymentsTable.clientId, [clientA, clientB]));
-  await db.delete(sessionsTable).where(inArray(sessionsTable.userId, [staffId, vendorUserId, parentUserId]));
-  await db.delete(usersTable).where(inArray(usersTable.id, [staffId, vendorUserId, parentUserId]));
+  await db.delete(sessionsTable).where(inArray(sessionsTable.userId, [staffId, coordId, vendorUserId, parentUserId]));
+  // Clients reference the coordinator via assigned_coordinator_id FK, so delete
+  // clients before the users they point at.
   await db.delete(clientsTable).where(inArray(clientsTable.id, [clientA, clientB]));
+  await db.delete(usersTable).where(inArray(usersTable.id, [staffId, coordId, vendorUserId, parentUserId]));
   await db.delete(vendorsTable).where(inArray(vendorsTable.id, [vendorId, otherVendorId]));
 });
 
@@ -220,6 +231,21 @@ describe("GET /payments SQL-level role scoping", () => {
 
   it("parent scoping cannot be widened by a clientId filter for another client", async () => {
     const res = await get(parentCookie, { clientId: clientB, limit: 1000 });
+    expect(res.body.total).toBe(0);
+    expect(res.body.items).toEqual([]);
+  });
+
+  it("service coordinators only see payments for clients in their caseload", async () => {
+    const res = await get(coordCookie, { limit: 1000 });
+    expect(res.status).toBe(200);
+    // clientA is assigned to the coordinator; clientB is not.
+    for (const p of res.body.items) expect(p.clientId).toBe(clientA);
+    const ids = res.body.items.map((p: { clientId: string }) => p.clientId);
+    expect(ids).not.toContain(clientB);
+  });
+
+  it("coordinator scoping cannot be widened by a clientId filter for a client outside the caseload", async () => {
+    const res = await get(coordCookie, { clientId: clientB, limit: 1000 });
     expect(res.body.total).toBe(0);
     expect(res.body.items).toEqual([]);
   });
@@ -488,9 +514,10 @@ describe("GET /remittances search by client name", () => {
   });
 });
 
-describe("GET /payments inactive vendor filtering", () => {
+describe("GET /payments inactive vendor visibility", () => {
   // Isolated vendor + client + payment so deactivating the vendor doesn't
-  // affect the shared fixtures in the outer beforeAll.
+  // affect the shared fixtures in the outer beforeAll. Historical payments must
+  // stay visible in the Payments Log regardless of vendor active status.
   let ivVendorId: string;
   let ivClientId: string;
   let ivPaymentId: string;
@@ -542,30 +569,29 @@ describe("GET /payments inactive vendor filtering", () => {
     expect(res.body.items[0].id).toBe(ivPaymentId);
   });
 
-  it("inactive vendor's payments are excluded from all query paths", async () => {
-    // Deactivate the vendor directly in the DB.
+  it("staff still sees a deactivated vendor's historical payments across all query paths", async () => {
+    // Deactivate the vendor directly in the DB (active = false, NOT soft-deleted).
     await db
       .update(vendorsTable)
       .set({ active: false })
       .where(eq(vendorsTable.id, ivVendorId));
 
-    // 1. vendorId filter must return nothing.
+    // 1. vendorId filter must still return the payment.
     const byVendorId = await get(staffCookie, { vendorId: ivVendorId, limit: 1000 });
     expect(byVendorId.status).toBe(200);
-    expect(byVendorId.body.total).toBe(0);
-    expect(byVendorId.body.items).toEqual([]);
+    expect(byVendorId.body.total).toBe(1);
+    expect(byVendorId.body.items[0].id).toBe(ivPaymentId);
 
-    // 2. clientId filter must also return nothing — the outer active-vendor
-    //    predicate hides the payment regardless of how the filter is expressed.
+    // 2. clientId filter must still return the payment.
     const byClientId = await get(staffCookie, { clientId: ivClientId, limit: 1000 });
     expect(byClientId.status).toBe(200);
-    expect(byClientId.body.total).toBe(0);
-    expect(byClientId.body.items).toEqual([]);
+    expect(byClientId.body.total).toBe(1);
+    expect(byClientId.body.items[0].id).toBe(ivPaymentId);
 
-    // 3. Unfiltered list must not include the payment either.
+    // 3. Unfiltered list must include the payment too.
     const unfiltered = await get(staffCookie, { limit: 1000 });
     expect(unfiltered.status).toBe(200);
     const ids = unfiltered.body.items.map((p: { id: string }) => p.id);
-    expect(ids).not.toContain(ivPaymentId);
+    expect(ids).toContain(ivPaymentId);
   });
 });

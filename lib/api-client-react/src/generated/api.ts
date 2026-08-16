@@ -99,6 +99,7 @@ import type {
   SessionUser,
   SignatureInput,
   SignaturePage,
+  SignatureResult,
   UpdateMeInput,
   UploadUrlRequest,
   UploadUrlResponse,
@@ -2465,9 +2466,9 @@ export const getSubmitSignatureUrl = (token: string,) => {
  * @summary Submit typed-name e-signature
  */
 export const submitSignature = async (token: string,
-    signatureInput: SignatureInput, options?: Parameters<typeof customFetch>[1]): Promise<OkResult> => {
+    signatureInput: SignatureInput, options?: Parameters<typeof customFetch>[1]): Promise<SignatureResult> => {
 
-  return customFetch<OkResult>(getSubmitSignatureUrl(token),
+  return customFetch<SignatureResult>(getSubmitSignatureUrl(token),
   {
     ...options,
     method: 'POST',
@@ -3573,6 +3574,83 @@ export const useCreatePayment = <TError = ErrorType<DuplicatePaymentError>,
       return useMutation(getCreatePaymentMutationOptions(options));
     }
 
+export const getGetPaymentUrl = (id: string,) => {
+
+
+
+
+  return `/api/payments/${id}`
+}
+
+/**
+ * @summary Payment detail (scoped by role)
+ */
+export const getPayment = async (id: string, options?: Parameters<typeof customFetch>[1]): Promise<Payment> => {
+
+  return customFetch<Payment>(getGetPaymentUrl(id),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetPaymentQueryKey = (id: string,) => {
+    return [
+    `/api/payments/${id}`
+    ] as const;
+    }
+
+
+export const getGetPaymentQueryOptions = <TData = Awaited<ReturnType<typeof getPayment>>, TError = ErrorType<void>>(id: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getPayment>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetPaymentQueryKey(id);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getPayment>>> = ({ signal }) => getPayment(id, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: id !== null && id !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getPayment>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetPaymentQueryResult = NonNullable<Awaited<ReturnType<typeof getPayment>>>
+export type GetPaymentQueryError = ErrorType<void>
+
+
+/**
+ * @summary Payment detail (scoped by role)
+ */
+
+export function useGetPayment<TData = Awaited<ReturnType<typeof getPayment>>, TError = ErrorType<void>>(
+ id: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getPayment>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetPaymentQueryOptions(id,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
 export const getUpdatePaymentUrl = (id: string,) => {
 
 
@@ -4460,6 +4538,83 @@ export const useCreateRemittance = <TError = ErrorType<unknown>,
       > => {
       return useMutation(getCreateRemittanceMutationOptions(options));
     }
+
+export const getGetRemittanceUrl = (id: string,) => {
+
+
+
+
+  return `/api/remittances/${id}`
+}
+
+/**
+ * @summary Remittance detail (scoped by role)
+ */
+export const getRemittance = async (id: string, options?: Parameters<typeof customFetch>[1]): Promise<Remittance> => {
+
+  return customFetch<Remittance>(getGetRemittanceUrl(id),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetRemittanceQueryKey = (id: string,) => {
+    return [
+    `/api/remittances/${id}`
+    ] as const;
+    }
+
+
+export const getGetRemittanceQueryOptions = <TData = Awaited<ReturnType<typeof getRemittance>>, TError = ErrorType<void>>(id: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getRemittance>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetRemittanceQueryKey(id);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getRemittance>>> = ({ signal }) => getRemittance(id, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: id !== null && id !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getRemittance>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetRemittanceQueryResult = NonNullable<Awaited<ReturnType<typeof getRemittance>>>
+export type GetRemittanceQueryError = ErrorType<void>
+
+
+/**
+ * @summary Remittance detail (scoped by role)
+ */
+
+export function useGetRemittance<TData = Awaited<ReturnType<typeof getRemittance>>, TError = ErrorType<void>>(
+ id: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getRemittance>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetRemittanceQueryOptions(id,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
 
 export const getUpdateRemittanceUrl = (id: string,) => {
 

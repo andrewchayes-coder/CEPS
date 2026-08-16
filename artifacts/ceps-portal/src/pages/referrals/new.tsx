@@ -13,8 +13,9 @@ import { Textarea } from '@/components/ui/textarea';
 import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { Separator } from '@/components/ui/separator';
 import { useToast } from '@/hooks/use-toast';
-import { ChevronLeft, ChevronRight, AlertTriangle, CheckCircle2, Users } from 'lucide-react';
+import { ChevronLeft, ChevronRight, AlertTriangle, CheckCircle2, Users, FileText } from 'lucide-react';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
+import { FileUpload } from '@/components/file-upload';
 
 // -----------------------------------------------------------------------------
 // Validation Schemas (Step by Step to manage complex conditional logic)
@@ -79,6 +80,9 @@ const clientSchemaBase = {
   contactCity: z.string().min(1, 'City is required'),
   contactZip: z.string().min(5, 'ZIP is required'),
   contactState: z.string().length(2, 'State must be 2 letters'),
+  // Diagnosis / eligibility (optional)
+  diagnosis: z.string().optional(),
+  eligibilityCategory: z.string().optional(),
 };
 
 const clientSchema = z.object(clientSchemaBase).refine(data => {
@@ -118,13 +122,14 @@ const fullSchema = z.object({
 
 type FormValues = z.infer<typeof fullSchema>;
 
-const STEPS = ['Coordinator', 'Vendor', 'Activity', 'Client', 'Review'];
+const STEPS = ['Coordinator', 'Vendor', 'Activity', 'Client', 'Documents', 'Review'];
 
 export default function ReferralNewPage() {
   const [, setLocation] = useLocation();
   const { toast } = useToast();
   const createReferral = useCreateReferral();
   const [currentStep, setCurrentStep] = useState(0);
+  const [supportingDocumentUrl, setSupportingDocumentUrl] = useState<string | undefined>(undefined);
 
   const form = useForm<FormValues>({
     resolver: zodResolver(fullSchema),
@@ -164,6 +169,8 @@ export default function ReferralNewPage() {
       contactCity: '',
       contactZip: '',
       contactState: 'CA',
+      diagnosis: '',
+      eligibilityCategory: '',
     },
     mode: 'onChange'
   });
@@ -200,14 +207,23 @@ export default function ReferralNewPage() {
     // Remove fields that go at the top level
     const serviceFrequency = intakeFields.serviceFrequency;
     delete (intakeFields as any).serviceFrequency;
-    
+    // Diagnosis / eligibility / document map to dedicated top-level columns.
+    const diagnosis = intakeFields.diagnosis;
+    const eligibilityCategory = intakeFields.eligibilityCategory;
+    delete (intakeFields as any).diagnosis;
+    delete (intakeFields as any).eligibilityCategory;
+
     const parentEmail = intakeFields.contactEmail; // This triggers the magic link automatically on backend
-    
+
     createReferral.mutate({
       data: {
         submittedVia: 'portal',
         serviceFrequency: serviceFrequency as 'one_time' | 'monthly',
         parentEmail,
+        // Portal sends '' for untouched optional fields — API normalizes '' -> null.
+        diagnosis: diagnosis ?? '',
+        eligibilityCategory: eligibilityCategory ?? '',
+        supportingDocumentUrl: supportingDocumentUrl ?? '',
         intakeFields: intakeFields as any
       }
     }, {
@@ -568,12 +584,71 @@ export default function ReferralNewPage() {
                   </div>
                 </div>
 
+                <Separator />
+
+                <div className="space-y-4">
+                  <h3 className="text-sm font-medium">Diagnosis & Eligibility <span className="text-muted-foreground font-normal">(Optional)</span></h3>
+                  <p className="text-xs text-muted-foreground">
+                    If known, record the client's diagnosis and regional-center eligibility category. Both fields are optional.
+                  </p>
+                  <FormField control={form.control} name="diagnosis" render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Diagnosis</FormLabel>
+                      <FormControl><Textarea placeholder="e.g. Autism Spectrum Disorder" {...field} /></FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )} />
+                  <FormField control={form.control} name="eligibilityCategory" render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Eligibility Category</FormLabel>
+                      <FormControl><Input placeholder="e.g. Developmental Disability" {...field} /></FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )} />
+                </div>
+
               </CardContent>
             </Card>
           )}
 
-          {/* STEP 4: Review */}
+          {/* STEP 4: Documents */}
           {currentStep === 4 && (
+            <Card>
+              <CardHeader>
+                <CardTitle>Supporting Documents</CardTitle>
+                <CardDescription>Optionally attach a supporting document (e.g. diagnosis report, POS letter, or eligibility record).</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="space-y-2">
+                  <Label>Attach Document (Optional)</Label>
+                  {supportingDocumentUrl ? (
+                    <div className="flex items-center justify-between rounded-md border p-3 text-sm" data-testid="text-referral-document-attached">
+                      <span className="flex items-center gap-2">
+                        <FileText className="w-4 h-4 text-muted-foreground" /> Document attached
+                      </span>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => setSupportingDocumentUrl(undefined)}
+                        data-testid="button-remove-referral-document"
+                      >
+                        Remove
+                      </Button>
+                    </div>
+                  ) : (
+                    <FileUpload
+                      label="Drag & drop a supporting document here, or click to browse"
+                      onUploaded={(r) => setSupportingDocumentUrl(r.objectPath)}
+                    />
+                  )}
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
+          {/* STEP 5: Review */}
+          {currentStep === 5 && (
             <Card>
               <CardHeader>
                 <CardTitle>Review & Submit</CardTitle>
@@ -604,6 +679,9 @@ export default function ReferralNewPage() {
                         <dt className="text-muted-foreground">Name:</dt><dd className="col-span-2">{watch('clientFirstName')} {watch('clientLastName')}</dd>
                         <dt className="text-muted-foreground">UCI:</dt><dd className="col-span-2">{watch('clientUci')}</dd>
                         <dt className="text-muted-foreground">Contact Email:</dt><dd className="col-span-2 font-medium">{watch('contactEmail')}</dd>
+                        {watch('diagnosis') && (<><dt className="text-muted-foreground">Diagnosis:</dt><dd className="col-span-2">{watch('diagnosis')}</dd></>)}
+                        {watch('eligibilityCategory') && (<><dt className="text-muted-foreground">Eligibility:</dt><dd className="col-span-2">{watch('eligibilityCategory')}</dd></>)}
+                        {supportingDocumentUrl && (<><dt className="text-muted-foreground">Document:</dt><dd className="col-span-2">Attached</dd></>)}
                       </dl>
                     </div>
                     <div>

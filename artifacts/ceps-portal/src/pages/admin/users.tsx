@@ -204,6 +204,7 @@ export default function UsersPage() {
               <TableRow>
                 <TableHead>Name</TableHead>
                 <TableHead>Email</TableHead>
+                <TableHead>Phone</TableHead>
                 <TableHead>Role</TableHead>
                 <TableHead>Status</TableHead>
                 <TableHead>Last Login</TableHead>
@@ -212,7 +213,7 @@ export default function UsersPage() {
             </TableHeader>
             <TableBody>
               {isLoading ? (
-                <TableRow><TableCell colSpan={6} className="h-24 text-center"><Skeleton className="h-4 w-full" /></TableCell></TableRow>
+                <TableRow><TableCell colSpan={7} className="h-24 text-center"><Skeleton className="h-4 w-full" /></TableCell></TableRow>
               ) : (
                 users?.map((u) => {
                   const isSelf = currentUser?.id === u.id;
@@ -220,6 +221,7 @@ export default function UsersPage() {
                   <TableRow key={u.id}>
                     <TableCell className="font-medium">{u.name}</TableCell>
                     <TableCell>{u.email}</TableCell>
+                    <TableCell className="text-sm text-muted-foreground">{u.phone || '—'}</TableCell>
                     <TableCell className="capitalize">{u.role === 'staff' ? 'admin' : u.role.replace('_', ' ')}</TableCell>
                     <TableCell>
                       <Badge variant="outline" className={u.active ? "text-chart-5 border-chart-5/20" : "text-muted-foreground"}>

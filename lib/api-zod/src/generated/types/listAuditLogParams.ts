@@ -5,6 +5,8 @@
  * CEPS Portal API — referral intake, authorizations, invoices, payments, remittances, vendors, reporting
  * OpenAPI spec version: 0.1.0
  */
+import type { ListAuditLogSortBy } from './listAuditLogSortBy';
+import type { ListAuditLogSortDirection } from './listAuditLogSortDirection';
 
 export type ListAuditLogParams = {
 userId?: string;
@@ -14,4 +16,6 @@ dateFrom?: string;
 dateTo?: string;
 limit?: number;
 offset?: number;
+sortBy?: ListAuditLogSortBy;
+sortDirection?: ListAuditLogSortDirection;
 };

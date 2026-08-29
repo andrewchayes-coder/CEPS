@@ -29,6 +29,7 @@ import { paymentJson, remittanceJson, clientNameMap, vendorNameMap, authNumberMa
 import { checkDuplicatePayment, lockDuplicatePaymentKey } from "../lib/paymentDuplicateCheck";
 import { money } from "../lib/money";
 import { parseAltaRemittanceCsv, altaRowFingerprint } from "../lib/altaRemittanceParser";
+import { sortedOrder } from "../lib/sorting";
 
 const router: IRouter = Router();
 
@@ -127,13 +128,29 @@ router.get("/payments", requireAuth, async (req, res): Promise<void> => {
   const where = and(...conditions);
   const limit = Math.min(Math.max(query.data.limit ?? 50, 1), 1000);
   const offset = Math.max(query.data.offset ?? 0, 0);
+  const order = sortedOrder(
+    query.data.sortBy,
+    query.data.sortDirection,
+    {
+      checkDate: sql`${paymentsTable.checkDate}`,
+      qbCheckNumber: sql`lower(${paymentsTable.qbCheckNumber})`,
+      vendorName: sql`lower((select name from vendors where id = ${paymentsTable.vendorId}))`,
+      clientName: sql`lower((select last_name || ', ' || first_name from clients where id = ${paymentsTable.clientId}))`,
+      amount: sql`${paymentsTable.amount}`,
+      remitted: sql`${paymentsTable.remitted}`,
+      paymentType: sql`lower(${paymentsTable.paymentType})`,
+      createdAt: sql`${paymentsTable.createdAt}`,
+    },
+    sql`${paymentsTable.id}`,
+    [desc(paymentsTable.checkDate), desc(paymentsTable.id)],
+  );
   const [[{ total }], payments] = await Promise.all([
     db.select({ total: count() }).from(paymentsTable).where(where),
     db
       .select()
       .from(paymentsTable)
       .where(where)
-      .orderBy(desc(paymentsTable.checkDate), desc(paymentsTable.id))
+      .orderBy(...order)
       .limit(limit)
       .offset(offset),
   ]);
@@ -597,13 +614,29 @@ router.get("/remittances", requireAuth, async (req, res): Promise<void> => {
   const where = and(...conditions);
   const limit = Math.min(Math.max(query.data.limit ?? 50, 1), 1000);
   const offset = Math.max(query.data.offset ?? 0, 0);
+  const order = sortedOrder(
+    query.data.sortBy,
+    query.data.sortDirection,
+    {
+      remittanceDate: sql`${remittancesTable.remittanceDate}`,
+      altaReference: sql`lower(${remittancesTable.altaReference})`,
+      remittanceBatchId: sql`lower(${remittancesTable.remittanceBatchId})`,
+      clientName: sql`lower((select last_name || ', ' || first_name from clients where id = ${remittancesTable.clientId}))`,
+      authNumber: sql`lower((select auth_number from authorizations where id = ${remittancesTable.authorizationId}))`,
+      amount: sql`${remittancesTable.amount}`,
+      status: sql`lower(${remittancesTable.status})`,
+      createdAt: sql`${remittancesTable.createdAt}`,
+    },
+    sql`${remittancesTable.id}`,
+    [desc(remittancesTable.createdAt), desc(remittancesTable.id)],
+  );
   const [[{ total }], rows] = await Promise.all([
     db.select({ total: count() }).from(remittancesTable).where(where),
     db
       .select()
       .from(remittancesTable)
       .where(where)
-      .orderBy(desc(remittancesTable.createdAt), desc(remittancesTable.id))
+      .orderBy(...order)
       .limit(limit)
       .offset(offset),
   ]);

@@ -5,6 +5,8 @@
  * CEPS Portal API — referral intake, authorizations, invoices, payments, remittances, vendors, reporting
  * OpenAPI spec version: 0.1.0
  */
+import type { GetCaseStatusReportSortBy } from './getCaseStatusReportSortBy';
+import type { GetCaseStatusReportSortDirection } from './getCaseStatusReportSortDirection';
 
 export type GetCaseStatusReportParams = {
 status?: string;
@@ -12,4 +14,6 @@ coordinatorId?: string;
 search?: string;
 limit?: number;
 offset?: number;
+sortBy?: GetCaseStatusReportSortBy;
+sortDirection?: GetCaseStatusReportSortDirection;
 };

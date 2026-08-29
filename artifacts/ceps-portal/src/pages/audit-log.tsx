@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useListAuditLog, useListUsers, listAuditLog } from '@workspace/api-client-react';
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { Table, TableBody, TableCell, TableHeader, TableRow, SortableTableHead, useTableSort } from '@/components/ui/table';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -23,6 +23,11 @@ export default function AuditLogPage() {
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
   const [page, setPage] = useState(0);
+  const sort = useTableSort<'createdAt' | 'userName' | 'action' | 'entityType' | 'entityId' | 'detail'>();
+  const onSort = (key: Parameters<typeof sort.toggleSort>[0]) => {
+    sort.toggleSort(key);
+    setPage(0);
+  };
   const [exporting, setExporting] = useState(false);
   const [exportProgress, setExportProgress] = useState<{ fetched: number; total: number } | null>(null);
   const { toast } = useToast();
@@ -34,7 +39,10 @@ export default function AuditLogPage() {
     ...(dateFrom ? { dateFrom } : {}),
     ...(dateTo ? { dateTo } : {}),
   };
-  const params = { ...filterParams, limit: PAGE_SIZE, offset: page * PAGE_SIZE };
+  const sortParams = sort.sortBy
+    ? { sortBy: sort.sortBy, sortDirection: sort.sortDirection }
+    : {};
+  const params = { ...filterParams, ...sortParams, limit: PAGE_SIZE, offset: page * PAGE_SIZE };
 
   const { data, isLoading } = useListAuditLog(params, {
     query: { queryKey: ['auditLog', params] },
@@ -63,7 +71,7 @@ export default function AuditLogPage() {
       const batch = 1000;
       let offset = 0;
       for (;;) {
-        const res = await listAuditLog({ ...filterParams, limit: batch, offset });
+        const res = await listAuditLog({ ...filterParams, ...sortParams, limit: batch, offset });
         all.push(...res.entries);
         offset += res.entries.length;
         setExportProgress({ fetched: offset, total: res.total });
@@ -178,12 +186,12 @@ export default function AuditLogPage() {
           <Table data-testid="table-audit-log">
             <TableHeader>
               <TableRow>
-                <TableHead>Timestamp</TableHead>
-                <TableHead>User</TableHead>
-                <TableHead>Action</TableHead>
-                <TableHead>Entity Type</TableHead>
-                <TableHead>Entity ID</TableHead>
-                <TableHead>Detail</TableHead>
+                <SortableTableHead label="Timestamp" sortKey="createdAt" activeSortBy={sort.sortBy} sortDirection={sort.sortDirection} onSort={onSort} />
+                <SortableTableHead label="User" sortKey="userName" activeSortBy={sort.sortBy} sortDirection={sort.sortDirection} onSort={onSort} />
+                <SortableTableHead label="Action" sortKey="action" activeSortBy={sort.sortBy} sortDirection={sort.sortDirection} onSort={onSort} />
+                <SortableTableHead label="Entity Type" sortKey="entityType" activeSortBy={sort.sortBy} sortDirection={sort.sortDirection} onSort={onSort} />
+                <SortableTableHead label="Entity ID" sortKey="entityId" activeSortBy={sort.sortBy} sortDirection={sort.sortDirection} onSort={onSort} />
+                <SortableTableHead label="Detail" sortKey="detail" activeSortBy={sort.sortBy} sortDirection={sort.sortDirection} onSort={onSort} />
               </TableRow>
             </TableHeader>
             <TableBody>

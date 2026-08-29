@@ -5,6 +5,8 @@
  * CEPS Portal API — referral intake, authorizations, invoices, payments, remittances, vendors, reporting
  * OpenAPI spec version: 0.1.0
  */
+import type { GetExpiringAuthReportSortBy } from './getExpiringAuthReportSortBy';
+import type { GetExpiringAuthReportSortDirection } from './getExpiringAuthReportSortDirection';
 
 export type GetExpiringAuthReportParams = {
 /**
@@ -13,4 +15,6 @@ export type GetExpiringAuthReportParams = {
 withinDays?: number;
 limit?: number;
 offset?: number;
+sortBy?: GetExpiringAuthReportSortBy;
+sortDirection?: GetExpiringAuthReportSortDirection;
 };

@@ -15,7 +15,7 @@ import {
 } from '@/components/ui/alert-dialog';
 import { Power } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow, SortableTableHead } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -30,6 +30,7 @@ import * as z from 'zod';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { useToast } from '@/hooks/use-toast';
 import { Plus } from 'lucide-react';
+import { stableSort, useTableSort } from '@/lib/table-sorting';
 
 const userSchema = z.object({
   name: z.string().min(1, 'Name is required'),
@@ -48,6 +49,15 @@ export default function UsersPage() {
   const createUser = useCreateUser();
   const deleteUser = useDeleteUser();
   const updateUser = useUpdateUser();
+  const { sort, onSort } = useTableSort<string>('name');
+  const sortedUsers = stableSort(users ?? [], sort, {
+    name: (u) => u.name,
+    email: (u) => u.email,
+    phone: (u) => u.phone,
+    role: (u) => u.role === 'staff' ? 'admin' : u.role.replace('_', ' '),
+    active: (u) => u.active,
+    lastLogin: (u) => u.lastLogin ? new Date(u.lastLogin) : null,
+  });
 
   if (!isStaff) {
     return (
@@ -202,12 +212,12 @@ export default function UsersPage() {
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>Name</TableHead>
-                <TableHead>Email</TableHead>
-                <TableHead>Phone</TableHead>
-                <TableHead>Role</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead>Last Login</TableHead>
+                <SortableTableHead sortDirection={sort.key === 'name' ? sort.direction : null} onSort={() => onSort('name')}>Name</SortableTableHead>
+                <SortableTableHead sortDirection={sort.key === 'email' ? sort.direction : null} onSort={() => onSort('email')}>Email</SortableTableHead>
+                <SortableTableHead sortDirection={sort.key === 'phone' ? sort.direction : null} onSort={() => onSort('phone')}>Phone</SortableTableHead>
+                <SortableTableHead sortDirection={sort.key === 'role' ? sort.direction : null} onSort={() => onSort('role')}>Role</SortableTableHead>
+                <SortableTableHead sortDirection={sort.key === 'active' ? sort.direction : null} onSort={() => onSort('active')}>Status</SortableTableHead>
+                <SortableTableHead sortDirection={sort.key === 'lastLogin' ? sort.direction : null} onSort={() => onSort('lastLogin')}>Last Login</SortableTableHead>
                 <TableHead className="text-right">Actions</TableHead>
               </TableRow>
             </TableHeader>
@@ -215,7 +225,7 @@ export default function UsersPage() {
               {isLoading ? (
                 <TableRow><TableCell colSpan={7} className="h-24 text-center"><Skeleton className="h-4 w-full" /></TableCell></TableRow>
               ) : (
-                users?.map((u) => {
+                sortedUsers.map((u) => {
                   const isSelf = currentUser?.id === u.id;
                   return (
                   <TableRow key={u.id}>

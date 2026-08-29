@@ -12,10 +12,11 @@ import {
   DialogTrigger,
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { Table, TableBody, TableCell, TableHeader, TableRow, SortableTableHead } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
 import { useToast } from '@/hooks/use-toast';
 import { FileUp, Loader2, Upload } from 'lucide-react';
+import { stableSort, useTableSort } from '@/lib/table-sorting';
 
 // ⚠️ The Alta "Payment Detail Report" CSV column mapping is INTERIM (pending a
 // real sample) and lives server-side in the isolated parser
@@ -31,6 +32,18 @@ export function AltaRemittanceImport({ onImported }: { onImported: (result: Alta
   const [result, setResult] = useState<AltaRemittanceImportResult | null>(null);
   const importMutation = useImportAltaRemittances();
   const { toast } = useToast();
+  const { sort, onSort } = useTableSort<string>('rowNumber');
+  const sortedResults = stableSort(result?.results ?? [], sort, {
+    rowNumber: (row) => row.rowNumber,
+    uciNumber: (row) => row.uciNumber,
+    outcome: (row) => {
+      if (row.outcome === 'auto_matched') return 'Auto-matched';
+      if (row.outcome === 'needs_manual_match') return 'Needs manual match';
+      if (row.outcome === 'skipped_duplicate') return 'Duplicate (skipped)';
+      return 'Errored';
+    },
+    message: (row) => row.message,
+  });
 
   const handleFile = (file: File) => {
     setParseError(null);
@@ -180,14 +193,14 @@ export function AltaRemittanceImport({ onImported }: { onImported: (result: Alta
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Row</TableHead>
-                  <TableHead>UCI</TableHead>
-                  <TableHead>Outcome</TableHead>
-                  <TableHead>Detail</TableHead>
+                  <SortableTableHead sortDirection={sort.key === 'rowNumber' ? sort.direction : null} onSort={() => onSort('rowNumber')}>Row</SortableTableHead>
+                  <SortableTableHead sortDirection={sort.key === 'uciNumber' ? sort.direction : null} onSort={() => onSort('uciNumber')}>UCI</SortableTableHead>
+                  <SortableTableHead sortDirection={sort.key === 'outcome' ? sort.direction : null} onSort={() => onSort('outcome')}>Outcome</SortableTableHead>
+                  <SortableTableHead sortDirection={sort.key === 'message' ? sort.direction : null} onSort={() => onSort('message')}>Detail</SortableTableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {result.results.map((r, i) => (
+                {sortedResults.map((r, i) => (
                   <TableRow key={i}>
                     <TableCell className="font-mono text-sm">{r.rowNumber}</TableCell>
                     <TableCell className="font-mono text-sm">{r.uciNumber}</TableCell>

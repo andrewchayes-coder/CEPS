@@ -16,7 +16,8 @@ import { ArrowLeft, User, FileText, FileCheck, Receipt, CreditCard, FolderSync, 
 import { Link } from 'wouter';
 import { format } from 'date-fns';
 import { Progress } from '@/components/ui/progress';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow, SortableTableHead } from '@/components/ui/table';
+import { stableSort, useTableSort } from '@/lib/table-sorting';
 
 export default function ClientDetailPage() {
   const { id } = useParams<{ id: string }>();
@@ -37,12 +38,51 @@ export default function ClientDetailPage() {
     { clientId: id },
     { query: { enabled: !!id, queryKey: ['fees', id] } },
   );
+  const authorizationsSort = useTableSort<string>('authNumber');
+  const invoicesSort = useTableSort<string>('serviceMonth');
+  const paymentsSort = useTableSort<string>('checkDate', 'desc');
+  const feesSort = useTableSort<string>('createdAt', 'desc');
+  const referralsSort = useTableSort<string>('referralDate', 'desc');
 
   if (isLoading) return <div className="p-8 text-center">Loading case record...</div>;
   if (!caseData) return <div className="p-8 text-center">Client not found.</div>;
 
   const { client, authorizations, invoices, payments, remittances, referrals } = caseData;
   const feeList = fees ?? [];
+  const sortedAuthorizations = stableSort(authorizations, authorizationsSort.sort, {
+    authNumber: (auth) => auth.authNumber,
+    vendorName: (auth) => auth.vendorName,
+    serviceCode: (auth) => auth.serviceCode,
+    servicePeriodStart: (auth) => new Date(auth.servicePeriodStart),
+    maxPeriodAmount: (auth) => Number(auth.maxPeriodAmount),
+    status: (auth) => auth.status,
+  });
+  const sortedInvoices = stableSort(invoices, invoicesSort.sort, {
+    serviceMonth: (invoice) => invoice.serviceMonth,
+    vendorName: (invoice) => invoice.vendorName,
+    authNumber: (invoice) => invoice.authNumber,
+    amountRequested: (invoice) => Number(invoice.amountRequested),
+    status: (invoice) => invoice.status,
+  });
+  const sortedPayments = stableSort(payments, paymentsSort.sort, {
+    checkDate: (payment) => new Date(payment.checkDate),
+    qbCheckNumber: (payment) => payment.qbCheckNumber,
+    vendorName: (payment) => payment.vendorName,
+    authNumber: (payment) => payment.authNumber,
+    amount: (payment) => Number(payment.amount),
+    remitted: (payment) => payment.remitted,
+  });
+  const sortedFees = stableSort(feeList, feesSort.sort, {
+    createdAt: (fee) => fee.createdAt ? new Date(fee.createdAt) : null,
+    amount: (fee) => Number(fee.amount),
+    ruleApplied: (fee) => fee.ruleApplied,
+    status: (fee) => fee.status,
+  });
+  const sortedReferrals = stableSort(referrals, referralsSort.sort, {
+    referralDate: (referral) => new Date(referral.referralDate),
+    coordinatorName: (referral) => referral.coordinatorName,
+    status: (referral) => referral.status,
+  });
 
   return (
     <div className="space-y-6 pb-10">
@@ -223,16 +263,16 @@ export default function ClientDetailPage() {
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>Auth Number</TableHead>
-                    <TableHead>Vendor</TableHead>
-                    <TableHead>Code</TableHead>
-                    <TableHead>Period</TableHead>
-                    <TableHead className="text-right">Max Amount</TableHead>
-                    <TableHead>Status</TableHead>
+                    <SortableTableHead sortDirection={authorizationsSort.sort.key === 'authNumber' ? authorizationsSort.sort.direction : null} onSort={() => authorizationsSort.onSort('authNumber')}>Auth Number</SortableTableHead>
+                    <SortableTableHead sortDirection={authorizationsSort.sort.key === 'vendorName' ? authorizationsSort.sort.direction : null} onSort={() => authorizationsSort.onSort('vendorName')}>Vendor</SortableTableHead>
+                    <SortableTableHead sortDirection={authorizationsSort.sort.key === 'serviceCode' ? authorizationsSort.sort.direction : null} onSort={() => authorizationsSort.onSort('serviceCode')}>Code</SortableTableHead>
+                    <SortableTableHead sortDirection={authorizationsSort.sort.key === 'servicePeriodStart' ? authorizationsSort.sort.direction : null} onSort={() => authorizationsSort.onSort('servicePeriodStart')}>Period</SortableTableHead>
+                    <SortableTableHead className="text-right" sortDirection={authorizationsSort.sort.key === 'maxPeriodAmount' ? authorizationsSort.sort.direction : null} onSort={() => authorizationsSort.onSort('maxPeriodAmount')}>Max Amount</SortableTableHead>
+                    <SortableTableHead sortDirection={authorizationsSort.sort.key === 'status' ? authorizationsSort.sort.direction : null} onSort={() => authorizationsSort.onSort('status')}>Status</SortableTableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {authorizations.map(auth => (
+                  {sortedAuthorizations.map(auth => (
                     <TableRow key={auth.id}>
                       <TableCell className="font-medium">
                         <Link href={`/authorizations/${auth.id}`} className="text-primary hover:underline" data-testid="link-client-authorization">
@@ -265,15 +305,15 @@ export default function ClientDetailPage() {
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>Service Month</TableHead>
-                    <TableHead>Vendor</TableHead>
-                    <TableHead>Auth #</TableHead>
-                    <TableHead className="text-right">Amount</TableHead>
-                    <TableHead>Status</TableHead>
+                    <SortableTableHead sortDirection={invoicesSort.sort.key === 'serviceMonth' ? invoicesSort.sort.direction : null} onSort={() => invoicesSort.onSort('serviceMonth')}>Service Month</SortableTableHead>
+                    <SortableTableHead sortDirection={invoicesSort.sort.key === 'vendorName' ? invoicesSort.sort.direction : null} onSort={() => invoicesSort.onSort('vendorName')}>Vendor</SortableTableHead>
+                    <SortableTableHead sortDirection={invoicesSort.sort.key === 'authNumber' ? invoicesSort.sort.direction : null} onSort={() => invoicesSort.onSort('authNumber')}>Auth #</SortableTableHead>
+                    <SortableTableHead className="text-right" sortDirection={invoicesSort.sort.key === 'amountRequested' ? invoicesSort.sort.direction : null} onSort={() => invoicesSort.onSort('amountRequested')}>Amount</SortableTableHead>
+                    <SortableTableHead sortDirection={invoicesSort.sort.key === 'status' ? invoicesSort.sort.direction : null} onSort={() => invoicesSort.onSort('status')}>Status</SortableTableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {invoices.map(inv => (
+                  {sortedInvoices.map(inv => (
                     <TableRow key={inv.id}>
                       <TableCell className="font-medium">
                         <Link href={`/invoices/${inv.id}`} className="text-primary hover:underline" data-testid="link-client-invoice">
@@ -305,16 +345,16 @@ export default function ClientDetailPage() {
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>Date</TableHead>
-                    <TableHead>Check #</TableHead>
-                    <TableHead>Payee/Vendor</TableHead>
-                    <TableHead>Auth #</TableHead>
-                    <TableHead className="text-right">Amount</TableHead>
-                    <TableHead>Remitted</TableHead>
+                    <SortableTableHead sortDirection={paymentsSort.sort.key === 'checkDate' ? paymentsSort.sort.direction : null} onSort={() => paymentsSort.onSort('checkDate')}>Date</SortableTableHead>
+                    <SortableTableHead sortDirection={paymentsSort.sort.key === 'qbCheckNumber' ? paymentsSort.sort.direction : null} onSort={() => paymentsSort.onSort('qbCheckNumber')}>Check #</SortableTableHead>
+                    <SortableTableHead sortDirection={paymentsSort.sort.key === 'vendorName' ? paymentsSort.sort.direction : null} onSort={() => paymentsSort.onSort('vendorName')}>Payee/Vendor</SortableTableHead>
+                    <SortableTableHead sortDirection={paymentsSort.sort.key === 'authNumber' ? paymentsSort.sort.direction : null} onSort={() => paymentsSort.onSort('authNumber')}>Auth #</SortableTableHead>
+                    <SortableTableHead className="text-right" sortDirection={paymentsSort.sort.key === 'amount' ? paymentsSort.sort.direction : null} onSort={() => paymentsSort.onSort('amount')}>Amount</SortableTableHead>
+                    <SortableTableHead sortDirection={paymentsSort.sort.key === 'remitted' ? paymentsSort.sort.direction : null} onSort={() => paymentsSort.onSort('remitted')}>Remitted</SortableTableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {payments.map(p => (
+                  {sortedPayments.map(p => (
                     <TableRow key={p.id}>
                       <TableCell className="whitespace-nowrap">{format(new Date(p.checkDate), 'MMM d, yyyy')}</TableCell>
                       <TableCell className="font-mono text-sm">
@@ -354,15 +394,15 @@ export default function ClientDetailPage() {
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>Date</TableHead>
-                    <TableHead className="text-right">Amount</TableHead>
-                    <TableHead>Rule</TableHead>
-                    <TableHead>Status</TableHead>
+                    <SortableTableHead sortDirection={feesSort.sort.key === 'createdAt' ? feesSort.sort.direction : null} onSort={() => feesSort.onSort('createdAt')}>Date</SortableTableHead>
+                    <SortableTableHead className="text-right" sortDirection={feesSort.sort.key === 'amount' ? feesSort.sort.direction : null} onSort={() => feesSort.onSort('amount')}>Amount</SortableTableHead>
+                    <SortableTableHead sortDirection={feesSort.sort.key === 'ruleApplied' ? feesSort.sort.direction : null} onSort={() => feesSort.onSort('ruleApplied')}>Rule</SortableTableHead>
+                    <SortableTableHead sortDirection={feesSort.sort.key === 'status' ? feesSort.sort.direction : null} onSort={() => feesSort.onSort('status')}>Status</SortableTableHead>
                     {isStaff && <TableHead className="text-right">Actions</TableHead>}
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {feeList.map(fee => (
+                  {sortedFees.map(fee => (
                     <TableRow key={fee.id}>
                       <TableCell className="whitespace-nowrap">
                         {fee.createdAt ? format(new Date(fee.createdAt), 'MMM d, yyyy') : '-'}
@@ -400,14 +440,14 @@ export default function ClientDetailPage() {
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>Date</TableHead>
-                    <TableHead>Coordinator</TableHead>
-                    <TableHead>Status</TableHead>
+                    <SortableTableHead sortDirection={referralsSort.sort.key === 'referralDate' ? referralsSort.sort.direction : null} onSort={() => referralsSort.onSort('referralDate')}>Date</SortableTableHead>
+                    <SortableTableHead sortDirection={referralsSort.sort.key === 'coordinatorName' ? referralsSort.sort.direction : null} onSort={() => referralsSort.onSort('coordinatorName')}>Coordinator</SortableTableHead>
+                    <SortableTableHead sortDirection={referralsSort.sort.key === 'status' ? referralsSort.sort.direction : null} onSort={() => referralsSort.onSort('status')}>Status</SortableTableHead>
                     <TableHead className="text-right">Actions</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {referrals.map(r => (
+                  {sortedReferrals.map(r => (
                     <TableRow key={r.id}>
                       <TableCell className="font-medium whitespace-nowrap">{format(new Date(r.referralDate), 'MMM d, yyyy')}</TableCell>
                       <TableCell>{r.coordinatorName}</TableCell>

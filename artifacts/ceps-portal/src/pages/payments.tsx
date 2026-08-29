@@ -8,7 +8,7 @@ import { EditPaymentDialog } from '@/components/edit-payment-dialog';
 import { ClientLink, VendorLink } from '@/components/entity-links';
 import { Link } from 'wouter';
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow, SortableTableHead, useTableSort } from '@/components/ui/table';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { format } from 'date-fns';
@@ -20,6 +20,11 @@ const PAGE_SIZE = 50;
 export default function PaymentsPage() {
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(0);
+  const sort = useTableSort<'checkDate' | 'qbCheckNumber' | 'vendorName' | 'clientName' | 'amount' | 'remitted'>();
+  const onSort = (key: Parameters<typeof sort.toggleSort>[0]) => {
+    sort.toggleSort(key);
+    setPage(0);
+  };
   const { user } = useAuth();
   const isStaff = user?.role === 'staff';
   const deletePayment = useDeletePayment();
@@ -30,6 +35,7 @@ export default function PaymentsPage() {
     ...(search ? { search } : {}),
     limit: PAGE_SIZE,
     offset: page * PAGE_SIZE,
+    ...(sort.sortBy ? { sortBy: sort.sortBy, sortDirection: sort.sortDirection } : {}),
   };
   const { data, isLoading, refetch } = useListPayments(params, {
     query: { queryKey: ['payments', params] },
@@ -76,12 +82,12 @@ export default function PaymentsPage() {
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>Date</TableHead>
-                <TableHead>Check #</TableHead>
-                <TableHead>Payee (Vendor)</TableHead>
-                <TableHead>Client</TableHead>
-                <TableHead className="text-right">Amount</TableHead>
-                <TableHead>Remitted</TableHead>
+                <SortableTableHead label="Date" sortKey="checkDate" activeSortBy={sort.sortBy} sortDirection={sort.sortDirection} onSort={onSort} />
+                <SortableTableHead label="Check #" sortKey="qbCheckNumber" activeSortBy={sort.sortBy} sortDirection={sort.sortDirection} onSort={onSort} />
+                <SortableTableHead label="Payee (Vendor)" sortKey="vendorName" activeSortBy={sort.sortBy} sortDirection={sort.sortDirection} onSort={onSort} />
+                <SortableTableHead label="Client" sortKey="clientName" activeSortBy={sort.sortBy} sortDirection={sort.sortDirection} onSort={onSort} />
+                <SortableTableHead label="Amount" sortKey="amount" activeSortBy={sort.sortBy} sortDirection={sort.sortDirection} onSort={onSort} className="text-right" />
+                <SortableTableHead label="Remitted" sortKey="remitted" activeSortBy={sort.sortBy} sortDirection={sort.sortDirection} onSort={onSort} />
                 {isStaff && <TableHead className="text-right">Actions</TableHead>}
               </TableRow>
             </TableHeader>

@@ -1,5 +1,5 @@
 import { Router, type IRouter } from "express";
-import { eq, desc, and, gte, lte, ilike, count, type SQL } from "drizzle-orm";
+import { eq, desc, and, gte, lte, ilike, count, sql, type SQL } from "drizzle-orm";
 import { db, usersTable, auditLogTable } from "@workspace/db";
 import {
   ListUsersQueryParams,
@@ -13,6 +13,7 @@ import {
 } from "@workspace/api-zod";
 import { requireStaff, hashPassword, audit, iso } from "../lib/auth";
 import { userJson, userNameMap, diffDetail } from "../lib/serializers";
+import { sortedOrder } from "../lib/sorting";
 
 const router: IRouter = Router();
 
@@ -130,13 +131,27 @@ router.get("/audit-log", requireStaff, async (req, res): Promise<void> => {
   const where = conditions.length ? and(...conditions) : undefined;
   const limit = Math.min(Math.max(query.data.limit ?? 50, 1), 1000);
   const offset = Math.max(query.data.offset ?? 0, 0);
+  const order = sortedOrder(
+    query.data.sortBy,
+    query.data.sortDirection,
+    {
+      createdAt: sql`${auditLogTable.createdAt}`,
+      userName: sql`lower((select name from users where id = ${auditLogTable.userId}))`,
+      action: sql`lower(${auditLogTable.action})`,
+      entityType: sql`lower(${auditLogTable.entityType})`,
+      entityId: sql`lower(${auditLogTable.entityId})`,
+      detail: sql`lower(${auditLogTable.detail})`,
+    },
+    sql`${auditLogTable.id}`,
+    [desc(auditLogTable.createdAt), desc(auditLogTable.id)],
+  );
   const [[{ total }], entries] = await Promise.all([
     db.select({ total: count() }).from(auditLogTable).where(where),
     db
       .select()
       .from(auditLogTable)
       .where(where)
-      .orderBy(desc(auditLogTable.createdAt), desc(auditLogTable.id))
+      .orderBy(...order)
       .limit(limit)
       .offset(offset),
   ]);

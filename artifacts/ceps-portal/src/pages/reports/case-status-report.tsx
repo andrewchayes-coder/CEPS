@@ -5,7 +5,7 @@ import {
   useListUsers,
 } from '@workspace/api-client-react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { Table, TableBody, TableCell, TableHeader, TableRow, SortableTableHead } from '@/components/ui/table';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -17,8 +17,10 @@ import { Download } from 'lucide-react';
 import { downloadCSV } from '@/lib/csv';
 import { useToast } from '@/hooks/use-toast';
 import { PAGE_SIZE, ReportPagination } from './report-pagination';
+import { useTableSort } from '@/lib/table-sorting';
 
 const ALL = '__all__';
+type CaseStatusSortKey = 'clientName' | 'status' | 'referralDate' | 'coordinatorName';
 
 const STATUS_STAGES = [
   'intake',
@@ -46,6 +48,7 @@ export default function CaseStatusReport({ initialStatus }: { initialStatus?: st
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(0);
   const [exporting, setExporting] = useState(false);
+  const { sort, onSort } = useTableSort<CaseStatusSortKey>('clientName');
   const { toast } = useToast();
 
   const filterParams = {
@@ -53,7 +56,7 @@ export default function CaseStatusReport({ initialStatus }: { initialStatus?: st
     ...(coordinatorId !== ALL ? { coordinatorId } : {}),
     ...(search ? { search } : {}),
   };
-  const params = { ...filterParams, limit: PAGE_SIZE, offset: page * PAGE_SIZE };
+  const params = { ...filterParams, limit: PAGE_SIZE, offset: page * PAGE_SIZE, sortBy: sort.key, sortDirection: sort.direction };
 
   const { data, isLoading } = useGetCaseStatusReport(params, {
     query: { queryKey: ['caseStatusReport', params] },
@@ -70,6 +73,10 @@ export default function CaseStatusReport({ initialStatus }: { initialStatus?: st
     setter(value);
     setPage(0);
   };
+  const changeSort = (key: CaseStatusSortKey) => {
+    onSort(key);
+    setPage(0);
+  };
 
   const exportCSV = async () => {
     setExporting(true);
@@ -78,7 +85,7 @@ export default function CaseStatusReport({ initialStatus }: { initialStatus?: st
       const batch = 1000;
       let offset = 0;
       for (;;) {
-        const res = await getCaseStatusReport({ ...filterParams, limit: batch, offset });
+        const res = await getCaseStatusReport({ ...filterParams, limit: batch, offset, sortBy: sort.key, sortDirection: sort.direction } as any);
         all.push(...res.items);
         offset += res.items.length;
         if (res.items.length < batch || offset >= res.total) break;
@@ -149,10 +156,10 @@ export default function CaseStatusReport({ initialStatus }: { initialStatus?: st
         <Table data-testid="table-case-status">
           <TableHeader>
             <TableRow>
-              <TableHead>Client</TableHead>
-              <TableHead>Status</TableHead>
-              <TableHead>Referral Date</TableHead>
-              <TableHead>Service Coordinator</TableHead>
+              <SortableTableHead sortDirection={sort.key === 'clientName' ? sort.direction : null} onSort={() => changeSort('clientName')}>Client</SortableTableHead>
+              <SortableTableHead sortDirection={sort.key === 'status' ? sort.direction : null} onSort={() => changeSort('status')}>Status</SortableTableHead>
+              <SortableTableHead sortDirection={sort.key === 'referralDate' ? sort.direction : null} onSort={() => changeSort('referralDate')}>Referral Date</SortableTableHead>
+              <SortableTableHead sortDirection={sort.key === 'coordinatorName' ? sort.direction : null} onSort={() => changeSort('coordinatorName')}>Service Coordinator</SortableTableHead>
             </TableRow>
           </TableHeader>
           <TableBody>

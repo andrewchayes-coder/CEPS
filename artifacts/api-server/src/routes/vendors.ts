@@ -16,6 +16,7 @@ import {
 } from "@workspace/api-zod";
 import { requireAuth, requireStaff, audit } from "../lib/auth";
 import { vendorJson } from "../lib/serializers";
+import { sortedOrder } from "../lib/sorting";
 
 const router: IRouter = Router();
 
@@ -40,6 +41,21 @@ router.get("/vendors", requireAuth, async (req, res): Promise<void> => {
   const where = conditions.length ? and(...conditions) : undefined;
   const limit = Math.min(Math.max(query.data.limit ?? 50, 1), 1000);
   const offset = Math.max(query.data.offset ?? 0, 0);
+  const order = sortedOrder(
+    query.data.sortBy,
+    query.data.sortDirection,
+    {
+      name: sql`lower(${vendorsTable.name})`,
+      contactPerson: sql`lower(${vendorsTable.contactPerson})`,
+      email: sql`lower(${vendorsTable.email})`,
+      w9Status: sql`lower(${vendorsTable.w9Status})`,
+      active: sql`${vendorsTable.active}`,
+      preferred: sql`${vendorsTable.preferred}`,
+      createdAt: sql`${vendorsTable.createdAt}`,
+    },
+    sql`${vendorsTable.id}`,
+    [desc(vendorsTable.preferred), asc(vendorsTable.name), desc(vendorsTable.id)],
+  );
   const [[{ total }], vendors] = await Promise.all([
     db.select({ total: count() }).from(vendorsTable).where(where),
     db
@@ -47,7 +63,7 @@ router.get("/vendors", requireAuth, async (req, res): Promise<void> => {
       .from(vendorsTable)
       .where(where)
       // Preferred vendors first, then alphabetical by name, stable by id.
-      .orderBy(desc(vendorsTable.preferred), asc(vendorsTable.name), desc(vendorsTable.id))
+      .orderBy(...order)
       .limit(limit)
       .offset(offset),
   ]);

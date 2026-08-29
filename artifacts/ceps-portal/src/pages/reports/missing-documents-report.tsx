@@ -4,7 +4,7 @@ import {
   getMissingDocumentsReport,
 } from '@workspace/api-client-react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { Table, TableBody, TableCell, TableHeader, TableRow, SortableTableHead } from '@/components/ui/table';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
@@ -16,8 +16,10 @@ import { ClientLink, VendorLink } from '@/components/entity-links';
 import { downloadCSV } from '@/lib/csv';
 import { useToast } from '@/hooks/use-toast';
 import { PAGE_SIZE, ReportPagination } from './report-pagination';
+import { useTableSort } from '@/lib/table-sorting';
 
 const ALL = '__all__';
+type MissingDocumentsSortKey = 'docType' | 'entityName' | 'clientName' | 'description';
 
 const DOC_LABELS: Record<string, string> = {
   w9: 'W-9',
@@ -29,10 +31,11 @@ export default function MissingDocumentsReport({ initialDocType }: { initialDocT
   const [docType, setDocType] = useState(initialDocType ?? ALL);
   const [page, setPage] = useState(0);
   const [exporting, setExporting] = useState(false);
+  const { sort, onSort } = useTableSort<MissingDocumentsSortKey>('docType');
   const { toast } = useToast();
 
   const filterParams = { ...(docType !== ALL ? { docType } : {}) };
-  const params = { ...filterParams, limit: PAGE_SIZE, offset: page * PAGE_SIZE };
+  const params = { ...filterParams, limit: PAGE_SIZE, offset: page * PAGE_SIZE, sortBy: sort.key, sortDirection: sort.direction };
 
   const { data, isLoading } = useGetMissingDocumentsReport(params, {
     query: { queryKey: ['missingDocumentsReport', params] },
@@ -46,6 +49,10 @@ export default function MissingDocumentsReport({ initialDocType }: { initialDocT
     setter(value);
     setPage(0);
   };
+  const changeSort = (key: MissingDocumentsSortKey) => {
+    onSort(key);
+    setPage(0);
+  };
 
   const exportCSV = async () => {
     setExporting(true);
@@ -54,7 +61,7 @@ export default function MissingDocumentsReport({ initialDocType }: { initialDocT
       const batch = 1000;
       let offset = 0;
       for (;;) {
-        const res = await getMissingDocumentsReport({ ...filterParams, limit: batch, offset });
+        const res = await getMissingDocumentsReport({ ...filterParams, limit: batch, offset, sortBy: sort.key, sortDirection: sort.direction } as any);
         all.push(...res.items);
         offset += res.items.length;
         if (res.items.length < batch || offset >= res.total) break;
@@ -103,10 +110,10 @@ export default function MissingDocumentsReport({ initialDocType }: { initialDocT
         <Table data-testid="table-missing-docs">
           <TableHeader>
             <TableRow>
-              <TableHead>Document</TableHead>
-              <TableHead>Record</TableHead>
-              <TableHead>Client</TableHead>
-              <TableHead>Description</TableHead>
+              <SortableTableHead sortDirection={sort.key === 'docType' ? sort.direction : null} onSort={() => changeSort('docType')}>Document</SortableTableHead>
+              <SortableTableHead sortDirection={sort.key === 'entityName' ? sort.direction : null} onSort={() => changeSort('entityName')}>Record</SortableTableHead>
+              <SortableTableHead sortDirection={sort.key === 'clientName' ? sort.direction : null} onSort={() => changeSort('clientName')}>Client</SortableTableHead>
+              <SortableTableHead sortDirection={sort.key === 'description' ? sort.direction : null} onSort={() => changeSort('description')}>Description</SortableTableHead>
             </TableRow>
           </TableHeader>
           <TableBody>

@@ -6,7 +6,7 @@ import { ClientLink, VendorLink } from '@/components/entity-links';
 import { Link } from 'wouter';
 import { format } from 'date-fns';
 import { 
-  Table, TableBody, TableCell, TableHead, TableHeader, TableRow 
+  Table, TableBody, TableCell, TableHead, TableHeader, TableRow, SortableTableHead, useTableSort
 } from '@/components/ui/table';
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -23,11 +23,17 @@ export default function AuthorizationsPage() {
   const isStaff = user?.role === 'staff';
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(0);
+  const sort = useTableSort<'authNumber' | 'clientName' | 'vendorName' | 'servicePeriodStart' | 'maxPeriodAmount' | 'status'>();
+  const onSort = (key: Parameters<typeof sort.toggleSort>[0]) => {
+    sort.toggleSort(key);
+    setPage(0);
+  };
 
   const params = {
     limit: PAGE_SIZE,
     offset: page * PAGE_SIZE,
     ...(search ? { search } : {}),
+    ...(sort.sortBy ? { sortBy: sort.sortBy, sortDirection: sort.sortDirection } : {}),
   };
   const { data, isLoading, refetch } = useListAuthorizations(params, {
     query: { queryKey: ['authorizations', params] },
@@ -71,12 +77,12 @@ export default function AuthorizationsPage() {
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>Auth #</TableHead>
-                <TableHead>Client</TableHead>
-                <TableHead>Vendor</TableHead>
-                <TableHead>Service Period</TableHead>
-                <TableHead className="text-right">Max Amount</TableHead>
-                <TableHead>Status</TableHead>
+                <SortableTableHead label="Auth #" sortKey="authNumber" activeSortBy={sort.sortBy} sortDirection={sort.sortDirection} onSort={onSort} />
+                <SortableTableHead label="Client" sortKey="clientName" activeSortBy={sort.sortBy} sortDirection={sort.sortDirection} onSort={onSort} />
+                <SortableTableHead label="Vendor" sortKey="vendorName" activeSortBy={sort.sortBy} sortDirection={sort.sortDirection} onSort={onSort} />
+                <SortableTableHead label="Service Period" sortKey="servicePeriodStart" activeSortBy={sort.sortBy} sortDirection={sort.sortDirection} onSort={onSort} />
+                <SortableTableHead label="Max Amount" sortKey="maxPeriodAmount" activeSortBy={sort.sortBy} sortDirection={sort.sortDirection} onSort={onSort} className="text-right" />
+                <SortableTableHead label="Status" sortKey="status" activeSortBy={sort.sortBy} sortDirection={sort.sortDirection} onSort={onSort} />
                 {isStaff && <TableHead className="text-right">Actions</TableHead>}
               </TableRow>
             </TableHeader>

@@ -5,6 +5,8 @@
  * CEPS Portal API — referral intake, authorizations, invoices, payments, remittances, vendors, reporting
  * OpenAPI spec version: 0.1.0
  */
+import type { ListReferralsSortBy } from './listReferralsSortBy';
+import type { ListReferralsSortDirection } from './listReferralsSortDirection';
 
 export type ListReferralsParams = {
 status?: string;
@@ -13,4 +15,6 @@ clientId?: string;
 search?: string;
 limit?: number;
 offset?: number;
+sortBy?: ListReferralsSortBy;
+sortDirection?: ListReferralsSortDirection;
 };

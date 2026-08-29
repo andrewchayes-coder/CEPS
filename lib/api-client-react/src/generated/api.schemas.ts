@@ -1665,7 +1665,29 @@ dateFrom?: string;
 dateTo?: string;
 limit?: number;
 offset?: number;
+sortBy?: ListAuditLogSortBy;
+sortDirection?: ListAuditLogSortDirection;
 };
+
+export type ListAuditLogSortBy = typeof ListAuditLogSortBy[keyof typeof ListAuditLogSortBy];
+
+
+export const ListAuditLogSortBy = {
+  createdAt: 'createdAt',
+  userName: 'userName',
+  action: 'action',
+  entityType: 'entityType',
+  entityId: 'entityId',
+  detail: 'detail',
+} as const;
+
+export type ListAuditLogSortDirection = typeof ListAuditLogSortDirection[keyof typeof ListAuditLogSortDirection];
+
+
+export const ListAuditLogSortDirection = {
+  asc: 'asc',
+  desc: 'desc',
+} as const;
 
 export type ListAuditLog200 = {
   entries: AuditEntry[];
@@ -1677,7 +1699,29 @@ status?: string;
 search?: string;
 limit?: number;
 offset?: number;
+sortBy?: ListClientsSortBy;
+sortDirection?: ListClientsSortDirection;
 };
+
+export type ListClientsSortBy = typeof ListClientsSortBy[keyof typeof ListClientsSortBy];
+
+
+export const ListClientsSortBy = {
+  name: 'name',
+  uciNumber: 'uciNumber',
+  dateOfBirth: 'dateOfBirth',
+  assignedCoordinatorName: 'assignedCoordinatorName',
+  status: 'status',
+  createdAt: 'createdAt',
+} as const;
+
+export type ListClientsSortDirection = typeof ListClientsSortDirection[keyof typeof ListClientsSortDirection];
+
+
+export const ListClientsSortDirection = {
+  asc: 'asc',
+  desc: 'desc',
+} as const;
 
 export type ListClients200 = {
   items: Client[];
@@ -1691,7 +1735,29 @@ clientId?: string;
 search?: string;
 limit?: number;
 offset?: number;
+sortBy?: ListReferralsSortBy;
+sortDirection?: ListReferralsSortDirection;
 };
+
+export type ListReferralsSortBy = typeof ListReferralsSortBy[keyof typeof ListReferralsSortBy];
+
+
+export const ListReferralsSortBy = {
+  referralDate: 'referralDate',
+  clientName: 'clientName',
+  coordinatorName: 'coordinatorName',
+  serviceType: 'serviceType',
+  status: 'status',
+  createdAt: 'createdAt',
+} as const;
+
+export type ListReferralsSortDirection = typeof ListReferralsSortDirection[keyof typeof ListReferralsSortDirection];
+
+
+export const ListReferralsSortDirection = {
+  asc: 'asc',
+  desc: 'desc',
+} as const;
 
 export type ListReferrals200 = {
   items: Referral[];
@@ -1706,7 +1772,31 @@ expiringWithinDays?: number;
 search?: string;
 limit?: number;
 offset?: number;
+sortBy?: ListAuthorizationsSortBy;
+sortDirection?: ListAuthorizationsSortDirection;
 };
+
+export type ListAuthorizationsSortBy = typeof ListAuthorizationsSortBy[keyof typeof ListAuthorizationsSortBy];
+
+
+export const ListAuthorizationsSortBy = {
+  authNumber: 'authNumber',
+  clientName: 'clientName',
+  vendorName: 'vendorName',
+  servicePeriodStart: 'servicePeriodStart',
+  servicePeriodEnd: 'servicePeriodEnd',
+  maxPeriodAmount: 'maxPeriodAmount',
+  status: 'status',
+  createdAt: 'createdAt',
+} as const;
+
+export type ListAuthorizationsSortDirection = typeof ListAuthorizationsSortDirection[keyof typeof ListAuthorizationsSortDirection];
+
+
+export const ListAuthorizationsSortDirection = {
+  asc: 'asc',
+  desc: 'desc',
+} as const;
 
 export type ListAuthorizations200 = {
   items: Authorization[];
@@ -1720,7 +1810,31 @@ vendorId?: string;
 search?: string;
 limit?: number;
 offset?: number;
+sortBy?: ListInvoicesSortBy;
+sortDirection?: ListInvoicesSortDirection;
 };
+
+export type ListInvoicesSortBy = typeof ListInvoicesSortBy[keyof typeof ListInvoicesSortBy];
+
+
+export const ListInvoicesSortBy = {
+  serviceMonth: 'serviceMonth',
+  vendorName: 'vendorName',
+  clientName: 'clientName',
+  authNumber: 'authNumber',
+  amountRequested: 'amountRequested',
+  status: 'status',
+  submittedDate: 'submittedDate',
+  createdAt: 'createdAt',
+} as const;
+
+export type ListInvoicesSortDirection = typeof ListInvoicesSortDirection[keyof typeof ListInvoicesSortDirection];
+
+
+export const ListInvoicesSortDirection = {
+  asc: 'asc',
+  desc: 'desc',
+} as const;
 
 export type ListInvoices200 = {
   items: Invoice[];
@@ -1735,7 +1849,31 @@ status?: string;
 search?: string;
 limit?: number;
 offset?: number;
+sortBy?: ListPaymentsSortBy;
+sortDirection?: ListPaymentsSortDirection;
 };
+
+export type ListPaymentsSortBy = typeof ListPaymentsSortBy[keyof typeof ListPaymentsSortBy];
+
+
+export const ListPaymentsSortBy = {
+  checkDate: 'checkDate',
+  qbCheckNumber: 'qbCheckNumber',
+  vendorName: 'vendorName',
+  clientName: 'clientName',
+  amount: 'amount',
+  remitted: 'remitted',
+  paymentType: 'paymentType',
+  createdAt: 'createdAt',
+} as const;
+
+export type ListPaymentsSortDirection = typeof ListPaymentsSortDirection[keyof typeof ListPaymentsSortDirection];
+
+
+export const ListPaymentsSortDirection = {
+  asc: 'asc',
+  desc: 'desc',
+} as const;
 
 export type ListPayments200 = {
   items: Payment[];
@@ -1764,7 +1902,31 @@ autoMatched?: boolean;
 search?: string;
 limit?: number;
 offset?: number;
+sortBy?: ListRemittancesSortBy;
+sortDirection?: ListRemittancesSortDirection;
 };
+
+export type ListRemittancesSortBy = typeof ListRemittancesSortBy[keyof typeof ListRemittancesSortBy];
+
+
+export const ListRemittancesSortBy = {
+  remittanceDate: 'remittanceDate',
+  altaReference: 'altaReference',
+  remittanceBatchId: 'remittanceBatchId',
+  clientName: 'clientName',
+  authNumber: 'authNumber',
+  amount: 'amount',
+  status: 'status',
+  createdAt: 'createdAt',
+} as const;
+
+export type ListRemittancesSortDirection = typeof ListRemittancesSortDirection[keyof typeof ListRemittancesSortDirection];
+
+
+export const ListRemittancesSortDirection = {
+  asc: 'asc',
+  desc: 'desc',
+} as const;
 
 export type ListRemittances200 = {
   items: Remittance[];
@@ -1777,6 +1939,8 @@ w9Status?: string;
 active?: ListVendorsActive;
 limit?: number;
 offset?: number;
+sortBy?: ListVendorsSortBy;
+sortDirection?: ListVendorsSortDirection;
 };
 
 export type ListVendorsActive = typeof ListVendorsActive[keyof typeof ListVendorsActive];
@@ -1785,6 +1949,27 @@ export type ListVendorsActive = typeof ListVendorsActive[keyof typeof ListVendor
 export const ListVendorsActive = {
   true: 'true',
   false: 'false',
+} as const;
+
+export type ListVendorsSortBy = typeof ListVendorsSortBy[keyof typeof ListVendorsSortBy];
+
+
+export const ListVendorsSortBy = {
+  name: 'name',
+  contactPerson: 'contactPerson',
+  email: 'email',
+  w9Status: 'w9Status',
+  active: 'active',
+  preferred: 'preferred',
+  createdAt: 'createdAt',
+} as const;
+
+export type ListVendorsSortDirection = typeof ListVendorsSortDirection[keyof typeof ListVendorsSortDirection];
+
+
+export const ListVendorsSortDirection = {
+  asc: 'asc',
+  desc: 'desc',
 } as const;
 
 export type ListVendors200 = {
@@ -1801,7 +1986,27 @@ coordinatorId?: string;
 search?: string;
 limit?: number;
 offset?: number;
+sortBy?: GetPendingAuthReportSortBy;
+sortDirection?: GetPendingAuthReportSortDirection;
 };
+
+export type GetPendingAuthReportSortBy = typeof GetPendingAuthReportSortBy[keyof typeof GetPendingAuthReportSortBy];
+
+
+export const GetPendingAuthReportSortBy = {
+  clientName: 'clientName',
+  referralDate: 'referralDate',
+  daysWaiting: 'daysWaiting',
+  coordinatorName: 'coordinatorName',
+} as const;
+
+export type GetPendingAuthReportSortDirection = typeof GetPendingAuthReportSortDirection[keyof typeof GetPendingAuthReportSortDirection];
+
+
+export const GetPendingAuthReportSortDirection = {
+  asc: 'asc',
+  desc: 'desc',
+} as const;
 
 export type GetPendingAuthReport200 = {
   items: PendingAuthRow[];
@@ -1814,7 +2019,28 @@ coordinatorId?: string;
 search?: string;
 limit?: number;
 offset?: number;
+sortBy?: GetCaseStatusReportSortBy;
+sortDirection?: GetCaseStatusReportSortDirection;
 };
+
+export type GetCaseStatusReportSortBy = typeof GetCaseStatusReportSortBy[keyof typeof GetCaseStatusReportSortBy];
+
+
+export const GetCaseStatusReportSortBy = {
+  clientName: 'clientName',
+  status: 'status',
+  referralDate: 'referralDate',
+  coordinatorName: 'coordinatorName',
+  createdAt: 'createdAt',
+} as const;
+
+export type GetCaseStatusReportSortDirection = typeof GetCaseStatusReportSortDirection[keyof typeof GetCaseStatusReportSortDirection];
+
+
+export const GetCaseStatusReportSortDirection = {
+  asc: 'asc',
+  desc: 'desc',
+} as const;
 
 export type GetCaseStatusReport200 = {
   items: CaseStatusRow[];
@@ -1828,7 +2054,28 @@ export type GetMissingDocumentsReportParams = {
 docType?: string;
 limit?: number;
 offset?: number;
+sortBy?: GetMissingDocumentsReportSortBy;
+sortDirection?: GetMissingDocumentsReportSortDirection;
 };
+
+export type GetMissingDocumentsReportSortBy = typeof GetMissingDocumentsReportSortBy[keyof typeof GetMissingDocumentsReportSortBy];
+
+
+export const GetMissingDocumentsReportSortBy = {
+  docType: 'docType',
+  entityType: 'entityType',
+  entityName: 'entityName',
+  description: 'description',
+  clientName: 'clientName',
+} as const;
+
+export type GetMissingDocumentsReportSortDirection = typeof GetMissingDocumentsReportSortDirection[keyof typeof GetMissingDocumentsReportSortDirection];
+
+
+export const GetMissingDocumentsReportSortDirection = {
+  asc: 'asc',
+  desc: 'desc',
+} as const;
 
 export type GetMissingDocumentsReport200 = {
   items: MissingDocumentRow[];
@@ -1842,7 +2089,30 @@ export type GetExpiringAuthReportParams = {
 withinDays?: number;
 limit?: number;
 offset?: number;
+sortBy?: GetExpiringAuthReportSortBy;
+sortDirection?: GetExpiringAuthReportSortDirection;
 };
+
+export type GetExpiringAuthReportSortBy = typeof GetExpiringAuthReportSortBy[keyof typeof GetExpiringAuthReportSortBy];
+
+
+export const GetExpiringAuthReportSortBy = {
+  authNumber: 'authNumber',
+  clientName: 'clientName',
+  vendorName: 'vendorName',
+  serviceCode: 'serviceCode',
+  servicePeriodEnd: 'servicePeriodEnd',
+  daysUntilExpiry: 'daysUntilExpiry',
+  maxPeriodAmount: 'maxPeriodAmount',
+} as const;
+
+export type GetExpiringAuthReportSortDirection = typeof GetExpiringAuthReportSortDirection[keyof typeof GetExpiringAuthReportSortDirection];
+
+
+export const GetExpiringAuthReportSortDirection = {
+  asc: 'asc',
+  desc: 'desc',
+} as const;
 
 export type GetExpiringAuthReport200 = {
   items: ExpiringAuthRow[];

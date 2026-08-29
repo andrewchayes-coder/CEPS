@@ -35,6 +35,7 @@ import {
   notDeleted,
   diffDetail,
 } from "../lib/serializers";
+import { sortedOrder } from "../lib/sorting";
 
 const router: IRouter = Router();
 
@@ -100,13 +101,27 @@ router.get("/clients", requireAuth, async (req, res): Promise<void> => {
   const where = and(...conditions);
   const limit = Math.min(Math.max(query.data.limit ?? 50, 1), 1000);
   const offset = Math.max(query.data.offset ?? 0, 0);
+  const order = sortedOrder(
+    query.data.sortBy,
+    query.data.sortDirection,
+    {
+      name: sql`lower(${clientsTable.lastName} || ', ' || ${clientsTable.firstName})`,
+      uciNumber: sql`lower(${clientsTable.uciNumber})`,
+      dateOfBirth: sql`${clientsTable.dateOfBirth}`,
+      assignedCoordinatorName: sql`lower((select name from users where id = ${clientsTable.assignedCoordinatorId}))`,
+      status: sql`lower(${clientsTable.status})`,
+      createdAt: sql`${clientsTable.createdAt}`,
+    },
+    sql`${clientsTable.id}`,
+    [sql`${clientsTable.lastName}`, desc(clientsTable.id)],
+  );
   const [[{ total }], page] = await Promise.all([
     db.select({ total: count() }).from(clientsTable).where(where),
     db
       .select()
       .from(clientsTable)
       .where(where)
-      .orderBy(clientsTable.lastName, desc(clientsTable.id))
+      .orderBy(...order)
       .limit(limit)
       .offset(offset),
   ]);

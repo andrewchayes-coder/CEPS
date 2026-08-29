@@ -5,7 +5,7 @@ import {
   useListUsers,
 } from '@workspace/api-client-react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { Table, TableBody, TableCell, TableHeader, TableRow, SortableTableHead } from '@/components/ui/table';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -16,21 +16,24 @@ import { Download } from 'lucide-react';
 import { downloadCSV } from '@/lib/csv';
 import { useToast } from '@/hooks/use-toast';
 import { PAGE_SIZE, ReportPagination } from './report-pagination';
+import { useTableSort } from '@/lib/table-sorting';
 
 const ALL = '__all__';
+type PendingAuthSortKey = 'clientName' | 'referralDate' | 'daysWaiting' | 'coordinatorName';
 
 export default function PendingAuthReport() {
   const [coordinatorId, setCoordinatorId] = useState(ALL);
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(0);
   const [exporting, setExporting] = useState(false);
+  const { sort, onSort } = useTableSort<PendingAuthSortKey>('clientName');
   const { toast } = useToast();
 
   const filterParams = {
     ...(coordinatorId !== ALL ? { coordinatorId } : {}),
     ...(search ? { search } : {}),
   };
-  const params = { ...filterParams, limit: PAGE_SIZE, offset: page * PAGE_SIZE };
+  const params = { ...filterParams, limit: PAGE_SIZE, offset: page * PAGE_SIZE, sortBy: sort.key, sortDirection: sort.direction };
 
   const { data, isLoading } = useGetPendingAuthReport(params, {
     query: { queryKey: ['pendingAuthReport', params] },
@@ -47,6 +50,10 @@ export default function PendingAuthReport() {
     setter(value);
     setPage(0);
   };
+  const changeSort = (key: PendingAuthSortKey) => {
+    onSort(key);
+    setPage(0);
+  };
 
   const exportCSV = async () => {
     setExporting(true);
@@ -55,7 +62,7 @@ export default function PendingAuthReport() {
       const batch = 1000;
       let offset = 0;
       for (;;) {
-        const res = await getPendingAuthReport({ ...filterParams, limit: batch, offset });
+        const res = await getPendingAuthReport({ ...filterParams, limit: batch, offset, sortBy: sort.key, sortDirection: sort.direction } as any);
         all.push(...res.items);
         offset += res.items.length;
         if (res.items.length < batch || offset >= res.total) break;
@@ -114,10 +121,10 @@ export default function PendingAuthReport() {
         <Table data-testid="table-pending-auth">
           <TableHeader>
             <TableRow>
-              <TableHead>Client</TableHead>
-              <TableHead>Referral Date</TableHead>
-              <TableHead className="text-right">Days Waiting</TableHead>
-              <TableHead>Service Coordinator</TableHead>
+              <SortableTableHead sortDirection={sort.key === 'clientName' ? sort.direction : null} onSort={() => changeSort('clientName')}>Client</SortableTableHead>
+              <SortableTableHead sortDirection={sort.key === 'referralDate' ? sort.direction : null} onSort={() => changeSort('referralDate')}>Referral Date</SortableTableHead>
+              <SortableTableHead className="text-right" sortDirection={sort.key === 'daysWaiting' ? sort.direction : null} onSort={() => changeSort('daysWaiting')}>Days Waiting</SortableTableHead>
+              <SortableTableHead sortDirection={sort.key === 'coordinatorName' ? sort.direction : null} onSort={() => changeSort('coordinatorName')}>Service Coordinator</SortableTableHead>
             </TableRow>
           </TableHeader>
           <TableBody>

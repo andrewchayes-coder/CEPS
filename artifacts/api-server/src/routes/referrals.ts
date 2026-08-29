@@ -31,6 +31,7 @@ import {
   hashPassword,
 } from "../lib/auth";
 import { referralJson, clientNameMap, userNameMap } from "../lib/serializers";
+import { sortedOrder } from "../lib/sorting";
 
 const router: IRouter = Router();
 
@@ -83,6 +84,20 @@ router.get("/referrals", requireAuth, async (req, res): Promise<void> => {
   const where = conditions.length ? and(...conditions) : undefined;
   const limit = Math.min(Math.max(query.data.limit ?? 50, 1), 1000);
   const offset = Math.max(query.data.offset ?? 0, 0);
+  const order = sortedOrder(
+    query.data.sortBy,
+    query.data.sortDirection,
+    {
+      referralDate: sql`${referralsTable.referralDate}`,
+      clientName: sql`lower((select last_name || ', ' || first_name from clients where id = ${referralsTable.clientId}))`,
+      coordinatorName: sql`lower((select name from users where id = ${referralsTable.serviceCoordinatorId}))`,
+      serviceType: sql`lower(${referralsTable.intakeFields}->>'serviceType')`,
+      status: sql`lower(${referralsTable.status})`,
+      createdAt: sql`${referralsTable.createdAt}`,
+    },
+    sql`${referralsTable.id}`,
+    [desc(referralsTable.createdAt), desc(referralsTable.id)],
+  );
   if (vendorEmpty) {
     res.json(ListReferralsResponse.parse({ items: [], total: 0 }));
     return;
@@ -93,7 +108,7 @@ router.get("/referrals", requireAuth, async (req, res): Promise<void> => {
       .select()
       .from(referralsTable)
       .where(where)
-      .orderBy(desc(referralsTable.createdAt), desc(referralsTable.id))
+      .orderBy(...order)
       .limit(limit)
       .offset(offset),
   ]);

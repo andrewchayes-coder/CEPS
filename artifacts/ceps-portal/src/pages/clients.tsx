@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { useListClients } from '@workspace/api-client-react';
 import { Link } from 'wouter';
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow, SortableTableHead, useTableSort } from '@/components/ui/table';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -14,12 +14,18 @@ const PAGE_SIZE = 50;
 export default function ClientsPage() {
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(0);
+  const sort = useTableSort<'name' | 'uciNumber' | 'dateOfBirth' | 'assignedCoordinatorName' | 'status'>();
+  const onSort = (key: Parameters<typeof sort.toggleSort>[0]) => {
+    sort.toggleSort(key);
+    setPage(0);
+  };
 
   // Server-driven search (name + UCI) + pagination — mirrors the audit-log page.
   const params = {
     ...(search ? { search } : {}),
     limit: PAGE_SIZE,
     offset: page * PAGE_SIZE,
+    ...(sort.sortBy ? { sortBy: sort.sortBy, sortDirection: sort.sortDirection } : {}),
   };
   const { data, isLoading } = useListClients(params, {
     query: { queryKey: ['clients', params] },
@@ -59,11 +65,11 @@ export default function ClientsPage() {
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>Name</TableHead>
-                <TableHead>UCI Number</TableHead>
-                <TableHead>DOB</TableHead>
-                <TableHead>Coordinator</TableHead>
-                <TableHead>Status</TableHead>
+                <SortableTableHead label="Name" sortKey="name" activeSortBy={sort.sortBy} sortDirection={sort.sortDirection} onSort={onSort} />
+                <SortableTableHead label="UCI Number" sortKey="uciNumber" activeSortBy={sort.sortBy} sortDirection={sort.sortDirection} onSort={onSort} />
+                <SortableTableHead label="DOB" sortKey="dateOfBirth" activeSortBy={sort.sortBy} sortDirection={sort.sortDirection} onSort={onSort} />
+                <SortableTableHead label="Coordinator" sortKey="assignedCoordinatorName" activeSortBy={sort.sortBy} sortDirection={sort.sortDirection} onSort={onSort} />
+                <SortableTableHead label="Status" sortKey="status" activeSortBy={sort.sortBy} sortDirection={sort.sortDirection} onSort={onSort} />
                 <TableHead className="text-right">Actions</TableHead>
               </TableRow>
             </TableHeader>

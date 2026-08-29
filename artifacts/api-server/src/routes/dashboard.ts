@@ -28,6 +28,7 @@ import { requireAuth, requireStaff, requireStaffOrCoordinator, iso } from "../li
 import { userNameMap, clientNameMap, vendorNameMap, authorizationTotalsPaid, effectiveAuthStatus, notDeleted } from "../lib/serializers";
 import { money, sumMoney } from "../lib/money";
 import Decimal from "decimal.js";
+import { sortedOrder, sortRows } from "../lib/sorting";
 
 const router: IRouter = Router();
 
@@ -239,6 +240,18 @@ router.get("/reports/pending-authorizations", requireStaffOrCoordinator, async (
   const where = and(...conditions);
   const limit = Math.min(Math.max(query.data.limit ?? 50, 1), 1000);
   const offset = Math.max(query.data.offset ?? 0, 0);
+  const order = sortedOrder(
+    query.data.sortBy,
+    query.data.sortDirection,
+    {
+      clientName: sql`lower(${clientsTable.lastName} || ', ' || ${clientsTable.firstName})`,
+      referralDate: sql`${referralsTable.referralDate}`,
+      daysWaiting: sql`(current_date - ${referralsTable.referralDate})`,
+      coordinatorName: sql`lower((select name from users where id = ${referralsTable.serviceCoordinatorId}))`,
+    },
+    sql`${referralsTable.id}`,
+    [asc(referralsTable.referralDate), desc(referralsTable.id)],
+  );
   const [[{ total }], referrals] = await Promise.all([
     db
       .select({ total: count() })
@@ -250,7 +263,7 @@ router.get("/reports/pending-authorizations", requireStaffOrCoordinator, async (
       .from(referralsTable)
       .innerJoin(clientsTable, eq(referralsTable.clientId, clientsTable.id))
       .where(where)
-      .orderBy(asc(referralsTable.referralDate), desc(referralsTable.id))
+      .orderBy(...order)
       .limit(limit)
       .offset(offset)
       .then((rows) => rows.map((row) => row.r)),
@@ -293,6 +306,19 @@ router.get("/reports/case-status", requireStaff, async (req, res): Promise<void>
   const where = conditions.length ? and(...conditions) : undefined;
   const limit = Math.min(Math.max(query.data.limit ?? 50, 1), 1000);
   const offset = Math.max(query.data.offset ?? 0, 0);
+  const order = sortedOrder(
+    query.data.sortBy,
+    query.data.sortDirection,
+    {
+      clientName: sql`lower(${clientsTable.lastName} || ', ' || ${clientsTable.firstName})`,
+      status: sql`lower(${referralsTable.status})`,
+      referralDate: sql`${referralsTable.referralDate}`,
+      coordinatorName: sql`lower((select name from users where id = ${referralsTable.serviceCoordinatorId}))`,
+      createdAt: sql`${referralsTable.createdAt}`,
+    },
+    sql`${referralsTable.id}`,
+    [desc(referralsTable.createdAt), desc(referralsTable.id)],
+  );
   const [[{ total }], referrals] = await Promise.all([
     db
       .select({ total: count() })
@@ -304,7 +330,7 @@ router.get("/reports/case-status", requireStaff, async (req, res): Promise<void>
       .from(referralsTable)
       .innerJoin(clientsTable, eq(referralsTable.clientId, clientsTable.id))
       .where(where)
-      .orderBy(desc(referralsTable.createdAt), desc(referralsTable.id))
+      .orderBy(...order)
       .limit(limit)
       .offset(offset)
       .then((rows) => rows.map((row) => row.r)),
@@ -405,10 +431,17 @@ router.get("/reports/missing-documents", requireStaff, async (req, res): Promise
     }
   }
 
-  const total = rows.length;
+  const orderedRows = sortRows(
+    rows,
+    query.data.sortBy ?? "docType",
+    query.data.sortDirection ?? "asc",
+    (row, key) => row[key as keyof typeof row] as string | null,
+    (row) => `${row.entityType}:${row.entityId}`,
+  );
+  const total = orderedRows.length;
   const limit = Math.min(Math.max(query.data.limit ?? 50, 1), 1000);
   const offset = Math.max(query.data.offset ?? 0, 0);
-  const items = rows.slice(offset, offset + limit);
+  const items = orderedRows.slice(offset, offset + limit);
   res.json(GetMissingDocumentsReportResponse.parse({ items, total }));
 });
 
@@ -472,10 +505,20 @@ router.get("/reports/expiring-authorizations", requireStaffOrCoordinator, async 
       maxPeriodAmount: a.maxPeriodAmount,
     };
   });
-  const total = rows.length;
+  const orderedRows = sortRows(
+    rows,
+    query.data.sortBy,
+    query.data.sortDirection,
+    (row, key) => {
+      const raw = row[key as keyof typeof row];
+      return key === "maxPeriodAmount" ? Number(raw) : raw as string | number | null;
+    },
+    (row) => row.authorizationId,
+  );
+  const total = orderedRows.length;
   const limit = Math.min(Math.max(query.data.limit ?? 50, 1), 1000);
   const offset = Math.max(query.data.offset ?? 0, 0);
-  const items = rows.slice(offset, offset + limit);
+  const items = orderedRows.slice(offset, offset + limit);
   res.json(GetExpiringAuthReportResponse.parse({ items, total }));
 });
 

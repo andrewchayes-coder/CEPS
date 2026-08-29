@@ -13,10 +13,11 @@ import {
   DialogTrigger,
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { Table, TableBody, TableCell, TableHeader, TableRow, SortableTableHead } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
 import { useToast } from '@/hooks/use-toast';
 import { FileUp, Loader2, Upload } from 'lucide-react';
+import { stableSort, useTableSort } from '@/lib/table-sorting';
 
 /** Minimal CSV parser with quoted-field support. */
 function parseCsv(text: string): string[][] {
@@ -85,6 +86,17 @@ export function CheckRegisterImport({ onImported }: { onImported: () => void }) 
   const [result, setResult] = useState<CheckRegisterImportResult | null>(null);
   const importMutation = useImportCheckRegister();
   const { toast } = useToast();
+  const { sort, onSort } = useTableSort<string>('qbCheckNumber');
+  const sortedResults = stableSort(result?.results ?? [], sort, {
+    qbCheckNumber: (row) => row.qbCheckNumber,
+    outcome: (row) => {
+      if (row.outcome === 'imported') return 'Imported';
+      if (row.outcome === 'skipped_duplicate') return 'Duplicate (check #)';
+      if (row.outcome === 'flagged_duplicate') return 'Flagged duplicate';
+      return 'Unmatched';
+    },
+    message: (row) => row.message,
+  });
 
   const handleFile = (file: File) => {
     setParseError(null);
@@ -249,13 +261,13 @@ export function CheckRegisterImport({ onImported }: { onImported: () => void }) 
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Check #</TableHead>
-                  <TableHead>Outcome</TableHead>
-                  <TableHead>Detail</TableHead>
+                  <SortableTableHead sortDirection={sort.key === 'qbCheckNumber' ? sort.direction : null} onSort={() => onSort('qbCheckNumber')}>Check #</SortableTableHead>
+                  <SortableTableHead sortDirection={sort.key === 'outcome' ? sort.direction : null} onSort={() => onSort('outcome')}>Outcome</SortableTableHead>
+                  <SortableTableHead sortDirection={sort.key === 'message' ? sort.direction : null} onSort={() => onSort('message')}>Detail</SortableTableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {result.results.map((r, i) => (
+                {sortedResults.map((r, i) => (
                   <TableRow key={i}>
                     <TableCell className="font-mono text-sm">{r.qbCheckNumber}</TableCell>
                     <TableCell>{outcomeBadge(r.outcome)}</TableCell>

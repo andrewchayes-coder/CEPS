@@ -91,12 +91,12 @@ beforeAll(async () => {
 
   const [ca] = await db
     .insert(clientsTable)
-    .values({ firstName: "PL", lastName: "ClientA", dateOfBirth: "2000-01-01", uciNumber: `${nonce}-uciA`, assignedCoordinatorId: coordId })
+    .values({ firstName: "PL", lastName: `${nonce}-ClientA`, dateOfBirth: "2000-01-01", uciNumber: `${nonce}-uciA`, assignedCoordinatorId: coordId })
     .returning();
   clientA = ca.id;
   const [cb] = await db
     .insert(clientsTable)
-    .values({ firstName: "PL", lastName: "ClientB", dateOfBirth: "2000-01-01", uciNumber: `${nonce}-uciB` })
+    .values({ firstName: "PL", lastName: `${nonce}-ClientB`, dateOfBirth: "2000-01-01", uciNumber: `${nonce}-uciB` })
     .returning();
   clientB = cb.id;
 
@@ -270,7 +270,7 @@ describe("GET /payments filters", () => {
 
   it("search matches client name (ilike) at the SQL level", async () => {
     // clientA has payments — searching by the last name portion should find them.
-    const res = await get(staffCookie, { search: "ClientA", limit: 1000 });
+    const res = await get(staffCookie, { search: `${nonce}-ClientA`, limit: 1000 });
     expect(res.status).toBe(200);
     expect(res.body.total).toBeGreaterThanOrEqual(1);
     for (const p of res.body.items) expect(p.clientId).toBe(clientA);

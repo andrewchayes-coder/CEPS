@@ -9,7 +9,9 @@ import {
   TableCell, 
   TableHead, 
   TableHeader, 
-  TableRow 
+  TableRow,
+  SortableTableHead,
+  useTableSort,
 } from '@/components/ui/table';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -26,6 +28,11 @@ export default function ReferralsPage() {
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(0);
+  const sort = useTableSort<'referralDate' | 'clientName' | 'coordinatorName' | 'serviceType' | 'status'>();
+  const onSort = (key: Parameters<typeof sort.toggleSort>[0]) => {
+    sort.toggleSort(key);
+    setPage(0);
+  };
 
   // Server-driven status filter, search, and pagination.
   const params = {
@@ -33,6 +40,7 @@ export default function ReferralsPage() {
     ...(search ? { search } : {}),
     limit: PAGE_SIZE,
     offset: page * PAGE_SIZE,
+    ...(sort.sortBy ? { sortBy: sort.sortBy, sortDirection: sort.sortDirection } : {}),
   };
   const { data, isLoading } = useListReferrals(params, {
     query: {
@@ -103,11 +111,11 @@ export default function ReferralsPage() {
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>Date</TableHead>
-                <TableHead>Client</TableHead>
-                <TableHead>Coordinator</TableHead>
-                <TableHead>Service Type</TableHead>
-                <TableHead>Status</TableHead>
+                <SortableTableHead label="Date" sortKey="referralDate" activeSortBy={sort.sortBy} sortDirection={sort.sortDirection} onSort={onSort} />
+                <SortableTableHead label="Client" sortKey="clientName" activeSortBy={sort.sortBy} sortDirection={sort.sortDirection} onSort={onSort} />
+                <SortableTableHead label="Coordinator" sortKey="coordinatorName" activeSortBy={sort.sortBy} sortDirection={sort.sortDirection} onSort={onSort} />
+                <SortableTableHead label="Service Type" sortKey="serviceType" activeSortBy={sort.sortBy} sortDirection={sort.sortDirection} onSort={onSort} />
+                <SortableTableHead label="Status" sortKey="status" activeSortBy={sort.sortBy} sortDirection={sort.sortDirection} onSort={onSort} />
                 <TableHead className="text-right">Actions</TableHead>
               </TableRow>
             </TableHeader>

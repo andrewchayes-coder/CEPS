@@ -22,6 +22,7 @@ import {
   notDeleted,
   diffDetail,
 } from "../lib/serializers";
+import { sortedOrder } from "../lib/sorting";
 
 const router: IRouter = Router();
 
@@ -109,13 +110,29 @@ router.get("/authorizations", requireAuth, async (req, res): Promise<void> => {
   const where = and(...conditions);
   const limit = Math.min(Math.max(query.data.limit ?? 50, 1), 1000);
   const offset = Math.max(query.data.offset ?? 0, 0);
+  const order = sortedOrder(
+    query.data.sortBy,
+    query.data.sortDirection,
+    {
+      authNumber: sql`lower(${authorizationsTable.authNumber})`,
+      clientName: sql`lower((select last_name || ', ' || first_name from clients where id = ${authorizationsTable.clientId}))`,
+      vendorName: sql`lower((select name from vendors where id = ${authorizationsTable.vendorId}))`,
+      servicePeriodStart: sql`${authorizationsTable.servicePeriodStart}`,
+      servicePeriodEnd: sql`${authorizationsTable.servicePeriodEnd}`,
+      maxPeriodAmount: sql`${authorizationsTable.maxPeriodAmount}`,
+      status: effectiveStatusSql,
+      createdAt: sql`${authorizationsTable.createdAt}`,
+    },
+    sql`${authorizationsTable.id}`,
+    [desc(authorizationsTable.createdAt), desc(authorizationsTable.id)],
+  );
   const [[{ total }], auths] = await Promise.all([
     db.select({ total: count() }).from(authorizationsTable).where(where),
     db
       .select()
       .from(authorizationsTable)
       .where(where)
-      .orderBy(desc(authorizationsTable.createdAt), desc(authorizationsTable.id))
+      .orderBy(...order)
       .limit(limit)
       .offset(offset),
   ]);

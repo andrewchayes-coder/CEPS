@@ -16,6 +16,7 @@ import {
 import { requireAuth, requireStaff, audit } from "../lib/auth";
 import { invoiceJson, clientNameMap, vendorNameMap, authNumberMap, userNameMap, notDeleted, diffDetail } from "../lib/serializers";
 import { checkDuplicatePayment } from "../lib/paymentDuplicateCheck";
+import { sortedOrder } from "../lib/sorting";
 
 const router: IRouter = Router();
 
@@ -75,13 +76,29 @@ router.get("/invoices", requireAuth, async (req, res): Promise<void> => {
   const where = and(...conditions);
   const limit = Math.min(Math.max(query.data.limit ?? 50, 1), 1000);
   const offset = Math.max(query.data.offset ?? 0, 0);
+  const order = sortedOrder(
+    query.data.sortBy,
+    query.data.sortDirection,
+    {
+      serviceMonth: sql`${invoicesTable.serviceMonth}`,
+      vendorName: sql`lower((select name from vendors where id = ${invoicesTable.vendorId}))`,
+      clientName: sql`lower((select last_name || ', ' || first_name from clients where id = ${invoicesTable.clientId}))`,
+      authNumber: sql`lower((select auth_number from authorizations where id = ${invoicesTable.authorizationId}))`,
+      amountRequested: sql`${invoicesTable.amountRequested}`,
+      status: sql`lower(${invoicesTable.status})`,
+      submittedDate: sql`${invoicesTable.submittedDate}`,
+      createdAt: sql`${invoicesTable.createdAt}`,
+    },
+    sql`${invoicesTable.id}`,
+    [desc(invoicesTable.createdAt), desc(invoicesTable.id)],
+  );
   const [[{ total }], invoices] = await Promise.all([
     db.select({ total: count() }).from(invoicesTable).where(where),
     db
       .select()
       .from(invoicesTable)
       .where(where)
-      .orderBy(desc(invoicesTable.createdAt), desc(invoicesTable.id))
+      .orderBy(...order)
       .limit(limit)
       .offset(offset),
   ]);

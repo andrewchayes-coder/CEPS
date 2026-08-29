@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { useListVendors } from '@workspace/api-client-react';
 import { Link } from 'wouter';
 import { 
-  Table, TableBody, TableCell, TableHead, TableHeader, TableRow 
+  Table, TableBody, TableCell, TableHead, TableHeader, TableRow, SortableTableHead, useTableSort
 } from '@/components/ui/table';
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -16,12 +16,18 @@ const PAGE_SIZE = 50;
 export default function VendorsPage() {
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(0);
+  const sort = useTableSort<'name' | 'email' | 'w9Status' | 'active'>();
+  const onSort = (key: Parameters<typeof sort.toggleSort>[0]) => {
+    sort.toggleSort(key);
+    setPage(0);
+  };
 
   // Server-driven search (vendor name) + pagination — mirrors the audit-log page.
   const params = {
     ...(search ? { search } : {}),
     limit: PAGE_SIZE,
     offset: page * PAGE_SIZE,
+    ...(sort.sortBy ? { sortBy: sort.sortBy, sortDirection: sort.sortDirection } : {}),
   };
   const { data, isLoading } = useListVendors(params, {
     query: { queryKey: ['vendors', params] },
@@ -67,10 +73,10 @@ export default function VendorsPage() {
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>Vendor Name</TableHead>
-                <TableHead>Contact Info</TableHead>
-                <TableHead>W-9 Status</TableHead>
-                <TableHead>Status</TableHead>
+                <SortableTableHead label="Vendor Name" sortKey="name" activeSortBy={sort.sortBy} sortDirection={sort.sortDirection} onSort={onSort} />
+                <SortableTableHead label="Contact Info" sortKey="email" activeSortBy={sort.sortBy} sortDirection={sort.sortDirection} onSort={onSort} />
+                <SortableTableHead label="W-9 Status" sortKey="w9Status" activeSortBy={sort.sortBy} sortDirection={sort.sortDirection} onSort={onSort} />
+                <SortableTableHead label="Status" sortKey="active" activeSortBy={sort.sortBy} sortDirection={sort.sortDirection} onSort={onSort} />
                 <TableHead className="text-right">Actions</TableHead>
               </TableRow>
             </TableHeader>

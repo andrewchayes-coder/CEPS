@@ -9,7 +9,7 @@ import {
 import { useAuth } from '@/components/auth/auth-provider';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { Table, TableBody, TableCell, TableHeader, TableRow, SortableTableHead } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
 import {
   Select,
@@ -20,6 +20,7 @@ import {
 } from '@/components/ui/select';
 import { useToast } from '@/hooks/use-toast';
 import { Download, FileUp, Loader2, Upload, CheckCircle2, RotateCcw } from 'lucide-react';
+import { stableSort, useTableSort } from '@/lib/table-sorting';
 
 // The five entities the bulk-import system covers, in the documented build
 // order. Kept in sync with the server-side field registry (importRegistry.ts).
@@ -335,18 +336,30 @@ interface PreviewRow {
 }
 
 function PreviewTable({ rows }: { rows: PreviewRow[] }) {
+  const { sort, onSort } = useTableSort<string>('rowNumber');
+  const sortedRows = stableSort(rows, sort, {
+    rowNumber: (row) => row.rowNumber,
+    status: (row) => {
+      if (row.status === 'valid') return 'Valid';
+      if (row.status === 'imported') return 'Imported';
+      if (row.status === 'duplicate' || row.status === 'skipped_duplicate') return 'Duplicate (skipped)';
+      return 'Error';
+    },
+    detail: (row) => row.detail,
+  });
+
   return (
     <div className="max-h-96 overflow-y-auto rounded-md border">
       <Table>
         <TableHeader>
           <TableRow>
-            <TableHead className="w-20">Row</TableHead>
-            <TableHead className="w-44">Status</TableHead>
-            <TableHead>Detail</TableHead>
+            <SortableTableHead className="w-20" sortDirection={sort.key === 'rowNumber' ? sort.direction : null} onSort={() => onSort('rowNumber')}>Row</SortableTableHead>
+            <SortableTableHead className="w-44" sortDirection={sort.key === 'status' ? sort.direction : null} onSort={() => onSort('status')}>Status</SortableTableHead>
+            <SortableTableHead sortDirection={sort.key === 'detail' ? sort.direction : null} onSort={() => onSort('detail')}>Detail</SortableTableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
-          {rows.map((r) => (
+          {sortedRows.map((r) => (
             <TableRow key={r.rowNumber} data-testid={`row-import-${r.rowNumber}`}>
               <TableCell className="font-mono text-sm">{r.rowNumber}</TableCell>
               <TableCell>{r.statusBadge(r.status)}</TableCell>

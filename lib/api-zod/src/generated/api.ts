@@ -315,7 +315,9 @@ export const ListAuditLogQueryParams = zod.object({
   "dateFrom": zod.coerce.string().optional(),
   "dateTo": zod.coerce.string().optional(),
   "limit": zod.coerce.number().int().optional(),
-  "offset": zod.coerce.number().int().optional()
+  "offset": zod.coerce.number().int().optional(),
+  "sortBy": zod.enum(['createdAt', 'userName', 'action', 'entityType', 'entityId', 'detail']).optional(),
+  "sortDirection": zod.enum(['asc', 'desc']).optional()
 })
 
 export const ListAuditLogResponse = zod.object({
@@ -340,7 +342,9 @@ export const ListClientsQueryParams = zod.object({
   "status": zod.coerce.string().optional(),
   "search": zod.coerce.string().optional(),
   "limit": zod.coerce.number().int().optional(),
-  "offset": zod.coerce.number().int().optional()
+  "offset": zod.coerce.number().int().optional(),
+  "sortBy": zod.enum(['name', 'uciNumber', 'dateOfBirth', 'assignedCoordinatorName', 'status', 'createdAt']).optional(),
+  "sortDirection": zod.enum(['asc', 'desc']).optional()
 })
 
 export const ListClientsResponse = zod.object({
@@ -694,7 +698,9 @@ export const ListReferralsQueryParams = zod.object({
   "clientId": zod.coerce.string().optional(),
   "search": zod.coerce.string().optional(),
   "limit": zod.coerce.number().int().optional(),
-  "offset": zod.coerce.number().int().optional()
+  "offset": zod.coerce.number().int().optional(),
+  "sortBy": zod.enum(['referralDate', 'clientName', 'coordinatorName', 'serviceType', 'status', 'createdAt']).optional(),
+  "sortDirection": zod.enum(['asc', 'desc']).optional()
 })
 
 export const ListReferralsResponse = zod.object({
@@ -1107,7 +1113,9 @@ export const ListAuthorizationsQueryParams = zod.object({
   "expiringWithinDays": zod.coerce.number().int().optional(),
   "search": zod.coerce.string().optional(),
   "limit": zod.coerce.number().int().optional(),
-  "offset": zod.coerce.number().int().optional()
+  "offset": zod.coerce.number().int().optional(),
+  "sortBy": zod.enum(['authNumber', 'clientName', 'vendorName', 'servicePeriodStart', 'servicePeriodEnd', 'maxPeriodAmount', 'status', 'createdAt']).optional(),
+  "sortDirection": zod.enum(['asc', 'desc']).optional()
 })
 
 export const ListAuthorizationsResponse = zod.object({
@@ -1324,7 +1332,9 @@ export const ListInvoicesQueryParams = zod.object({
   "vendorId": zod.coerce.string().optional(),
   "search": zod.coerce.string().optional(),
   "limit": zod.coerce.number().int().optional(),
-  "offset": zod.coerce.number().int().optional()
+  "offset": zod.coerce.number().int().optional(),
+  "sortBy": zod.enum(['serviceMonth', 'vendorName', 'clientName', 'authNumber', 'amountRequested', 'status', 'submittedDate', 'createdAt']).optional(),
+  "sortDirection": zod.enum(['asc', 'desc']).optional()
 })
 
 export const ListInvoicesResponse = zod.object({
@@ -1506,7 +1516,9 @@ export const ListPaymentsQueryParams = zod.object({
   "status": zod.coerce.string().optional(),
   "search": zod.coerce.string().optional(),
   "limit": zod.coerce.number().int().optional(),
-  "offset": zod.coerce.number().int().optional()
+  "offset": zod.coerce.number().int().optional(),
+  "sortBy": zod.enum(['checkDate', 'qbCheckNumber', 'vendorName', 'clientName', 'amount', 'remitted', 'paymentType', 'createdAt']).optional(),
+  "sortDirection": zod.enum(['asc', 'desc']).optional()
 })
 
 export const ListPaymentsResponse = zod.object({
@@ -1845,7 +1857,9 @@ export const ListRemittancesQueryParams = zod.object({
   "autoMatched": zod.coerce.boolean().optional().describe('Filter by auto-match flag.'),
   "search": zod.coerce.string().optional().describe('Filter by client name (case-insensitive partial match).'),
   "limit": zod.coerce.number().int().optional(),
-  "offset": zod.coerce.number().int().optional()
+  "offset": zod.coerce.number().int().optional(),
+  "sortBy": zod.enum(['remittanceDate', 'altaReference', 'remittanceBatchId', 'clientName', 'authNumber', 'amount', 'status', 'createdAt']).optional(),
+  "sortDirection": zod.enum(['asc', 'desc']).optional()
 })
 
 export const ListRemittancesResponse = zod.object({
@@ -2040,7 +2054,9 @@ export const ListVendorsQueryParams = zod.object({
   "w9Status": zod.coerce.string().optional(),
   "active": zod.enum(['true', 'false']).optional(),
   "limit": zod.coerce.number().int().optional(),
-  "offset": zod.coerce.number().int().optional()
+  "offset": zod.coerce.number().int().optional(),
+  "sortBy": zod.enum(['name', 'contactPerson', 'email', 'w9Status', 'active', 'preferred', 'createdAt']).optional(),
+  "sortDirection": zod.enum(['asc', 'desc']).optional()
 })
 
 export const ListVendorsResponse = zod.object({
@@ -2285,7 +2301,9 @@ export const GetPendingAuthReportQueryParams = zod.object({
   "coordinatorId": zod.coerce.string().optional(),
   "search": zod.coerce.string().optional(),
   "limit": zod.coerce.number().int().optional(),
-  "offset": zod.coerce.number().int().optional()
+  "offset": zod.coerce.number().int().optional(),
+  "sortBy": zod.enum(['clientName', 'referralDate', 'daysWaiting', 'coordinatorName']).optional(),
+  "sortDirection": zod.enum(['asc', 'desc']).optional()
 })
 
 export const GetPendingAuthReportResponse = zod.object({
@@ -2310,7 +2328,9 @@ export const GetCaseStatusReportQueryParams = zod.object({
   "coordinatorId": zod.coerce.string().optional(),
   "search": zod.coerce.string().optional(),
   "limit": zod.coerce.number().int().optional(),
-  "offset": zod.coerce.number().int().optional()
+  "offset": zod.coerce.number().int().optional(),
+  "sortBy": zod.enum(['clientName', 'status', 'referralDate', 'coordinatorName', 'createdAt']).optional(),
+  "sortDirection": zod.enum(['asc', 'desc']).optional()
 })
 
 export const GetCaseStatusReportResponse = zod.object({
@@ -2334,7 +2354,9 @@ export const GetCaseStatusReportResponse = zod.object({
 export const GetMissingDocumentsReportQueryParams = zod.object({
   "docType": zod.coerce.string().optional().describe('Filter by document type (w9, signature, auth_pdf)'),
   "limit": zod.coerce.number().int().optional(),
-  "offset": zod.coerce.number().int().optional()
+  "offset": zod.coerce.number().int().optional(),
+  "sortBy": zod.enum(['docType', 'entityType', 'entityName', 'description', 'clientName']).optional(),
+  "sortDirection": zod.enum(['asc', 'desc']).optional()
 })
 
 export const GetMissingDocumentsReportResponse = zod.object({
@@ -2357,7 +2379,9 @@ export const GetMissingDocumentsReportResponse = zod.object({
 export const GetExpiringAuthReportQueryParams = zod.object({
   "withinDays": zod.coerce.number().int().optional().describe('Only include authorizations expiring within this many days (default 30).'),
   "limit": zod.coerce.number().int().optional(),
-  "offset": zod.coerce.number().int().optional()
+  "offset": zod.coerce.number().int().optional(),
+  "sortBy": zod.enum(['authNumber', 'clientName', 'vendorName', 'serviceCode', 'servicePeriodEnd', 'daysUntilExpiry', 'maxPeriodAmount']).optional(),
+  "sortDirection": zod.enum(['asc', 'desc']).optional()
 })
 
 export const GetExpiringAuthReportResponse = zod.object({

@@ -5,10 +5,14 @@
  * CEPS Portal API — referral intake, authorizations, invoices, payments, remittances, vendors, reporting
  * OpenAPI spec version: 0.1.0
  */
+import type { GetPendingAuthReportSortBy } from './getPendingAuthReportSortBy';
+import type { GetPendingAuthReportSortDirection } from './getPendingAuthReportSortDirection';
 
 export type GetPendingAuthReportParams = {
 coordinatorId?: string;
 search?: string;
 limit?: number;
 offset?: number;
+sortBy?: GetPendingAuthReportSortBy;
+sortDirection?: GetPendingAuthReportSortDirection;
 };

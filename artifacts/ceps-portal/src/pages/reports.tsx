@@ -3,7 +3,7 @@ import { useGetVendorPaymentReport, useGetDashboardSummary } from '@workspace/ap
 import { useSearchParams } from 'wouter';
 import { useAuth } from '@/components/auth/auth-provider';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { Table, TableBody, TableCell, TableHeader, TableRow, SortableTableHead } from '@/components/ui/table';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Download } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -15,6 +15,7 @@ import PendingAuthReport from './reports/pending-auth-report';
 import CaseStatusReport from './reports/case-status-report';
 import MissingDocumentsReport from './reports/missing-documents-report';
 import ExpiringAuthReport from './reports/expiring-auth-report';
+import { stableSort, useTableSort } from '@/lib/table-sorting';
 
 const VALID_TABS = ['vendor-payments', 'case-status', 'pending-auth', 'missing-docs', 'expiring-auth'];
 
@@ -85,10 +86,16 @@ export default function ReportsPage() {
 
 function VendorPaymentsReport() {
   const currentYear = new Date().getFullYear();
+  const { sort, onSort } = useTableSort<string>('vendorName');
   const { data: report, isLoading } = useGetVendorPaymentReport({ year: currentYear }, {
     query: { queryKey: ['vendorReport', currentYear] },
   });
   const { data: summary, isLoading: summaryLoading } = useGetDashboardSummary({ query: { queryKey: ['dashboardSummary'] } });
+  const sortedReport = stableSort(report ?? [], sort, {
+    vendorName: (v: any) => v.vendorName,
+    einOnFile: (v: any) => v.einOnFile ? 'On File' : 'Pending',
+    totalPaid: (v: any) => Number(v.totalPaid),
+  });
 
   const exportVendorPayments = () => {
     if (!report) return;
@@ -191,9 +198,9 @@ function VendorPaymentsReport() {
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>Vendor Name</TableHead>
-                <TableHead>W-9 Status</TableHead>
-                <TableHead className="text-right">Total Paid YTD</TableHead>
+                <SortableTableHead sortDirection={sort.key === 'vendorName' ? sort.direction : null} onSort={() => onSort('vendorName')}>Vendor Name</SortableTableHead>
+                <SortableTableHead sortDirection={sort.key === 'einOnFile' ? sort.direction : null} onSort={() => onSort('einOnFile')}>W-9 Status</SortableTableHead>
+                <SortableTableHead className="text-right" sortDirection={sort.key === 'totalPaid' ? sort.direction : null} onSort={() => onSort('totalPaid')}>Total Paid YTD</SortableTableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -202,7 +209,7 @@ function VendorPaymentsReport() {
               ) : report?.length === 0 ? (
                 <TableRow><TableCell colSpan={3} className="h-24 text-center text-muted-foreground">No data available.</TableCell></TableRow>
               ) : (
-                report?.map((v: any, i: number) => (
+                sortedReport.map((v: any, i: number) => (
                   <TableRow key={i}>
                     <TableCell className="font-medium"><VendorLink id={v.vendorId} name={v.vendorName} /></TableCell>
                     <TableCell className="capitalize text-muted-foreground">{v.einOnFile ? 'On File' : 'Pending'}</TableCell>

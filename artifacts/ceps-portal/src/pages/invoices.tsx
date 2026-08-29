@@ -3,7 +3,7 @@ import { useListInvoices } from '@workspace/api-client-react';
 import { Link } from 'wouter';
 import { ClientLink, VendorLink } from '@/components/entity-links';
 import { 
-  Table, TableBody, TableCell, TableHead, TableHeader, TableRow 
+  Table, TableBody, TableCell, TableHead, TableHeader, TableRow, SortableTableHead, useTableSort
 } from '@/components/ui/table';
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -19,11 +19,17 @@ export default function InvoicesPage() {
   const { user } = useAuth();
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(0);
+  const sort = useTableSort<'serviceMonth' | 'vendorName' | 'clientName' | 'authNumber' | 'amountRequested' | 'status'>();
+  const onSort = (key: Parameters<typeof sort.toggleSort>[0]) => {
+    sort.toggleSort(key);
+    setPage(0);
+  };
 
   const params = {
     limit: PAGE_SIZE,
     offset: page * PAGE_SIZE,
     ...(search ? { search } : {}),
+    ...(sort.sortBy ? { sortBy: sort.sortBy, sortDirection: sort.sortDirection } : {}),
   };
   const { data, isLoading } = useListInvoices(params, {
     query: { queryKey: ['invoices', params] },
@@ -64,12 +70,12 @@ export default function InvoicesPage() {
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>Service Month</TableHead>
-                <TableHead>Vendor</TableHead>
-                <TableHead>Client</TableHead>
-                <TableHead>Auth #</TableHead>
-                <TableHead className="text-right">Amount</TableHead>
-                <TableHead>Status</TableHead>
+                <SortableTableHead label="Service Month" sortKey="serviceMonth" activeSortBy={sort.sortBy} sortDirection={sort.sortDirection} onSort={onSort} />
+                <SortableTableHead label="Vendor" sortKey="vendorName" activeSortBy={sort.sortBy} sortDirection={sort.sortDirection} onSort={onSort} />
+                <SortableTableHead label="Client" sortKey="clientName" activeSortBy={sort.sortBy} sortDirection={sort.sortDirection} onSort={onSort} />
+                <SortableTableHead label="Auth #" sortKey="authNumber" activeSortBy={sort.sortBy} sortDirection={sort.sortDirection} onSort={onSort} />
+                <SortableTableHead label="Amount" sortKey="amountRequested" activeSortBy={sort.sortBy} sortDirection={sort.sortDirection} onSort={onSort} className="text-right" />
+                <SortableTableHead label="Status" sortKey="status" activeSortBy={sort.sortBy} sortDirection={sort.sortDirection} onSort={onSort} />
                 <TableHead className="text-right">Actions</TableHead>
               </TableRow>
             </TableHeader>

@@ -6,6 +6,8 @@
  * OpenAPI spec version: 0.1.0
  */
 import type { ListVendorsActive } from './listVendorsActive';
+import type { ListVendorsSortBy } from './listVendorsSortBy';
+import type { ListVendorsSortDirection } from './listVendorsSortDirection';
 
 export type ListVendorsParams = {
 search?: string;
@@ -13,4 +15,6 @@ w9Status?: string;
 active?: ListVendorsActive;
 limit?: number;
 offset?: number;
+sortBy?: ListVendorsSortBy;
+sortDirection?: ListVendorsSortDirection;
 };

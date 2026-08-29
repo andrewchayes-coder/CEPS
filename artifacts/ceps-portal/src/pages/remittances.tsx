@@ -8,7 +8,7 @@ import { Link } from 'wouter';
 import { AltaRemittanceImport } from '@/components/alta-remittance-import';
 import { Card, CardContent } from '@/components/ui/card';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow, SortableTableHead, useTableSort } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -35,6 +35,11 @@ export default function RemittancesPage() {
   const [page, setPage] = useState(0);
   const [batchFilter, setBatchFilter] = useState<string>('');
   const [tab, setTab] = useState<RemittanceTab>('all');
+  const sort = useTableSort<'remittanceDate' | 'altaReference' | 'remittanceBatchId' | 'clientName' | 'authNumber' | 'amount' | 'status'>();
+  const onSort = (key: Parameters<typeof sort.toggleSort>[0]) => {
+    sort.toggleSort(key);
+    setPage(0);
+  };
   const { user } = useAuth();
   const isStaff = user?.role === 'staff';
   // "Needs Manual Match" is a staff-only triage view: imported rows that landed
@@ -45,6 +50,7 @@ export default function RemittancesPage() {
     offset: page * PAGE_SIZE,
     ...(batchFilter ? { remittanceBatchId: batchFilter } : {}),
     ...(triage ? { status: 'received', autoMatched: false } : {}),
+    ...(sort.sortBy ? { sortBy: sort.sortBy, sortDirection: sort.sortDirection } : {}),
   };
   const { data, isLoading, refetch } = useListRemittances(params, {
     query: { queryKey: ['remittances', params] },
@@ -158,13 +164,13 @@ export default function RemittancesPage() {
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>Date Received</TableHead>
-                <TableHead>Reference</TableHead>
-                <TableHead>Batch</TableHead>
-                <TableHead>Client</TableHead>
-                <TableHead>Auth #</TableHead>
-                <TableHead className="text-right">Amount</TableHead>
-                <TableHead>Status</TableHead>
+                <SortableTableHead label="Date Received" sortKey="remittanceDate" activeSortBy={sort.sortBy} sortDirection={sort.sortDirection} onSort={onSort} />
+                <SortableTableHead label="Reference" sortKey="altaReference" activeSortBy={sort.sortBy} sortDirection={sort.sortDirection} onSort={onSort} />
+                <SortableTableHead label="Batch" sortKey="remittanceBatchId" activeSortBy={sort.sortBy} sortDirection={sort.sortDirection} onSort={onSort} />
+                <SortableTableHead label="Client" sortKey="clientName" activeSortBy={sort.sortBy} sortDirection={sort.sortDirection} onSort={onSort} />
+                <SortableTableHead label="Auth #" sortKey="authNumber" activeSortBy={sort.sortBy} sortDirection={sort.sortDirection} onSort={onSort} />
+                <SortableTableHead label="Amount" sortKey="amount" activeSortBy={sort.sortBy} sortDirection={sort.sortDirection} onSort={onSort} className="text-right" />
+                <SortableTableHead label="Status" sortKey="status" activeSortBy={sort.sortBy} sortDirection={sort.sortDirection} onSort={onSort} />
                 {isStaff && <TableHead className="text-right">Actions</TableHead>}
               </TableRow>
             </TableHeader>

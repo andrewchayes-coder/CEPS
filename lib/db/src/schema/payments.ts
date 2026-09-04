@@ -9,6 +9,7 @@ import {
   uniqueIndex,
   index,
 } from "drizzle-orm/pg-core";
+import { sql } from "drizzle-orm";
 import { clientsTable } from "./clients";
 import { authorizationsTable } from "./authorizations";
 import { vendorsTable } from "./vendors";
@@ -31,6 +32,7 @@ export const paymentsTable = pgTable("payments", {
   paymentMonth: text("payment_month"), // YYYY-MM
   paymentType: text("payment_type").notNull(), // direct_payment | reimbursement | fee
   source: text("source").notNull(), // quickbooks | manual
+  sourceRowFingerprint: text("source_row_fingerprint"),
   loggedBy: uuid("logged_by").references(() => usersTable.id),
   remitted: boolean("remitted").notNull().default(false),
   isDeleted: boolean("is_deleted").notNull().default(false),
@@ -40,9 +42,12 @@ export const paymentsTable = pgTable("payments", {
     .notNull()
     .defaultNow(),
 }, (table) => ({
-  qbCheckNumberUnique: uniqueIndex("payments_qb_check_number_unique").on(
+  qbCheckNumberIdx: index("payments_qb_check_number_idx").on(
     table.qbCheckNumber,
   ),
+  sourceRowFingerprintUnique: uniqueIndex("payments_source_row_fingerprint_unique")
+    .on(table.sourceRowFingerprint)
+    .where(sql`${table.sourceRowFingerprint} IS NOT NULL`),
   // Backing indexes for the SQL-WHERE list filtering / role scoping
   // (Prompt 6), following the audit-log indexing pattern.
   checkDateIdx: index("payments_check_date_idx").on(table.checkDate.desc()),

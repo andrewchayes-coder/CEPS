@@ -23,13 +23,13 @@ import { Download, FileUp, Loader2, Upload, CheckCircle2, RotateCcw } from 'luci
 import { stableSort, useTableSort } from '@/lib/table-sorting';
 import { trackAnalyticsEvent } from '@/lib/analytics';
 
-// The five entities the bulk-import system covers, in the documented build
+// The generic CSV entities. Alta FMS payments use their source workbook on the
+// Payments Log instead of a hand-converted CSV template.
 // order. Kept in sync with the server-side field registry (importRegistry.ts).
 const ENTITIES = [
   { value: 'clients', label: 'Participants' },
   { value: 'vendors', label: 'Vendors' },
   { value: 'authorizations', label: 'Authorizations' },
-  { value: 'payments', label: 'Payments (historical — no fee auto-generated)' },
   { value: 'remittances', label: 'Remittances' },
 ] as const;
 
@@ -165,9 +165,13 @@ export default function AdminImportPage() {
       <div>
         <h1 className="text-3xl font-bold tracking-tight">Bulk Import</h1>
         <p className="text-muted-foreground mt-1">
-          Import participants, vendors, authorizations, payments, and remittances from a CSV. Download the
+          Import participants, vendors, authorizations, and remittances from a prepared CSV. Download the
           template, fill it in, then upload to preview and confirm. Duplicates are skipped, unresolvable
           rows are reported — nothing is guessed.
+        </p>
+        <p className="mt-2 text-sm text-muted-foreground">
+          Alta FMS payment workbooks are imported directly from the Payments Log so their UCI, authorization,
+          and monthly transaction structure can be validated without converting the source file.
         </p>
       </div>
 

@@ -6,6 +6,10 @@
  * OpenAPI spec version: 0.1.0
  */
 
+export * from './altaFmsPaymentImportInput';
+export * from './altaFmsPaymentImportResult';
+export * from './altaFmsPaymentImportRowResult';
+export * from './altaFmsPaymentImportRowResultOutcome';
 export * from './altaRemittanceImportInput';
 export * from './altaRemittanceImportResult';
 export * from './altaRemittanceImportRowResult';
@@ -25,11 +29,6 @@ export * from './authorizationUpdatePaymentType';
 export * from './authorizationUpdateServiceCode';
 export * from './authorizationUpdateStatus';
 export * from './caseStatusRow';
-export * from './checkRegisterImportInput';
-export * from './checkRegisterImportResult';
-export * from './checkRegisterImportRowResult';
-export * from './checkRegisterImportRowResultOutcome';
-export * from './checkRegisterRow';
 export * from './client';
 export * from './clientCase';
 export * from './clientInput';

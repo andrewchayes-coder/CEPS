@@ -1139,43 +1139,43 @@ export interface DuplicatePaymentError {
   existingPayments: Payment[];
 }
 
-export interface CheckRegisterRow {
-  qbCheckNumber: string;
-  checkDate: string;
-  amount: string;
-  payeeName?: string;
-  clientName?: string;
-  memo?: string;
+export interface AltaFmsPaymentImportInput {
+  /** Raw rows from the one-sheet Alta FMS payments workbook. */
+  worksheetRows: string[][];
 }
 
-export interface CheckRegisterImportInput {
-  rows: CheckRegisterRow[];
-}
-
-export type CheckRegisterImportRowResultOutcome = typeof CheckRegisterImportRowResultOutcome[keyof typeof CheckRegisterImportRowResultOutcome];
+export type AltaFmsPaymentImportRowResultOutcome = typeof AltaFmsPaymentImportRowResultOutcome[keyof typeof AltaFmsPaymentImportRowResultOutcome];
 
 
-export const CheckRegisterImportRowResultOutcome = {
+export const AltaFmsPaymentImportRowResultOutcome = {
   imported: 'imported',
   skipped_duplicate: 'skipped_duplicate',
   flagged_duplicate: 'flagged_duplicate',
-  unmatched: 'unmatched',
+  errored: 'errored',
 } as const;
 
-export interface CheckRegisterImportRowResult {
-  qbCheckNumber: string;
-  outcome: CheckRegisterImportRowResultOutcome;
+export interface AltaFmsPaymentImportRowResult {
+  rowNumber: number;
+  /** @nullable */
+  uciNumber?: string | null;
+  outcome: AltaFmsPaymentImportRowResultOutcome;
   /** @nullable */
   message?: string | null;
   /** @nullable */
   paymentId?: string | null;
 }
 
-export interface CheckRegisterImportResult {
+export interface AltaFmsPaymentImportResult {
   imported: number;
-  skipped: number;
-  unmatched: number;
-  results: CheckRegisterImportRowResult[];
+  skippedDuplicate: number;
+  /** Rows held back because another payment already exists for the same participant, authorization, and service month. */
+  flaggedDuplicate: number;
+  errored: number;
+  ignoredNonCheckRows: number;
+  /** @nullable */
+  headerError: string | null;
+  parseProblems: string[];
+  results: AltaFmsPaymentImportRowResult[];
 }
 
 export interface ImportValidateInput {
@@ -1208,7 +1208,6 @@ export const ImportValidateResultEntity = {
   clients: 'clients',
   vendors: 'vendors',
   authorizations: 'authorizations',
-  payments: 'payments',
   remittances: 'remittances',
 } as const;
 
@@ -1257,7 +1256,6 @@ export const ImportCommitResultEntity = {
   clients: 'clients',
   vendors: 'vendors',
   authorizations: 'authorizations',
-  payments: 'payments',
   remittances: 'remittances',
 } as const;
 
@@ -1287,7 +1285,7 @@ export interface RemittanceMatchInput {
 }
 
 export interface AltaRemittanceImportInput {
-  /** Raw text of the uploaded Remittance Report CSV. Parsed server-side by the isolated altaRemittanceParser (interim column mapping — pending a real sample). */
+  /** Raw text of the uploaded Alta Payment History Detail Report CSV, including its summary and detail sections. Parsed server-side. */
   csvText: string;
   /** Optional source Remittance Report reference stamped onto every line. */
   reportReference?: string;

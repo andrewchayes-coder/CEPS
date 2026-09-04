@@ -6,11 +6,7 @@
  * OpenAPI spec version: 0.1.0
  */
 
-export interface CheckRegisterRow {
-  qbCheckNumber: string;
-  checkDate: string;
-  amount: string;
-  payeeName?: string;
-  clientName?: string;
-  memo?: string;
+export interface AltaFmsPaymentImportInput {
+  /** Raw rows from the one-sheet Alta FMS payments workbook. */
+  worksheetRows: string[][];
 }

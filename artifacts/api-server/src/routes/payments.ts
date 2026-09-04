@@ -8,8 +8,8 @@ import {
   CreatePaymentBody,
   CreatePaymentResponse,
   GetPaymentResponse,
-  ImportCheckRegisterBody,
-  ImportCheckRegisterResponse,
+  ImportAltaFmsPaymentsBody,
+  ImportAltaFmsPaymentsResponse,
   UpdatePaymentBody,
   UpdatePaymentResponse,
   ListRemittancesQueryParams,
@@ -29,9 +29,12 @@ import { paymentJson, remittanceJson, clientNameMap, vendorNameMap, authNumberMa
 import { checkDuplicatePayment, lockDuplicatePaymentKey } from "../lib/paymentDuplicateCheck";
 import { money } from "../lib/money";
 import { parseAltaRemittanceCsv, altaRowFingerprint } from "../lib/altaRemittanceParser";
+import { altaFmsPaymentRowFingerprint, parseAltaFmsPaymentWorksheet } from "../lib/altaFmsPaymentParser";
 import { sortedOrder } from "../lib/sorting";
 
 const router: IRouter = Router();
+
+class DuplicateFingerprint extends Error {}
 
 // ⚠️ INTERIM PLACEHOLDER — the exact Fee auto-generation trigger/amount rule and
 // qualifying service codes are pending confirmation from CEPS (docs/CEPS_OPEN_ITEMS.md #4).
@@ -255,86 +258,113 @@ router.post("/payments", requireStaff, async (req, res): Promise<void> => {
 });
 
 router.post("/payments/import", requireStaff, async (req, res): Promise<void> => {
-  const parsed = ImportCheckRegisterBody.safeParse(req.body);
+  const parsed = ImportAltaFmsPaymentsBody.safeParse(req.body);
   if (!parsed.success) {
     res.status(400).json({ error: parsed.error.message });
     return;
   }
-  const clients = await db.select().from(clientsTable).where(notDeleted(clientsTable));
-  const results: { qbCheckNumber: string; outcome: "imported" | "skipped_duplicate" | "flagged_duplicate" | "unmatched"; message?: string | null; paymentId?: string | null }[] = [];
-  let imported = 0;
-  let skipped = 0;
-  let flagged = 0;
-  let unmatched = 0;
-
-  for (const row of parsed.data.rows) {
-    const [dup] = await db.select().from(paymentsTable).where(and(eq(paymentsTable.qbCheckNumber, row.qbCheckNumber), notDeleted(paymentsTable)));
-    if (dup) {
-      skipped++;
-      results.push({ qbCheckNumber: row.qbCheckNumber, outcome: "skipped_duplicate", message: "A payment with this check number already exists.", paymentId: dup.id });
-      continue;
-    }
-    const nameNeedle = (row.clientName ?? "").trim().toLowerCase();
-    const client = nameNeedle
-      ? clients.find((c) => `${c.firstName} ${c.lastName}`.toLowerCase() === nameNeedle || `${c.lastName}, ${c.firstName}`.toLowerCase() === nameNeedle)
-      : undefined;
-    if (!client) {
-      unmatched++;
-      results.push({
-        qbCheckNumber: row.qbCheckNumber,
-        outcome: "unmatched",
-        message: row.clientName ? `No client matched "${row.clientName}". Log this payment manually.` : "No client name in this row. Log this payment manually.",
-      });
-      continue;
-    }
-    const rowPaymentMonth = row.checkDate.slice(0, 7);
-    // Duplicate-payment HARD STOP (same rule as manual entry / invoice validation):
-    // a row matching an existing payment for this client + authorization + month
-    // must NOT be silently imported. Imported rows carry no authorization, so the
-    // shared check matches against existing no-authorization payments for the
-    // client + month. There is no override path in bulk import — the row is held
-    // back and surfaced for manual review.
-    const { isDuplicate, existingPayments } = await checkDuplicatePayment(db, {
-      clientId: client.id,
-      authorizationId: null,
-      paymentMonth: rowPaymentMonth,
-    });
-    if (isDuplicate) {
-      flagged++;
-      const existing = existingPayments[0];
-      const message = `A payment already exists for ${client.firstName} ${client.lastName} in ${rowPaymentMonth} (check ${existing.qbCheckNumber}, $${existing.amount}). Held back — review and log manually with a justification if this is intentional.`;
-      results.push({ qbCheckNumber: row.qbCheckNumber, outcome: "flagged_duplicate", message, paymentId: existing.id });
-      await audit(req.user!.id, "flag_duplicate_payment", "payment", existing.id, `Import row check ${row.qbCheckNumber} held back — ${message}`);
-      continue;
-    }
-    // Persist the imported payment and its auto-generated Fee atomically.
-    const payment = await db.transaction(async (tx) => {
-      const [p] = await tx
-        .insert(paymentsTable)
-        .values({
-          clientId: client.id,
-          qbCheckNumber: row.qbCheckNumber,
-          checkDate: row.checkDate,
-          amount: row.amount,
-          paymentMonth: rowPaymentMonth,
-          paymentType: "direct_payment",
-          source: "quickbooks",
-          loggedBy: req.user!.id,
-        })
-        .returning();
-      // INTERIM PLACEHOLDER: auto-generate the corresponding Fee for imported payments too
-      // (rule pending CEPS confirmation — docs/CEPS_OPEN_ITEMS.md #4).
-      await autoGenerateFee(p, req.user!.id, tx as unknown as typeof db);
-      return p;
-    });
-    imported++;
-    results.push({ qbCheckNumber: row.qbCheckNumber, outcome: "imported", message: `Matched to ${client.firstName} ${client.lastName}.`, paymentId: payment.id });
+  const source = parseAltaFmsPaymentWorksheet(parsed.data.worksheetRows);
+  if (source.headerError) {
+    res.json(ImportAltaFmsPaymentsResponse.parse({ imported: 0, skippedDuplicate: 0, flaggedDuplicate: 0, errored: 0, ignoredNonCheckRows: 0, headerError: source.headerError, parseProblems: [], results: [] }));
+    return;
   }
-  await audit(req.user!.id, "import_check_register", "payment", undefined, `${imported} imported, ${skipped} skipped, ${flagged} flagged as duplicate, ${unmatched} unmatched`);
-  // The response's `skipped` total counts every held-back row (check-number
-  // duplicates + client/auth/month duplicates); the per-row `outcome` field
-  // distinguishes skipped_duplicate from flagged_duplicate.
-  res.json(ImportCheckRegisterResponse.parse({ imported, skipped: skipped + flagged, unmatched, results }));
+  const clients = await db.select().from(clientsTable).where(notDeleted(clientsTable));
+  const clientByUci = new Map(clients.map((client) => [client.uciNumber, client]));
+  const auths = await db.select().from(authorizationsTable).where(notDeleted(authorizationsTable));
+  const authByClientAndNumber = new Map(auths.map((auth) => [`${auth.clientId}::${auth.authNumber}`, auth]));
+  const fingerprints = new Set((await db.select({ fingerprint: paymentsTable.sourceRowFingerprint }).from(paymentsTable).where(notDeleted(paymentsTable))).map((row) => row.fingerprint).filter((value): value is string => !!value));
+  const results: { rowNumber: number; uciNumber?: string | null; outcome: "imported" | "skipped_duplicate" | "flagged_duplicate" | "errored"; message?: string | null; paymentId?: string | null }[] = [];
+  let imported = 0;
+  let skippedDuplicate = 0;
+  let flaggedDuplicate = 0;
+  let errored = source.problems.length;
+  for (const problem of source.problems) {
+    const rowNumber = Number(problem.match(/^Row (\d+):/)?.[1]);
+    if (rowNumber) results.push({ rowNumber, outcome: "errored", message: problem });
+  }
+
+  for (const row of source.rows) {
+    const fingerprint = altaFmsPaymentRowFingerprint(row);
+    if (fingerprints.has(fingerprint)) {
+      skippedDuplicate++;
+      results.push({ rowNumber: row.rowNumber, uciNumber: row.uciNumber, outcome: "skipped_duplicate", message: "This Alta FMS line was already imported (matched by source-row fingerprint)." });
+      continue;
+    }
+    const client = clientByUci.get(row.uciNumber);
+    if (!client) {
+      errored++;
+      results.push({ rowNumber: row.rowNumber, uciNumber: row.uciNumber, outcome: "errored", message: `No client found for UCI "${row.uciNumber}".` });
+      continue;
+    }
+    const authorization = authByClientAndNumber.get(`${client.id}::${row.authNumber}`);
+    if (!authorization) {
+      errored++;
+      results.push({ rowNumber: row.rowNumber, uciNumber: row.uciNumber, outcome: "errored", message: `Authorization "${row.authNumber}" not found for UCI "${row.uciNumber}".` });
+      continue;
+    }
+    try {
+      const transactionResult = await db.transaction(async (tx) => {
+        const txDb = tx as unknown as typeof db;
+        await lockDuplicatePaymentKey(txDb, {
+          clientId: client.id,
+          authorizationId: authorization.id,
+          paymentMonth: row.serviceMonth,
+        });
+        const [existingSourceRow] = await tx
+          .select({ id: paymentsTable.id })
+          .from(paymentsTable)
+          .where(eq(paymentsTable.sourceRowFingerprint, fingerprint))
+          .limit(1);
+        if (existingSourceRow) return { kind: "source_duplicate" as const };
+
+        const duplicate = await checkDuplicatePayment(txDb, {
+          clientId: client.id,
+          authorizationId: authorization.id,
+          paymentMonth: row.serviceMonth,
+        });
+        if (duplicate.isDuplicate) {
+          const existing = duplicate.existingPayments[0];
+          await audit(
+            req.user!.id,
+            "flag_duplicate_payment",
+            "payment",
+            existing.id,
+            `Alta FMS row ${row.rowNumber} held back — check ${row.checkNumber} conflicts with existing check ${existing.qbCheckNumber}.`,
+            txDb,
+          );
+          return { kind: "business_duplicate" as const, existing };
+        }
+
+        const [inserted] = await tx.insert(paymentsTable).values({ clientId: client.id, authorizationId: authorization.id, qbCheckNumber: row.checkNumber, checkDate: row.checkDate, amount: row.amount, paymentMonth: row.serviceMonth, paymentType: row.paymentType, source: "historical_import", loggedBy: req.user!.id, sourceRowFingerprint: fingerprint }).onConflictDoNothing().returning();
+        if (!inserted) return { kind: "source_duplicate" as const };
+        await audit(req.user!.id, "import_alta_fms_payment", "payment", inserted.id, `Alta FMS historical import — check ${inserted.qbCheckNumber}`, tx as unknown as typeof db);
+        return { kind: "imported" as const, payment: inserted };
+      });
+      if (transactionResult.kind === "source_duplicate") {
+        fingerprints.add(fingerprint);
+        skippedDuplicate++;
+        results.push({ rowNumber: row.rowNumber, uciNumber: row.uciNumber, outcome: "skipped_duplicate", message: "This Alta FMS line was already imported (matched by source-row fingerprint)." });
+      } else if (transactionResult.kind === "business_duplicate") {
+        flaggedDuplicate++;
+        results.push({
+          rowNumber: row.rowNumber,
+          uciNumber: row.uciNumber,
+          outcome: "flagged_duplicate",
+          paymentId: transactionResult.existing.id,
+          message: `Held back: existing check ${transactionResult.existing.qbCheckNumber} already covers this participant, authorization, and service month.`,
+        });
+      } else {
+        fingerprints.add(fingerprint);
+        imported++;
+        results.push({ rowNumber: row.rowNumber, uciNumber: row.uciNumber, outcome: "imported", paymentId: transactionResult.payment.id });
+      }
+    } catch (error) {
+      errored++;
+      results.push({ rowNumber: row.rowNumber, uciNumber: row.uciNumber, outcome: "errored", message: error instanceof Error ? error.message : "Insert failed." });
+    }
+  }
+  await audit(req.user!.id, "import_alta_fms_payments", "payment", undefined, `${imported} imported, ${skippedDuplicate} source duplicate, ${flaggedDuplicate} business duplicate, ${errored} errored`);
+  res.json(ImportAltaFmsPaymentsResponse.parse({ imported, skippedDuplicate, flaggedDuplicate, errored, ignoredNonCheckRows: source.ignoredNonCheckRows, headerError: null, parseProblems: source.problems, results }));
 });
 
 router.get("/payments/:id", requireAuth, async (req, res): Promise<void> => {
@@ -566,8 +596,6 @@ router.delete("/payments/:id", requireStaff, async (req, res): Promise<void> => 
 // already exists (re-uploaded report row). Throwing aborts the transaction so
 // any conditional `remitted` claim made before the conflicting insert is rolled
 // back; the caller catches it and reports the row as skipped_duplicate.
-class DuplicateFingerprint extends Error {}
-
 // Shared auto-match logic (the same rule behind POST /remittances and
 // POST /remittances/:id/match): an unremitted payment for the SAME client whose
 // amount equals the remittance amount, and — when a service month is provided —
@@ -849,8 +877,7 @@ router.post("/remittances/:id/match", requireStaff, async (req, res): Promise<vo
 // scoped to that client — unresolvable rows are reported as row errors, never
 // guessed. After insert, each row runs the SAME auto-match logic as manual
 // entry (findMatchingPayment) so imported remittances match Payments like
-// manual ones. CSV parsing/column mapping is isolated in
-// src/lib/altaRemittanceParser.ts (interim_..._pending_confirmation).
+// manual ones. CSV parsing is isolated in src/lib/altaRemittanceParser.ts.
 router.post("/remittances/import", requireStaff, async (req, res): Promise<void> => {
   const parsed = ImportAltaRemittancesBody.safeParse(req.body);
   if (!parsed.success) {
@@ -860,8 +887,8 @@ router.post("/remittances/import", requireStaff, async (req, res): Promise<void>
   const remittanceBatchId = randomUUID();
   const reportReference = parsed.data.reportReference?.trim() || null;
 
-  // Parse the uploaded CSV with the ISOLATED interim column mapping. A header
-  // error means the required Alta columns weren't found — nothing is imported.
+  // A header error means the required Alta report sections weren't found —
+  // nothing is imported.
   const { rows: parsedRows, problems: parseProblems, headerError } = parseAltaRemittanceCsv(parsed.data.csvText);
   if (headerError) {
     res.json(

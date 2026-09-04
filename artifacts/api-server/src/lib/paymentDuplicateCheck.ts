@@ -8,7 +8,7 @@ export interface DuplicatePaymentArgs {
   clientId: string;
   /**
    * The authorization the payment is tied to. When null (e.g. an imported
-   * check-register row that carries no authorization), the match falls back to
+   * legacy payment row that carries no authorization), the match falls back to
    * payments with no authorization for the same client + month.
    */
   authorizationId: string | null;

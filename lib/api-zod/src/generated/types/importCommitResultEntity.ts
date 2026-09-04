@@ -13,6 +13,5 @@ export const ImportCommitResultEntity = {
   clients: 'clients',
   vendors: 'vendors',
   authorizations: 'authorizations',
-  payments: 'payments',
   remittances: 'remittances',
 } as const;

@@ -5,11 +5,13 @@
  * CEPS Portal API — referral intake, authorizations, invoices, payments, remittances, vendors, reporting
  * OpenAPI spec version: 0.1.0
  */
-import type { CheckRegisterImportRowResultOutcome } from './checkRegisterImportRowResultOutcome';
+import type { AltaFmsPaymentImportRowResultOutcome } from './altaFmsPaymentImportRowResultOutcome';
 
-export interface CheckRegisterImportRowResult {
-  qbCheckNumber: string;
-  outcome: CheckRegisterImportRowResultOutcome;
+export interface AltaFmsPaymentImportRowResult {
+  rowNumber: number;
+  /** @nullable */
+  uciNumber?: string | null;
+  outcome: AltaFmsPaymentImportRowResultOutcome;
   /** @nullable */
   message?: string | null;
   /** @nullable */

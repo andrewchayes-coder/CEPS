@@ -26,9 +26,10 @@ let clientAId: string;
 let vendorAId: string;
 let authAId: string;
 let cookie: string;
+let coordinatorCookie: string;
 
 const coordEmail = `${nonce}-coord@test.local`;
-const uciA = `${nonce}-UCI-A`;
+const uciA = String(Date.now()).slice(-7);
 const vendorAName = `${nonce} Bright Futures`;
 const authANumber = `${nonce}-AUTH-A`;
 
@@ -74,6 +75,9 @@ beforeAll(async () => {
   const token = newToken();
   await db.insert(sessionsTable).values({ userId: staffId, token, expiresAt: new Date(Date.now() + 60 * 60 * 1000) });
   cookie = `ceps_session=${token}`;
+  const coordinatorToken = newToken();
+  await db.insert(sessionsTable).values({ userId: coordId, token: coordinatorToken, expiresAt: new Date(Date.now() + 60 * 60 * 1000) });
+  coordinatorCookie = `ceps_session=${coordinatorToken}`;
 });
 
 afterAll(async () => {
@@ -82,7 +86,7 @@ afterAll(async () => {
   await db.delete(paymentsTable).where(inArray(paymentsTable.clientId, [clientAId]));
   await db.delete(authorizationsTable).where(inArray(authorizationsTable.clientId, [clientAId]));
   await db.delete(auditLogTable).where(eq(auditLogTable.userId, staffId));
-  await db.delete(sessionsTable).where(eq(sessionsTable.userId, staffId));
+  await db.delete(sessionsTable).where(inArray(sessionsTable.userId, [staffId, coordId]));
   // Clean up any imported clients (by UCI prefix) and vendors (by name prefix).
   const importedClients = await db.select({ id: clientsTable.id }).from(clientsTable).where(inArray(clientsTable.uciNumber, [uciA, `${nonce}-UCI-NEW`]));
   const importedClientIds = importedClients.map((c) => c.id);
@@ -127,40 +131,9 @@ describe("GET /import/:entity/template", () => {
 // ── Validate (dry run) ───────────────────────────────────────────────────────
 
 describe("POST /import/:entity/validate", () => {
-  it("catches bad rows, missing FKs, and ambiguity without writing", async () => {
-    const csv = [
-      "Client UCI *,Vendor Name,Auth Number,QB Check Number *,Check Date *,Amount *,Payment Month,Payment Type",
-      // valid — resolves client + vendor + auth
-      `${uciA},${vendorAName},${authANumber},${nonce}-CHK-1,2026-02-15,500.00,,`,
-      // bad amount
-      `${uciA},,,${nonce}-CHK-2,2026-02-15,not-a-number,,`,
-      // unknown UCI
-      `${nonce}-UCI-MISSING,,,${nonce}-CHK-3,2026-02-15,10.00,,`,
-      // unknown vendor
-      `${uciA},${nonce}-NO-SUCH-VENDOR,,${nonce}-CHK-4,2026-02-15,10.00,,`,
-      // bad auth scoped to client
-      `${uciA},,NOPE-AUTH,${nonce}-CHK-5,2026-02-15,10.00,,`,
-    ].join("\n");
-    const res = await request(app).post("/api/import/payments/validate").set("Cookie", cookie).send({ csvText: csv });
-    expect(res.status).toBe(200);
-    const body = res.body as {
-      totalRows: number;
-      validRows: number;
-      errorRows: number;
-      results: { rowNumber: number; status: string; errors?: string[] }[];
-    };
-    expect(body.totalRows).toBe(5);
-    expect(body.validRows).toBe(1);
-    expect(body.errorRows).toBe(4);
-    const byRow = new Map(body.results.map((r) => [r.rowNumber, r]));
-    expect(byRow.get(2)!.status).toBe("valid");
-    expect(byRow.get(3)!.status).toBe("error"); // bad amount
-    expect(byRow.get(4)!.errors!.join(" ")).toContain("No client found");
-    expect(byRow.get(5)!.errors!.join(" ")).toContain("No vendor found");
-    expect(byRow.get(6)!.errors!.join(" ")).toContain("Authorization");
-    // No writes happened.
-    const [dup] = await db.select().from(paymentsTable).where(eq(paymentsTable.qbCheckNumber, `${nonce}-CHK-1`));
-    expect(dup).toBeUndefined();
+  it("does not expose the retired generic payments validation route", async () => {
+    const res = await request(app).post("/api/import/payments/validate").set("Cookie", cookie).send({ csvText: "synthetic" });
+    expect(res.status).toBe(404);
   });
 
   it("rejects the template's unedited example row instead of importing it", async () => {
@@ -189,11 +162,11 @@ describe("POST /import/:entity/validate", () => {
 // resolvers' "ambiguous" branches are exercised with a hand-built context.
 describe("FK resolvers treat an ambiguous natural key as a hard row error", () => {
   it("errors when a vendor name resolves to more than one vendor", () => {
-    const def = getEntityDef("payments");
+    const def = getEntityDef("authorizations");
     const grid = parseCsv(
       [
-        "Client UCI *,Vendor Name,QB Check Number *,Check Date *,Amount *",
-        `UCI-X,Dup Vendor,CHK-Z,2026-02-15,10.00`,
+        "Client UCI *,Vendor Name,Auth Number *,Service Code *,Service Period Start *,Service Period End *,Max Period Amount *",
+        "UCI-X,Dup Vendor,AUTH-Z,459,2026-01-01,2026-12-31,10.00",
       ].join("\n"),
     );
     const ctx: ResolveContext = {
@@ -209,11 +182,11 @@ describe("FK resolvers treat an ambiguous natural key as a hard row error", () =
   });
 
   it("errors when a (client, auth number) key resolves to more than one authorization", () => {
-    const def = getEntityDef("payments");
+    const def = getEntityDef("remittances");
     const grid = parseCsv(
       [
-        "Client UCI *,Auth Number,QB Check Number *,Check Date *,Amount *",
-        `UCI-X,AUTH-DUP,CHK-Z,2026-02-15,10.00`,
+        "Client UCI *,Auth Number,Remittance Date *,Amount *",
+        "UCI-X,AUTH-DUP,2026-02-15,10.00",
       ].join("\n"),
     );
     const ctx: ResolveContext = {
@@ -262,49 +235,42 @@ describe("POST /import/clients/commit + vendors", () => {
   });
 });
 
-describe("POST /import/payments/commit", () => {
-  it("imports historical payments tagged source=historical_import with NO auto-generated fee", async () => {
-    const csv = [
-      "Client UCI *,Auth Number,QB Check Number *,Check Date *,Amount *",
-      `${uciA},${authANumber},${nonce}-HIST-1,2026-03-15,750.00`,
-    ].join("\n");
-    const res = await request(app).post("/api/import/payments/commit").set("Cookie", cookie).send({ csvText: csv });
-    expect(res.status).toBe(200);
-    expect(res.body.imported).toBe(1);
-    const [pay] = await db.select().from(paymentsTable).where(eq(paymentsTable.qbCheckNumber, `${nonce}-HIST-1`));
-    expect(pay).toBeTruthy();
-    expect(pay.source).toBe("historical_import");
-    expect(pay.paymentMonth).toBe("2026-03"); // derived from check date
-    expect(pay.authorizationId).toBe(authAId);
-    // Critically: NO fee was auto-generated for this historical import.
-    const fees = await db.select().from(feesTable).where(eq(feesTable.paymentId, pay.id));
-    expect(fees.length).toBe(0);
+describe("POST /payments/import", () => {
+  const worksheetRows = [
+    ["Transaction date", "Transaction type", "Num", "Name", "Description", "Split", "Amount", "Customer"],
+    ["03/31/2026", "Check", `${nonce}-HIST`, "Vendor", `Services/Mar 26/${authANumber}`, "", "125.00", `Synthetic ${uciA} (1)`],
+    ["04/01/2026", "Check", `${nonce}-HIST`, "Vendor", `Services/Apr 26/${authANumber}`, "", "225.00", `Synthetic ${uciA} (1)`],
+    ["04/02/2026", "Check", `${nonce}-UNKNOWN`, "Vendor", "Services/Apr 26/MISSING-AUTH", "", "10.00", "Synthetic 7654321 (1)"],
+    ["04/02/2026", "Check", `${nonce}-BAD-AUTH`, "Vendor", "Services/Apr 26/MISSING-AUTH", "", "10.00", `Synthetic ${uciA} (1)`],
+    ["04/02/2026", "Check", "", "Vendor", `Services/Apr 26/${authANumber}`, "", "10.00", `Synthetic ${uciA} (1)`],
+    ["04/02/2026", "Invoice", "INV-1", "Vendor", "Services/Apr 26/IGNORED", "", "10.00", `Synthetic ${uciA} (1)`],
+  ];
+
+  it("is staff-only", async () => {
+    const unauthenticated = await request(app).post("/api/payments/import").send({ worksheetRows });
+    expect(unauthenticated.status).toBe(401);
+    const coordinator = await request(app).post("/api/payments/import").set("Cookie", coordinatorCookie).send({ worksheetRows });
+    expect(coordinator.status).toBe(403);
   });
 
-  it("skips a duplicate check number", async () => {
-    const csv = [
-      "Client UCI *,QB Check Number *,Check Date *,Amount *",
-      `${uciA},${nonce}-HIST-1,2026-04-15,100.00`,
-    ].join("\n");
-    const res = await request(app).post("/api/import/payments/commit").set("Cookie", cookie).send({ csvText: csv });
-    expect(res.status).toBe(200);
-    expect(res.body.imported).toBe(0);
-    expect(res.body.skippedDuplicate).toBe(1);
-  });
+  it("imports valid FMS lines, reports row errors, and skips an identical re-upload", async () => {
+    const first = await request(app).post("/api/payments/import").set("Cookie", cookie).send({ worksheetRows });
+    expect(first.status).toBe(200);
+    expect(first.body).toMatchObject({ imported: 2, errored: 3, ignoredNonCheckRows: 1, skippedDuplicate: 0, headerError: null });
+    expect(first.body.results.filter((r: { outcome: string }) => r.outcome === "errored").map((r: { message: string }) => r.message).join(" ")).toContain("No client found");
+    expect(first.body.results.filter((r: { outcome: string }) => r.outcome === "errored").map((r: { message: string }) => r.message).join(" ")).toContain("Authorization");
+    expect(first.body.results.filter((r: { outcome: string }) => r.outcome === "errored").map((r: { message: string }) => r.message).join(" ")).toContain("malformed Check row");
 
-  it("a bulk-imported historical payment is returned by GET /payments (response validation passes)", async () => {
-    // Regression: Payment.source spec enum must include "historical_import",
-    // otherwise ListPaymentsResponse.parse throws on any historical row.
-    const res = await request(app)
-      .get("/api/payments")
-      .query({ search: `${nonce}-HIST-1`, limit: 50, offset: 0 })
-      .set("Cookie", cookie);
-    expect(res.status).toBe(200);
-    const found = (res.body.items as { qbCheckNumber: string; source: string }[]).find(
-      (p) => p.qbCheckNumber === `${nonce}-HIST-1`,
-    );
-    expect(found).toBeTruthy();
-    expect(found!.source).toBe("historical_import");
+    const payments = await db.select().from(paymentsTable).where(eq(paymentsTable.qbCheckNumber, `${nonce}-HIST`));
+    expect(payments).toHaveLength(2);
+    expect(payments.map((payment) => payment.paymentMonth).sort()).toEqual(["2026-03", "2026-04"]);
+    expect(payments.every((payment) => payment.authorizationId === authAId && payment.source === "historical_import")).toBe(true);
+    const feeRows = await db.select().from(feesTable).where(inArray(feesTable.paymentId, payments.map((payment) => payment.id)));
+    expect(feeRows).toHaveLength(0);
+
+    const second = await request(app).post("/api/payments/import").set("Cookie", cookie).send({ worksheetRows });
+    expect(second.status).toBe(200);
+    expect(second.body).toMatchObject({ imported: 0, skippedDuplicate: 2, errored: 3, ignoredNonCheckRows: 1 });
   });
 });
 
@@ -354,8 +320,10 @@ describe("POST /import/remittances/commit", () => {
     // must hash it to the SAME source-row fingerprint (raw UCI/auth/check +
     // normalized amount/month/date), so the second import is skipped.
     const altaCsv = [
-      "Client UCI Number,Authorization Number,Payment Date,Amount,Service Month,Check Number",
-      `${uciA},${authANumber},2026-06-01,321.00,2026-05,XREF-1`,
+      "Date,Units,Amount,Reference #",
+      "2026-06-01,1,321.00,XREF-1",
+      "UCI #,Consumer Name,Auth #,Svc Code,Sub-Code,Service M/Y,Units,Amount,Invoice #,Adj Code,Inv Amt",
+      `${uciA},Synthetic Person,${authANumber},459,,05/2026,1,321.00,INV,,321.00`,
     ].join("\n");
     const alta = await request(app).post("/api/remittances/import").set("Cookie", cookie).send({ csvText: altaCsv });
     expect(alta.status).toBe(200);

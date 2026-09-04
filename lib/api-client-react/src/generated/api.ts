@@ -20,14 +20,14 @@ import type {
 } from '@tanstack/react-query';
 
 import type {
+  AltaFmsPaymentImportInput,
+  AltaFmsPaymentImportResult,
   AltaRemittanceImportInput,
   AltaRemittanceImportResult,
   Authorization,
   AuthorizationInput,
   AuthorizationResult,
   AuthorizationUpdate,
-  CheckRegisterImportInput,
-  CheckRegisterImportResult,
   Client,
   ClientCase,
   ClientInput,
@@ -3794,7 +3794,7 @@ export const useDeletePayment = <TError = ErrorType<void>,
       return useMutation(getDeletePaymentMutationOptions(options));
     }
 
-export const getImportCheckRegisterUrl = () => {
+export const getImportAltaFmsPaymentsUrl = () => {
 
 
 
@@ -3803,16 +3803,16 @@ export const getImportCheckRegisterUrl = () => {
 }
 
 /**
- * @summary Upload parsed check-register rows; matches to clients/vendors/invoices
+ * @summary Import raw Alta FMS payment worksheet rows server-side
  */
-export const importCheckRegister = async (checkRegisterImportInput: CheckRegisterImportInput, options?: Parameters<typeof customFetch>[1]): Promise<CheckRegisterImportResult> => {
+export const importAltaFmsPayments = async (altaFmsPaymentImportInput: AltaFmsPaymentImportInput, options?: Parameters<typeof customFetch>[1]): Promise<AltaFmsPaymentImportResult> => {
 
-  return customFetch<CheckRegisterImportResult>(getImportCheckRegisterUrl(),
+  return customFetch<AltaFmsPaymentImportResult>(getImportAltaFmsPaymentsUrl(),
   {
     ...options,
     method: 'POST',
     headers: { 'Content-Type': 'application/json', ...options?.headers },
-    body: JSON.stringify(checkRegisterImportInput)
+    body: JSON.stringify(altaFmsPaymentImportInput)
   }
 );}
 
@@ -3820,11 +3820,11 @@ export const importCheckRegister = async (checkRegisterImportInput: CheckRegiste
 
 
 
-export const getImportCheckRegisterMutationOptions = <TError = ErrorType<unknown>,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof importCheckRegister>>, TError,{data: BodyType<CheckRegisterImportInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
-): UseMutationOptions<Awaited<ReturnType<typeof importCheckRegister>>, TError,{data: BodyType<CheckRegisterImportInput>}, TContext> => {
+export const getImportAltaFmsPaymentsMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof importAltaFmsPayments>>, TError,{data: BodyType<AltaFmsPaymentImportInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof importAltaFmsPayments>>, TError,{data: BodyType<AltaFmsPaymentImportInput>}, TContext> => {
 
-const mutationKey = ['importCheckRegister'];
+const mutationKey = ['importAltaFmsPayments'];
 const {mutation: mutationOptions, request: requestOptions} = options ?
       options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
       options
@@ -3834,10 +3834,10 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
 
 
 
-      const mutationFn: MutationFunction<Awaited<ReturnType<typeof importCheckRegister>>, {data: BodyType<CheckRegisterImportInput>}> = (props) => {
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof importAltaFmsPayments>>, {data: BodyType<AltaFmsPaymentImportInput>}> = (props) => {
           const {data} = props ?? {};
 
-          return  importCheckRegister(data,requestOptions)
+          return  importAltaFmsPayments(data,requestOptions)
         }
 
 
@@ -3847,25 +3847,25 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
 
   return  { mutationFn, ...mutationOptions }}
 
-    export type ImportCheckRegisterMutationResult = NonNullable<Awaited<ReturnType<typeof importCheckRegister>>>
-    export type ImportCheckRegisterMutationBody = BodyType<CheckRegisterImportInput>
-    export type ImportCheckRegisterMutationError = ErrorType<unknown>
+    export type ImportAltaFmsPaymentsMutationResult = NonNullable<Awaited<ReturnType<typeof importAltaFmsPayments>>>
+    export type ImportAltaFmsPaymentsMutationBody = BodyType<AltaFmsPaymentImportInput>
+    export type ImportAltaFmsPaymentsMutationError = ErrorType<unknown>
 
     /**
- * @summary Upload parsed check-register rows; matches to clients/vendors/invoices
+ * @summary Import raw Alta FMS payment worksheet rows server-side
  */
-export const useImportCheckRegister = <TError = ErrorType<unknown>,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof importCheckRegister>>, TError,{data: BodyType<CheckRegisterImportInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+export const useImportAltaFmsPayments = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof importAltaFmsPayments>>, TError,{data: BodyType<AltaFmsPaymentImportInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
  ): UseMutationResult<
-        Awaited<ReturnType<typeof importCheckRegister>>,
+        Awaited<ReturnType<typeof importAltaFmsPayments>>,
         TError,
-        {data: BodyType<CheckRegisterImportInput>},
+        {data: BodyType<AltaFmsPaymentImportInput>},
         TContext
       > => {
-      return useMutation(getImportCheckRegisterMutationOptions(options));
+      return useMutation(getImportAltaFmsPaymentsMutationOptions(options));
     }
 
-export const getGetImportTemplateUrl = (entity: 'clients' | 'vendors' | 'authorizations' | 'payments' | 'remittances',) => {
+export const getGetImportTemplateUrl = (entity: 'clients' | 'vendors' | 'authorizations' | 'remittances',) => {
 
 
 
@@ -3876,7 +3876,7 @@ export const getGetImportTemplateUrl = (entity: 'clients' | 'vendors' | 'authori
 /**
  * @summary Download a CSV import template for an entity (generated from the field registry)
  */
-export const getImportTemplate = async (entity: 'clients' | 'vendors' | 'authorizations' | 'payments' | 'remittances', options?: Parameters<typeof customFetch>[1]): Promise<string> => {
+export const getImportTemplate = async (entity: 'clients' | 'vendors' | 'authorizations' | 'remittances', options?: Parameters<typeof customFetch>[1]): Promise<string> => {
 
   return customFetch<string>(getGetImportTemplateUrl(entity),
   {
@@ -3891,14 +3891,14 @@ export const getImportTemplate = async (entity: 'clients' | 'vendors' | 'authori
 
 
 
-export const getGetImportTemplateQueryKey = (entity: 'clients' | 'vendors' | 'authorizations' | 'payments' | 'remittances',) => {
+export const getGetImportTemplateQueryKey = (entity: 'clients' | 'vendors' | 'authorizations' | 'remittances',) => {
     return [
     `/api/import/${entity}/template`
     ] as const;
     }
 
 
-export const getGetImportTemplateQueryOptions = <TData = Awaited<ReturnType<typeof getImportTemplate>>, TError = ErrorType<void>>(entity: 'clients' | 'vendors' | 'authorizations' | 'payments' | 'remittances', options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getImportTemplate>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+export const getGetImportTemplateQueryOptions = <TData = Awaited<ReturnType<typeof getImportTemplate>>, TError = ErrorType<void>>(entity: 'clients' | 'vendors' | 'authorizations' | 'remittances', options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getImportTemplate>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
 ) => {
 
 const {query: queryOptions, request: requestOptions} = options ?? {};
@@ -3925,7 +3925,7 @@ export type GetImportTemplateQueryError = ErrorType<void>
  */
 
 export function useGetImportTemplate<TData = Awaited<ReturnType<typeof getImportTemplate>>, TError = ErrorType<void>>(
- entity: 'clients' | 'vendors' | 'authorizations' | 'payments' | 'remittances', options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getImportTemplate>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+ entity: 'clients' | 'vendors' | 'authorizations' | 'remittances', options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getImportTemplate>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
 
  ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
 
@@ -3942,7 +3942,7 @@ export function useGetImportTemplate<TData = Awaited<ReturnType<typeof getImport
 
 
 
-export const getValidateImportUrl = (entity: 'clients' | 'vendors' | 'authorizations' | 'payments' | 'remittances',) => {
+export const getValidateImportUrl = (entity: 'clients' | 'vendors' | 'authorizations' | 'remittances',) => {
 
 
 
@@ -3953,7 +3953,7 @@ export const getValidateImportUrl = (entity: 'clients' | 'vendors' | 'authorizat
 /**
  * @summary Dry-run a CSV import — per-row validation, FK resolution, duplicate preview (no writes)
  */
-export const validateImport = async (entity: 'clients' | 'vendors' | 'authorizations' | 'payments' | 'remittances',
+export const validateImport = async (entity: 'clients' | 'vendors' | 'authorizations' | 'remittances',
     importValidateInput: ImportValidateInput, options?: Parameters<typeof customFetch>[1]): Promise<ImportValidateResult> => {
 
   return customFetch<ImportValidateResult>(getValidateImportUrl(entity),
@@ -3970,8 +3970,8 @@ export const validateImport = async (entity: 'clients' | 'vendors' | 'authorizat
 
 
 export const getValidateImportMutationOptions = <TError = ErrorType<void>,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof validateImport>>, TError,{entity: 'clients' | 'vendors' | 'authorizations' | 'payments' | 'remittances';data: BodyType<ImportValidateInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
-): UseMutationOptions<Awaited<ReturnType<typeof validateImport>>, TError,{entity: 'clients' | 'vendors' | 'authorizations' | 'payments' | 'remittances';data: BodyType<ImportValidateInput>}, TContext> => {
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof validateImport>>, TError,{entity: 'clients' | 'vendors' | 'authorizations' | 'remittances';data: BodyType<ImportValidateInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof validateImport>>, TError,{entity: 'clients' | 'vendors' | 'authorizations' | 'remittances';data: BodyType<ImportValidateInput>}, TContext> => {
 
 const mutationKey = ['validateImport'];
 const {mutation: mutationOptions, request: requestOptions} = options ?
@@ -3983,7 +3983,7 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
 
 
 
-      const mutationFn: MutationFunction<Awaited<ReturnType<typeof validateImport>>, {entity: 'clients' | 'vendors' | 'authorizations' | 'payments' | 'remittances';data: BodyType<ImportValidateInput>}> = (props) => {
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof validateImport>>, {entity: 'clients' | 'vendors' | 'authorizations' | 'remittances';data: BodyType<ImportValidateInput>}> = (props) => {
           const {entity,data} = props ?? {};
 
           return  validateImport(entity,data,requestOptions)
@@ -4004,17 +4004,17 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
  * @summary Dry-run a CSV import — per-row validation, FK resolution, duplicate preview (no writes)
  */
 export const useValidateImport = <TError = ErrorType<void>,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof validateImport>>, TError,{entity: 'clients' | 'vendors' | 'authorizations' | 'payments' | 'remittances';data: BodyType<ImportValidateInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof validateImport>>, TError,{entity: 'clients' | 'vendors' | 'authorizations' | 'remittances';data: BodyType<ImportValidateInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
  ): UseMutationResult<
         Awaited<ReturnType<typeof validateImport>>,
         TError,
-        {entity: 'clients' | 'vendors' | 'authorizations' | 'payments' | 'remittances';data: BodyType<ImportValidateInput>},
+        {entity: 'clients' | 'vendors' | 'authorizations' | 'remittances';data: BodyType<ImportValidateInput>},
         TContext
       > => {
       return useMutation(getValidateImportMutationOptions(options));
     }
 
-export const getCommitImportUrl = (entity: 'clients' | 'vendors' | 'authorizations' | 'payments' | 'remittances',) => {
+export const getCommitImportUrl = (entity: 'clients' | 'vendors' | 'authorizations' | 'remittances',) => {
 
 
 
@@ -4025,7 +4025,7 @@ export const getCommitImportUrl = (entity: 'clients' | 'vendors' | 'authorizatio
 /**
  * @summary Commit a CSV import — transactional per-row insert, duplicates skipped, audit-logged
  */
-export const commitImport = async (entity: 'clients' | 'vendors' | 'authorizations' | 'payments' | 'remittances',
+export const commitImport = async (entity: 'clients' | 'vendors' | 'authorizations' | 'remittances',
     importCommitInput: ImportCommitInput, options?: Parameters<typeof customFetch>[1]): Promise<ImportCommitResult> => {
 
   return customFetch<ImportCommitResult>(getCommitImportUrl(entity),
@@ -4042,8 +4042,8 @@ export const commitImport = async (entity: 'clients' | 'vendors' | 'authorizatio
 
 
 export const getCommitImportMutationOptions = <TError = ErrorType<void>,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof commitImport>>, TError,{entity: 'clients' | 'vendors' | 'authorizations' | 'payments' | 'remittances';data: BodyType<ImportCommitInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
-): UseMutationOptions<Awaited<ReturnType<typeof commitImport>>, TError,{entity: 'clients' | 'vendors' | 'authorizations' | 'payments' | 'remittances';data: BodyType<ImportCommitInput>}, TContext> => {
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof commitImport>>, TError,{entity: 'clients' | 'vendors' | 'authorizations' | 'remittances';data: BodyType<ImportCommitInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof commitImport>>, TError,{entity: 'clients' | 'vendors' | 'authorizations' | 'remittances';data: BodyType<ImportCommitInput>}, TContext> => {
 
 const mutationKey = ['commitImport'];
 const {mutation: mutationOptions, request: requestOptions} = options ?
@@ -4055,7 +4055,7 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
 
 
 
-      const mutationFn: MutationFunction<Awaited<ReturnType<typeof commitImport>>, {entity: 'clients' | 'vendors' | 'authorizations' | 'payments' | 'remittances';data: BodyType<ImportCommitInput>}> = (props) => {
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof commitImport>>, {entity: 'clients' | 'vendors' | 'authorizations' | 'remittances';data: BodyType<ImportCommitInput>}> = (props) => {
           const {entity,data} = props ?? {};
 
           return  commitImport(entity,data,requestOptions)
@@ -4076,11 +4076,11 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
  * @summary Commit a CSV import — transactional per-row insert, duplicates skipped, audit-logged
  */
 export const useCommitImport = <TError = ErrorType<void>,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof commitImport>>, TError,{entity: 'clients' | 'vendors' | 'authorizations' | 'payments' | 'remittances';data: BodyType<ImportCommitInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof commitImport>>, TError,{entity: 'clients' | 'vendors' | 'authorizations' | 'remittances';data: BodyType<ImportCommitInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
  ): UseMutationResult<
         Awaited<ReturnType<typeof commitImport>>,
         TError,
-        {entity: 'clients' | 'vendors' | 'authorizations' | 'payments' | 'remittances';data: BodyType<ImportCommitInput>},
+        {entity: 'clients' | 'vendors' | 'authorizations' | 'remittances';data: BodyType<ImportCommitInput>},
         TContext
       > => {
       return useMutation(getCommitImportMutationOptions(options));
@@ -4840,7 +4840,7 @@ export const getImportAltaRemittancesUrl = () => {
 }
 
 /**
- * @summary Import a Remittance Report — parsed rows become remittance line items sharing one generated remittanceBatchId, each auto-matched to a payment like a manual entry.
+ * @summary Import an Alta Payment History Detail Report — parsed rows become remittance line items sharing one generated remittanceBatchId, each auto-matched to a payment like a manual entry.
  */
 export const importAltaRemittances = async (altaRemittanceImportInput: AltaRemittanceImportInput, options?: Parameters<typeof customFetch>[1]): Promise<AltaRemittanceImportResult> => {
 
@@ -4889,7 +4889,7 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
     export type ImportAltaRemittancesMutationError = ErrorType<unknown>
 
     /**
- * @summary Import a Remittance Report — parsed rows become remittance line items sharing one generated remittanceBatchId, each auto-matched to a payment like a manual entry.
+ * @summary Import an Alta Payment History Detail Report — parsed rows become remittance line items sharing one generated remittanceBatchId, each auto-matched to a payment like a manual entry.
  */
 export const useImportAltaRemittances = <TError = ErrorType<unknown>,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof importAltaRemittances>>, TError,{data: BodyType<AltaRemittanceImportInput>}, TContext>, request?: SecondParameter<typeof customFetch>}

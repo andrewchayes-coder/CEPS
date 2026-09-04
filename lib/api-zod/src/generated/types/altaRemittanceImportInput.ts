@@ -7,7 +7,7 @@
  */
 
 export interface AltaRemittanceImportInput {
-  /** Raw text of the uploaded Remittance Report CSV. Parsed server-side by the isolated altaRemittanceParser (interim column mapping — pending a real sample). */
+  /** Raw text of the uploaded Alta Payment History Detail Report CSV, including its summary and detail sections. Parsed server-side. */
   csvText: string;
   /** Optional source Remittance Report reference stamped onto every line. */
   reportReference?: string;

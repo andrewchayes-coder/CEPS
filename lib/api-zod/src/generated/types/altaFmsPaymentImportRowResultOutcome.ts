@@ -6,12 +6,12 @@
  * OpenAPI spec version: 0.1.0
  */
 
-export type CheckRegisterImportRowResultOutcome = typeof CheckRegisterImportRowResultOutcome[keyof typeof CheckRegisterImportRowResultOutcome];
+export type AltaFmsPaymentImportRowResultOutcome = typeof AltaFmsPaymentImportRowResultOutcome[keyof typeof AltaFmsPaymentImportRowResultOutcome];
 
 
-export const CheckRegisterImportRowResultOutcome = {
+export const AltaFmsPaymentImportRowResultOutcome = {
   imported: 'imported',
   skipped_duplicate: 'skipped_duplicate',
   flagged_duplicate: 'flagged_duplicate',
-  unmatched: 'unmatched',
+  errored: 'errored',
 } as const;

@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useListPayments, useDeletePayment } from '@workspace/api-client-react';
 import { useAuth } from '@/components/auth/auth-provider';
-import { CheckRegisterImport } from '@/components/check-register-import';
+import { AltaFmsPaymentImport } from '@/components/alta-fms-payment-import';
 import { LogPaymentDialog } from '@/components/log-payment-dialog';
 import { DeleteEntityButton } from '@/components/delete-entity-button';
 import { EditPaymentDialog } from '@/components/edit-payment-dialog';
@@ -55,12 +55,12 @@ export default function PaymentsPage() {
       <div className="flex items-start justify-between gap-4 flex-wrap">
         <div>
           <h1 className="text-3xl font-bold tracking-tight">Payments Log</h1>
-          <p className="text-muted-foreground mt-1">Record of checks issued from QuickBooks.</p>
+          <p className="text-muted-foreground mt-1">Monthly payment records from Alta FMS and staff-entered checks.</p>
         </div>
         {user?.role === 'staff' && (
           <div className="flex items-center gap-2">
             <LogPaymentDialog onSaved={() => refetch()} />
-            <CheckRegisterImport onImported={() => refetch()} />
+            <AltaFmsPaymentImport onImported={() => refetch()} />
           </div>
         )}
       </div>

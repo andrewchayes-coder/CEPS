@@ -18,7 +18,6 @@ import {
   clientsTable,
   vendorsTable,
   authorizationsTable,
-  paymentsTable,
   remittancesTable,
   usersTable,
 } from "@workspace/db";
@@ -164,14 +163,6 @@ async function buildDupIndex(entity: ImportEntity): Promise<DupIndex> {
         record: (v) => seen.add(key(v)),
       };
     }
-    case "payments": {
-      const rows = await db.select({ qbCheckNumber: paymentsTable.qbCheckNumber }).from(paymentsTable).where(notDeleted(paymentsTable));
-      const seen = new Set(rows.map((r) => r.qbCheckNumber));
-      return {
-        isDuplicate: (v) => (typeof v.qbCheckNumber === "string" && seen.has(v.qbCheckNumber) ? `A payment with check number "${v.qbCheckNumber}" already exists.` : null),
-        record: (v) => typeof v.qbCheckNumber === "string" && seen.add(v.qbCheckNumber),
-      };
-    }
     case "remittances": {
       // Natural key: the Alta source-row fingerprint (reused pattern).
       const rows = await db
@@ -246,21 +237,6 @@ async function insertRow(entity: ImportEntity, values: Record<string, unknown>, 
         if (v.paymentType == null && typeof v.serviceCode === "string") v.paymentType = derivePaymentType(v.serviceCode);
         const [row] = await tx.insert(authorizationsTable).values(v as typeof authorizationsTable.$inferInsert).returning();
         await audit(userId, "import_authorization", "authorization", row.id, `Bulk import — auth ${row.authNumber}`, txDb);
-        return row.id;
-      }
-      case "payments": {
-        const v = { ...values };
-        // Derive service month from check date when blank so it is always set.
-        if ((v.paymentMonth == null || v.paymentMonth === "") && typeof v.checkDate === "string" && v.checkDate.length >= 7) {
-          v.paymentMonth = v.checkDate.slice(0, 7);
-        }
-        if (v.paymentType == null) v.paymentType = "direct_payment";
-        // Historical imports are tagged and MUST NOT auto-generate a Fee (that
-        // trigger lives only in POST /payments — this path never calls it).
-        v.source = "historical_import";
-        v.loggedBy = userId;
-        const [row] = await tx.insert(paymentsTable).values(v as typeof paymentsTable.$inferInsert).returning();
-        await audit(userId, "import_payment", "payment", row.id, `Bulk import (historical, no fee) — check ${row.qbCheckNumber}`, txDb);
         return row.id;
       }
       case "remittances": {

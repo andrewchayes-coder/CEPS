@@ -1161,22 +1161,22 @@ paths:
         "404": { description: Not found }
   /payments/import:
     post:
-      operationId: importCheckRegister
+      operationId: importAltaFmsPayments
       tags: [payments]
-      summary: Upload parsed check-register rows; matches to clients/vendors/invoices
+      summary: Import raw Alta FMS payment worksheet rows server-side
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/CheckRegisterImportInput"
+              $ref: "#/components/schemas/AltaFmsPaymentImportInput"
       responses:
         "200":
           description: Import outcome per row
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/CheckRegisterImportResult"
+                $ref: "#/components/schemas/AltaFmsPaymentImportResult"
   /import/{entity}/template:
     get:
       operationId: getImportTemplate
@@ -1188,7 +1188,7 @@ paths:
           required: true
           schema:
             type: string
-            enum: [clients, vendors, authorizations, payments, remittances]
+            enum: [clients, vendors, authorizations, remittances]
       responses:
         "200":
           description: CSV template (header row with required fields marked, plus an example row)
@@ -1208,7 +1208,7 @@ paths:
           required: true
           schema:
             type: string
-            enum: [clients, vendors, authorizations, payments, remittances]
+            enum: [clients, vendors, authorizations, remittances]
       requestBody:
         required: true
         content:
@@ -1234,7 +1234,7 @@ paths:
           required: true
           schema:
             type: string
-            enum: [clients, vendors, authorizations, payments, remittances]
+            enum: [clients, vendors, authorizations, remittances]
       requestBody:
         required: true
         content:
@@ -1481,7 +1481,7 @@ paths:
       operationId: importAltaRemittances
       tags: [remittances]
       summary: >-
-        Import a Remittance Report — parsed rows become remittance
+        Import an Alta Payment History Detail Report — parsed rows become remittance
         line items sharing one generated remittanceBatchId, each auto-matched to
         a payment like a manual entry.
       requestBody:
@@ -2442,41 +2442,43 @@ components:
           type: array
           description: The payment(s) already on file that block this insert.
           items: { $ref: "#/components/schemas/Payment" }
-    CheckRegisterRow:
+    AltaFmsPaymentImportInput:
       type: object
-      required: [qbCheckNumber, checkDate, amount]
+      required: [worksheetRows]
       properties:
-        qbCheckNumber: { type: string }
-        checkDate: { type: string }
-        amount: { type: string }
-        payeeName: { type: string }
-        clientName: { type: string }
-        memo: { type: string }
-    CheckRegisterImportInput:
-      type: object
-      required: [rows]
-      properties:
-        rows:
+        worksheetRows:
           type: array
-          items: { $ref: "#/components/schemas/CheckRegisterRow" }
-    CheckRegisterImportRowResult:
+          description: Raw rows from the one-sheet Alta FMS payments workbook.
+          items:
+            type: array
+            items: { type: string }
+    AltaFmsPaymentImportRowResult:
       type: object
-      required: [qbCheckNumber, outcome]
+      required: [rowNumber, outcome]
       properties:
-        qbCheckNumber: { type: string }
-        outcome: { type: string, enum: [imported, skipped_duplicate, flagged_duplicate, unmatched] }
+        rowNumber: { type: integer }
+        uciNumber: { type: ["string", "null"] }
+        outcome: { type: string, enum: [imported, skipped_duplicate, flagged_duplicate, errored] }
         message: { type: ["string", "null"] }
         paymentId: { type: ["string", "null"] }
-    CheckRegisterImportResult:
+    AltaFmsPaymentImportResult:
       type: object
-      required: [imported, skipped, unmatched, results]
+      required: [imported, skippedDuplicate, flaggedDuplicate, errored, ignoredNonCheckRows, headerError, parseProblems, results]
       properties:
         imported: { type: integer }
-        skipped: { type: integer }
-        unmatched: { type: integer }
+        skippedDuplicate: { type: integer }
+        flaggedDuplicate:
+          type: integer
+          description: Rows held back because another payment already exists for the same participant, authorization, and service month.
+        errored: { type: integer }
+        ignoredNonCheckRows: { type: integer }
+        headerError: { type: ["string", "null"] }
+        parseProblems:
+          type: array
+          items: { type: string }
         results:
           type: array
-          items: { $ref: "#/components/schemas/CheckRegisterImportRowResult" }
+          items: { $ref: "#/components/schemas/AltaFmsPaymentImportRowResult" }
     ImportValidateInput:
       type: object
       required: [csvText]
@@ -2501,7 +2503,7 @@ components:
       type: object
       required: [entity, totalRows, validRows, errorRows, duplicateRows, results]
       properties:
-        entity: { type: string, enum: [clients, vendors, authorizations, payments, remittances] }
+        entity: { type: string, enum: [clients, vendors, authorizations, remittances] }
         headerError:
           type: ["string", "null"]
           description: Set when required columns are missing from the header; no rows validated.
@@ -2534,7 +2536,7 @@ components:
       type: object
       required: [entity, imported, skippedDuplicate, errored, results]
       properties:
-        entity: { type: string, enum: [clients, vendors, authorizations, payments, remittances] }
+        entity: { type: string, enum: [clients, vendors, authorizations, remittances] }
         imported: { type: integer }
         skippedDuplicate: { type: integer }
         errored: { type: integer }
@@ -2599,9 +2601,8 @@ components:
         csvText:
           type: string
           description: >-
-            Raw text of the uploaded Remittance Report CSV. Parsed
-            server-side by the isolated altaRemittanceParser (interim column
-            mapping — pending a real sample).
+            Raw text of the uploaded Alta Payment History Detail Report CSV,
+            including its summary and detail sections. Parsed server-side.
         reportReference:
           type: string
           description: Optional source Remittance Report reference stamped onto every line.

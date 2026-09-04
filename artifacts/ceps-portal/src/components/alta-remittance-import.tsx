@@ -19,13 +19,6 @@ import { FileUp, Loader2, Upload } from 'lucide-react';
 import { stableSort, useTableSort } from '@/lib/table-sorting';
 import { trackAnalyticsEvent } from '@/lib/analytics';
 
-// ⚠️ The Alta "Payment Detail Report" CSV column mapping is INTERIM (pending a
-// real sample) and lives server-side in the isolated parser
-// (api-server/src/lib/altaRemittanceParser.ts, marker
-// `interim_alta_columns_pending_confirmation`). This component just uploads the
-// raw CSV text — it never assumes columns itself.
-const ALTA_INTERIM_MARKER = 'interim_alta_columns_pending_confirmation';
-
 export function AltaRemittanceImport({ onImported }: { onImported: (result: AltaRemittanceImportResult) => void }) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [open, setOpen] = useState(false);
@@ -110,16 +103,16 @@ export function AltaRemittanceImport({ onImported }: { onImported: (result: Alta
     >
       <DialogTrigger asChild>
         <Button variant="outline" data-testid="button-import-alta-remittances">
-          <Upload className="w-4 h-4 mr-2" /> Import Remittance Report
+          <Upload className="w-4 h-4 mr-2" /> Import Payment History Detail Report
         </Button>
       </DialogTrigger>
       <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>Import Remittance Report</DialogTitle>
+          <DialogTitle>Import Alta Payment History Detail Report</DialogTitle>
           <DialogDescription>
-            Upload one Remittance Report CSV. Each line becomes a remittance sharing a
-            single batch id; rows are resolved to participants by UCI number and auto-matched to payments
-            like manual entries. Unresolvable rows are reported, never guessed.
+            Upload Alta&apos;s Payment History Detail Report CSV. The report summary supplies the payment
+            date and reference number; each detail line is resolved by UCI, authorization, service month,
+            and amount before matching.
           </DialogDescription>
         </DialogHeader>
 
@@ -141,10 +134,10 @@ export function AltaRemittanceImport({ onImported }: { onImported: (result: Alta
               ) : (
                 <>
                   <FileUp className="h-6 w-6 text-muted-foreground" />
-                  <p className="text-muted-foreground">Click to choose the Remittance Report CSV</p>
+                  <p className="text-muted-foreground">Choose the Alta Payment History Detail Report CSV</p>
                   <p className="text-xs text-muted-foreground">
-                    Interim columns: Participant UCI Number, Amount, Payment Date (Authorization Number,
-                    Service Month, Check/Payment Number optional)
+                    Expected sections: Date / Amount / Reference # summary, followed by UCI #, Auth #,
+                    Service M/Y, and Amount detail rows
                   </p>
                 </>
               )}
@@ -162,8 +155,7 @@ export function AltaRemittanceImport({ onImported }: { onImported: (result: Alta
               }}
             />
             <p className="text-xs text-muted-foreground">
-              ⚠️ Column mapping is interim ({ALTA_INTERIM_MARKER}) — a real Alta sample is still
-              needed to confirm the exact headers.
+              The detail Amount total must reconcile to the summary Amount before any rows are imported.
             </p>
             {parseError && (
               <p className="text-sm text-destructive" data-testid="text-alta-import-error">{parseError}</p>
@@ -222,7 +214,7 @@ export function AltaRemittanceImport({ onImported }: { onImported: (result: Alta
 
             {result.errored > 0 && (
               <p className="text-sm text-muted-foreground">
-                Errored rows were not imported (unresolvable UCI or authorization). Fix the Remittance Report and
+                Errored rows were not imported (unresolvable UCI or authorization). Fix the Payment History Detail Report and
                 re-import, or log those remittances manually.
               </p>
             )}

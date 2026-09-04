@@ -22,6 +22,7 @@ let clientId: string;
 let authId: string;
 let cookie: string;
 let checkCounter = 0;
+const uciNumber = String(1_000_000 + (Date.now() % 9_000_000));
 
 const nextCheck = () => `${nonce}-chk-${checkCounter++}`;
 
@@ -34,7 +35,7 @@ beforeAll(async () => {
 
   const [client] = await db
     .insert(clientsTable)
-    .values({ firstName: "Dup", lastName: "Client", dateOfBirth: "2000-01-01", uciNumber: `${nonce}-uci` })
+    .values({ firstName: "Dup", lastName: "Client", dateOfBirth: "2000-01-01", uciNumber })
     .returning();
   clientId = client.id;
 
@@ -490,33 +491,38 @@ describe("PATCH /payments/:id duplicate hard stop", () => {
 
 describe("POST /payments/import duplicate flagging", () => {
   it("flags a row as flagged_duplicate rather than inserting it", async () => {
-    // Seed a no-authorization payment for the client in a specific month; import
-    // rows carry no authorization, so the check matches on client + month.
-    const existing = await seedPayment("2027-01", null);
+    const existing = await seedPayment("2027-01", authId);
+    const incomingCheck = nextCheck();
 
     const res = await request(app)
       .post("/api/payments/import")
       .set("Cookie", cookie)
       .send({
-        rows: [
-          {
-            qbCheckNumber: nextCheck(),
-            checkDate: "2027-01-20",
-            amount: "500.00",
-            clientName: "Dup Client",
-          },
+        worksheetRows: [
+          ["Transaction date", "Transaction type", "Num", "Name", "Description", "Split", "Amount", "Customer"],
+          [
+            "01/20/2027",
+            "Check",
+            incomingCheck,
+            "Synthetic Vendor",
+            `Services/Jan 27/${nonce}-auth`,
+            "",
+            "500.00",
+            `Synthetic, Participant ${uciNumber} (1)`,
+          ],
         ],
       });
     expect(res.status).toBe(200);
     const row = res.body.results[0];
     expect(row.outcome).toBe("flagged_duplicate");
+    expect(res.body.flaggedDuplicate).toBe(1);
     expect(row.paymentId).toBe(existing.id);
     expect(row.message).toContain(existing.qbCheckNumber);
     // The flagged row must NOT have been inserted.
     const inserted = await db
       .select()
       .from(paymentsTable)
-      .where(eq(paymentsTable.qbCheckNumber, row.qbCheckNumber));
+      .where(eq(paymentsTable.qbCheckNumber, incomingCheck));
     expect(inserted.length).toBe(0);
 
     // The hold-back must be audit-logged.
@@ -528,17 +534,23 @@ describe("POST /payments/import duplicate flagging", () => {
   });
 
   it("imports a non-duplicate row normally", async () => {
+    const incomingCheck = nextCheck();
     const res = await request(app)
       .post("/api/payments/import")
       .set("Cookie", cookie)
       .send({
-        rows: [
-          {
-            qbCheckNumber: nextCheck(),
-            checkDate: "2027-02-20",
-            amount: "500.00",
-            clientName: "Dup Client",
-          },
+        worksheetRows: [
+          ["Transaction date", "Transaction type", "Num", "Name", "Description", "Split", "Amount", "Customer"],
+          [
+            "02/20/2027",
+            "Check",
+            incomingCheck,
+            "Synthetic Vendor",
+            `Services/Feb 27/${nonce}-auth`,
+            "",
+            "500.00",
+            `Synthetic, Participant ${uciNumber} (1)`,
+          ],
         ],
       });
     expect(res.status).toBe(200);

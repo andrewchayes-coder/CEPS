@@ -1689,26 +1689,24 @@ export const DeletePaymentResponse = zod.object({
 
 
 /**
- * @summary Upload parsed check-register rows; matches to clients/vendors/invoices
+ * @summary Import raw Alta FMS payment worksheet rows server-side
  */
-export const ImportCheckRegisterBody = zod.object({
-  "rows": zod.array(zod.object({
-  "qbCheckNumber": zod.string(),
-  "checkDate": zod.string(),
-  "amount": zod.string(),
-  "payeeName": zod.string().optional(),
-  "clientName": zod.string().optional(),
-  "memo": zod.string().optional()
-}))
+export const ImportAltaFmsPaymentsBody = zod.object({
+  "worksheetRows": zod.array(zod.array(zod.string())).describe('Raw rows from the one-sheet Alta FMS payments workbook.')
 })
 
-export const ImportCheckRegisterResponse = zod.object({
+export const ImportAltaFmsPaymentsResponse = zod.object({
   "imported": zod.int(),
-  "skipped": zod.int(),
-  "unmatched": zod.int(),
+  "skippedDuplicate": zod.int(),
+  "flaggedDuplicate": zod.int().describe('Rows held back because another payment already exists for the same participant, authorization, and service month.'),
+  "errored": zod.int(),
+  "ignoredNonCheckRows": zod.int(),
+  "headerError": zod.string().nullable(),
+  "parseProblems": zod.array(zod.string()),
   "results": zod.array(zod.object({
-  "qbCheckNumber": zod.string(),
-  "outcome": zod.enum(['imported', 'skipped_duplicate', 'flagged_duplicate', 'unmatched']),
+  "rowNumber": zod.int(),
+  "uciNumber": zod.string().nullish(),
+  "outcome": zod.enum(['imported', 'skipped_duplicate', 'flagged_duplicate', 'errored']),
   "message": zod.string().nullish(),
   "paymentId": zod.string().nullish()
 }))
@@ -1719,7 +1717,7 @@ export const ImportCheckRegisterResponse = zod.object({
  * @summary Download a CSV import template for an entity (generated from the field registry)
  */
 export const GetImportTemplateParams = zod.object({
-  "entity": zod.enum(['clients', 'vendors', 'authorizations', 'payments', 'remittances'])
+  "entity": zod.enum(['clients', 'vendors', 'authorizations', 'remittances'])
 })
 
 export const GetImportTemplateResponse = zod.unknown()
@@ -1729,7 +1727,7 @@ export const GetImportTemplateResponse = zod.unknown()
  * @summary Dry-run a CSV import — per-row validation, FK resolution, duplicate preview (no writes)
  */
 export const ValidateImportParams = zod.object({
-  "entity": zod.enum(['clients', 'vendors', 'authorizations', 'payments', 'remittances'])
+  "entity": zod.enum(['clients', 'vendors', 'authorizations', 'remittances'])
 })
 
 export const ValidateImportBody = zod.object({
@@ -1737,7 +1735,7 @@ export const ValidateImportBody = zod.object({
 })
 
 export const ValidateImportResponse = zod.object({
-  "entity": zod.enum(['clients', 'vendors', 'authorizations', 'payments', 'remittances']),
+  "entity": zod.enum(['clients', 'vendors', 'authorizations', 'remittances']),
   "headerError": zod.string().nullish().describe('Set when required columns are missing from the header; no rows validated.'),
   "totalRows": zod.int(),
   "validRows": zod.int(),
@@ -1757,7 +1755,7 @@ export const ValidateImportResponse = zod.object({
  * @summary Commit a CSV import — transactional per-row insert, duplicates skipped, audit-logged
  */
 export const CommitImportParams = zod.object({
-  "entity": zod.enum(['clients', 'vendors', 'authorizations', 'payments', 'remittances'])
+  "entity": zod.enum(['clients', 'vendors', 'authorizations', 'remittances'])
 })
 
 export const CommitImportBody = zod.object({
@@ -1765,7 +1763,7 @@ export const CommitImportBody = zod.object({
 })
 
 export const CommitImportResponse = zod.object({
-  "entity": zod.enum(['clients', 'vendors', 'authorizations', 'payments', 'remittances']),
+  "entity": zod.enum(['clients', 'vendors', 'authorizations', 'remittances']),
   "imported": zod.int(),
   "skippedDuplicate": zod.int(),
   "errored": zod.int(),
@@ -2101,10 +2099,10 @@ export const MatchRemittanceResponse = zod.object({
 
 
 /**
- * @summary Import a Remittance Report — parsed rows become remittance line items sharing one generated remittanceBatchId, each auto-matched to a payment like a manual entry.
+ * @summary Import an Alta Payment History Detail Report — parsed rows become remittance line items sharing one generated remittanceBatchId, each auto-matched to a payment like a manual entry.
  */
 export const ImportAltaRemittancesBody = zod.object({
-  "csvText": zod.string().describe('Raw text of the uploaded Remittance Report CSV. Parsed server-side by the isolated altaRemittanceParser (interim column mapping — pending a real sample).'),
+  "csvText": zod.string().describe('Raw text of the uploaded Alta Payment History Detail Report CSV, including its summary and detail sections. Parsed server-side.'),
   "reportReference": zod.string().optional().describe('Optional source Remittance Report reference stamped onto every line.')
 })
 

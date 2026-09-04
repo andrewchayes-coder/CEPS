@@ -17,12 +17,12 @@
 
 import { validatePositiveMoney } from "./money";
 
-/** The five entities the bulk-import system covers. */
+/** The generic bulk-import system covers these entities. Alta FMS payments use
+ * their dedicated, source-format-aware endpoint rather than a misleading CSV adapter. */
 export const IMPORT_ENTITIES = [
   "clients",
   "vendors",
   "authorizations",
-  "payments",
   "remittances",
 ] as const;
 export type ImportEntity = (typeof IMPORT_ENTITIES)[number];
@@ -319,46 +319,6 @@ export const IMPORT_REGISTRY: Record<ImportEntity, EntityDef> = {
       { key: "units", header: "Units", required: false, type: "integer", example: "12" },
       { key: "status", header: "Status", required: false, type: "enum", enumValues: ["active", "expired", "pending", "exhausted"], example: "active" },
       { key: "receivedDate", header: "Received Date", required: false, type: "date", example: "2025-12-15" },
-    ],
-  },
-
-  payments: {
-    entity: "payments",
-    auditType: "payment",
-    naturalKey: "QuickBooks check number (payments.qbCheckNumber)",
-    fields: [
-      {
-        key: "clientId",
-        header: "Client UCI",
-        required: true,
-        type: "string",
-        example: "UCI-0001",
-        help: "Resolved to a client by UCI",
-        resolve: resolveClientUci,
-      },
-      {
-        key: "vendorId",
-        header: "Vendor Name",
-        required: false,
-        type: "string",
-        example: "Bright Futures Therapy",
-        help: "Resolved to a vendor by name (ambiguous names error)",
-        resolve: resolveVendorName,
-      },
-      {
-        key: "authorizationId",
-        header: "Auth Number",
-        required: false,
-        type: "string",
-        example: "POS-2026-001",
-        help: "Resolved to an authorization for the row's client",
-        resolve: resolveAuthScoped("clientId"),
-      },
-      { key: "qbCheckNumber", header: "QB Check Number", required: true, type: "string", example: "10234", help: "Natural key — duplicates are skipped" },
-      { key: "checkDate", header: "Check Date", required: true, type: "date", example: "2026-02-15" },
-      { key: "amount", header: "Amount", required: true, type: "money", example: "500.00" },
-      { key: "paymentMonth", header: "Payment Month", required: false, type: "month", example: "2026-02", help: "Derived from check date when blank" },
-      { key: "paymentType", header: "Payment Type", required: false, type: "enum", enumValues: ["direct_payment", "reimbursement", "fee"], example: "direct_payment" },
     ],
   },
 

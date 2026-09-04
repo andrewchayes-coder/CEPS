@@ -21,6 +21,7 @@ let staffId: string;
 let clientAId: string;
 let clientBId: string;
 let authAId: string;
+let authBId: string;
 let matchPaymentId: string;
 let cookie: string;
 
@@ -55,6 +56,19 @@ beforeAll(async () => {
     })
     .returning();
   authAId = authA.id;
+  const [authB] = await db
+    .insert(authorizationsTable)
+    .values({
+      clientId: clientBId,
+      authNumber: `${nonce}-AUTH-B`,
+      serviceCode: "459",
+      paymentType: "direct_payment",
+      servicePeriodStart: "2026-01-01",
+      servicePeriodEnd: "2026-12-31",
+      maxPeriodAmount: "10000.00",
+    })
+    .returning();
+  authBId = authB.id;
 
   // An unremitted payment that the first row should AUTO-MATCH (same client,
   // same amount, same month).
@@ -93,7 +107,14 @@ afterAll(async () => {
   await db.delete(usersTable).where(inArray(usersTable.id, [staffId]));
 });
 
-const CSV_HEADER = "Client UCI Number,Authorization Number,Service Month,Amount,Check/Payment Number,Payment Date";
+const SUMMARY_HEADER = ["Date", "Units", "Amount", "Reference #"];
+const DETAIL_HEADER = ["UCI #", "Consumer Name", "Auth #", "Svc Code", "Sub-Code", "Service M/Y", "Units", "Amount", "Invoice #", "Adj Code", "Inv Amt"];
+const altaReport = (reference: string, date: string, lines: { uci: string; auth: string; month: string; amount: string }[]) => [
+  SUMMARY_HEADER,
+  [date, String(lines.length), lines.reduce((sum, line) => sum + Number(line.amount), 0).toFixed(2), reference],
+  DETAIL_HEADER,
+  ...lines.map((line) => [line.uci, "Synthetic Person", line.auth, "459", "", `${line.month.slice(5)}/${line.month.slice(0, 4)}`, "1", line.amount, "INV", "", line.amount]),
+].map((row) => row.join(",")).join("\n");
 
 describe("POST /remittances/import (Alta batch import)", () => {
   it("creates a staff manual remittance with required participant and authorization context", async () => {
@@ -108,17 +129,12 @@ describe("POST /remittances/import (Alta batch import)", () => {
   });
 
   it("imports a batch: shared batch id, auto-match runs, unresolvable rows errored, audit logged", async () => {
-    const csvText = [
-      CSV_HEADER,
-      // Row 2: resolves client A + auth A, amount/month match the payment → auto_matched
-      `${nonce}-UCI-A,${nonce}-AUTH-A,2026-01,500.00,C1,2026-01-20`,
-      // Row 3: resolves client B, no matching payment → needs_manual_match
-      `${nonce}-UCI-B,,2026-02,42.00,,2026-02-20`,
-      // Row 4: unknown UCI → errored
-      `${nonce}-UCI-MISSING,,,10.00,,2026-02-20`,
-      // Row 5: known client A but bad auth number scoped to that client → errored
-      `${nonce}-UCI-A,AUTH-DOES-NOT-EXIST,,10.00,,2026-02-20`,
-    ].join("\n");
+    const csvText = altaReport(`${nonce}-REPORT`, "2026-01-20", [
+      { uci: `${nonce}-UCI-A`, auth: `${nonce}-AUTH-A`, month: "2026-01", amount: "500.00" },
+      { uci: `${nonce}-UCI-B`, auth: `${nonce}-AUTH-B`, month: "2026-02", amount: "42.00" },
+      { uci: `${nonce}-UCI-MISSING`, auth: "UNKNOWN", month: "2026-02", amount: "10.00" },
+      { uci: `${nonce}-UCI-A`, auth: "AUTH-DOES-NOT-EXIST", month: "2026-02", amount: "10.00" },
+    ]);
     const res = await request(app)
       .post("/api/remittances/import")
       .set("Cookie", cookie)
@@ -143,11 +159,11 @@ describe("POST /remittances/import (Alta batch import)", () => {
 
     // Per-row outcomes
     const byRow = new Map(body.results.map((r) => [r.rowNumber, r]));
-    expect(byRow.get(2)?.outcome).toBe("auto_matched");
-    expect(byRow.get(2)?.matchedPaymentId).toBe(matchPaymentId);
-    expect(byRow.get(3)?.outcome).toBe("needs_manual_match");
-    expect(byRow.get(4)?.outcome).toBe("errored");
-    expect(byRow.get(5)?.outcome).toBe("errored");
+    expect(byRow.get(4)?.outcome).toBe("auto_matched");
+    expect(byRow.get(4)?.matchedPaymentId).toBe(matchPaymentId);
+    expect(byRow.get(5)?.outcome).toBe("needs_manual_match");
+    expect(byRow.get(6)?.outcome).toBe("errored");
+    expect(byRow.get(7)?.outcome).toBe("errored");
 
     // All imported line items share ONE batch id.
     const inserted = await db
@@ -165,7 +181,7 @@ describe("POST /remittances/import (Alta batch import)", () => {
     expect(matched?.status).toBe("matched");
     expect(matched?.autoMatched).toBe(true);
     expect(matched?.authorizationId).toBe(authAId);
-    expect(matched?.altaReference).toBe("C1");
+    expect(matched?.altaReference).toBe(`${nonce}-REPORT`);
     expect(matched?.reportReference).toBe(`${nonce}-REPORT`);
 
     // The unmatched-but-imported line is flagged for manual matching.
@@ -185,11 +201,10 @@ describe("POST /remittances/import (Alta batch import)", () => {
 
   it("filters the remittances list by remittanceBatchId", async () => {
     // Import a small batch, then confirm the list endpoint returns only its rows.
-    const csvText = [
-      CSV_HEADER,
-      `${nonce}-UCI-B,,,7.00,,2026-03-01`,
-      `${nonce}-UCI-B,,,8.00,,2026-03-01`,
-    ].join("\n");
+    const csvText = altaReport(`${nonce}-LIST`, "2026-03-01", [
+      { uci: `${nonce}-UCI-B`, auth: `${nonce}-AUTH-B`, month: "2026-03", amount: "7.00" },
+      { uci: `${nonce}-UCI-B`, auth: `${nonce}-AUTH-B`, month: "2026-03", amount: "8.00" },
+    ]);
     const res = await request(app)
       .post("/api/remittances/import")
       .set("Cookie", cookie)
@@ -205,11 +220,10 @@ describe("POST /remittances/import (Alta batch import)", () => {
   });
 
   it("re-uploading the SAME report skips every row as duplicate (no new rows, new batch id)", async () => {
-    const csvText = [
-      CSV_HEADER,
-      `${nonce}-UCI-B,,2026-04,11.00,DUP-1,2026-04-01`,
-      `${nonce}-UCI-B,,2026-04,12.00,DUP-2,2026-04-01`,
-    ].join("\n");
+    const csvText = altaReport(`${nonce}-DUP`, "2026-04-01", [
+      { uci: `${nonce}-UCI-B`, auth: `${nonce}-AUTH-B`, month: "2026-04", amount: "11.00" },
+      { uci: `${nonce}-UCI-B`, auth: `${nonce}-AUTH-B`, month: "2026-04", amount: "12.00" },
+    ]);
 
     // First upload: both rows import (needs_manual_match — no matching payment).
     const first = await request(app).post("/api/remittances/import").set("Cookie", cookie).send({ csvText });
@@ -256,7 +270,7 @@ describe("POST /remittances/import (Alta batch import)", () => {
       })
       .returning();
 
-    const csvText = [CSV_HEADER, `${nonce}-UCI-B,,2026-05,777.00,RACE-1,2026-05-20`].join("\n");
+    const csvText = altaReport(`${nonce}-RACE-1`, "2026-05-20", [{ uci: `${nonce}-UCI-B`, auth: `${nonce}-AUTH-B`, month: "2026-05", amount: "777.00" }]);
     const res = await request(app).post("/api/remittances/import").set("Cookie", cookie).send({ csvText });
     expect(res.status).toBe(200);
     expect(res.body.imported).toBe(1);
@@ -284,7 +298,7 @@ describe("POST /remittances/import (Alta batch import)", () => {
       checkDate: "2026-06-15", paymentMonth: "2026-06", amount: "50.00",
       paymentType: "direct_payment", source: "manual", remitted: false,
     }).returning();
-    const csvText = [CSV_HEADER, `${nonce}-UCI-B,${nonce}-MISMATCH,2026-06,50.00,CHECK-50,2026-06-20`].join("\n");
+    const csvText = altaReport("CHECK-50", "2026-06-20", [{ uci: `${nonce}-UCI-B`, auth: `${nonce}-MISMATCH`, month: "2026-06", amount: "50.00" }]);
     const res = await request(app).post("/api/remittances/import").set("Cookie", cookie).send({ csvText });
     expect(res.status).toBe(200);
     expect(res.body.autoMatched).toBe(0);
@@ -392,10 +406,7 @@ describe("POST /remittances/import (Alta batch import)", () => {
     expect(afterRejectedAutoMatch.body.remainingAmount).toBe("40.00");
 
     const importAfterPartial = await request(app).post("/api/remittances/import").set("Cookie", cookie).send({
-      csvText: [
-        CSV_HEADER,
-        `${nonce}-UCI-A,${nonce}-AUTH-A,2026-09,100.00,${nonce}-IMPORT-AFTER-PARTIAL,2026-09-20`,
-      ].join("\n"),
+      csvText: altaReport(`${nonce}-IMPORT-AFTER-PARTIAL`, "2026-09-20", [{ uci: `${nonce}-UCI-A`, auth: `${nonce}-AUTH-A`, month: "2026-09", amount: "100.00" }]),
     });
     expect(importAfterPartial.status).toBe(200);
     expect(importAfterPartial.body.autoMatched).toBe(0);

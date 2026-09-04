@@ -1,0 +1,16 @@
+uploads = []
+generated = []
+
+[[outputs]]
+id = "nGufYNGg97RVaY4kDTN5h"
+uri = "file://release-reports/ceps-release-report-e205795-to-e5cdd52.pdf"
+type = "pdf"
+title = "CEPS Release Report — Since Last Publish"
+description = "Stakeholder-ready 12-page release report covering e205795 through e5cdd52, with rollout guidance, migrations, all 15 commits, and all 155 changed paths."
+logical_id = "31eb9a4f-dd9d-456a-8d4b-878d260470e0"
+content_hash = "sha256:21360912071efb4e5169c5f7bd638fe55c0124c88082db66269231b31bea8903"
+size = 236089
+mtime_ms = 1788547218973
+storage_uri = "gcs://replit-rams-assets-spock/rams/assets/repl:2d79accb-dc01-473f-80fa-0b1a6c689285/31eb9a4f-dd9d-456a-8d4b-878d260470e0/5b2e9b56-ce74-4d5f-9163-0b676b6619dc"
+storage_version_token = "1788547241490613"
+content_type = "application/pdf"

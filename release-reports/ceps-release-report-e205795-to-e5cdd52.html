@@ -1,0 +1,494 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="release-baseline" content="e205795ebd7ce60a474fb80806256076510bf652">
+<meta name="release-current" content="e5cdd52f73006e272ec6958490a0c06d170b6bbc">
+<meta name="release-commit-count" content="15">
+<meta name="release-file-count" content="155">
+<title>CEPS Portal Release Report — e205795 to e5cdd52</title>
+<style>
+  :root { --navy:#0b2440; --blue:#007ea8; --cyan:#00a8e0; --ink:#142433; --muted:#5f6f7d; --line:#d8e1e8; --soft:#f4f8fb; --green:#157347; --amber:#956400; --red:#a52834; }
+  * { box-sizing:border-box; }
+  html { background:#eef3f6; color:var(--ink); font-family:Inter,ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif; line-height:1.52; }
+  body { margin:0; }
+  .page { width:min(1120px,calc(100% - 32px)); margin:32px auto; background:white; box-shadow:0 18px 60px rgba(11,36,64,.12); }
+  header { color:white; padding:64px 68px 54px; background:linear-gradient(135deg,var(--navy),#114d70 62%,var(--blue)); position:relative; overflow:hidden; }
+  header:after { content:""; position:absolute; width:360px; height:360px; right:-150px; top:-160px; border:68px solid rgba(255,255,255,.08); border-radius:50%; }
+  .eyebrow { text-transform:uppercase; letter-spacing:.16em; font-weight:750; font-size:12px; color:#9ee9ff; }
+  h1 { font-size:44px; line-height:1.05; margin:14px 0 16px; max-width:760px; }
+  .lede { font-size:19px; max-width:790px; color:#d8f3fc; margin:0; }
+  .release-state { display:inline-flex; margin-top:28px; padding:8px 12px; border:1px solid rgba(255,255,255,.35); border-radius:999px; background:rgba(255,255,255,.1); font-size:13px; font-weight:700; }
+  main { padding:48px 68px 72px; }
+  h2 { color:var(--navy); font-size:28px; margin:52px 0 18px; padding-bottom:10px; border-bottom:3px solid var(--cyan); }
+  h3 { color:var(--navy); font-size:19px; margin:28px 0 10px; }
+  h4 { color:var(--navy); margin:20px 0 6px; }
+  p { margin:8px 0 14px; }
+  ul,ol { margin:8px 0 18px; padding-left:24px; }
+  li { margin:7px 0; }
+  code { font-family:"SFMono-Regular",Consolas,"Liberation Mono",monospace; font-size:.88em; }
+  .facts { display:grid; grid-template-columns:repeat(4,1fr); gap:12px; margin:-25px 32px 28px; position:relative; z-index:2; }
+  .fact { background:white; border:1px solid var(--line); border-top:4px solid var(--cyan); border-radius:8px; padding:18px; box-shadow:0 8px 26px rgba(11,36,64,.08); }
+  .fact strong { display:block; font-size:25px; color:var(--navy); }
+  .fact span { color:var(--muted); font-size:12px; text-transform:uppercase; letter-spacing:.08em; }
+  .meta-grid { display:grid; grid-template-columns:1fr 1fr; gap:10px 24px; background:var(--soft); border:1px solid var(--line); padding:20px; border-radius:8px; }
+  .meta-grid dt { font-size:12px; font-weight:800; text-transform:uppercase; color:var(--muted); letter-spacing:.06em; }
+  .meta-grid dd { margin:3px 0 12px; overflow-wrap:anywhere; }
+  .callout { border-left:5px solid var(--cyan); padding:15px 18px; background:#edf9fd; margin:20px 0; }
+  .warning { border-left-color:#d79a00; background:#fff8e5; }
+  .danger { border-left-color:var(--red); background:#fff1f2; }
+  .trace { color:var(--muted); font-size:13px; margin-top:8px; }
+  .trace code { color:#31576b; }
+  .feature-grid { display:grid; grid-template-columns:1fr 1fr; gap:16px; }
+  .feature { border:1px solid var(--line); border-radius:8px; padding:18px; background:linear-gradient(180deg,#fff,var(--soft)); break-inside:avoid; }
+  .feature h3 { margin-top:0; }
+  .migration { border:1px solid var(--line); border-radius:8px; margin:14px 0; overflow:hidden; break-inside:avoid; }
+  .migration .top { display:flex; justify-content:space-between; gap:16px; background:var(--navy); color:white; padding:12px 16px; }
+  .migration .body { padding:14px 16px; }
+  .tag { display:inline-block; border-radius:999px; padding:3px 8px; font-size:11px; font-weight:800; background:#dff5fc; color:#075c79; margin-right:5px; }
+  .checklist li::marker { color:var(--cyan); font-weight:800; }
+  table { width:100%; border-collapse:collapse; margin:12px 0 24px; font-size:13px; }
+  th { text-align:left; background:var(--soft); color:var(--navy); border-bottom:2px solid var(--line); padding:9px 10px; }
+  td { vertical-align:top; border-bottom:1px solid var(--line); padding:9px 10px; }
+  tr { break-inside:avoid; }
+  .subtle { color:var(--muted); font-size:11px; margin-top:3px; }
+  .count { font-size:12px; color:var(--muted); font-weight:600; }
+  .status { display:inline-block; min-width:58px; text-align:center; padding:3px 7px; border-radius:999px; font-size:10px; font-weight:800; }
+  .status-a { color:var(--green); background:#e7f7ee; } .status-m { color:#705100; background:#fff3cd; } .status-d { color:var(--red); background:#fde8ea; }
+  .path { overflow-wrap:anywhere; }
+  .appendix-group { break-before:auto; }
+  .footer { border-top:1px solid var(--line); margin-top:46px; padding-top:18px; color:var(--muted); font-size:12px; }
+  @media (max-width:780px) { header,main { padding-left:28px; padding-right:28px; } .facts,.feature-grid,.meta-grid { grid-template-columns:1fr; } h1 { font-size:35px; } }
+  @media print { @page { size:Letter; margin:.55in; } .facts { grid-template-columns:repeat(4,1fr) !important; } .feature-grid,.meta-grid { grid-template-columns:1fr 1fr !important; } html { background:white; } .page { width:auto; margin:0; box-shadow:none; } header { margin:-.55in -.55in 0; padding:48px .55in 42px; } main { padding:20px 0 0; } .facts { margin:-18px 0 22px; } h2 { break-after:avoid; } h3 { break-after:avoid; } .appendix-start { break-before:page; } a { color:inherit; text-decoration:none; } }
+</style>
+</head>
+<body>
+<div class="page">
+<header>
+  <div class="eyebrow">CEPS Portal · Pre-publish briefing</div>
+  <h1>Release report since the last publish</h1>
+  <p class="lede">A stakeholder-readable, Git-audited summary of all merged code changes from the August 16 publish baseline through the September 4 release candidate.</p>
+  <div class="release-state">Release candidate reviewed · Not yet published</div>
+</header>
+<div class="facts">
+  <div class="fact"><strong>15</strong><span>Included commits</span></div>
+  <div class="fact"><strong>155</strong><span>Changed paths</span></div>
+  <div class="fact"><strong>+12,100</strong><span>Line additions</span></div>
+  <div class="fact"><strong>−1,630</strong><span>Line deletions</span></div>
+</div>
+<main>
+<section>
+  <h2>Report identity and scope</h2>
+  <dl class="meta-grid">
+    <div><dt>Publish baseline</dt><dd><code>e205795ebd7ce60a474fb80806256076510bf652</code><br>2026-08-16T15:48:02Z · “Published your App”</dd></div>
+    <div><dt>Release candidate</dt><dd><code>e5cdd52f73006e272ec6958490a0c06d170b6bbc</code><br>2026-09-04T17:54:38Z · “Chunk oversized Alta import lookups safely”</dd></div>
+    <div><dt>Git revision range</dt><dd><code>e205795..e5cdd52</code> (baseline exclusive, candidate inclusive)</dd></div>
+    <div><dt>Generated</dt><dd>2026-09-04 11:42:14 PDT · America/Los_Angeles</dd></div>
+    <div><dt>Aggregate diff</dt><dd>155 files changed, 12100 insertions(+), 1630 deletions(-); 1 binary file (a synthetic test workbook)</dd></div>
+    <div><dt>Completeness rule</dt><dd>Only commits reachable from the current main revision and after the designated publish baseline are included.</dd></div>
+  </dl>
+  <div class="callout">
+    <strong>Why <code>e205795</code> is the baseline:</strong> it is the newest deployment-authored “Published your App” commit on the current main ancestry. A similarly timed publish commit, <code>c340eff</code>, is not an ancestor of <code>e5cdd52</code> and is excluded. Proposed tasks, unmerged work, working-tree files, database activity, and deployment activity are outside this report.
+  </div>
+</section>
+
+<section>
+  <h2>Executive summary</h2>
+  <p>This release candidate materially improves staff data operations and financial reconciliation while making everyday lists easier to navigate. The largest changes are the finalized Alta payment/remittance imports, the new allocation ledger for partial remittance matching, secure staff referral reassignment, participant/family remittance actions, and consistent sortable tables.</p>
+  <div class="feature-grid">
+    <div class="feature"><h3>Faster day-to-day navigation</h3><p>Staff-facing lists and reports now use accessible sorting, stable tie-breaks, and server-side sort parameters where pagination requires them. User-facing wording consistently says <strong>Participant</strong>, while internal API/database identifiers remain unchanged.</p><div class="trace">Trace: <code>dc4bd2b</code>, <code>5726c6c</code> · portal table/page files; API <code>sorting.ts</code> and list routes</div></div>
+    <div class="feature"><h3>Confirmed Alta import workflows</h3><p>Payments now use the Alta FMS Transaction Detail by Account Excel format; remittances use the Payment History Detail Report summary/detail CSV. Server validation, natural-key matching, source fingerprints, duplicate reporting, and audit behavior are preserved.</p><div class="trace">Trace: <code>ccf70e3</code>, <code>119e47f</code>, <code>4b1c93e</code>, <code>e5cdd52</code> · Alta parsers, payment routes, import dialogs</div></div>
+    <div class="feature"><h3>Safer reconciliation</h3><p>A remittance can be allocated across one or more eligible payments, and a payment can receive more than one remittance allocation. Transactional balance checks prevent either side from being over-applied. Existing one-to-one matches are backfilled into the allocation ledger.</p><div class="trace">Trace: <code>90805a0</code> · payments/remittances API, serializers, schema, migration <code>0007</code></div></div>
+    <div class="feature"><h3>Stronger staff workflows</h3><p>Staff can create and update vendors, reassign referrals only to active service coordinators, and review or match participant-submitted remittances. Correction-only CSV downloads help resolve Alta errors without exporting successful rows or internal IDs.</p><div class="trace">Trace: <code>035a818</code>, <code>f6bacb0</code>, <code>13d1613</code></div></div>
+  </div>
+</section>
+
+<section>
+  <h2>Portal behavior changes</h2>
+  <h3>Tables, reports, and audit history</h3>
+  <ul>
+    <li>Sortable headers were added across participants, authorizations, invoices, payments, referrals, users, vendors, remittances, the audit log, dashboard summaries, and operational reports. Server-backed tables reset pagination when sorting changes and apply deterministic secondary ordering.</li>
+    <li>Report tables support local sorting where their data is already fully loaded. The audit-log export preserves the active sort order while fetching all filtered pages.</li>
+    <li>Participant and vendor names are linked to their record pages for authorized roles; restricted-role views preserve plain text where navigation is not allowed.</li>
+  </ul>
+  <div class="trace">Representative paths: <code>artifacts/ceps-portal/src/components/ui/table.tsx</code>, <code>src/lib/table-sorting.ts</code>, <code>src/pages/audit-log.tsx</code>, <code>src/pages/reports.tsx</code>; API list routes and <code>src/lib/sorting.ts</code>.</div>
+
+  <h3>Participant terminology</h3>
+  <p>User-visible labels, search prompts, empty states, and report metrics now use “Participant.” This is a presentation change, not a data-model migration: source code, API contracts, and database tables still use the existing client identifiers.</p>
+
+  <h3>Vendor and referral administration</h3>
+  <ul>
+    <li>Staff can create vendors and update business profiles. The API trims values, rejects blank business names, reports duplicate names as conflicts, and audits successful mutations.</li>
+    <li>Referral editing supports staff reassignment to an active service coordinator. Coordinators cannot reassign referrals themselves, and existing ownership-based access checks remain in force.</li>
+  </ul>
+
+  <h3>Analytics instrumentation</h3>
+  <p>Lightweight Umami events were added for meaningful portal interactions, including imports and correction-report downloads. Tracking is intentionally non-blocking and no-ops when Umami is unavailable. This range does not add an analytics dashboard, warehouse pipeline, or guaranteed external delivery.</p>
+  <div class="trace">Trace: <code>24fa755</code> · <code>artifacts/ceps-portal/src/lib/analytics.ts</code> and instrumented pages/components.</div>
+</section>
+
+<section>
+  <h2>Alta payments and remittances</h2>
+  <h3>Alta FMS payment workbooks</h3>
+  <ul>
+    <li>The Payments Log accepts the confirmed Alta FMS Transaction Detail by Account <code>.xlsx</code> workbook and extracts its first worksheet in the browser; authoritative interpretation remains on the API.</li>
+    <li>Only <strong>Check</strong> rows are processed. Participants resolve by the trailing seven-digit UCI in Customer; authorization and service month resolve from Description.</li>
+    <li>Historical imports use source <code>historical_import</code> and do not create CEPS fee records. Repeated check numbers are allowed because one check may represent multiple monthly lines.</li>
+    <li>Identical source rows are skipped by SHA-256 source fingerprint. An existing participant/authorization/service-month payment is held as a business duplicate rather than silently inserted.</li>
+    <li>Lookup queries are scoped to keys in the workbook and chunked to stay under database parameter limits for exceptionally large files.</li>
+  </ul>
+
+  <h3>Alta Payment History Detail Reports</h3>
+  <ul>
+    <li>The parser requires the report summary Date, positive Amount, and Reference #, then applies the summary date/reference to each detail row.</li>
+    <li>Each detail row requires UCI, Auth #, Service M/Y, and positive Amount. The complete detail total must exactly reconcile to the summary Amount before any rows import.</li>
+    <li>Rows may auto-match, require manual matching, be skipped as exact duplicates, or be rejected with a correction reason. Batch identifiers and report references remain distinct.</li>
+    <li>Correction downloads include only errored/held rows and safe row-level detail; they omit successfully imported rows and internal database IDs.</li>
+  </ul>
+  <div class="callout warning"><strong>Operational meaning:</strong> these workflows record and reconcile financial records. They do not initiate bank transfers or settle payments. No April 1, 2026 cutoff is enforced by the import code.</div>
+</section>
+
+<section>
+  <h2>API and business-workflow changes</h2>
+  <ul>
+    <li><strong>List endpoints:</strong> new <code>sortBy</code>/<code>sortDirection</code> options and deterministic secondary keys support stable server pagination across the main entities and reports.</li>
+    <li><strong>Payments:</strong> dedicated Alta FMS import contracts replace the legacy generic check-register path; duplicate locking and source-fingerprint idempotency protect concurrent imports.</li>
+    <li><strong>Remittances:</strong> responses expose allocation, allocated amount, and remaining amount; create/update/match operations validate participant ownership, authorization/service month, and remaining balances inside transactions.</li>
+    <li><strong>Referrals:</strong> the update contract supports nullable coordinator assignment with server-side role and active-account validation.</li>
+    <li><strong>Vendors:</strong> staff-only create/update routes add conflict handling and audit records while preserving existing contact and W-9 behavior.</li>
+    <li><strong>Generated contracts:</strong> OpenAPI remains the source of truth; React client and Zod outputs were regenerated for sorting, Alta import outcomes, remittance allocations, referrals, and vendors.</li>
+  </ul>
+</section>
+
+<section>
+  <h2>Database migrations and schema impact</h2>
+  <div class="migration">
+    <div class="top"><strong>0006 · Remittance report metadata</strong><code>0006_odd_xavin.sql</code></div>
+    <div class="body"><span class="tag">Additive</span><span class="tag">Nullable columns</span><p>Adds <code>report_reference</code>, <code>review_reason</code>, and <code>expected_amount numeric(12,2)</code> to remittances. No default or backfill is required.</p><div class="trace">Introduced by <code>ccf70e3</code>.</div></div>
+  </div>
+  <div class="migration">
+    <div class="top"><strong>0007 · Remittance allocation ledger</strong><code>0007_omniscient_ken_ellis.sql</code></div>
+    <div class="body"><span class="tag">New table</span><span class="tag">Data backfill</span><span class="tag">Foreign keys</span><p>Creates <code>remittance_allocations</code> with amount, auto-match flag, indexed remittance/payment foreign keys, and one row per remittance/payment pair. It backfills existing non-deleted remittances that have <code>matched_payment_id</code>, using <code>ON CONFLICT DO NOTHING</code>. The legacy matched-payment column remains for compatibility.</p><div class="trace">Introduced by <code>90805a0</code>.</div></div>
+  </div>
+  <div class="migration">
+    <div class="top"><strong>0008 · Payment import identity</strong><code>0008_superb_chimera.sql</code></div>
+    <div class="body"><span class="tag">Index replacement</span><span class="tag">New nullable column</span><p>Drops the unique check-number index, adds nullable <code>source_row_fingerprint</code>, creates a normal check-number index, and creates a partial unique fingerprint index for non-null values. This permits repeated check numbers while making imported source rows idempotent.</p><div class="trace">Introduced by <code>119e47f</code>.</div></div>
+  </div>
+
+  <div class="callout danger"><strong>Publish-time rule:</strong> do not add or run <code>db:migrate</code> as a production startup/deploy command. Development uses checked-in Drizzle migrations; Replit Publish compares development and production schemas and applies the production schema sync. Prior deploy-time migration replay caused duplicate-index failures after Publish had already synchronized schema objects.</div>
+
+  <h3>Pre-publish data checks</h3>
+  <ol class="checklist">
+    <li>Confirm development contains migrations 0006–0008 and the schema journal/snapshots are internally consistent.</li>
+    <li>Review production counts for existing matched, deleted, and partially matched remittances; confirm the 0007 backfill produces the expected allocation rows and cents totals.</li>
+    <li>Confirm the production schema sync can create the allocation foreign keys/indexes and the partial fingerprint index without conflicts.</li>
+    <li>After publishing, smoke-test one remittance read/match flow and one synthetic Alta validation flow without importing real participant data.</li>
+  </ol>
+</section>
+
+<section>
+  <h2>Dependencies, configuration, and operations</h2>
+  <ul>
+    <li><code>read-excel-file@9.3.10</code> is a new portal runtime dependency for first-worksheet extraction. The API remains authoritative for Alta business parsing.</li>
+    <li><code>@playwright/test@1.62.1</code> and portal test scripts support sorting, participant-language/link, and Alta upload browser regressions. <code>/test-results</code> is ignored for new files.</li>
+    <li><strong>Packaging cleanup:</strong> <code>artifacts/ceps-portal/test-results/.last-run.json</code> was already tracked and remains in this candidate; Git ignore rules do not untrack existing files. It contains test metadata, not participant data or production behavior, and should be removed before publish.</li>
+    <li>The API test command is serialized with <code>--maxWorkers=1</code> to reduce shared-database test collisions and resource pressure.</li>
+    <li><code>.replit</code> and deployment routing are unchanged in this range. No email provider, storage configuration, or production secret was added.</li>
+  </ul>
+</section>
+
+<section>
+  <h2>Regression coverage and verification status</h2>
+  <p>The range adds or expands API coverage for Alta parsing/imports, payment duplicate behavior, payment list behavior, remittance allocation/reconciliation, referral reassignment, vendor mutations, and sorting. Portal Playwright coverage includes table sorting, participant wording and record links, remittance/vendor workflows, and synthetic Alta file uploads with intercepted writes.</p>
+  <div class="callout"><strong>Evidence boundary:</strong> Git proves that these tests and fixtures are included; it does not, by itself, certify that the complete candidate passed in the production-like environment. Synthetic fixtures contain no real participant data and the Alta browser test intercepts writes.</div>
+  <h3>Recommended release-candidate checks</h3>
+  <ol class="checklist">
+    <li>Run the full API test suite serially and both API/portal typechecks from a clean install.</li>
+    <li>Run the portal production build and the sorting, participant, Alta upload, remittance, and vendor browser suites against the candidate.</li>
+    <li>Regenerate API clients from <code>lib/api-spec/openapi.yaml</code> and require a clean diff to catch contract/codegen drift.</li>
+    <li>Apply migrations to a clean development database and verify remittance backfill/allocation invariants.</li>
+    <li>Confirm no real Alta files, participant data, secrets, <code>test-results</code>, or unrelated working-tree content are included in the publish.</li>
+  </ol>
+</section>
+
+<section>
+  <h2>Known assumptions and decisions still open</h2>
+  <p>This release report does not convert existing open decisions into approvals. Before go-live, CEPS should separately resolve or accept the documented interim behavior for:</p>
+  <ul>
+    <li>Transactional email provider and real email delivery (current signature/magic-link workflow still exposes development links where documented).</li>
+    <li>Brand font licensing, exact UCI format/uniqueness rules, e-signature legal sufficiency, vendor W-9 collection, and Phase 2 1099 delivery.</li>
+    <li>The interim 5% fee auto-generation rule for manually logged payments. Historical Alta imports intentionally do not generate fees.</li>
+    <li>Role visibility/security acceptance for participants, invoices, payments, referral reassignment, vendor information, and analytics payloads.</li>
+  </ul>
+  <div class="trace">Source: <code>docs/CEPS_OPEN_ITEMS.md</code> as changed in this range. Confirmed Alta source layouts are recorded there; the other listed decisions remain open.</div>
+</section>
+
+<section class="appendix-start">
+  <h2>Appendix A · Included commits (15)</h2>
+  <p>Chronological list of every commit in <code>e205795..e5cdd52</code>. Per-commit stats are not additive because later commits can revise earlier files.</p>
+  <table><thead><tr><th>Commit</th><th>Date</th><th>Author</th><th>Subject and commit stat</th></tr></thead><tbody><tr data-commit="dc4bd2be4744cba6f61e12e8b971cc9595d092b4">
+      <td><code>dc4bd2be</code></td><td>2026-08-29</td><td>hayes-estates</td>
+      <td><strong>Add accessible sorting to all CEPS portal tables</strong><div class="subtle">71 files changed, 1840 insertions(+), 174 deletions(-)</div></td>
+    </tr>
+<tr data-commit="22c891bfef0aeefd9794be72eeb0c58e63e628c9">
+      <td><code>22c891bf</code></td><td>2026-09-04</td><td>Replit Agent</td>
+      <td><strong>Update UI component imports and structure across portal pages</strong><div class="subtle">29 files changed, 123 insertions(+), 107 deletions(-)</div></td>
+    </tr>
+<tr data-commit="ec9225020a4b85142d1f2527212de71238693786">
+      <td><code>ec922502</code></td><td>2026-09-04</td><td>hayes-estates</td>
+      <td><strong>Git commit prior to merge</strong><div class="subtle">1 file changed, 1 insertion(+)</div></td>
+    </tr>
+<tr data-commit="0ccba56a55262c65c2ef8906575515503fcc8cd6">
+      <td><code>0ccba56a</code></td><td>2026-09-04</td><td>hayes-estates</td>
+      <td><strong>Add portal table sorting browser regression suite</strong><div class="subtle">5 files changed, 196 insertions(+)</div></td>
+    </tr>
+<tr data-commit="ccf70e3258f9d52d59a155fd2537ef60c23ec9db">
+      <td><code>ccf70e32</code></td><td>2026-09-04</td><td>Replit Agent</td>
+      <td><strong>Refactor payment route and update remittance import logic</strong><div class="subtle">33 files changed, 2832 insertions(+), 279 deletions(-)</div></td>
+    </tr>
+<tr data-commit="5726c6c604dacd09db063d1ddb7a65876244c557">
+      <td><code>5726c6c6</code></td><td>2026-09-04</td><td>hayes-estates</td>
+      <td><strong>Add participant wording and record link regression coverage</strong><div class="subtle">2 files changed, 132 insertions(+), 1 deletion(-)</div></td>
+    </tr>
+<tr data-commit="24fa755628534af44dc2eb3f356a22c812adf886">
+      <td><code>24fa7556</code></td><td>2026-09-04</td><td>Replit Agent</td>
+      <td><strong>Add analytics tracking to portal components and pages</strong><div class="subtle">16 files changed, 99 insertions(+), 3 deletions(-)</div></td>
+    </tr>
+<tr data-commit="035a818e9dd7119283c53df051bf763a4bc80061">
+      <td><code>035a818e</code></td><td>2026-09-04</td><td>Replit Agent</td>
+      <td><strong>Implement new vendor creation functionality and update existing vendor routes</strong><div class="subtle">7 files changed, 384 insertions(+), 28 deletions(-)</div></td>
+    </tr>
+<tr data-commit="90805a0287cdd7d5b927e1cf22794ca4540e015d">
+      <td><code>90805a02</code></td><td>2026-09-04</td><td>hayes-estates</td>
+      <td><strong>Support partial remittance allocations with transactional balance tracking</strong><div class="subtle">22 files changed, 2758 insertions(+), 60 deletions(-)</div></td>
+    </tr>
+<tr data-commit="119e47f1db0d41106a05bc0b13334f10af024c3b">
+      <td><code>119e47f1</code></td><td>2026-09-04</td><td>Replit Agent</td>
+      <td><strong>Refactor and prune legacy alta remittance parser logic</strong><div class="subtle">37 files changed, 3133 insertions(+), 1098 deletions(-)</div></td>
+    </tr>
+<tr data-commit="f6bacb0ee0836baa47ea9b5aecb1200f706f8544">
+      <td><code>f6bacb0e</code></td><td>2026-09-04</td><td>hayes-estates</td>
+      <td><strong>Add secure referral reassignment and participant remittance actions</strong><div class="subtle">15 files changed, 431 insertions(+), 21 deletions(-)</div></td>
+    </tr>
+<tr data-commit="4b1c93e2d534d86c55d8d26e3d43c3b6603e5eb8">
+      <td><code>4b1c93e2</code></td><td>2026-09-04</td><td>hayes-estates</td>
+      <td><strong>Scope Alta payment import lookups to workbook rows</strong><div class="subtle">2 files changed, 57 insertions(+), 3 deletions(-)</div></td>
+    </tr>
+<tr data-commit="c08a607e35b7f5ab97d6f366970bc32e5460a907">
+      <td><code>c08a607e</code></td><td>2026-09-04</td><td>hayes-estates</td>
+      <td><strong>Add synthetic Alta file upload browser regression</strong><div class="subtle">5 files changed, 137 insertions(+)</div></td>
+    </tr>
+<tr data-commit="13d1613873f4f7a84169a61ec240967bfc4ea51c">
+      <td><code>13d16138</code></td><td>2026-09-04</td><td>hayes-estates</td>
+      <td><strong>Add correction-only CSV downloads for Alta imports</strong><div class="subtle">3 files changed, 96 insertions(+), 3 deletions(-)</div></td>
+    </tr>
+<tr data-commit="e5cdd52f73006e272ec6958490a0c06d170b6bbc">
+      <td><code>e5cdd52f</code></td><td>2026-09-04</td><td>hayes-estates</td>
+      <td><strong>Chunk oversized Alta import lookups safely</strong><div class="subtle">2 files changed, 64 insertions(+), 36 deletions(-)</div></td>
+    </tr></tbody></table>
+</section>
+
+<section class="appendix-start">
+  <h2>Appendix B · Complete changed-path inventory (155)</h2>
+  <p>Every path returned by <code>git diff --name-only e205795..e5cdd52</code>, grouped by product area. Each detected rename is one Git changed-file entry and is shown as old path → new path, matching Git’s 155-entry name-status inventory.</p>
+  <section class="appendix-group">
+      <h3>CEPS Portal production UI <span class="count">48 paths</span></h3>
+      <table class="file-table"><thead><tr><th>Status</th><th>Path</th></tr></thead><tbody><tr data-path="artifacts/ceps-portal/src/App.tsx"><td><span class="status status-m">Modified</span></td><td><code class="path">artifacts/ceps-portal/src/App.tsx</code></td></tr>
+<tr data-path="artifacts/ceps-portal/src/components/alta-fms-payment-import.tsx"><td><span class="status status-a">Added</span></td><td><code class="path">artifacts/ceps-portal/src/components/alta-fms-payment-import.tsx</code></td></tr>
+<tr data-path="artifacts/ceps-portal/src/components/alta-remittance-import.tsx"><td><span class="status status-m">Modified</span></td><td><code class="path">artifacts/ceps-portal/src/components/alta-remittance-import.tsx</code></td></tr>
+<tr data-path="artifacts/ceps-portal/src/components/check-register-import.tsx"><td><span class="status status-d">Deleted</span></td><td><code class="path">artifacts/ceps-portal/src/components/check-register-import.tsx</code></td></tr>
+<tr data-path="artifacts/ceps-portal/src/components/create-remittance-dialog.tsx"><td><span class="status status-a">Added</span></td><td><code class="path">artifacts/ceps-portal/src/components/create-remittance-dialog.tsx</code></td></tr>
+<tr data-path="artifacts/ceps-portal/src/components/edit-client-dialog.tsx"><td><span class="status status-m">Modified</span></td><td><code class="path">artifacts/ceps-portal/src/components/edit-client-dialog.tsx</code></td></tr>
+<tr data-path="artifacts/ceps-portal/src/components/edit-referral-dialog.tsx"><td><span class="status status-m">Modified</span></td><td><code class="path">artifacts/ceps-portal/src/components/edit-referral-dialog.tsx</code></td></tr>
+<tr data-path="artifacts/ceps-portal/src/components/edit-remittance-dialog.tsx"><td><span class="status status-m">Modified</span></td><td><code class="path">artifacts/ceps-portal/src/components/edit-remittance-dialog.tsx</code></td></tr>
+<tr data-path="artifacts/ceps-portal/src/components/invite-portal-dialog.tsx"><td><span class="status status-m">Modified</span></td><td><code class="path">artifacts/ceps-portal/src/components/invite-portal-dialog.tsx</code></td></tr>
+<tr data-path="artifacts/ceps-portal/src/components/layout/app-shell.tsx"><td><span class="status status-m">Modified</span></td><td><code class="path">artifacts/ceps-portal/src/components/layout/app-shell.tsx</code></td></tr>
+<tr data-path="artifacts/ceps-portal/src/components/log-payment-dialog.tsx"><td><span class="status status-m">Modified</span></td><td><code class="path">artifacts/ceps-portal/src/components/log-payment-dialog.tsx</code></td></tr>
+<tr data-path="artifacts/ceps-portal/src/components/match-remittance-dialog.tsx"><td><span class="status status-a">Added</span></td><td><code class="path">artifacts/ceps-portal/src/components/match-remittance-dialog.tsx</code></td></tr>
+<tr data-path="artifacts/ceps-portal/src/components/ui/table.tsx"><td><span class="status status-m">Modified</span></td><td><code class="path">artifacts/ceps-portal/src/components/ui/table.tsx</code></td></tr>
+<tr data-path="artifacts/ceps-portal/src/components/vendor-business-profile.tsx"><td><span class="status status-m">Modified</span></td><td><code class="path">artifacts/ceps-portal/src/components/vendor-business-profile.tsx</code></td></tr>
+<tr data-path="artifacts/ceps-portal/src/lib/analytics.ts"><td><span class="status status-a">Added</span></td><td><code class="path">artifacts/ceps-portal/src/lib/analytics.ts</code></td></tr>
+<tr data-path="artifacts/ceps-portal/src/lib/table-sorting.ts"><td><span class="status status-a">Added</span></td><td><code class="path">artifacts/ceps-portal/src/lib/table-sorting.ts</code></td></tr>
+<tr data-path="artifacts/ceps-portal/src/pages/account.tsx"><td><span class="status status-m">Modified</span></td><td><code class="path">artifacts/ceps-portal/src/pages/account.tsx</code></td></tr>
+<tr data-path="artifacts/ceps-portal/src/pages/admin/import.tsx"><td><span class="status status-m">Modified</span></td><td><code class="path">artifacts/ceps-portal/src/pages/admin/import.tsx</code></td></tr>
+<tr data-path="artifacts/ceps-portal/src/pages/admin/users.tsx"><td><span class="status status-m">Modified</span></td><td><code class="path">artifacts/ceps-portal/src/pages/admin/users.tsx</code></td></tr>
+<tr data-path="artifacts/ceps-portal/src/pages/audit-log.tsx"><td><span class="status status-m">Modified</span></td><td><code class="path">artifacts/ceps-portal/src/pages/audit-log.tsx</code></td></tr>
+<tr data-path="artifacts/ceps-portal/src/pages/auth/magic.tsx"><td><span class="status status-m">Modified</span></td><td><code class="path">artifacts/ceps-portal/src/pages/auth/magic.tsx</code></td></tr>
+<tr data-path="artifacts/ceps-portal/src/pages/authorizations.tsx"><td><span class="status status-m">Modified</span></td><td><code class="path">artifacts/ceps-portal/src/pages/authorizations.tsx</code></td></tr>
+<tr data-path="artifacts/ceps-portal/src/pages/authorizations/[id].tsx"><td><span class="status status-m">Modified</span></td><td><code class="path">artifacts/ceps-portal/src/pages/authorizations/[id].tsx</code></td></tr>
+<tr data-path="artifacts/ceps-portal/src/pages/authorizations/new.tsx"><td><span class="status status-m">Modified</span></td><td><code class="path">artifacts/ceps-portal/src/pages/authorizations/new.tsx</code></td></tr>
+<tr data-path="artifacts/ceps-portal/src/pages/clients.tsx"><td><span class="status status-m">Modified</span></td><td><code class="path">artifacts/ceps-portal/src/pages/clients.tsx</code></td></tr>
+<tr data-path="artifacts/ceps-portal/src/pages/clients/[id].tsx"><td><span class="status status-m">Modified</span></td><td><code class="path">artifacts/ceps-portal/src/pages/clients/[id].tsx</code></td></tr>
+<tr data-path="artifacts/ceps-portal/src/pages/dashboard.tsx"><td><span class="status status-m">Modified</span></td><td><code class="path">artifacts/ceps-portal/src/pages/dashboard.tsx</code></td></tr>
+<tr data-path="artifacts/ceps-portal/src/pages/help/content.ts"><td><span class="status status-m">Modified</span></td><td><code class="path">artifacts/ceps-portal/src/pages/help/content.ts</code></td></tr>
+<tr data-path="artifacts/ceps-portal/src/pages/invoices.tsx"><td><span class="status status-m">Modified</span></td><td><code class="path">artifacts/ceps-portal/src/pages/invoices.tsx</code></td></tr>
+<tr data-path="artifacts/ceps-portal/src/pages/invoices/[id].tsx"><td><span class="status status-m">Modified</span></td><td><code class="path">artifacts/ceps-portal/src/pages/invoices/[id].tsx</code></td></tr>
+<tr data-path="artifacts/ceps-portal/src/pages/invoices/new.tsx"><td><span class="status status-m">Modified</span></td><td><code class="path">artifacts/ceps-portal/src/pages/invoices/new.tsx</code></td></tr>
+<tr data-path="artifacts/ceps-portal/src/pages/login.tsx"><td><span class="status status-m">Modified</span></td><td><code class="path">artifacts/ceps-portal/src/pages/login.tsx</code></td></tr>
+<tr data-path="artifacts/ceps-portal/src/pages/payments.tsx"><td><span class="status status-m">Modified</span></td><td><code class="path">artifacts/ceps-portal/src/pages/payments.tsx</code></td></tr>
+<tr data-path="artifacts/ceps-portal/src/pages/payments/[id].tsx"><td><span class="status status-m">Modified</span></td><td><code class="path">artifacts/ceps-portal/src/pages/payments/[id].tsx</code></td></tr>
+<tr data-path="artifacts/ceps-portal/src/pages/referrals.tsx"><td><span class="status status-m">Modified</span></td><td><code class="path">artifacts/ceps-portal/src/pages/referrals.tsx</code></td></tr>
+<tr data-path="artifacts/ceps-portal/src/pages/referrals/[id].tsx"><td><span class="status status-m">Modified</span></td><td><code class="path">artifacts/ceps-portal/src/pages/referrals/[id].tsx</code></td></tr>
+<tr data-path="artifacts/ceps-portal/src/pages/referrals/new.tsx"><td><span class="status status-m">Modified</span></td><td><code class="path">artifacts/ceps-portal/src/pages/referrals/new.tsx</code></td></tr>
+<tr data-path="artifacts/ceps-portal/src/pages/remittances.tsx"><td><span class="status status-m">Modified</span></td><td><code class="path">artifacts/ceps-portal/src/pages/remittances.tsx</code></td></tr>
+<tr data-path="artifacts/ceps-portal/src/pages/remittances/[id].tsx"><td><span class="status status-m">Modified</span></td><td><code class="path">artifacts/ceps-portal/src/pages/remittances/[id].tsx</code></td></tr>
+<tr data-path="artifacts/ceps-portal/src/pages/reports.tsx"><td><span class="status status-m">Modified</span></td><td><code class="path">artifacts/ceps-portal/src/pages/reports.tsx</code></td></tr>
+<tr data-path="artifacts/ceps-portal/src/pages/reports/case-status-report.tsx"><td><span class="status status-m">Modified</span></td><td><code class="path">artifacts/ceps-portal/src/pages/reports/case-status-report.tsx</code></td></tr>
+<tr data-path="artifacts/ceps-portal/src/pages/reports/expiring-auth-report.tsx"><td><span class="status status-m">Modified</span></td><td><code class="path">artifacts/ceps-portal/src/pages/reports/expiring-auth-report.tsx</code></td></tr>
+<tr data-path="artifacts/ceps-portal/src/pages/reports/missing-documents-report.tsx"><td><span class="status status-m">Modified</span></td><td><code class="path">artifacts/ceps-portal/src/pages/reports/missing-documents-report.tsx</code></td></tr>
+<tr data-path="artifacts/ceps-portal/src/pages/reports/pending-auth-report.tsx"><td><span class="status status-m">Modified</span></td><td><code class="path">artifacts/ceps-portal/src/pages/reports/pending-auth-report.tsx</code></td></tr>
+<tr data-path="artifacts/ceps-portal/src/pages/sign.tsx"><td><span class="status status-m">Modified</span></td><td><code class="path">artifacts/ceps-portal/src/pages/sign.tsx</code></td></tr>
+<tr data-path="artifacts/ceps-portal/src/pages/vendors.tsx"><td><span class="status status-m">Modified</span></td><td><code class="path">artifacts/ceps-portal/src/pages/vendors.tsx</code></td></tr>
+<tr data-path="artifacts/ceps-portal/src/pages/vendors/[id].tsx"><td><span class="status status-m">Modified</span></td><td><code class="path">artifacts/ceps-portal/src/pages/vendors/[id].tsx</code></td></tr>
+<tr data-path="artifacts/ceps-portal/src/pages/vendors/new.tsx"><td><span class="status status-a">Added</span></td><td><code class="path">artifacts/ceps-portal/src/pages/vendors/new.tsx</code></td></tr></tbody></table>
+    </section>
+<section class="appendix-group">
+      <h3>API server production code <span class="count">15 paths</span></h3>
+      <table class="file-table"><thead><tr><th>Status</th><th>Path</th></tr></thead><tbody><tr data-path="artifacts/api-server/src/lib/altaFmsPaymentParser.ts"><td><span class="status status-a">Added</span></td><td><code class="path">artifacts/api-server/src/lib/altaFmsPaymentParser.ts</code></td></tr>
+<tr data-path="artifacts/api-server/src/lib/altaRemittanceParser.ts"><td><span class="status status-m">Modified</span></td><td><code class="path">artifacts/api-server/src/lib/altaRemittanceParser.ts</code></td></tr>
+<tr data-path="artifacts/api-server/src/lib/importRegistry.ts"><td><span class="status status-m">Modified</span></td><td><code class="path">artifacts/api-server/src/lib/importRegistry.ts</code></td></tr>
+<tr data-path="artifacts/api-server/src/lib/paymentDuplicateCheck.ts"><td><span class="status status-m">Modified</span></td><td><code class="path">artifacts/api-server/src/lib/paymentDuplicateCheck.ts</code></td></tr>
+<tr data-path="artifacts/api-server/src/lib/serializers.ts"><td><span class="status status-m">Modified</span></td><td><code class="path">artifacts/api-server/src/lib/serializers.ts</code></td></tr>
+<tr data-path="artifacts/api-server/src/lib/sorting.ts"><td><span class="status status-a">Added</span></td><td><code class="path">artifacts/api-server/src/lib/sorting.ts</code></td></tr>
+<tr data-path="artifacts/api-server/src/routes/authorizations.ts"><td><span class="status status-m">Modified</span></td><td><code class="path">artifacts/api-server/src/routes/authorizations.ts</code></td></tr>
+<tr data-path="artifacts/api-server/src/routes/clients.ts"><td><span class="status status-m">Modified</span></td><td><code class="path">artifacts/api-server/src/routes/clients.ts</code></td></tr>
+<tr data-path="artifacts/api-server/src/routes/dashboard.ts"><td><span class="status status-m">Modified</span></td><td><code class="path">artifacts/api-server/src/routes/dashboard.ts</code></td></tr>
+<tr data-path="artifacts/api-server/src/routes/imports.ts"><td><span class="status status-m">Modified</span></td><td><code class="path">artifacts/api-server/src/routes/imports.ts</code></td></tr>
+<tr data-path="artifacts/api-server/src/routes/invoices.ts"><td><span class="status status-m">Modified</span></td><td><code class="path">artifacts/api-server/src/routes/invoices.ts</code></td></tr>
+<tr data-path="artifacts/api-server/src/routes/payments.ts"><td><span class="status status-m">Modified</span></td><td><code class="path">artifacts/api-server/src/routes/payments.ts</code></td></tr>
+<tr data-path="artifacts/api-server/src/routes/referrals.ts"><td><span class="status status-m">Modified</span></td><td><code class="path">artifacts/api-server/src/routes/referrals.ts</code></td></tr>
+<tr data-path="artifacts/api-server/src/routes/users.ts"><td><span class="status status-m">Modified</span></td><td><code class="path">artifacts/api-server/src/routes/users.ts</code></td></tr>
+<tr data-path="artifacts/api-server/src/routes/vendors.ts"><td><span class="status status-m">Modified</span></td><td><code class="path">artifacts/api-server/src/routes/vendors.ts</code></td></tr></tbody></table>
+    </section>
+<section class="appendix-group">
+      <h3>Database schema, migrations, and snapshots <span class="count">9 paths</span></h3>
+      <table class="file-table"><thead><tr><th>Status</th><th>Path</th></tr></thead><tbody><tr data-path="lib/db/migrations/0006_odd_xavin.sql"><td><span class="status status-a">Added</span></td><td><code class="path">lib/db/migrations/0006_odd_xavin.sql</code></td></tr>
+<tr data-path="lib/db/migrations/0007_omniscient_ken_ellis.sql"><td><span class="status status-a">Added</span></td><td><code class="path">lib/db/migrations/0007_omniscient_ken_ellis.sql</code></td></tr>
+<tr data-path="lib/db/migrations/0008_superb_chimera.sql"><td><span class="status status-a">Added</span></td><td><code class="path">lib/db/migrations/0008_superb_chimera.sql</code></td></tr>
+<tr data-path="lib/db/migrations/meta/0006_snapshot.json"><td><span class="status status-a">Added</span></td><td><code class="path">lib/db/migrations/meta/0006_snapshot.json</code></td></tr>
+<tr data-path="lib/db/migrations/meta/0007_snapshot.json"><td><span class="status status-a">Added</span></td><td><code class="path">lib/db/migrations/meta/0007_snapshot.json</code></td></tr>
+<tr data-path="lib/db/migrations/meta/0008_snapshot.json"><td><span class="status status-a">Added</span></td><td><code class="path">lib/db/migrations/meta/0008_snapshot.json</code></td></tr>
+<tr data-path="lib/db/migrations/meta/_journal.json"><td><span class="status status-m">Modified</span></td><td><code class="path">lib/db/migrations/meta/_journal.json</code></td></tr>
+<tr data-path="lib/db/src/schema/payments.ts"><td><span class="status status-m">Modified</span></td><td><code class="path">lib/db/src/schema/payments.ts</code></td></tr>
+<tr data-path="lib/db/src/schema/remittances.ts"><td><span class="status status-m">Modified</span></td><td><code class="path">lib/db/src/schema/remittances.ts</code></td></tr></tbody></table>
+    </section>
+<section class="appendix-group">
+      <h3>Authoritative API specification <span class="count">1 paths</span></h3>
+      <table class="file-table"><thead><tr><th>Status</th><th>Path</th></tr></thead><tbody><tr data-path="lib/api-spec/openapi.yaml"><td><span class="status status-m">Modified</span></td><td><code class="path">lib/api-spec/openapi.yaml</code></td></tr></tbody></table>
+    </section>
+<section class="appendix-group">
+      <h3>Generated API clients and validation schemas <span class="count">55 paths</span></h3>
+      <table class="file-table"><thead><tr><th>Status</th><th>Path</th></tr></thead><tbody><tr data-path="lib/api-client-react/src/generated/api.schemas.ts"><td><span class="status status-m">Modified</span></td><td><code class="path">lib/api-client-react/src/generated/api.schemas.ts</code></td></tr>
+<tr data-path="lib/api-client-react/src/generated/api.ts"><td><span class="status status-m">Modified</span></td><td><code class="path">lib/api-client-react/src/generated/api.ts</code></td></tr>
+<tr data-path="lib/api-zod/src/generated/api.ts"><td><span class="status status-m">Modified</span></td><td><code class="path">lib/api-zod/src/generated/api.ts</code></td></tr>
+<tr data-path="lib/api-zod/src/generated/types/altaFmsPaymentImportInput.ts"><td><span class="status status-r">Renamed</span></td><td><code class="path">lib/api-zod/src/generated/types/checkRegisterImportInput.ts → lib/api-zod/src/generated/types/altaFmsPaymentImportInput.ts</code></td></tr>
+<tr data-path="lib/api-zod/src/generated/types/altaFmsPaymentImportResult.ts"><td><span class="status status-a">Added</span></td><td><code class="path">lib/api-zod/src/generated/types/altaFmsPaymentImportResult.ts</code></td></tr>
+<tr data-path="lib/api-zod/src/generated/types/altaFmsPaymentImportRowResult.ts"><td><span class="status status-r">Renamed</span></td><td><code class="path">lib/api-zod/src/generated/types/checkRegisterImportRowResult.ts → lib/api-zod/src/generated/types/altaFmsPaymentImportRowResult.ts</code></td></tr>
+<tr data-path="lib/api-zod/src/generated/types/altaFmsPaymentImportRowResultOutcome.ts"><td><span class="status status-r">Renamed</span></td><td><code class="path">lib/api-zod/src/generated/types/checkRegisterImportRowResultOutcome.ts → lib/api-zod/src/generated/types/altaFmsPaymentImportRowResultOutcome.ts</code></td></tr>
+<tr data-path="lib/api-zod/src/generated/types/altaRemittanceImportInput.ts"><td><span class="status status-m">Modified</span></td><td><code class="path">lib/api-zod/src/generated/types/altaRemittanceImportInput.ts</code></td></tr>
+<tr data-path="lib/api-zod/src/generated/types/checkRegisterImportResult.ts"><td><span class="status status-d">Deleted</span></td><td><code class="path">lib/api-zod/src/generated/types/checkRegisterImportResult.ts</code></td></tr>
+<tr data-path="lib/api-zod/src/generated/types/getCaseStatusReportParams.ts"><td><span class="status status-m">Modified</span></td><td><code class="path">lib/api-zod/src/generated/types/getCaseStatusReportParams.ts</code></td></tr>
+<tr data-path="lib/api-zod/src/generated/types/getCaseStatusReportSortBy.ts"><td><span class="status status-a">Added</span></td><td><code class="path">lib/api-zod/src/generated/types/getCaseStatusReportSortBy.ts</code></td></tr>
+<tr data-path="lib/api-zod/src/generated/types/getCaseStatusReportSortDirection.ts"><td><span class="status status-a">Added</span></td><td><code class="path">lib/api-zod/src/generated/types/getCaseStatusReportSortDirection.ts</code></td></tr>
+<tr data-path="lib/api-zod/src/generated/types/getExpiringAuthReportParams.ts"><td><span class="status status-m">Modified</span></td><td><code class="path">lib/api-zod/src/generated/types/getExpiringAuthReportParams.ts</code></td></tr>
+<tr data-path="lib/api-zod/src/generated/types/getExpiringAuthReportSortBy.ts"><td><span class="status status-a">Added</span></td><td><code class="path">lib/api-zod/src/generated/types/getExpiringAuthReportSortBy.ts</code></td></tr>
+<tr data-path="lib/api-zod/src/generated/types/getExpiringAuthReportSortDirection.ts"><td><span class="status status-a">Added</span></td><td><code class="path">lib/api-zod/src/generated/types/getExpiringAuthReportSortDirection.ts</code></td></tr>
+<tr data-path="lib/api-zod/src/generated/types/getMissingDocumentsReportParams.ts"><td><span class="status status-m">Modified</span></td><td><code class="path">lib/api-zod/src/generated/types/getMissingDocumentsReportParams.ts</code></td></tr>
+<tr data-path="lib/api-zod/src/generated/types/getMissingDocumentsReportSortBy.ts"><td><span class="status status-a">Added</span></td><td><code class="path">lib/api-zod/src/generated/types/getMissingDocumentsReportSortBy.ts</code></td></tr>
+<tr data-path="lib/api-zod/src/generated/types/getMissingDocumentsReportSortDirection.ts"><td><span class="status status-a">Added</span></td><td><code class="path">lib/api-zod/src/generated/types/getMissingDocumentsReportSortDirection.ts</code></td></tr>
+<tr data-path="lib/api-zod/src/generated/types/getPendingAuthReportParams.ts"><td><span class="status status-m">Modified</span></td><td><code class="path">lib/api-zod/src/generated/types/getPendingAuthReportParams.ts</code></td></tr>
+<tr data-path="lib/api-zod/src/generated/types/getPendingAuthReportSortBy.ts"><td><span class="status status-a">Added</span></td><td><code class="path">lib/api-zod/src/generated/types/getPendingAuthReportSortBy.ts</code></td></tr>
+<tr data-path="lib/api-zod/src/generated/types/getPendingAuthReportSortDirection.ts"><td><span class="status status-a">Added</span></td><td><code class="path">lib/api-zod/src/generated/types/getPendingAuthReportSortDirection.ts</code></td></tr>
+<tr data-path="lib/api-zod/src/generated/types/importCommitResultEntity.ts"><td><span class="status status-m">Modified</span></td><td><code class="path">lib/api-zod/src/generated/types/importCommitResultEntity.ts</code></td></tr>
+<tr data-path="lib/api-zod/src/generated/types/importValidateResultEntity.ts"><td><span class="status status-m">Modified</span></td><td><code class="path">lib/api-zod/src/generated/types/importValidateResultEntity.ts</code></td></tr>
+<tr data-path="lib/api-zod/src/generated/types/index.ts"><td><span class="status status-m">Modified</span></td><td><code class="path">lib/api-zod/src/generated/types/index.ts</code></td></tr>
+<tr data-path="lib/api-zod/src/generated/types/listAuditLogParams.ts"><td><span class="status status-m">Modified</span></td><td><code class="path">lib/api-zod/src/generated/types/listAuditLogParams.ts</code></td></tr>
+<tr data-path="lib/api-zod/src/generated/types/listAuditLogSortBy.ts"><td><span class="status status-a">Added</span></td><td><code class="path">lib/api-zod/src/generated/types/listAuditLogSortBy.ts</code></td></tr>
+<tr data-path="lib/api-zod/src/generated/types/listAuditLogSortDirection.ts"><td><span class="status status-r">Renamed</span></td><td><code class="path">lib/api-zod/src/generated/types/remittanceInputSource.ts → lib/api-zod/src/generated/types/listAuditLogSortDirection.ts</code></td></tr>
+<tr data-path="lib/api-zod/src/generated/types/listAuthorizationsParams.ts"><td><span class="status status-m">Modified</span></td><td><code class="path">lib/api-zod/src/generated/types/listAuthorizationsParams.ts</code></td></tr>
+<tr data-path="lib/api-zod/src/generated/types/listAuthorizationsSortBy.ts"><td><span class="status status-a">Added</span></td><td><code class="path">lib/api-zod/src/generated/types/listAuthorizationsSortBy.ts</code></td></tr>
+<tr data-path="lib/api-zod/src/generated/types/listAuthorizationsSortDirection.ts"><td><span class="status status-r">Renamed</span></td><td><code class="path">lib/api-zod/src/generated/types/remittanceUpdateStatus.ts → lib/api-zod/src/generated/types/listAuthorizationsSortDirection.ts</code></td></tr>
+<tr data-path="lib/api-zod/src/generated/types/listClientsParams.ts"><td><span class="status status-m">Modified</span></td><td><code class="path">lib/api-zod/src/generated/types/listClientsParams.ts</code></td></tr>
+<tr data-path="lib/api-zod/src/generated/types/listClientsSortBy.ts"><td><span class="status status-a">Added</span></td><td><code class="path">lib/api-zod/src/generated/types/listClientsSortBy.ts</code></td></tr>
+<tr data-path="lib/api-zod/src/generated/types/listClientsSortDirection.ts"><td><span class="status status-r">Renamed</span></td><td><code class="path">lib/api-zod/src/generated/types/remittanceUpdateSource.ts → lib/api-zod/src/generated/types/listClientsSortDirection.ts</code></td></tr>
+<tr data-path="lib/api-zod/src/generated/types/listInvoicesParams.ts"><td><span class="status status-m">Modified</span></td><td><code class="path">lib/api-zod/src/generated/types/listInvoicesParams.ts</code></td></tr>
+<tr data-path="lib/api-zod/src/generated/types/listInvoicesSortBy.ts"><td><span class="status status-a">Added</span></td><td><code class="path">lib/api-zod/src/generated/types/listInvoicesSortBy.ts</code></td></tr>
+<tr data-path="lib/api-zod/src/generated/types/listInvoicesSortDirection.ts"><td><span class="status status-a">Added</span></td><td><code class="path">lib/api-zod/src/generated/types/listInvoicesSortDirection.ts</code></td></tr>
+<tr data-path="lib/api-zod/src/generated/types/listPaymentsParams.ts"><td><span class="status status-m">Modified</span></td><td><code class="path">lib/api-zod/src/generated/types/listPaymentsParams.ts</code></td></tr>
+<tr data-path="lib/api-zod/src/generated/types/listPaymentsSortBy.ts"><td><span class="status status-a">Added</span></td><td><code class="path">lib/api-zod/src/generated/types/listPaymentsSortBy.ts</code></td></tr>
+<tr data-path="lib/api-zod/src/generated/types/listPaymentsSortDirection.ts"><td><span class="status status-a">Added</span></td><td><code class="path">lib/api-zod/src/generated/types/listPaymentsSortDirection.ts</code></td></tr>
+<tr data-path="lib/api-zod/src/generated/types/listReferralsParams.ts"><td><span class="status status-m">Modified</span></td><td><code class="path">lib/api-zod/src/generated/types/listReferralsParams.ts</code></td></tr>
+<tr data-path="lib/api-zod/src/generated/types/listReferralsSortBy.ts"><td><span class="status status-a">Added</span></td><td><code class="path">lib/api-zod/src/generated/types/listReferralsSortBy.ts</code></td></tr>
+<tr data-path="lib/api-zod/src/generated/types/listReferralsSortDirection.ts"><td><span class="status status-a">Added</span></td><td><code class="path">lib/api-zod/src/generated/types/listReferralsSortDirection.ts</code></td></tr>
+<tr data-path="lib/api-zod/src/generated/types/listRemittancesParams.ts"><td><span class="status status-m">Modified</span></td><td><code class="path">lib/api-zod/src/generated/types/listRemittancesParams.ts</code></td></tr>
+<tr data-path="lib/api-zod/src/generated/types/listRemittancesSortBy.ts"><td><span class="status status-a">Added</span></td><td><code class="path">lib/api-zod/src/generated/types/listRemittancesSortBy.ts</code></td></tr>
+<tr data-path="lib/api-zod/src/generated/types/listRemittancesSortDirection.ts"><td><span class="status status-a">Added</span></td><td><code class="path">lib/api-zod/src/generated/types/listRemittancesSortDirection.ts</code></td></tr>
+<tr data-path="lib/api-zod/src/generated/types/listUsersParams.ts"><td><span class="status status-m">Modified</span></td><td><code class="path">lib/api-zod/src/generated/types/listUsersParams.ts</code></td></tr>
+<tr data-path="lib/api-zod/src/generated/types/listVendorsParams.ts"><td><span class="status status-m">Modified</span></td><td><code class="path">lib/api-zod/src/generated/types/listVendorsParams.ts</code></td></tr>
+<tr data-path="lib/api-zod/src/generated/types/listVendorsSortBy.ts"><td><span class="status status-a">Added</span></td><td><code class="path">lib/api-zod/src/generated/types/listVendorsSortBy.ts</code></td></tr>
+<tr data-path="lib/api-zod/src/generated/types/listVendorsSortDirection.ts"><td><span class="status status-a">Added</span></td><td><code class="path">lib/api-zod/src/generated/types/listVendorsSortDirection.ts</code></td></tr>
+<tr data-path="lib/api-zod/src/generated/types/payment.ts"><td><span class="status status-m">Modified</span></td><td><code class="path">lib/api-zod/src/generated/types/payment.ts</code></td></tr>
+<tr data-path="lib/api-zod/src/generated/types/remittance.ts"><td><span class="status status-m">Modified</span></td><td><code class="path">lib/api-zod/src/generated/types/remittance.ts</code></td></tr>
+<tr data-path="lib/api-zod/src/generated/types/remittanceAllocation.ts"><td><span class="status status-r">Renamed</span></td><td><code class="path">lib/api-zod/src/generated/types/checkRegisterRow.ts → lib/api-zod/src/generated/types/remittanceAllocation.ts</code></td></tr>
+<tr data-path="lib/api-zod/src/generated/types/remittanceInput.ts"><td><span class="status status-m">Modified</span></td><td><code class="path">lib/api-zod/src/generated/types/remittanceInput.ts</code></td></tr>
+<tr data-path="lib/api-zod/src/generated/types/remittanceMatchInput.ts"><td><span class="status status-m">Modified</span></td><td><code class="path">lib/api-zod/src/generated/types/remittanceMatchInput.ts</code></td></tr>
+<tr data-path="lib/api-zod/src/generated/types/remittanceUpdate.ts"><td><span class="status status-m">Modified</span></td><td><code class="path">lib/api-zod/src/generated/types/remittanceUpdate.ts</code></td></tr></tbody></table>
+    </section>
+<section class="appendix-group">
+      <h3>Regression tests and synthetic fixtures <span class="count">19 paths</span></h3>
+      <table class="file-table"><thead><tr><th>Status</th><th>Path</th></tr></thead><tbody><tr data-path="artifacts/api-server/src/lib/altaFmsPaymentParser.test.ts"><td><span class="status status-a">Added</span></td><td><code class="path">artifacts/api-server/src/lib/altaFmsPaymentParser.test.ts</code></td></tr>
+<tr data-path="artifacts/api-server/src/routes/altaRemittanceParser.test.ts"><td><span class="status status-m">Modified</span></td><td><code class="path">artifacts/api-server/src/routes/altaRemittanceParser.test.ts</code></td></tr>
+<tr data-path="artifacts/api-server/src/routes/imports.test.ts"><td><span class="status status-m">Modified</span></td><td><code class="path">artifacts/api-server/src/routes/imports.test.ts</code></td></tr>
+<tr data-path="artifacts/api-server/src/routes/paymentDuplicateCheck.test.ts"><td><span class="status status-m">Modified</span></td><td><code class="path">artifacts/api-server/src/routes/paymentDuplicateCheck.test.ts</code></td></tr>
+<tr data-path="artifacts/api-server/src/routes/payments-list.test.ts"><td><span class="status status-m">Modified</span></td><td><code class="path">artifacts/api-server/src/routes/payments-list.test.ts</code></td></tr>
+<tr data-path="artifacts/api-server/src/routes/referral-reassignment.test.ts"><td><span class="status status-a">Added</span></td><td><code class="path">artifacts/api-server/src/routes/referral-reassignment.test.ts</code></td></tr>
+<tr data-path="artifacts/api-server/src/routes/remittances-import.test.ts"><td><span class="status status-m">Modified</span></td><td><code class="path">artifacts/api-server/src/routes/remittances-import.test.ts</code></td></tr>
+<tr data-path="artifacts/api-server/src/routes/sorting.test.ts"><td><span class="status status-a">Added</span></td><td><code class="path">artifacts/api-server/src/routes/sorting.test.ts</code></td></tr>
+<tr data-path="artifacts/api-server/src/routes/vendors-mutations.test.ts"><td><span class="status status-a">Added</span></td><td><code class="path">artifacts/api-server/src/routes/vendors-mutations.test.ts</code></td></tr>
+<tr data-path="artifacts/ceps-portal/playwright.config.ts"><td><span class="status status-a">Added</span></td><td><code class="path">artifacts/ceps-portal/playwright.config.ts</code></td></tr>
+<tr data-path="artifacts/ceps-portal/test-results/.last-run.json"><td><span class="status status-a">Added</span></td><td><code class="path">artifacts/ceps-portal/test-results/.last-run.json</code></td></tr>
+<tr data-path="artifacts/ceps-portal/tests/alta-file-upload.spec.ts"><td><span class="status status-a">Added</span></td><td><code class="path">artifacts/ceps-portal/tests/alta-file-upload.spec.ts</code></td></tr>
+<tr data-path="artifacts/ceps-portal/tests/fixtures/README.md"><td><span class="status status-a">Added</span></td><td><code class="path">artifacts/ceps-portal/tests/fixtures/README.md</code></td></tr>
+<tr data-path="artifacts/ceps-portal/tests/fixtures/synthetic-alta-fms-transaction-detail.xlsx"><td><span class="status status-a">Added</span></td><td><code class="path">artifacts/ceps-portal/tests/fixtures/synthetic-alta-fms-transaction-detail.xlsx</code></td></tr>
+<tr data-path="artifacts/ceps-portal/tests/fixtures/synthetic-alta-payment-history-error.csv"><td><span class="status status-a">Added</span></td><td><code class="path">artifacts/ceps-portal/tests/fixtures/synthetic-alta-payment-history-error.csv</code></td></tr>
+<tr data-path="artifacts/ceps-portal/tests/participant-language-and-links.spec.ts"><td><span class="status status-a">Added</span></td><td><code class="path">artifacts/ceps-portal/tests/participant-language-and-links.spec.ts</code></td></tr>
+<tr data-path="artifacts/ceps-portal/tests/remittance-workflow.spec.ts"><td><span class="status status-a">Added</span></td><td><code class="path">artifacts/ceps-portal/tests/remittance-workflow.spec.ts</code></td></tr>
+<tr data-path="artifacts/ceps-portal/tests/table-sorting.spec.ts"><td><span class="status status-a">Added</span></td><td><code class="path">artifacts/ceps-portal/tests/table-sorting.spec.ts</code></td></tr>
+<tr data-path="artifacts/ceps-portal/tests/vendor-workflow.spec.ts"><td><span class="status status-a">Added</span></td><td><code class="path">artifacts/ceps-portal/tests/vendor-workflow.spec.ts</code></td></tr></tbody></table>
+    </section>
+<section class="appendix-group">
+      <h3>Dependencies and workspace configuration <span class="count">4 paths</span></h3>
+      <table class="file-table"><thead><tr><th>Status</th><th>Path</th></tr></thead><tbody><tr data-path=".gitignore"><td><span class="status status-m">Modified</span></td><td><code class="path">.gitignore</code></td></tr>
+<tr data-path="artifacts/api-server/package.json"><td><span class="status status-m">Modified</span></td><td><code class="path">artifacts/api-server/package.json</code></td></tr>
+<tr data-path="artifacts/ceps-portal/package.json"><td><span class="status status-m">Modified</span></td><td><code class="path">artifacts/ceps-portal/package.json</code></td></tr>
+<tr data-path="pnpm-lock.yaml"><td><span class="status status-m">Modified</span></td><td><code class="path">pnpm-lock.yaml</code></td></tr></tbody></table>
+    </section>
+<section class="appendix-group">
+      <h3>Project documentation <span class="count">1 paths</span></h3>
+      <table class="file-table"><thead><tr><th>Status</th><th>Path</th></tr></thead><tbody><tr data-path="docs/CEPS_OPEN_ITEMS.md"><td><span class="status status-m">Modified</span></td><td><code class="path">docs/CEPS_OPEN_ITEMS.md</code></td></tr></tbody></table>
+    </section>
+<section class="appendix-group">
+      <h3>Internal agent memory (non-runtime) <span class="count">3 paths</span></h3>
+      <table class="file-table"><thead><tr><th>Status</th><th>Path</th></tr></thead><tbody><tr data-path=".agents/memory/MEMORY.md"><td><span class="status status-m">Modified</span></td><td><code class="path">.agents/memory/MEMORY.md</code></td></tr>
+<tr data-path=".agents/memory/db-migrations.md"><td><span class="status status-m">Modified</span></td><td><code class="path">.agents/memory/db-migrations.md</code></td></tr>
+<tr data-path=".agents/memory/remittance-reconciliation.md"><td><span class="status status-a">Added</span></td><td><code class="path">.agents/memory/remittance-reconciliation.md</code></td></tr></tbody></table>
+    </section>
+</section>
+
+<section>
+  <h2>Appendix C · Reproduction commands</h2>
+  <pre><code>git rev-list --count e205795ebd7ce60a474fb80806256076510bf652..e5cdd52f73006e272ec6958490a0c06d170b6bbc
+git diff --shortstat e205795ebd7ce60a474fb80806256076510bf652..e5cdd52f73006e272ec6958490a0c06d170b6bbc
+git log --reverse --date=short --format='%H %ad %an %s' e205795ebd7ce60a474fb80806256076510bf652..e5cdd52f73006e272ec6958490a0c06d170b6bbc
+git diff --name-status --find-renames e205795ebd7ce60a474fb80806256076510bf652..e5cdd52f73006e272ec6958490a0c06d170b6bbc
+git diff --name-only e205795ebd7ce60a474fb80806256076510bf652..e5cdd52f73006e272ec6958490a0c06d170b6bbc | sort -u</code></pre>
+  <p>Report appendix checks: 15 commit rows; 155 changed-path rows; 155 unique Git paths.</p>
+</section>
+
+<div class="footer">CEPS Portal release report · Generated from immutable Git objects only · Range <code>e205795..e5cdd52</code> · No application records, secrets, credentials, or uploaded participant files included.</div>
+</main>
+</div>
+<script type="application/json" id="release-manifest">{"baseline": "e205795ebd7ce60a474fb80806256076510bf652", "current": "e5cdd52f73006e272ec6958490a0c06d170b6bbc", "commits": ["dc4bd2be4744cba6f61e12e8b971cc9595d092b4", "22c891bfef0aeefd9794be72eeb0c58e63e628c9", "ec9225020a4b85142d1f2527212de71238693786", "0ccba56a55262c65c2ef8906575515503fcc8cd6", "ccf70e3258f9d52d59a155fd2537ef60c23ec9db", "5726c6c604dacd09db063d1ddb7a65876244c557", "24fa755628534af44dc2eb3f356a22c812adf886", "035a818e9dd7119283c53df051bf763a4bc80061", "90805a0287cdd7d5b927e1cf22794ca4540e015d", "119e47f1db0d41106a05bc0b13334f10af024c3b", "f6bacb0ee0836baa47ea9b5aecb1200f706f8544", "4b1c93e2d534d86c55d8d26e3d43c3b6603e5eb8", "c08a607e35b7f5ab97d6f366970bc32e5460a907", "13d1613873f4f7a84169a61ec240967bfc4ea51c", "e5cdd52f73006e272ec6958490a0c06d170b6bbc"], "paths": [".agents/memory/MEMORY.md", ".agents/memory/db-migrations.md", ".agents/memory/remittance-reconciliation.md", ".gitignore", "artifacts/api-server/package.json", "artifacts/api-server/src/lib/altaFmsPaymentParser.test.ts", "artifacts/api-server/src/lib/altaFmsPaymentParser.ts", "artifacts/api-server/src/lib/altaRemittanceParser.ts", "artifacts/api-server/src/lib/importRegistry.ts", "artifacts/api-server/src/lib/paymentDuplicateCheck.ts", "artifacts/api-server/src/lib/serializers.ts", "artifacts/api-server/src/lib/sorting.ts", "artifacts/api-server/src/routes/altaRemittanceParser.test.ts", "artifacts/api-server/src/routes/authorizations.ts", "artifacts/api-server/src/routes/clients.ts", "artifacts/api-server/src/routes/dashboard.ts", "artifacts/api-server/src/routes/imports.test.ts", "artifacts/api-server/src/routes/imports.ts", "artifacts/api-server/src/routes/invoices.ts", "artifacts/api-server/src/routes/paymentDuplicateCheck.test.ts", "artifacts/api-server/src/routes/payments-list.test.ts", "artifacts/api-server/src/routes/payments.ts", "artifacts/api-server/src/routes/referral-reassignment.test.ts", "artifacts/api-server/src/routes/referrals.ts", "artifacts/api-server/src/routes/remittances-import.test.ts", "artifacts/api-server/src/routes/sorting.test.ts", "artifacts/api-server/src/routes/users.ts", "artifacts/api-server/src/routes/vendors-mutations.test.ts", "artifacts/api-server/src/routes/vendors.ts", "artifacts/ceps-portal/package.json", "artifacts/ceps-portal/playwright.config.ts", "artifacts/ceps-portal/src/App.tsx", "artifacts/ceps-portal/src/components/alta-fms-payment-import.tsx", "artifacts/ceps-portal/src/components/alta-remittance-import.tsx", "artifacts/ceps-portal/src/components/check-register-import.tsx", "artifacts/ceps-portal/src/components/create-remittance-dialog.tsx", "artifacts/ceps-portal/src/components/edit-client-dialog.tsx", "artifacts/ceps-portal/src/components/edit-referral-dialog.tsx", "artifacts/ceps-portal/src/components/edit-remittance-dialog.tsx", "artifacts/ceps-portal/src/components/invite-portal-dialog.tsx", "artifacts/ceps-portal/src/components/layout/app-shell.tsx", "artifacts/ceps-portal/src/components/log-payment-dialog.tsx", "artifacts/ceps-portal/src/components/match-remittance-dialog.tsx", "artifacts/ceps-portal/src/components/ui/table.tsx", "artifacts/ceps-portal/src/components/vendor-business-profile.tsx", "artifacts/ceps-portal/src/lib/analytics.ts", "artifacts/ceps-portal/src/lib/table-sorting.ts", "artifacts/ceps-portal/src/pages/account.tsx", "artifacts/ceps-portal/src/pages/admin/import.tsx", "artifacts/ceps-portal/src/pages/admin/users.tsx", "artifacts/ceps-portal/src/pages/audit-log.tsx", "artifacts/ceps-portal/src/pages/auth/magic.tsx", "artifacts/ceps-portal/src/pages/authorizations.tsx", "artifacts/ceps-portal/src/pages/authorizations/[id].tsx", "artifacts/ceps-portal/src/pages/authorizations/new.tsx", "artifacts/ceps-portal/src/pages/clients.tsx", "artifacts/ceps-portal/src/pages/clients/[id].tsx", "artifacts/ceps-portal/src/pages/dashboard.tsx", "artifacts/ceps-portal/src/pages/help/content.ts", "artifacts/ceps-portal/src/pages/invoices.tsx", "artifacts/ceps-portal/src/pages/invoices/[id].tsx", "artifacts/ceps-portal/src/pages/invoices/new.tsx", "artifacts/ceps-portal/src/pages/login.tsx", "artifacts/ceps-portal/src/pages/payments.tsx", "artifacts/ceps-portal/src/pages/payments/[id].tsx", "artifacts/ceps-portal/src/pages/referrals.tsx", "artifacts/ceps-portal/src/pages/referrals/[id].tsx", "artifacts/ceps-portal/src/pages/referrals/new.tsx", "artifacts/ceps-portal/src/pages/remittances.tsx", "artifacts/ceps-portal/src/pages/remittances/[id].tsx", "artifacts/ceps-portal/src/pages/reports.tsx", "artifacts/ceps-portal/src/pages/reports/case-status-report.tsx", "artifacts/ceps-portal/src/pages/reports/expiring-auth-report.tsx", "artifacts/ceps-portal/src/pages/reports/missing-documents-report.tsx", "artifacts/ceps-portal/src/pages/reports/pending-auth-report.tsx", "artifacts/ceps-portal/src/pages/sign.tsx", "artifacts/ceps-portal/src/pages/vendors.tsx", "artifacts/ceps-portal/src/pages/vendors/[id].tsx", "artifacts/ceps-portal/src/pages/vendors/new.tsx", "artifacts/ceps-portal/test-results/.last-run.json", "artifacts/ceps-portal/tests/alta-file-upload.spec.ts", "artifacts/ceps-portal/tests/fixtures/README.md", "artifacts/ceps-portal/tests/fixtures/synthetic-alta-fms-transaction-detail.xlsx", "artifacts/ceps-portal/tests/fixtures/synthetic-alta-payment-history-error.csv", "artifacts/ceps-portal/tests/participant-language-and-links.spec.ts", "artifacts/ceps-portal/tests/remittance-workflow.spec.ts", "artifacts/ceps-portal/tests/table-sorting.spec.ts", "artifacts/ceps-portal/tests/vendor-workflow.spec.ts", "docs/CEPS_OPEN_ITEMS.md", "lib/api-client-react/src/generated/api.schemas.ts", "lib/api-client-react/src/generated/api.ts", "lib/api-spec/openapi.yaml", "lib/api-zod/src/generated/api.ts", "lib/api-zod/src/generated/types/altaFmsPaymentImportInput.ts", "lib/api-zod/src/generated/types/altaFmsPaymentImportResult.ts", "lib/api-zod/src/generated/types/altaFmsPaymentImportRowResult.ts", "lib/api-zod/src/generated/types/altaFmsPaymentImportRowResultOutcome.ts", "lib/api-zod/src/generated/types/altaRemittanceImportInput.ts", "lib/api-zod/src/generated/types/checkRegisterImportResult.ts", "lib/api-zod/src/generated/types/getCaseStatusReportParams.ts", "lib/api-zod/src/generated/types/getCaseStatusReportSortBy.ts", "lib/api-zod/src/generated/types/getCaseStatusReportSortDirection.ts", "lib/api-zod/src/generated/types/getExpiringAuthReportParams.ts", "lib/api-zod/src/generated/types/getExpiringAuthReportSortBy.ts", "lib/api-zod/src/generated/types/getExpiringAuthReportSortDirection.ts", "lib/api-zod/src/generated/types/getMissingDocumentsReportParams.ts", "lib/api-zod/src/generated/types/getMissingDocumentsReportSortBy.ts", "lib/api-zod/src/generated/types/getMissingDocumentsReportSortDirection.ts", "lib/api-zod/src/generated/types/getPendingAuthReportParams.ts", "lib/api-zod/src/generated/types/getPendingAuthReportSortBy.ts", "lib/api-zod/src/generated/types/getPendingAuthReportSortDirection.ts", "lib/api-zod/src/generated/types/importCommitResultEntity.ts", "lib/api-zod/src/generated/types/importValidateResultEntity.ts", "lib/api-zod/src/generated/types/index.ts", "lib/api-zod/src/generated/types/listAuditLogParams.ts", "lib/api-zod/src/generated/types/listAuditLogSortBy.ts", "lib/api-zod/src/generated/types/listAuditLogSortDirection.ts", "lib/api-zod/src/generated/types/listAuthorizationsParams.ts", "lib/api-zod/src/generated/types/listAuthorizationsSortBy.ts", "lib/api-zod/src/generated/types/listAuthorizationsSortDirection.ts", "lib/api-zod/src/generated/types/listClientsParams.ts", "lib/api-zod/src/generated/types/listClientsSortBy.ts", "lib/api-zod/src/generated/types/listClientsSortDirection.ts", "lib/api-zod/src/generated/types/listInvoicesParams.ts", "lib/api-zod/src/generated/types/listInvoicesSortBy.ts", "lib/api-zod/src/generated/types/listInvoicesSortDirection.ts", "lib/api-zod/src/generated/types/listPaymentsParams.ts", "lib/api-zod/src/generated/types/listPaymentsSortBy.ts", "lib/api-zod/src/generated/types/listPaymentsSortDirection.ts", "lib/api-zod/src/generated/types/listReferralsParams.ts", "lib/api-zod/src/generated/types/listReferralsSortBy.ts", "lib/api-zod/src/generated/types/listReferralsSortDirection.ts", "lib/api-zod/src/generated/types/listRemittancesParams.ts", "lib/api-zod/src/generated/types/listRemittancesSortBy.ts", "lib/api-zod/src/generated/types/listRemittancesSortDirection.ts", "lib/api-zod/src/generated/types/listUsersParams.ts", "lib/api-zod/src/generated/types/listVendorsParams.ts", "lib/api-zod/src/generated/types/listVendorsSortBy.ts", "lib/api-zod/src/generated/types/listVendorsSortDirection.ts", "lib/api-zod/src/generated/types/payment.ts", "lib/api-zod/src/generated/types/remittance.ts", "lib/api-zod/src/generated/types/remittanceAllocation.ts", "lib/api-zod/src/generated/types/remittanceInput.ts", "lib/api-zod/src/generated/types/remittanceMatchInput.ts", "lib/api-zod/src/generated/types/remittanceUpdate.ts", "lib/db/migrations/0006_odd_xavin.sql", "lib/db/migrations/0007_omniscient_ken_ellis.sql", "lib/db/migrations/0008_superb_chimera.sql", "lib/db/migrations/meta/0006_snapshot.json", "lib/db/migrations/meta/0007_snapshot.json", "lib/db/migrations/meta/0008_snapshot.json", "lib/db/migrations/meta/_journal.json", "lib/db/src/schema/payments.ts", "lib/db/src/schema/remittances.ts", "pnpm-lock.yaml"]}</script>
+</body>
+</html>

@@ -10,3 +10,4 @@
 - [zod.coerce.boolean query params](zod-coerce-boolean.md) — generated boolean query params coerce "false"→true; hand-parse raw req.query string + add a "false" regression test.
 - [List endpoint pagination](list-pagination.md) — all 7 list endpoints use {items,total} + limit/offset SQL pattern (audit-log is the reference, envelope key differs: entries).
 - [Remittance reconciliation invariants](remittance-reconciliation.md) — allocations are many-to-many, exact to cents, and transactionally bounded by both remaining balances.
+- [Release publish baseline](release-publish-baseline.md) — choose the newest publish commit on current main ancestry; timestamp-only selection can pick a sibling commit.

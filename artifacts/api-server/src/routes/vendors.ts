@@ -20,6 +20,29 @@ import { sortedOrder } from "../lib/sorting";
 
 const router: IRouter = Router();
 
+const nullableVendorFields = [
+  "altaVendorNumber", "ein", "billingAddress", "serviceAddress",
+  "phone", "email", "contactPerson", "w9DocumentUrl",
+] as const;
+
+function normalizeVendorData(data: Record<string, unknown>): Record<string, unknown> {
+  const normalized = { ...data };
+  if (typeof normalized.name === "string") normalized.name = normalized.name.trim();
+  for (const field of nullableVendorFields) {
+    if (typeof normalized[field] === "string" && normalized[field].trim() === "") normalized[field] = null;
+  }
+  return normalized;
+}
+
+function isDuplicateNameError(error: unknown): boolean {
+  let current = error as { code?: string; constraint?: string; cause?: unknown } | undefined;
+  while (current) {
+    if (current.code === "23505" && (current.constraint?.includes("vendors_name_lower_unique") ?? true)) return true;
+    current = current.cause as typeof current;
+  }
+  return false;
+}
+
 router.get("/vendors", requireAuth, async (req, res): Promise<void> => {
   const query = ListVendorsQueryParams.safeParse(req.query);
   if (!query.success) {
@@ -76,7 +99,21 @@ router.post("/vendors", requireStaff, async (req, res): Promise<void> => {
     res.status(400).json({ error: parsed.error.message });
     return;
   }
-  const [vendor] = await db.insert(vendorsTable).values(parsed.data).returning();
+  const data = normalizeVendorData(parsed.data);
+  if (!data.name) {
+    res.status(400).json({ error: "Business name is required" });
+    return;
+  }
+  let vendor;
+  try {
+    [vendor] = await db.insert(vendorsTable).values(data as typeof vendorsTable.$inferInsert).returning();
+  } catch (error) {
+    if (isDuplicateNameError(error)) {
+      res.status(409).json({ error: "A vendor with this business name already exists" });
+      return;
+    }
+    throw error;
+  }
   await audit(req.user!.id, "create_vendor", "vendor", vendor.id, vendor.name);
   res.status(201).json(CreateVendorResponse.parse(vendorJson(vendor)));
 });
@@ -103,7 +140,21 @@ router.patch("/vendors/:id", requireStaff, async (req, res): Promise<void> => {
     res.status(400).json({ error: parsed.error.message });
     return;
   }
-  const [vendor] = await db.update(vendorsTable).set(parsed.data).where(eq(vendorsTable.id, id)).returning();
+  const data = normalizeVendorData(parsed.data);
+  if ("name" in data && !data.name) {
+    res.status(400).json({ error: "Business name cannot be blank" });
+    return;
+  }
+  let vendor;
+  try {
+    [vendor] = await db.update(vendorsTable).set(data as typeof vendorsTable.$inferInsert).where(eq(vendorsTable.id, id)).returning();
+  } catch (error) {
+    if (isDuplicateNameError(error)) {
+      res.status(409).json({ error: "A vendor with this business name already exists" });
+      return;
+    }
+    throw error;
+  }
   if (!vendor) {
     res.status(404).json({ error: "Vendor not found" });
     return;
@@ -158,7 +209,7 @@ router.patch("/vendors/:id/contact", requireAuth, async (req, res): Promise<void
   }
   const [vendor] = await db
     .update(vendorsTable)
-    .set(parsed.data)
+    .set(normalizeVendorData(parsed.data) as typeof vendorsTable.$inferInsert)
     .where(eq(vendorsTable.id, id))
     .returning();
   if (!vendor) {

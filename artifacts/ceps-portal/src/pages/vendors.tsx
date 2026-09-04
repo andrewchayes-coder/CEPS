@@ -10,10 +10,12 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Plus, Search, AlertTriangle, CheckCircle2, ChevronLeft, ChevronRight } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
+import { useAuth } from '@/components/auth/auth-provider';
 
 const PAGE_SIZE = 50;
 
 export default function VendorsPage() {
+  const { user } = useAuth();
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(0);
   const sort = useTableSort<'name' | 'email' | 'w9Status' | 'active'>();
@@ -48,12 +50,12 @@ export default function VendorsPage() {
           <h1 className="text-3xl font-bold tracking-tight">Vendors</h1>
           <p className="text-muted-foreground mt-1">Manage vendor profiles and W-9 compliance.</p>
         </div>
-        <Button asChild>
+        {user?.role === 'staff' && <Button asChild data-testid="button-add-vendor">
           <Link href="/vendors/new">
             <Plus className="mr-2 h-4 w-4" />
             Add Vendor
           </Link>
-        </Button>
+        </Button>}
       </div>
 
       <Card>

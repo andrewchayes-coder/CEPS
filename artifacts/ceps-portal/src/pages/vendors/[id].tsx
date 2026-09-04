@@ -25,6 +25,7 @@ import {
   AlertDialogTrigger,
 } from '@/components/ui/alert-dialog';
 import { trackAnalyticsEvent } from '@/lib/analytics';
+import { Switch } from '@/components/ui/switch';
 
 export default function VendorDetailPage() {
   const { id } = useParams<{ id: string }>();
@@ -41,22 +42,24 @@ export default function VendorDetailPage() {
   const isStaff = user?.role === 'staff';
 
   const [formData, setFormData] = useState<any>({});
+  const [isDirty, setIsDirty] = useState(false);
   const initialized = useRef(false);
 
+  const vendorForm = (value: any) => ({
+    name: value.name, altaVendorNumber: value.altaVendorNumber || '', ein: value.ein || '',
+    w9Status: value.w9Status, contactPerson: value.contactPerson || '', email: value.email || '',
+    phone: value.phone || '', billingAddress: value.billingAddress || '', serviceAddress: value.serviceAddress || '',
+    preferred: value.preferred, active: value.active,
+  });
+  const apiError = (error: any, fallback: string) =>
+    typeof error?.data?.error === 'string' ? error.data.error :
+      typeof error?.data?.message === 'string' ? error.data.message :
+        typeof error?.response?.data?.error === 'string' ? error.response.data.error :
+          typeof error?.response?.data?.message === 'string' ? error.response.data.message : fallback;
+
   useEffect(() => {
-    if (vendor && !initialized.current) {
-      setFormData({
-        name: vendor.name,
-        altaVendorNumber: vendor.altaVendorNumber || '',
-        w9Status: vendor.w9Status,
-        contactPerson: vendor.contactPerson || '',
-        email: vendor.email || '',
-        phone: vendor.phone || '',
-        billingAddress: vendor.billingAddress || '',
-        serviceAddress: vendor.serviceAddress || '',
-        preferred: vendor.preferred,
-        active: vendor.active,
-      });
+    if (vendor && (!initialized.current || !isDirty)) {
+      setFormData(vendorForm(vendor));
       initialized.current = true;
     }
   }, [vendor]);
@@ -65,6 +68,7 @@ export default function VendorDetailPage() {
   if (!vendor) return <div className="p-8 text-center">Vendor not found.</div>;
 
   const handleChange = (field: string, value: any) => {
+    setIsDirty(true);
     setFormData((prev: any) => ({ ...prev, [field]: value }));
   };
 
@@ -74,16 +78,17 @@ export default function VendorDetailPage() {
     updateVendor.mutate(
       { id, data: { active: nextActive } as any },
       {
-        onSuccess: () => {
+        onSuccess: (updated) => {
           toast({ title: nextActive ? 'Vendor Reactivated' : 'Vendor Deactivated' });
-          setFormData((prev: any) => ({ ...prev, active: nextActive }));
+          setFormData(vendorForm(updated));
+          setIsDirty(false);
           refetch();
         },
-        onError: () => {
+        onError: (error) => {
           toast({
             variant: 'destructive',
             title: 'Error',
-            description: `Could not ${nextActive ? 'reactivate' : 'deactivate'} this vendor.`,
+            description: apiError(error, `Could not ${nextActive ? 'reactivate' : 'deactivate'} this vendor.`),
           });
         },
       },
@@ -91,10 +96,13 @@ export default function VendorDetailPage() {
   };
 
   const handleSave = () => {
-    const onSuccess = () => {
+    const onSuccess = (updated: any) => {
       toast({ title: 'Vendor Updated' });
+      setFormData(vendorForm(updated));
+      setIsDirty(false);
       refetch();
     };
+    const onError = (error: any) => toast({ variant: 'destructive', title: 'Unable to update vendor', description: apiError(error, 'Please try again.') });
     if (isVendorUser) {
       updateVendorContact.mutate(
         {
@@ -107,10 +115,10 @@ export default function VendorDetailPage() {
             serviceAddress: formData.serviceAddress,
           },
         },
-        { onSuccess },
+        { onSuccess, onError },
       );
     } else {
-      updateVendor.mutate({ id, data: formData }, { onSuccess });
+      updateVendor.mutate({ id, data: formData }, { onSuccess, onError });
     }
   };
 
@@ -123,13 +131,13 @@ export default function VendorDetailPage() {
       <div className="flex justify-between items-center">
         <h1 className="text-3xl font-bold tracking-tight">Edit Vendor</h1>
         <div className="flex items-center gap-3">
-          {formData.preferred && <Badge variant="secondary" className="bg-primary/10 text-primary">Preferred Vendor</Badge>}
+          {formData.preferred && <Badge variant="secondary" className="bg-primary/10 text-primary" data-testid="badge-vendor-preferred">Preferred Vendor</Badge>}
           <Badge
             variant="outline"
-            className={vendor.active ? 'text-chart-5 border-chart-5/20' : 'bg-muted text-muted-foreground'}
+            className={formData.active ? 'text-chart-5 border-chart-5/20' : 'bg-muted text-muted-foreground'}
             data-testid="badge-vendor-status"
           >
-            {vendor.active ? 'Active' : 'Inactive'}
+            {formData.active ? 'Active' : 'Inactive'}
           </Badge>
           {isStaff && (
             <InvitePortalDialog linkedRecordType="vendor" linkedRecordId={id} recordName={vendor.name} />
@@ -210,6 +218,13 @@ export default function VendorDetailPage() {
                     </SelectContent>
                   </Select>
                 </div>
+              </div>
+              <div className="flex items-center justify-between rounded-md border p-3">
+                <div>
+                  <label htmlFor="switch-vendor-preferred" className="text-sm font-medium">Preferred Vendor</label>
+                  <p className="text-sm text-muted-foreground">Show this vendor first in vendor lists.</p>
+                </div>
+                <Switch id="switch-vendor-preferred" checked={!!formData.preferred} onCheckedChange={(value) => handleChange('preferred', value)} disabled={saving} data-testid="switch-vendor-preferred" />
               </div>
 
               <div className="space-y-2">

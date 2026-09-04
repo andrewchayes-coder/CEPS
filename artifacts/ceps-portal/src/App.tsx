@@ -36,6 +36,7 @@ import PaymentDetailPage from '@/pages/payments/[id]';
 import RemittancesPage from '@/pages/remittances';
 import RemittanceDetailPage from '@/pages/remittances/[id]';
 import VendorsPage from '@/pages/vendors';
+import VendorNewPage from '@/pages/vendors/new';
 import VendorDetailPage from '@/pages/vendors/[id]';
 import ReportsPage from '@/pages/reports';
 import UsersPage from '@/pages/admin/users';
@@ -84,6 +85,7 @@ function ProtectedRoutes() {
         <Route path="/remittances" component={RemittancesPage} />
         <Route path="/remittances/:id" component={RemittanceDetailPage} />
         <Route path="/vendors" component={VendorsPage} />
+        <Route path="/vendors/new" component={VendorNewPage} />
         <Route path="/vendors/:id" component={VendorDetailPage} />
         <Route path="/reports" component={ReportsPage} />
         <Route path="/admin/users" component={UsersPage} />

@@ -7,7 +7,8 @@
     "dev": "vite --config vite.config.ts --host 0.0.0.0",
     "build": "vite build --config vite.config.ts",
     "serve": "vite preview --config vite.config.ts --host 0.0.0.0",
-    "test:sorting": "playwright test --config playwright.config.ts",
+    "test:sorting": "playwright test tests/table-sorting.spec.ts --config playwright.config.ts",
+    "test:participants": "playwright test tests/participant-language-and-links.spec.ts --config playwright.config.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "devDependencies": {

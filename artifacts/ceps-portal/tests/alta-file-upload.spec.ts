@@ -1,4 +1,5 @@
 import { expect, test, type Page, type Request } from '@playwright/test';
+import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 
 const fixture = (name: string) => path.join(import.meta.dirname, 'fixtures', name);
@@ -62,7 +63,13 @@ test('demo staff can upload synthetic Alta Excel and CSV reports without touchin
         parseProblems: ['Row 4: malformed Check row.'],
         results: [
           { rowNumber: 2, uciNumber: '0000000', outcome: 'imported', paymentId: 'synthetic-payment' },
-          { rowNumber: 4, uciNumber: '0000000', outcome: 'errored', message: 'Row 4: malformed Check row.' },
+          {
+            rowNumber: 4,
+            uciNumber: '0000000',
+            outcome: 'errored',
+            message: 'Row 4: malformed Check row.',
+            paymentId: 'internal-payment-id-must-not-export',
+          },
         ],
       },
     });
@@ -77,6 +84,15 @@ test('demo staff can upload synthetic Alta Excel and CSV reports without touchin
   await expect(page.getByTestId('text-alta-fms-imported')).toHaveText('1');
   await expect(page.getByTestId('text-alta-fms-errored')).toHaveText('1');
   await expect(page.getByTestId('text-alta-fms-ignored')).toHaveText('1');
+  const paymentDownload = page.waitForEvent('download');
+  await page.getByTestId('button-download-alta-fms-corrections').click();
+  const paymentCsvPath = await (await paymentDownload).path();
+  expect(paymentCsvPath).not.toBeNull();
+  const paymentCsvText = await readFile(paymentCsvPath!, 'utf8');
+  expect(paymentCsvText).toContain('Source row,UCI,Outcome,Detail');
+  expect(paymentCsvText).toContain('4,0000000,Errored,Row 4: malformed Check row.');
+  expect(paymentCsvText).not.toContain('Imported');
+  expect(paymentCsvText).not.toContain('internal-payment-id-must-not-export');
   expect(paymentImportRequests).toBe(1);
 
   let remittanceImportRequests = 0;
@@ -101,6 +117,7 @@ test('demo staff can upload synthetic Alta Excel and CSV reports without touchin
           uciNumber: '0000000',
           outcome: 'errored',
           message: 'No participant found for synthetic UCI. Row not imported.',
+          remittanceId: 'internal-remittance-id-must-not-export',
         }],
       },
     });
@@ -118,6 +135,14 @@ test('demo staff can upload synthetic Alta Excel and CSV reports without touchin
   await expect(page.getByTestId('text-alta-errored-count')).toHaveText('1');
   await expect(page.getByTestId('text-alta-automatched-count')).toHaveText('0');
   await expect(page.getByTestId('text-alta-needsmatch-count')).toHaveText('0');
+  const remittanceDownload = page.waitForEvent('download');
+  await page.getByTestId('button-download-alta-remittance-corrections').click();
+  const remittanceCsvPath = await (await remittanceDownload).path();
+  expect(remittanceCsvPath).not.toBeNull();
+  const remittanceCsvText = await readFile(remittanceCsvPath!, 'utf8');
+  expect(remittanceCsvText).toContain('Source row,UCI,Outcome,Detail');
+  expect(remittanceCsvText).toContain('4,0000000,Errored,No participant found for synthetic UCI. Row not imported.');
+  expect(remittanceCsvText).not.toContain('internal-remittance-id-must-not-export');
   expect(remittanceImportRequests).toBe(1);
 
   // All write endpoints are intercepted above. The zero-import error result therefore

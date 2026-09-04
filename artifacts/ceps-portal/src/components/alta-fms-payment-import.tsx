@@ -16,9 +16,10 @@ import { Button } from '@/components/ui/button';
 import { Table, TableBody, TableCell, TableHeader, TableRow, SortableTableHead } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
 import { useToast } from '@/hooks/use-toast';
-import { FileSpreadsheet, Loader2, Upload } from 'lucide-react';
+import { Download, FileSpreadsheet, Loader2, Upload } from 'lucide-react';
 import { stableSort, useTableSort } from '@/lib/table-sorting';
 import { trackAnalyticsEvent } from '@/lib/analytics';
+import { downloadCSV } from '@/lib/csv';
 
 function cellText(cell: CellValue): string {
   if (cell == null) return '';
@@ -44,6 +45,30 @@ export function AltaFmsPaymentImport({ onImported }: { onImported: () => void })
     outcome: (row) => row.outcome,
     message: (row) => row.message,
   });
+  const correctionRows = result?.results.filter(
+    (row) => row.outcome === 'flagged_duplicate' || row.outcome === 'errored',
+  ) ?? [];
+
+  const downloadCorrectionReport = () => {
+    if (correctionRows.length === 0) return;
+
+    downloadCSV(
+      'alta_fms_payment_corrections.csv',
+      ['Source row', 'UCI', 'Outcome', 'Detail'],
+      correctionRows.map((row) => [
+        row.rowNumber,
+        row.uciNumber ?? '',
+        row.outcome === 'flagged_duplicate' ? 'Needs review' : 'Errored',
+        row.message ?? '',
+      ]),
+    );
+    trackAnalyticsEvent('alta_correction_report_downloaded', {
+      import_type: 'payments',
+      row_count: correctionRows.length,
+      errored: correctionRows.filter((row) => row.outcome === 'errored').length,
+      needs_review: correctionRows.filter((row) => row.outcome === 'flagged_duplicate').length,
+    });
+  };
 
   const handleFile = async (file: File) => {
     setParseError(null);
@@ -192,6 +217,15 @@ export function AltaFmsPaymentImport({ onImported }: { onImported: () => void })
               </TableBody>
             </Table>
             <div className="flex justify-end gap-2">
+              {correctionRows.length > 0 && (
+                <Button
+                  variant="outline"
+                  onClick={downloadCorrectionReport}
+                  data-testid="button-download-alta-fms-corrections"
+                >
+                  <Download className="mr-2 h-4 w-4" /> Download Corrections CSV
+                </Button>
+              )}
               <Button variant="outline" onClick={() => setResult(null)}>Import Another Workbook</Button>
               <Button onClick={() => setOpen(false)}>Done</Button>
             </div>

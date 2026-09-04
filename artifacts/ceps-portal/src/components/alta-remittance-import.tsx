@@ -15,9 +15,10 @@ import { Button } from '@/components/ui/button';
 import { Table, TableBody, TableCell, TableHeader, TableRow, SortableTableHead } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
 import { useToast } from '@/hooks/use-toast';
-import { FileUp, Loader2, Upload } from 'lucide-react';
+import { Download, FileUp, Loader2, Upload } from 'lucide-react';
 import { stableSort, useTableSort } from '@/lib/table-sorting';
 import { trackAnalyticsEvent } from '@/lib/analytics';
+import { downloadCSV } from '@/lib/csv';
 
 export function AltaRemittanceImport({ onImported }: { onImported: (result: AltaRemittanceImportResult) => void }) {
   const inputRef = useRef<HTMLInputElement>(null);
@@ -38,6 +39,30 @@ export function AltaRemittanceImport({ onImported }: { onImported: (result: Alta
     },
     message: (row) => row.message,
   });
+  const correctionRows = result?.results.filter(
+    (row) => row.outcome === 'needs_manual_match' || row.outcome === 'errored',
+  ) ?? [];
+
+  const downloadCorrectionReport = () => {
+    if (correctionRows.length === 0) return;
+
+    downloadCSV(
+      'alta_remittance_corrections.csv',
+      ['Source row', 'UCI', 'Outcome', 'Detail'],
+      correctionRows.map((row) => [
+        row.rowNumber,
+        row.uciNumber ?? '',
+        row.outcome === 'needs_manual_match' ? 'Needs manual match' : 'Errored',
+        row.message ?? '',
+      ]),
+    );
+    trackAnalyticsEvent('alta_correction_report_downloaded', {
+      import_type: 'remittances',
+      row_count: correctionRows.length,
+      errored: correctionRows.filter((row) => row.outcome === 'errored').length,
+      needs_manual_match: correctionRows.filter((row) => row.outcome === 'needs_manual_match').length,
+    });
+  };
 
   const handleFile = (file: File) => {
     setParseError(null);
@@ -220,6 +245,15 @@ export function AltaRemittanceImport({ onImported }: { onImported: (result: Alta
             )}
 
             <div className="flex justify-end gap-2">
+              {correctionRows.length > 0 && (
+                <Button
+                  variant="outline"
+                  onClick={downloadCorrectionReport}
+                  data-testid="button-download-alta-remittance-corrections"
+                >
+                  <Download className="mr-2 h-4 w-4" /> Download Corrections CSV
+                </Button>
+              )}
               <Button variant="outline" onClick={() => setResult(null)}>Import Another File</Button>
               <Button onClick={() => setOpen(false)}>Done</Button>
             </div>

@@ -5,6 +5,7 @@
  * CEPS Portal API — referral intake, authorizations, invoices, payments, remittances, vendors, reporting
  * OpenAPI spec version: 0.1.0
  */
+import type { RemittanceAllocation } from './remittanceAllocation';
 import type { RemittanceSource } from './remittanceSource';
 import type { RemittanceStatus } from './remittanceStatus';
 
@@ -48,4 +49,7 @@ export interface Remittance {
      * @nullable
      */
   expectedAmount?: string | null;
+  allocatedAmount: string;
+  remainingAmount: string;
+  allocations: RemittanceAllocation[];
 }

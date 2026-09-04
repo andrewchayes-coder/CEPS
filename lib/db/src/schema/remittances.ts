@@ -64,3 +64,22 @@ export const remittancesTable = pgTable("remittances", {
 }));
 
 export type Remittance = typeof remittancesTable.$inferSelect;
+
+export const remittanceAllocationsTable = pgTable("remittance_allocations", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  remittanceId: uuid("remittance_id")
+    .notNull()
+    .references(() => remittancesTable.id, { onDelete: "cascade" }),
+  paymentId: uuid("payment_id")
+    .notNull()
+    .references(() => paymentsTable.id, { onDelete: "cascade" }),
+  amount: numeric("amount", { precision: 12, scale: 2 }).notNull(),
+  autoMatched: boolean("auto_matched").notNull().default(false),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+}, (table) => ({
+  remittanceIdIdx: index("remittance_allocations_remittance_id_idx").on(table.remittanceId),
+  paymentIdIdx: index("remittance_allocations_payment_id_idx").on(table.paymentId),
+  pairUnique: uniqueIndex("remittance_allocations_pair_unique").on(table.remittanceId, table.paymentId),
+}));
+
+export type RemittanceAllocation = typeof remittanceAllocationsTable.$inferSelect;

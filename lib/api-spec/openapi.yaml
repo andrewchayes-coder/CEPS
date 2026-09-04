@@ -2396,7 +2396,7 @@ components:
           items: { $ref: "#/components/schemas/InvoiceValidationCheck" }
     Payment:
       type: object
-      required: [id, clientId, qbCheckNumber, checkDate, amount, paymentType, source]
+      required: [id, clientId, qbCheckNumber, checkDate, amount, paymentType, source, allocatedAmount, remainingAmount]
       properties:
         id: { type: string }
         clientId: { type: string }
@@ -2414,6 +2414,8 @@ components:
         source: { type: string, enum: [quickbooks, manual, historical_import] }
         loggedBy: { type: ["string", "null"] }
         remitted: { type: ["boolean", "null"] }
+        allocatedAmount: { type: string }
+        remainingAmount: { type: string }
         createdAt: { type: ["string", "null"] }
     PaymentInput:
       type: object
@@ -2541,7 +2543,7 @@ components:
           items: { $ref: "#/components/schemas/ImportCommitRowResult" }
     Remittance:
       type: object
-      required: [id, clientId, remittanceDate, amount, status, source, autoMatched]
+      required: [id, clientId, remittanceDate, amount, status, source, autoMatched, allocatedAmount, remainingAmount, allocations]
       properties:
         id: { type: string }
         clientId: { type: string }
@@ -2560,6 +2562,20 @@ components:
         reportReference: { type: ["string", "null"], description: "Source Remittance Report reference, distinct from the generated batch id." }
         reviewReason: { type: ["string", "null"], description: "Stable reason a received remittance requires review." }
         expectedAmount: { type: ["string", "null"], description: "Authorization amount expected for this remittance when known." }
+        allocatedAmount: { type: string }
+        remainingAmount: { type: string }
+        allocations:
+          type: array
+          items: { $ref: "#/components/schemas/RemittanceAllocation" }
+    RemittanceAllocation:
+      type: object
+      required: [id, paymentId, amount, autoMatched]
+      properties:
+        id: { type: string }
+        paymentId: { type: string }
+        amount: { type: string }
+        autoMatched: { type: boolean }
+        createdAt: { type: ["string", "null"] }
     RemittanceInput:
       type: object
       required: [clientId, authorizationId, remittanceDate, amount]
@@ -2572,9 +2588,10 @@ components:
         paymentMonth: { type: ["string", "null"] }
     RemittanceMatchInput:
       type: object
-      required: [paymentId]
+      required: [paymentId, amount]
       properties:
         paymentId: { type: string }
+        amount: { type: string, pattern: '^\d+(\.\d{1,2})?$' }
     AltaRemittanceImportInput:
       type: object
       required: [csvText]

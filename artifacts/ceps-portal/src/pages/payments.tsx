@@ -109,7 +109,7 @@ export default function PaymentsPage() {
                     <TableCell className="text-muted-foreground"><ClientLink id={p.clientId} name={p.clientName} className="text-muted-foreground hover:underline" /></TableCell>
                     <TableCell className="text-right font-medium">${parseFloat(p.amount).toFixed(2)}</TableCell>
                     <TableCell>
-                      {p.remitted ? <CheckCircle2 className="w-5 h-5 text-chart-5" /> : <span className="text-muted-foreground">-</span>}
+                      {p.remitted ? <CheckCircle2 className="w-5 h-5 text-chart-5" /> : <span className="text-xs text-muted-foreground">${parseFloat(p.allocatedAmount ?? '0').toFixed(2)} allocated<br />${parseFloat(p.remainingAmount ?? p.amount).toFixed(2)} remaining</span>}
                     </TableCell>
                     {isStaff && (
                       <TableCell className="text-right">

@@ -248,7 +248,7 @@ export function invoiceJson(
 
 export function paymentJson(
   p: Payment,
-  opts: { clientName?: string | null; vendorName?: string | null; authNumber?: string | null } = {},
+  opts: { clientName?: string | null; vendorName?: string | null; authNumber?: string | null; allocatedAmount?: string; remainingAmount?: string } = {},
 ) {
   return {
     id: p.id,
@@ -267,13 +267,21 @@ export function paymentJson(
     source: p.source,
     loggedBy: p.loggedBy,
     remitted: p.remitted,
+    allocatedAmount: opts.allocatedAmount ?? (p.remitted ? p.amount : "0.00"),
+    remainingAmount: opts.remainingAmount ?? (p.remitted ? "0.00" : p.amount),
     createdAt: iso(p.createdAt),
   };
 }
 
 export function remittanceJson(
   r: Remittance,
-  opts: { clientName?: string | null; authNumber?: string | null } = {},
+  opts: {
+    clientName?: string | null;
+    authNumber?: string | null;
+    allocatedAmount?: string;
+    remainingAmount?: string;
+    allocations?: { id: string; paymentId: string; amount: string; autoMatched: boolean; createdAt: string | null }[];
+  } = {},
 ) {
   return {
     id: r.id,
@@ -293,6 +301,9 @@ export function remittanceJson(
     reportReference: r.reportReference,
     reviewReason: r.reviewReason,
     expectedAmount: r.expectedAmount,
+    allocatedAmount: opts.allocatedAmount ?? (r.matchedPaymentId ? r.amount : "0.00"),
+    remainingAmount: opts.remainingAmount ?? (r.matchedPaymentId ? "0.00" : r.amount),
+    allocations: opts.allocations ?? [],
   };
 }
 

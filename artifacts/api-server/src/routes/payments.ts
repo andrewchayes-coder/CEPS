@@ -1,7 +1,7 @@
 import { Router, type IRouter } from "express";
 import { randomUUID } from "node:crypto";
 import { eq, and, desc, ilike, or, count, sql, inArray, type SQL } from "drizzle-orm";
-import { db, paymentsTable, clientsTable, remittancesTable, feesTable, authorizationsTable } from "@workspace/db";
+import { db, paymentsTable, clientsTable, remittancesTable, remittanceAllocationsTable, feesTable, authorizationsTable } from "@workspace/db";
 import {
   ListPaymentsQueryParams,
   ListPaymentsResponse,
@@ -63,16 +63,24 @@ async function autoGenerateFee(
 }
 
 async function enrichPayments(payments: (typeof paymentsTable.$inferSelect)[]) {
-  const [clientNames, vendorNames, authNums] = await Promise.all([
+  const ids = payments.map((p) => p.id);
+  const [clientNames, vendorNames, authNums, allocationRows] = await Promise.all([
     clientNameMap(payments.map((p) => p.clientId)),
     vendorNameMap(payments.map((p) => p.vendorId)),
     authNumberMap(payments.map((p) => p.authorizationId)),
+    ids.length ? db.select({
+      paymentId: remittanceAllocationsTable.paymentId,
+      total: sql<string>`coalesce(sum(${remittanceAllocationsTable.amount}), 0)`,
+    }).from(remittanceAllocationsTable).where(inArray(remittanceAllocationsTable.paymentId, ids)).groupBy(remittanceAllocationsTable.paymentId) : [],
   ]);
+  const allocated = new Map(allocationRows.map((r) => [r.paymentId, money(r.total)]));
   return payments.map((p) =>
     paymentJson(p, {
       clientName: clientNames.get(p.clientId),
       vendorName: p.vendorId ? vendorNames.get(p.vendorId) : null,
       authNumber: p.authorizationId ? authNums.get(p.authorizationId) : null,
+      allocatedAmount: (allocated.get(p.id) ?? money(p.remitted ? p.amount : 0)).toFixed(2),
+      remainingAmount: money(p.amount).minus(allocated.get(p.id) ?? money(p.remitted ? p.amount : 0)).toFixed(2),
     }),
   );
 }
@@ -423,8 +431,20 @@ router.patch("/payments/:id", requireStaff, async (req, res): Promise<void> => {
   const amountChanged =
     "amount" in updateData && String(before.amount) !== String(updates.amount);
   let duplicateBlocked: Awaited<ReturnType<typeof enrichPayments>> | null = null;
+  let allocationBlocked = false;
   const { payment, recalculatedFees } = await db.transaction(async (tx) => {
     const txDb = tx as unknown as typeof db;
+    await tx.execute(sql`select id from payments where id = ${id} for update`);
+    if (amountChanged || dupFieldChanged) {
+      const [allocation] = await tx.select({ id: remittanceAllocationsTable.id })
+        .from(remittanceAllocationsTable)
+        .where(eq(remittanceAllocationsTable.paymentId, id))
+        .limit(1);
+      if (allocation) {
+        allocationBlocked = true;
+        return { payment: null as typeof paymentsTable.$inferSelect | null, recalculatedFees: [] as { id: string; before: string; after: string }[] };
+      }
+    }
     // Serialize + re-check the duplicate hard stop inside the transaction behind
     // a pg advisory lock so a concurrent write for the same triple can't race
     // past the SELECT-then-UPDATE window.
@@ -473,6 +493,10 @@ router.patch("/payments/:id", requireStaff, async (req, res): Promise<void> => {
     return { payment: p, recalculatedFees: recalculated };
   });
   if (!payment) {
+    if (allocationBlocked) {
+      res.status(409).json({ error: "Amount, authorization, and service month cannot be changed after a remittance allocation" });
+      return;
+    }
     res.status(409).json({
       error: `A payment already exists for this client, authorization, and month (${effPaymentMonth}). This is a hard stop — override requires a written justification.`,
       code: "duplicate_payment",
@@ -499,21 +523,33 @@ router.delete("/payments/:id", requireStaff, async (req, res): Promise<void> => 
   const deletedBy = req.user!.id;
   // Soft-delete the payment and any linked auto-generated fee(s) together so a
   // deleted payment never leaves an orphaned fee behind.
-  const { payment, deletedFees } = await db.transaction(async (tx) => {
+  const { payment, deletedFees, allocationBlocked } = await db.transaction(async (tx) => {
+    await tx.execute(sql`select id from payments where id = ${id} for update`);
+    const [allocation] = await tx.select({ id: remittanceAllocationsTable.id })
+      .from(remittanceAllocationsTable)
+      .where(eq(remittanceAllocationsTable.paymentId, id))
+      .limit(1);
+    if (allocation) {
+      return { payment: undefined, deletedFees: [] as (typeof feesTable.$inferSelect)[], allocationBlocked: true };
+    }
     const [p] = await tx
       .update(paymentsTable)
       .set({ isDeleted: true, deletedAt, deletedBy })
       .where(and(eq(paymentsTable.id, id), notDeleted(paymentsTable)))
       .returning();
-    if (!p) return { payment: undefined, deletedFees: [] as (typeof feesTable.$inferSelect)[] };
+    if (!p) return { payment: undefined, deletedFees: [] as (typeof feesTable.$inferSelect)[], allocationBlocked: false };
     const fees = await tx
       .update(feesTable)
       .set({ isDeleted: true, deletedAt, deletedBy })
       .where(and(eq(feesTable.paymentId, p.id), notDeleted(feesTable)))
       .returning();
-    return { payment: p, deletedFees: fees };
+    return { payment: p, deletedFees: fees, allocationBlocked: false };
   });
   if (!payment) {
+    if (allocationBlocked) {
+      res.status(409).json({ error: "Payment cannot be deleted while it has remittance allocations" });
+      return;
+    }
     res.status(404).json({ error: "Payment not found" });
     return;
   }
@@ -537,19 +573,25 @@ class DuplicateFingerprint extends Error {}
 // amount equals the remittance amount, and — when a service month is provided —
 // whose paymentMonth also matches. Extracted so the Alta batch import matches
 // imported line items exactly like manually-entered ones (no duplication).
-// Pass a `tx` to run inside a transaction. Candidate payments may be supplied to
-// avoid re-querying per row when importing a batch.
+// Pass a `tx` to run inside a transaction. Payments that already have any
+// allocation are intentionally excluded: automatic matching is exact/full only,
+// while partial payments require an explicit staff allocation.
 async function findMatchingPayment(
   args: { clientId: string; authorizationId?: string | null; amount: string; paymentMonth?: string | null },
   database: typeof db = db,
-  candidates?: (typeof paymentsTable.$inferSelect)[],
 ): Promise<typeof paymentsTable.$inferSelect | undefined> {
-  const pool =
-    candidates ??
-    (await database
-      .select()
-      .from(paymentsTable)
-      .where(and(eq(paymentsTable.clientId, args.clientId), eq(paymentsTable.remitted, false), notDeleted(paymentsTable))));
+  const pool = await database
+    .select()
+    .from(paymentsTable)
+    .where(and(
+      eq(paymentsTable.clientId, args.clientId),
+      eq(paymentsTable.remitted, false),
+      notDeleted(paymentsTable),
+      sql`not exists (
+        select 1 from ${remittanceAllocationsTable}
+        where ${remittanceAllocationsTable.paymentId} = ${paymentsTable.id}
+      )`,
+    ));
   return pool.find(
     (p) =>
       p.clientId === args.clientId &&
@@ -580,15 +622,32 @@ function reviewForMatch(
 }
 
 async function enrichRemittances(rows: (typeof remittancesTable.$inferSelect)[]) {
-  const [clientNames, authNums] = await Promise.all([
+  const ids = rows.map((r) => r.id);
+  const [clientNames, authNums, allocations] = await Promise.all([
     clientNameMap(rows.map((r) => r.clientId)),
     authNumberMap(rows.map((r) => r.authorizationId)),
+    ids.length ? db.select().from(remittanceAllocationsTable).where(inArray(remittanceAllocationsTable.remittanceId, ids)) : [],
   ]);
+  const byRemittance = new Map<string, typeof allocations>();
+  for (const allocation of allocations) {
+    const list = byRemittance.get(allocation.remittanceId) ?? [];
+    list.push(allocation);
+    byRemittance.set(allocation.remittanceId, list);
+  }
   return rows.map((r) =>
-    remittanceJson(r, {
+    {
+      const remittanceAllocations = byRemittance.get(r.id) ?? [];
+      const allocatedAmount = remittanceAllocations.length
+        ? remittanceAllocations.reduce((sum, a) => sum.plus(a.amount), money(0))
+        : money(r.matchedPaymentId ? r.amount : 0);
+      return remittanceJson(r, {
       clientName: clientNames.get(r.clientId),
       authNumber: r.authorizationId ? authNums.get(r.authorizationId) : null,
-    }),
+      allocatedAmount: allocatedAmount.toFixed(2),
+      remainingAmount: money(r.amount).minus(allocatedAmount).toFixed(2),
+      allocations: remittanceAllocations.map((a) => ({ id: a.id, paymentId: a.paymentId, amount: a.amount, autoMatched: a.autoMatched, createdAt: a.createdAt?.toISOString() ?? null })),
+      });
+    },
   );
 }
 
@@ -701,7 +760,15 @@ router.post("/remittances", requireStaff, async (req, res): Promise<void> => {
     let match: typeof paymentsTable.$inferSelect | undefined;
     if (candidate) {
       const [claimed] = await tx.update(paymentsTable).set({ remitted: true })
-        .where(and(eq(paymentsTable.id, candidate.id), eq(paymentsTable.remitted, false), notDeleted(paymentsTable))).returning();
+        .where(and(
+          eq(paymentsTable.id, candidate.id),
+          eq(paymentsTable.remitted, false),
+          notDeleted(paymentsTable),
+          sql`not exists (
+            select 1 from ${remittanceAllocationsTable}
+            where ${remittanceAllocationsTable.paymentId} = ${paymentsTable.id}
+          )`,
+        )).returning();
       if (claimed) match = claimed;
     }
     const review = reviewForMatch(auth, parsed.data.amount, !!match);
@@ -710,6 +777,11 @@ router.post("/remittances", requireStaff, async (req, res): Promise<void> => {
       matchedPaymentId: match?.id ?? null, autoMatched: !!match,
       reviewReason: review.reviewReason, expectedAmount: review.expectedAmount,
     } as typeof remittancesTable.$inferInsert).returning();
+    if (match) {
+      await tx.insert(remittanceAllocationsTable).values({
+        remittanceId: created.id, paymentId: match.id, amount: created.amount, autoMatched: true,
+      });
+    }
     return created;
   });
   await audit(req.user!.id, "create_remittance", "remittance", remittance.id, remittance.matchedPaymentId ? "Auto-matched to an eligible payment" : `No automatic match — ${remittance.reviewReason ?? "flagged for review"}`);
@@ -729,7 +801,6 @@ router.post("/remittances/:id/match", requireStaff, async (req, res): Promise<vo
     await tx.execute(sql`select id from payments where id = ${parsed.data.paymentId} for update`);
     const [remittance] = await tx.select().from(remittancesTable).where(eq(remittancesTable.id, id));
     if (!remittance || remittance.isDeleted) return { error: "Remittance not found", status: 404 } as const;
-    if (remittance.status === "matched" || remittance.matchedPaymentId) return { error: "Remittance is already matched", status: 409 } as const;
     const [payment] = await tx.select().from(paymentsTable).where(eq(paymentsTable.id, parsed.data.paymentId));
     if (!payment || payment.isDeleted) return { error: "Payment not found", status: 404 } as const;
     const [client] = await tx.select().from(clientsTable).where(eq(clientsTable.id, payment.clientId));
@@ -737,13 +808,27 @@ router.post("/remittances/:id/match", requireStaff, async (req, res): Promise<vo
     if (payment.clientId !== remittance.clientId) return { error: "Payment belongs to a different client", status: 400 } as const;
     if (remittance.authorizationId && payment.authorizationId !== remittance.authorizationId) return { error: "Payment belongs to a different authorization", status: 400 } as const;
     if (remittance.paymentMonth && payment.paymentMonth !== remittance.paymentMonth) return { error: "Payment is for a different service month", status: 400 } as const;
-    if (!money(payment.amount).equals(money(remittance.amount))) return { error: "Payment amount does not match remittance amount", status: 400 } as const;
-    if (payment.remitted) return { error: "Payment has already been remitted", status: 409 } as const;
-    const [claimed] = await tx.update(paymentsTable).set({ remitted: true }).where(and(eq(paymentsTable.id, payment.id), eq(paymentsTable.remitted, false), notDeleted(paymentsTable))).returning();
-    if (!claimed) return { error: "Payment was claimed by another remittance", status: 409 } as const;
+    const allocationAmount = money(parsed.data.amount);
+    if (!allocationAmount.isPositive()) return { error: "Allocation amount must be greater than zero", status: 400 } as const;
+    const [paymentTotals] = await tx.select({ total: sql<string>`coalesce(sum(${remittanceAllocationsTable.amount}), 0)` }).from(remittanceAllocationsTable).where(eq(remittanceAllocationsTable.paymentId, payment.id));
+    const [remittanceTotals] = await tx.select({ total: sql<string>`coalesce(sum(${remittanceAllocationsTable.amount}), 0)` }).from(remittanceAllocationsTable).where(eq(remittanceAllocationsTable.remittanceId, remittance.id));
+    if (payment.remitted && money(paymentTotals.total).isZero()) {
+      return { error: "Payment has already been remitted", status: 409 } as const;
+    }
+    const paymentRemaining = money(payment.amount).minus(paymentTotals.total);
+    const remittanceRemaining = money(remittance.amount).minus(remittanceTotals.total);
+    if (allocationAmount.greaterThan(paymentRemaining)) return { error: "Allocation exceeds the payment remaining balance", status: 409 } as const;
+    if (allocationAmount.greaterThan(remittanceRemaining)) return { error: "Allocation exceeds the remittance remaining balance", status: 409 } as const;
+    const [allocation] = await tx.insert(remittanceAllocationsTable).values({
+      remittanceId: remittance.id, paymentId: payment.id, amount: allocationAmount.toFixed(2), autoMatched: false,
+    }).onConflictDoNothing().returning();
+    if (!allocation) return { error: "This remittance is already allocated to that payment", status: 409 } as const;
+    const paymentComplete = allocationAmount.equals(paymentRemaining);
+    const remittanceComplete = allocationAmount.equals(remittanceRemaining);
+    await tx.update(paymentsTable).set({ remitted: paymentComplete }).where(and(eq(paymentsTable.id, payment.id), notDeleted(paymentsTable)));
     const [matched] = await tx.update(remittancesTable)
-      .set({ status: "matched", matchedPaymentId: payment.id, autoMatched: false, reviewReason: null, expectedAmount: null })
-      .where(and(eq(remittancesTable.id, id), notDeleted(remittancesTable), sql`${remittancesTable.matchedPaymentId} is null`))
+      .set({ status: remittanceComplete ? "matched" : "received", matchedPaymentId: null, autoMatched: false, reviewReason: remittanceComplete ? null : "partially_allocated", expectedAmount: null })
+      .where(and(eq(remittancesTable.id, id), notDeleted(remittancesTable)))
       .returning();
     if (!matched) throw new Error("Remittance changed while matching");
     return { remittance: matched, payment } as const;
@@ -753,7 +838,7 @@ router.post("/remittances/:id/match", requireStaff, async (req, res): Promise<vo
     return;
   }
   const { remittance, payment } = result;
-  await audit(req.user!.id, "match_remittance", "remittance", remittance.id, `Matched to check ${payment.qbCheckNumber}`);
+  await audit(req.user!.id, "match_remittance", "remittance", remittance.id, `Allocated $${parsed.data.amount} to check ${payment.qbCheckNumber}`);
   res.json(MatchRemittanceResponse.parse((await enrichRemittances([remittance]))[0]));
 });
 
@@ -888,7 +973,14 @@ router.post("/remittances/import", requireStaff, async (req, res): Promise<void>
         const [claimed] = await tx
           .update(paymentsTable)
           .set({ remitted: true })
-          .where(and(eq(paymentsTable.id, candidate.id), eq(paymentsTable.remitted, false)))
+          .where(and(
+            eq(paymentsTable.id, candidate.id),
+            eq(paymentsTable.remitted, false),
+            sql`not exists (
+              select 1 from ${remittanceAllocationsTable}
+              where ${remittanceAllocationsTable.paymentId} = ${paymentsTable.id}
+            )`,
+          ))
           .returning();
         if (claimed) claimedPayment = candidate;
       }
@@ -933,6 +1025,11 @@ router.post("/remittances/import", requireStaff, async (req, res): Promise<void>
         // The conditional claim above ran before the conflicting insert; abort
         // the transaction so the (unwanted) remitted flip is undone.
         throw new DuplicateFingerprint();
+      }
+      if (claimedPayment) {
+        await tx.insert(remittanceAllocationsTable).values({
+          remittanceId: r.id, paymentId: claimedPayment.id, amount: r.amount, autoMatched: true,
+        });
       }
       return { remittance: r, match: claimedPayment };
     }).catch((err) => {
@@ -1034,7 +1131,8 @@ router.patch("/remittances/:id", requireStaff, async (req, res): Promise<void> =
     const [before] = await tx.select().from(remittancesTable).where(and(eq(remittancesTable.id, id), notDeleted(remittancesTable)));
     if (!before) return { error: "Remittance not found", status: 404 } as const;
     const reconciliationChanged = ["authorizationId", "amount", "paymentMonth"].some((key) => key in updates);
-    if (before.matchedPaymentId && reconciliationChanged) {
+    const [allocation] = await tx.select({ id: remittanceAllocationsTable.id }).from(remittanceAllocationsTable).where(eq(remittanceAllocationsTable.remittanceId, id)).limit(1);
+    if ((before.matchedPaymentId || allocation) && reconciliationChanged) {
       return { error: "Authorization, amount, and service month cannot be changed after matching", status: 409 } as const;
     }
     const effectiveAuthId = ("authorizationId" in updates ? updates.authorizationId : before.authorizationId) as string | null;
@@ -1046,7 +1144,7 @@ router.patch("/remittances/:id", requireStaff, async (req, res): Promise<void> =
       }
     }
     const next = { ...updates } as Record<string, unknown>;
-    if (!before.matchedPaymentId && reconciliationChanged) {
+    if (!before.matchedPaymentId && !allocation && reconciliationChanged) {
       const amount = ("amount" in next ? next.amount : before.amount) as string;
       const review = reviewForMatch(auth, amount, false);
       next.reviewReason = review.reviewReason;
@@ -1078,6 +1176,24 @@ router.delete("/remittances/:id", requireStaff, async (req, res): Promise<void> 
     const [row] = await tx.update(remittancesTable)
       .set({ isDeleted: true, deletedAt: new Date(), deletedBy: req.user!.id })
       .where(and(eq(remittancesTable.id, id), notDeleted(remittancesTable))).returning();
+    if (row) {
+      const allocations = await tx.select().from(remittanceAllocationsTable).where(eq(remittanceAllocationsTable.remittanceId, row.id));
+      const paymentIds = [...new Set(allocations.map((allocation) => allocation.paymentId))].sort();
+      if (paymentIds.length) {
+        await tx.execute(sql`
+          select id from payments
+          where id in (${sql.join(paymentIds.map((paymentId) => sql`${paymentId}`), sql`, `)})
+          order by id
+          for update
+        `);
+      }
+      await tx.delete(remittanceAllocationsTable).where(eq(remittanceAllocationsTable.remittanceId, row.id));
+      for (const allocation of allocations) {
+        const [totals] = await tx.select({ total: sql<string>`coalesce(sum(${remittanceAllocationsTable.amount}), 0)` }).from(remittanceAllocationsTable).where(eq(remittanceAllocationsTable.paymentId, allocation.paymentId));
+        const [payment] = await tx.select().from(paymentsTable).where(eq(paymentsTable.id, allocation.paymentId));
+        if (payment) await tx.update(paymentsTable).set({ remitted: money(totals.total).greaterThanOrEqualTo(payment.amount) }).where(eq(paymentsTable.id, payment.id));
+      }
+    }
     if (row?.matchedPaymentId) {
       await tx.update(paymentsTable).set({ remitted: false })
         .where(and(eq(paymentsTable.id, row.matchedPaymentId), eq(paymentsTable.remitted, true)));

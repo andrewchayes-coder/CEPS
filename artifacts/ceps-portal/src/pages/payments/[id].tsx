@@ -98,6 +98,10 @@ export default function PaymentDetailPage() {
             <dd className="col-span-2">
               {payment.remitted ? <CheckCircle2 className="w-4 h-4 text-chart-5" /> : <span className="text-muted-foreground">Not yet remitted</span>}
             </dd>
+            <dt className="text-muted-foreground">Allocated:</dt>
+            <dd className="col-span-2">${parseFloat(payment.allocatedAmount ?? '0').toFixed(2)}</dd>
+            <dt className="text-muted-foreground">Remaining:</dt>
+            <dd className="col-span-2">${parseFloat(payment.remainingAmount ?? payment.amount).toFixed(2)}</dd>
           </dl>
         </CardContent>
       </Card>

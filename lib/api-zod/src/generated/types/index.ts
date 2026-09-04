@@ -166,6 +166,7 @@ export * from './referralUpdate';
 export * from './referralUpdateServiceFrequency';
 export * from './referralUpdateStatus';
 export * from './remittance';
+export * from './remittanceAllocation';
 export * from './remittanceInput';
 export * from './remittanceMatchInput';
 export * from './remittanceSource';

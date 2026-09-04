@@ -668,6 +668,8 @@ export const GetClientCaseResponse = zod.object({
   "source": zod.enum(['quickbooks', 'manual', 'historical_import']),
   "loggedBy": zod.string().nullish(),
   "remitted": zod.boolean().nullish(),
+  "allocatedAmount": zod.string(),
+  "remainingAmount": zod.string(),
   "createdAt": zod.string().nullish()
 })),
   "remittances": zod.array(zod.object({
@@ -687,7 +689,16 @@ export const GetClientCaseResponse = zod.object({
   "remittanceBatchId": zod.string().nullish(),
   "reportReference": zod.string().nullish().describe('Source Remittance Report reference, distinct from the generated batch id.'),
   "reviewReason": zod.string().nullish().describe('Stable reason a received remittance requires review.'),
-  "expectedAmount": zod.string().nullish().describe('Authorization amount expected for this remittance when known.')
+  "expectedAmount": zod.string().nullish().describe('Authorization amount expected for this remittance when known.'),
+  "allocatedAmount": zod.string(),
+  "remainingAmount": zod.string(),
+  "allocations": zod.array(zod.object({
+  "id": zod.string(),
+  "paymentId": zod.string(),
+  "amount": zod.string(),
+  "autoMatched": zod.boolean(),
+  "createdAt": zod.string().nullish()
+}))
 }))
 })
 
@@ -1544,6 +1555,8 @@ export const ListPaymentsResponse = zod.object({
   "source": zod.enum(['quickbooks', 'manual', 'historical_import']),
   "loggedBy": zod.string().nullish(),
   "remitted": zod.boolean().nullish(),
+  "allocatedAmount": zod.string(),
+  "remainingAmount": zod.string(),
   "createdAt": zod.string().nullish()
 })),
   "total": zod.int()
@@ -1584,6 +1597,8 @@ export const CreatePaymentResponse = zod.object({
   "source": zod.enum(['quickbooks', 'manual', 'historical_import']),
   "loggedBy": zod.string().nullish(),
   "remitted": zod.boolean().nullish(),
+  "allocatedAmount": zod.string(),
+  "remainingAmount": zod.string(),
   "createdAt": zod.string().nullish()
 })
 
@@ -1612,6 +1627,8 @@ export const GetPaymentResponse = zod.object({
   "source": zod.enum(['quickbooks', 'manual', 'historical_import']),
   "loggedBy": zod.string().nullish(),
   "remitted": zod.boolean().nullish(),
+  "allocatedAmount": zod.string(),
+  "remainingAmount": zod.string(),
   "createdAt": zod.string().nullish()
 })
 
@@ -1653,6 +1670,8 @@ export const UpdatePaymentResponse = zod.object({
   "source": zod.enum(['quickbooks', 'manual', 'historical_import']),
   "loggedBy": zod.string().nullish(),
   "remitted": zod.boolean().nullish(),
+  "allocatedAmount": zod.string(),
+  "remainingAmount": zod.string(),
   "createdAt": zod.string().nullish()
 })
 
@@ -1885,7 +1904,16 @@ export const ListRemittancesResponse = zod.object({
   "remittanceBatchId": zod.string().nullish(),
   "reportReference": zod.string().nullish().describe('Source Remittance Report reference, distinct from the generated batch id.'),
   "reviewReason": zod.string().nullish().describe('Stable reason a received remittance requires review.'),
-  "expectedAmount": zod.string().nullish().describe('Authorization amount expected for this remittance when known.')
+  "expectedAmount": zod.string().nullish().describe('Authorization amount expected for this remittance when known.'),
+  "allocatedAmount": zod.string(),
+  "remainingAmount": zod.string(),
+  "allocations": zod.array(zod.object({
+  "id": zod.string(),
+  "paymentId": zod.string(),
+  "amount": zod.string(),
+  "autoMatched": zod.boolean(),
+  "createdAt": zod.string().nullish()
+}))
 })),
   "total": zod.int()
 })
@@ -1920,7 +1948,16 @@ export const CreateRemittanceResponse = zod.object({
   "remittanceBatchId": zod.string().nullish(),
   "reportReference": zod.string().nullish().describe('Source Remittance Report reference, distinct from the generated batch id.'),
   "reviewReason": zod.string().nullish().describe('Stable reason a received remittance requires review.'),
-  "expectedAmount": zod.string().nullish().describe('Authorization amount expected for this remittance when known.')
+  "expectedAmount": zod.string().nullish().describe('Authorization amount expected for this remittance when known.'),
+  "allocatedAmount": zod.string(),
+  "remainingAmount": zod.string(),
+  "allocations": zod.array(zod.object({
+  "id": zod.string(),
+  "paymentId": zod.string(),
+  "amount": zod.string(),
+  "autoMatched": zod.boolean(),
+  "createdAt": zod.string().nullish()
+}))
 })
 
 
@@ -1948,7 +1985,16 @@ export const GetRemittanceResponse = zod.object({
   "remittanceBatchId": zod.string().nullish(),
   "reportReference": zod.string().nullish().describe('Source Remittance Report reference, distinct from the generated batch id.'),
   "reviewReason": zod.string().nullish().describe('Stable reason a received remittance requires review.'),
-  "expectedAmount": zod.string().nullish().describe('Authorization amount expected for this remittance when known.')
+  "expectedAmount": zod.string().nullish().describe('Authorization amount expected for this remittance when known.'),
+  "allocatedAmount": zod.string(),
+  "remainingAmount": zod.string(),
+  "allocations": zod.array(zod.object({
+  "id": zod.string(),
+  "paymentId": zod.string(),
+  "amount": zod.string(),
+  "autoMatched": zod.boolean(),
+  "createdAt": zod.string().nullish()
+}))
 })
 
 
@@ -1984,7 +2030,16 @@ export const UpdateRemittanceResponse = zod.object({
   "remittanceBatchId": zod.string().nullish(),
   "reportReference": zod.string().nullish().describe('Source Remittance Report reference, distinct from the generated batch id.'),
   "reviewReason": zod.string().nullish().describe('Stable reason a received remittance requires review.'),
-  "expectedAmount": zod.string().nullish().describe('Authorization amount expected for this remittance when known.')
+  "expectedAmount": zod.string().nullish().describe('Authorization amount expected for this remittance when known.'),
+  "allocatedAmount": zod.string(),
+  "remainingAmount": zod.string(),
+  "allocations": zod.array(zod.object({
+  "id": zod.string(),
+  "paymentId": zod.string(),
+  "amount": zod.string(),
+  "autoMatched": zod.boolean(),
+  "createdAt": zod.string().nullish()
+}))
 })
 
 
@@ -2007,8 +2062,12 @@ export const MatchRemittanceParams = zod.object({
   "id": zod.coerce.string()
 })
 
+export const matchRemittanceBodyAmountRegExp = new RegExp('^\\d+(\\.\\d{1,2})?$');
+
+
 export const MatchRemittanceBody = zod.object({
-  "paymentId": zod.string()
+  "paymentId": zod.string(),
+  "amount": zod.string().regex(matchRemittanceBodyAmountRegExp)
 })
 
 export const MatchRemittanceResponse = zod.object({
@@ -2028,7 +2087,16 @@ export const MatchRemittanceResponse = zod.object({
   "remittanceBatchId": zod.string().nullish(),
   "reportReference": zod.string().nullish().describe('Source Remittance Report reference, distinct from the generated batch id.'),
   "reviewReason": zod.string().nullish().describe('Stable reason a received remittance requires review.'),
-  "expectedAmount": zod.string().nullish().describe('Authorization amount expected for this remittance when known.')
+  "expectedAmount": zod.string().nullish().describe('Authorization amount expected for this remittance when known.'),
+  "allocatedAmount": zod.string(),
+  "remainingAmount": zod.string(),
+  "allocations": zod.array(zod.object({
+  "id": zod.string(),
+  "paymentId": zod.string(),
+  "amount": zod.string(),
+  "autoMatched": zod.boolean(),
+  "createdAt": zod.string().nullish()
+}))
 })
 
 

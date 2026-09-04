@@ -106,6 +106,14 @@ export default function RemittanceDetailPage() {
             <dd className="col-span-2">{remittance.paymentMonth || '-'}</dd>
             <dt className="text-muted-foreground">Amount:</dt>
             <dd className="col-span-2 font-bold text-lg">${parseFloat(remittance.amount).toFixed(2)}</dd>
+            <dt className="text-muted-foreground">Allocated:</dt>
+            <dd className="col-span-2">${parseFloat(remittance.allocatedAmount ?? '0').toFixed(2)}</dd>
+            <dt className="text-muted-foreground">Remaining:</dt>
+            <dd className="col-span-2">${parseFloat(remittance.remainingAmount ?? remittance.amount).toFixed(2)}</dd>
+            {(remittance.allocations ?? []).map((allocation) => <React.Fragment key={allocation.id}>
+              <dt className="text-muted-foreground">Allocated Payment:</dt>
+              <dd className="col-span-2"><Link href={`/payments/${allocation.paymentId}`} className="text-primary hover:underline">${parseFloat(allocation.amount).toFixed(2)} — view payment</Link></dd>
+            </React.Fragment>)}
             {remittance.expectedAmount && (
               <>
                 <dt className="text-muted-foreground">Expected amount:</dt>

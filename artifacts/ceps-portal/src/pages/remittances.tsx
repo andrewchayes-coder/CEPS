@@ -219,6 +219,7 @@ export default function RemittancesPage() {
                     </TableCell>
                     <TableCell className="text-right font-medium">
                       ${parseFloat(r.amount).toFixed(2)}
+                      <div className="text-xs font-normal text-muted-foreground">${parseFloat(r.allocatedAmount ?? '0').toFixed(2)} allocated · ${parseFloat(r.remainingAmount ?? r.amount).toFixed(2)} remaining</div>
                       {r.expectedAmount && <div className="text-xs font-normal text-muted-foreground">Expected ${parseFloat(r.expectedAmount).toFixed(2)}</div>}
                     </TableCell>
                     <TableCell>
@@ -240,7 +241,7 @@ export default function RemittancesPage() {
                             remittance={r}
                             onSaved={() => refetch()}
                           />
-                          {triage && !r.matchedPaymentId && <MatchRemittanceDialog remittance={r} onSaved={() => refetch()} />}
+                          {triage && Number(r.remainingAmount) > 0 && <MatchRemittanceDialog remittance={r} onSaved={() => refetch()} />}
                           <DeleteEntityButton
                             variant="ghost"
                             buttonLabel=""

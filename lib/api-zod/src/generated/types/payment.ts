@@ -34,6 +34,8 @@ export interface Payment {
   loggedBy?: string | null;
   /** @nullable */
   remitted?: boolean | null;
+  allocatedAmount: string;
+  remainingAmount: string;
   /** @nullable */
   createdAt?: string | null;
 }

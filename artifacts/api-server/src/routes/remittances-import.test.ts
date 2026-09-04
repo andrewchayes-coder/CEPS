@@ -316,13 +316,15 @@ describe("POST /remittances/import (Alta batch import)", () => {
       clientId: clientAId, authorizationId: authAId, remittanceDate: "2026-07-20",
       amount: "99.00", paymentMonth: "2026-07", status: "received", source: "manual",
     }).returning();
-    for (const payment of [crossClient, crossAuth, crossMonth, wrongAmount]) {
-      const response = await request(app).post(`/api/remittances/${remittance.id}/match`).set("Cookie", cookie).send({ paymentId: payment.id });
+    for (const payment of [crossClient, crossAuth, crossMonth]) {
+      const response = await request(app).post(`/api/remittances/${remittance.id}/match`).set("Cookie", cookie).send({ paymentId: payment.id, amount: "99.00" });
       expect(response.status).toBe(400);
     }
-    const success = await request(app).post(`/api/remittances/${remittance.id}/match`).set("Cookie", cookie).send({ paymentId: valid.id });
+    const tooLargeForPayment = await request(app).post(`/api/remittances/${remittance.id}/match`).set("Cookie", cookie).send({ paymentId: wrongAmount.id, amount: "99.00" });
+    expect(tooLargeForPayment.status).toBe(409);
+    const success = await request(app).post(`/api/remittances/${remittance.id}/match`).set("Cookie", cookie).send({ paymentId: valid.id, amount: "99.00" });
     expect(success.status).toBe(200);
-    const repeated = await request(app).post(`/api/remittances/${remittance.id}/match`).set("Cookie", cookie).send({ paymentId: valid.id });
+    const repeated = await request(app).post(`/api/remittances/${remittance.id}/match`).set("Cookie", cookie).send({ paymentId: valid.id, amount: "99.00" });
     expect(repeated.status).toBe(409);
     const deleted = await request(app).delete(`/api/remittances/${remittance.id}`).set("Cookie", cookie);
     expect(deleted.status).toBe(200);
@@ -334,7 +336,141 @@ describe("POST /remittances/import (Alta batch import)", () => {
       clientId: clientAId, authorizationId: authAId, remittanceDate: "2026-07-21",
       amount: "99.00", paymentMonth: "2026-07", status: "received", source: "manual",
     }).returning();
-    const alreadyClaimed = await request(app).post(`/api/remittances/${unmatched.id}/match`).set("Cookie", cookie).send({ paymentId: claimed.id });
+    const alreadyClaimed = await request(app).post(`/api/remittances/${unmatched.id}/match`).set("Cookie", cookie).send({ paymentId: claimed.id, amount: "99.00" });
     expect(alreadyClaimed.status).toBe(409);
+  });
+
+  it("allocates multiple partial remittances without closing the payment early and rejects over-allocation", async () => {
+    const makePartialRemittance = async (amount: string, date: string) => {
+      const [row] = await db.insert(remittancesTable).values({
+        clientId: clientAId,
+        authorizationId: authAId,
+        remittanceDate: date,
+        amount,
+        paymentMonth: "2026-09",
+        status: "received",
+        source: "manual",
+      }).returning();
+      return row;
+    };
+    const [payment] = await db.insert(paymentsTable).values({
+      clientId: clientAId,
+      authorizationId: authAId,
+      qbCheckNumber: `${nonce}-PARTIAL`,
+      checkDate: "2026-09-15",
+      paymentMonth: "2026-09",
+      amount: "100.00",
+      paymentType: "direct_payment",
+      source: "manual",
+      remitted: false,
+    }).returning();
+    const first = await makePartialRemittance("60.00", "2026-09-20");
+    const second = await makePartialRemittance("50.00", "2026-09-21");
+
+    const firstAllocation = await request(app)
+      .post(`/api/remittances/${first.id}/match`)
+      .set("Cookie", cookie)
+      .send({ paymentId: payment.id, amount: "60.00" });
+    expect(firstAllocation.status).toBe(200);
+    expect(firstAllocation.body.allocatedAmount).toBe("60.00");
+    expect(firstAllocation.body.remainingAmount).toBe("0.00");
+    expect((await db.select().from(paymentsTable).where(eq(paymentsTable.id, payment.id)))[0].remitted).toBe(false);
+
+    const automaticAfterPartial = await request(app).post("/api/remittances").set("Cookie", cookie).send({
+      clientId: clientAId,
+      authorizationId: authAId,
+      altaReference: `${nonce}-AUTO-AFTER-PARTIAL`,
+      remittanceDate: "2026-09-20",
+      amount: "100.00",
+      paymentMonth: "2026-09",
+    });
+    expect(automaticAfterPartial.status).toBe(201);
+    expect(automaticAfterPartial.body.autoMatched).toBe(false);
+    expect(automaticAfterPartial.body.allocatedAmount).toBe("0.00");
+    const afterRejectedAutoMatch = await request(app).get(`/api/payments/${payment.id}`).set("Cookie", cookie);
+    expect(afterRejectedAutoMatch.body.allocatedAmount).toBe("60.00");
+    expect(afterRejectedAutoMatch.body.remainingAmount).toBe("40.00");
+
+    const importAfterPartial = await request(app).post("/api/remittances/import").set("Cookie", cookie).send({
+      csvText: [
+        CSV_HEADER,
+        `${nonce}-UCI-A,${nonce}-AUTH-A,2026-09,100.00,${nonce}-IMPORT-AFTER-PARTIAL,2026-09-20`,
+      ].join("\n"),
+    });
+    expect(importAfterPartial.status).toBe(200);
+    expect(importAfterPartial.body.autoMatched).toBe(0);
+    expect(importAfterPartial.body.needsManualMatch).toBe(1);
+    const afterRejectedImportMatch = await request(app).get(`/api/payments/${payment.id}`).set("Cookie", cookie);
+    expect(afterRejectedImportMatch.body.allocatedAmount).toBe("60.00");
+    expect(afterRejectedImportMatch.body.remainingAmount).toBe("40.00");
+
+    const overAllocation = await request(app)
+      .post(`/api/remittances/${second.id}/match`)
+      .set("Cookie", cookie)
+      .send({ paymentId: payment.id, amount: "50.00" });
+    expect(overAllocation.status).toBe(409);
+
+    const finalAllocation = await request(app)
+      .post(`/api/remittances/${second.id}/match`)
+      .set("Cookie", cookie)
+      .send({ paymentId: payment.id, amount: "40.00" });
+    expect(finalAllocation.status).toBe(200);
+    expect(finalAllocation.body.allocatedAmount).toBe("40.00");
+    expect(finalAllocation.body.remainingAmount).toBe("10.00");
+    expect((await db.select().from(paymentsTable).where(eq(paymentsTable.id, payment.id)))[0].remitted).toBe(true);
+
+    const detail = await request(app).get(`/api/payments/${payment.id}`).set("Cookie", cookie);
+    expect(detail.body.allocatedAmount).toBe("100.00");
+    expect(detail.body.remainingAmount).toBe("0.00");
+  });
+
+  it("keeps the payment completion flag consistent when deletion races a new allocation", async () => {
+    const [payment] = await db.insert(paymentsTable).values({
+      clientId: clientAId,
+      authorizationId: authAId,
+      qbCheckNumber: `${nonce}-DELETE-RACE`,
+      checkDate: "2026-10-15",
+      paymentMonth: "2026-10",
+      amount: "100.00",
+      paymentType: "direct_payment",
+      source: "manual",
+      remitted: false,
+    }).returning();
+    const [first, second] = await db.insert(remittancesTable).values([
+      {
+        clientId: clientAId, authorizationId: authAId, remittanceDate: "2026-10-20",
+        amount: "60.00", paymentMonth: "2026-10", status: "received", source: "manual",
+      },
+      {
+        clientId: clientAId, authorizationId: authAId, remittanceDate: "2026-10-21",
+        amount: "100.00", paymentMonth: "2026-10", status: "received", source: "manual",
+      },
+    ]).returning();
+    const initial = await request(app)
+      .post(`/api/remittances/${first.id}/match`)
+      .set("Cookie", cookie)
+      .send({ paymentId: payment.id, amount: "60.00" });
+    expect(initial.status).toBe(200);
+
+    const [deleted, racedAllocation] = await Promise.all([
+      request(app).delete(`/api/remittances/${first.id}`).set("Cookie", cookie),
+      request(app)
+        .post(`/api/remittances/${second.id}/match`)
+        .set("Cookie", cookie)
+        .send({ paymentId: payment.id, amount: "100.00" }),
+    ]);
+    expect(deleted.status).toBe(200);
+    expect([200, 409]).toContain(racedAllocation.status);
+
+    const detail = await request(app).get(`/api/payments/${payment.id}`).set("Cookie", cookie);
+    const allocated = Number(detail.body.allocatedAmount);
+    const remaining = Number(detail.body.remainingAmount);
+    expect(allocated + remaining).toBe(100);
+    expect(detail.body.remitted).toBe(remaining === 0);
+    if (racedAllocation.status === 200) {
+      expect(allocated).toBe(100);
+    } else {
+      expect(allocated).toBe(0);
+    }
   });
 });

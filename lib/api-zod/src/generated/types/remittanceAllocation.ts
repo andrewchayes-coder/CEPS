@@ -6,8 +6,11 @@
  * OpenAPI spec version: 0.1.0
  */
 
-export interface RemittanceMatchInput {
+export interface RemittanceAllocation {
+  id: string;
   paymentId: string;
-  /** @pattern ^\d+(\.\d{1,2})?$ */
   amount: string;
+  autoMatched: boolean;
+  /** @nullable */
+  createdAt?: string | null;
 }

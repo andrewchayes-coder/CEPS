@@ -676,6 +676,8 @@ export interface Payment {
   loggedBy?: string | null;
   /** @nullable */
   remitted?: boolean | null;
+  allocatedAmount: string;
+  remainingAmount: string;
   /** @nullable */
   createdAt?: string | null;
 }
@@ -696,6 +698,15 @@ export const RemittanceSource = {
   alta_regional: 'alta_regional',
   manual: 'manual',
 } as const;
+
+export interface RemittanceAllocation {
+  id: string;
+  paymentId: string;
+  amount: string;
+  autoMatched: boolean;
+  /** @nullable */
+  createdAt?: string | null;
+}
 
 export interface Remittance {
   id: string;
@@ -737,6 +748,9 @@ export interface Remittance {
      * @nullable
      */
   expectedAmount?: string | null;
+  allocatedAmount: string;
+  remainingAmount: string;
+  allocations: RemittanceAllocation[];
 }
 
 export interface ClientCase {
@@ -1268,6 +1282,8 @@ export interface RemittanceInput {
 
 export interface RemittanceMatchInput {
   paymentId: string;
+  /** @pattern ^\d+(\.\d{1,2})?$ */
+  amount: string;
 }
 
 export interface AltaRemittanceImportInput {

@@ -49,6 +49,13 @@ export function AltaFmsPaymentImport({ onImported }: { onImported: () => void })
     (row) => row.outcome === 'flagged_duplicate' || row.outcome === 'errored',
   ) ?? [];
 
+  const paymentOutcomeLabel = (outcome: string) => {
+    if (outcome === 'imported') return 'Imported';
+    if (outcome === 'skipped_duplicate') return 'Duplicate (skipped)';
+    if (outcome === 'flagged_duplicate') return 'Needs review';
+    return 'Errored';
+  };
+
   const downloadCorrectionReport = () => {
     if (correctionRows.length === 0) return;
 
@@ -67,6 +74,29 @@ export function AltaFmsPaymentImport({ onImported }: { onImported: () => void })
       row_count: correctionRows.length,
       errored: correctionRows.filter((row) => row.outcome === 'errored').length,
       needs_review: correctionRows.filter((row) => row.outcome === 'flagged_duplicate').length,
+    });
+  };
+
+  const downloadFullAudit = () => {
+    if (!result || result.results.length === 0) return;
+
+    downloadCSV(
+      'alta_fms_payment_full_audit.csv',
+      ['Source row', 'UCI', 'Outcome', 'Detail'],
+      result.results.map((row) => [
+        row.rowNumber,
+        row.uciNumber ?? '',
+        paymentOutcomeLabel(row.outcome),
+        row.message ?? '',
+      ]),
+    );
+    trackAnalyticsEvent('alta_full_audit_downloaded', {
+      import_type: 'payments',
+      row_count: result.results.length,
+      imported: result.results.filter((row) => row.outcome === 'imported').length,
+      skipped_duplicate: result.results.filter((row) => row.outcome === 'skipped_duplicate').length,
+      flagged_duplicate: result.results.filter((row) => row.outcome === 'flagged_duplicate').length,
+      errored: result.results.filter((row) => row.outcome === 'errored').length,
     });
   };
 
@@ -224,6 +254,15 @@ export function AltaFmsPaymentImport({ onImported }: { onImported: () => void })
                   data-testid="button-download-alta-fms-corrections"
                 >
                   <Download className="mr-2 h-4 w-4" /> Download Corrections CSV
+                </Button>
+              )}
+              {result.results.length > 0 && (
+                <Button
+                  variant="ghost"
+                  onClick={downloadFullAudit}
+                  data-testid="button-download-alta-fms-full-audit"
+                >
+                  <Download className="mr-2 h-4 w-4" /> Download Full Audit CSV
                 </Button>
               )}
               <Button variant="outline" onClick={() => setResult(null)}>Import Another Workbook</Button>

@@ -43,6 +43,13 @@ export function AltaRemittanceImport({ onImported }: { onImported: (result: Alta
     (row) => row.outcome === 'needs_manual_match' || row.outcome === 'errored',
   ) ?? [];
 
+  const remittanceOutcomeLabel = (outcome: string) => {
+    if (outcome === 'auto_matched') return 'Auto-matched';
+    if (outcome === 'needs_manual_match') return 'Needs manual match';
+    if (outcome === 'skipped_duplicate') return 'Duplicate (skipped)';
+    return 'Errored';
+  };
+
   const downloadCorrectionReport = () => {
     if (correctionRows.length === 0) return;
 
@@ -61,6 +68,29 @@ export function AltaRemittanceImport({ onImported }: { onImported: (result: Alta
       row_count: correctionRows.length,
       errored: correctionRows.filter((row) => row.outcome === 'errored').length,
       needs_manual_match: correctionRows.filter((row) => row.outcome === 'needs_manual_match').length,
+    });
+  };
+
+  const downloadFullAudit = () => {
+    if (!result || result.results.length === 0) return;
+
+    downloadCSV(
+      'alta_remittance_full_audit.csv',
+      ['Source row', 'UCI', 'Outcome', 'Detail'],
+      result.results.map((row) => [
+        row.rowNumber,
+        row.uciNumber ?? '',
+        remittanceOutcomeLabel(row.outcome),
+        row.message ?? '',
+      ]),
+    );
+    trackAnalyticsEvent('alta_full_audit_downloaded', {
+      import_type: 'remittances',
+      row_count: result.results.length,
+      auto_matched: result.results.filter((row) => row.outcome === 'auto_matched').length,
+      needs_manual_match: result.results.filter((row) => row.outcome === 'needs_manual_match').length,
+      skipped_duplicate: result.results.filter((row) => row.outcome === 'skipped_duplicate').length,
+      errored: result.results.filter((row) => row.outcome === 'errored').length,
     });
   };
 
@@ -252,6 +282,15 @@ export function AltaRemittanceImport({ onImported }: { onImported: (result: Alta
                   data-testid="button-download-alta-remittance-corrections"
                 >
                   <Download className="mr-2 h-4 w-4" /> Download Corrections CSV
+                </Button>
+              )}
+              {result.results.length > 0 && (
+                <Button
+                  variant="ghost"
+                  onClick={downloadFullAudit}
+                  data-testid="button-download-alta-remittance-full-audit"
+                >
+                  <Download className="mr-2 h-4 w-4" /> Download Full Audit CSV
                 </Button>
               )}
               <Button variant="outline" onClick={() => setResult(null)}>Import Another File</Button>

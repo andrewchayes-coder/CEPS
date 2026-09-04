@@ -272,6 +272,33 @@ describe("POST /payments/import", () => {
     expect(second.status).toBe(200);
     expect(second.body).toMatchObject({ imported: 0, skippedDuplicate: 2, errored: 3, ignoredNonCheckRows: 1 });
   });
+
+  it("preserves row outcomes when workbook keys are resolved in batches", async () => {
+    const rows = [
+      ["Transaction date", "Transaction type", "Num", "Name", "Description", "Split", "Amount", "Customer"],
+      ["05/01/2026", "Check", `${nonce}-BATCH-NEW`, "Vendor", `Services/May 26/${authANumber}`, "", "325.00", `Synthetic ${uciA} (1)`],
+      ["05/02/2026", "Check", `${nonce}-BATCH-NO-CLIENT`, "Vendor", `Services/May 26/${authANumber}`, "", "25.00", "Synthetic 7654321 (1)"],
+      ["05/03/2026", "Check", `${nonce}-BATCH-NO-AUTH`, "Vendor", "Services/May 26/NOT-IN-WORKBOOK-SCOPE", "", "25.00", `Synthetic ${uciA} (1)`],
+    ];
+
+    const first = await request(app).post("/api/payments/import").set("Cookie", cookie).send({ worksheetRows: rows });
+    expect(first.status).toBe(200);
+    expect(first.body.results.map((row: { outcome: string }) => row.outcome)).toEqual([
+      "imported",
+      "errored",
+      "errored",
+    ]);
+    expect(first.body).toMatchObject({ imported: 1, skippedDuplicate: 0, flaggedDuplicate: 0, errored: 2 });
+
+    const second = await request(app).post("/api/payments/import").set("Cookie", cookie).send({ worksheetRows: rows });
+    expect(second.status).toBe(200);
+    expect(second.body.results.map((row: { outcome: string }) => row.outcome)).toEqual([
+      "skipped_duplicate",
+      "errored",
+      "errored",
+    ]);
+    expect(second.body).toMatchObject({ imported: 0, skippedDuplicate: 1, flaggedDuplicate: 0, errored: 2 });
+  });
 });
 
 describe("POST /import/authorizations/commit", () => {

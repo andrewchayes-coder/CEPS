@@ -268,11 +268,38 @@ router.post("/payments/import", requireStaff, async (req, res): Promise<void> =>
     res.json(ImportAltaFmsPaymentsResponse.parse({ imported: 0, skippedDuplicate: 0, flaggedDuplicate: 0, errored: 0, ignoredNonCheckRows: 0, headerError: source.headerError, parseProblems: [], results: [] }));
     return;
   }
-  const clients = await db.select().from(clientsTable).where(notDeleted(clientsTable));
+  // Resolve only natural keys present in this workbook. Import history and the
+  // participant/authorization tables can grow indefinitely without increasing
+  // the preload cost of one monthly file.
+  const uciNumbers = [...new Set(source.rows.map((row) => row.uciNumber))];
+  const authNumbers = [...new Set(source.rows.map((row) => row.authNumber))];
+  const rowFingerprints = [...new Set(source.rows.map(altaFmsPaymentRowFingerprint))];
+  const clients = uciNumbers.length
+    ? await db.select().from(clientsTable).where(and(inArray(clientsTable.uciNumber, uciNumbers), notDeleted(clientsTable)))
+    : [];
   const clientByUci = new Map(clients.map((client) => [client.uciNumber, client]));
-  const auths = await db.select().from(authorizationsTable).where(notDeleted(authorizationsTable));
+  const clientIds = clients.map((client) => client.id);
+  const auths = clientIds.length && authNumbers.length
+    ? await db.select().from(authorizationsTable).where(and(
+        inArray(authorizationsTable.clientId, clientIds),
+        inArray(authorizationsTable.authNumber, authNumbers),
+        notDeleted(authorizationsTable),
+      ))
+    : [];
   const authByClientAndNumber = new Map(auths.map((auth) => [`${auth.clientId}::${auth.authNumber}`, auth]));
-  const fingerprints = new Set((await db.select({ fingerprint: paymentsTable.sourceRowFingerprint }).from(paymentsTable).where(notDeleted(paymentsTable))).map((row) => row.fingerprint).filter((value): value is string => !!value));
+  const fingerprints = new Set(
+    rowFingerprints.length
+      ? (await db
+          .select({ fingerprint: paymentsTable.sourceRowFingerprint })
+          .from(paymentsTable)
+          .where(and(
+            inArray(paymentsTable.sourceRowFingerprint, rowFingerprints),
+            notDeleted(paymentsTable),
+          )))
+          .map((row) => row.fingerprint)
+          .filter((value): value is string => !!value)
+      : [],
+  );
   const results: { rowNumber: number; uciNumber?: string | null; outcome: "imported" | "skipped_duplicate" | "flagged_duplicate" | "errored"; message?: string | null; paymentId?: string | null }[] = [];
   let imported = 0;
   let skippedDuplicate = 0;

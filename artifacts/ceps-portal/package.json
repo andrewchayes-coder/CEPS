@@ -9,6 +9,7 @@
     "serve": "vite preview --config vite.config.ts --host 0.0.0.0",
     "test:sorting": "playwright test tests/table-sorting.spec.ts --config playwright.config.ts",
     "test:participants": "playwright test tests/participant-language-and-links.spec.ts --config playwright.config.ts",
+    "test:alta-upload": "playwright test tests/alta-file-upload.spec.ts --config playwright.config.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "devDependencies": {

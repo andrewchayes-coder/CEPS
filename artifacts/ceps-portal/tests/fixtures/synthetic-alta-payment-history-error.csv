@@ -1,0 +1,4 @@
+Date,Units,Amount,Reference #
+09/30/2099,1,77.77,SYNTHETIC-ERROR-REPORT-NOT-REAL
+UCI #,Consumer Name,Auth #,Svc Code,Sub-Code,Service M/Y,Units,Amount,Invoice #,Adj Code,Inv Amt
+0000000,Synthetic Participant — NOT REAL,SYNTH-AUTH-MISSING,459,,09/2099,1,77.77,SYNTHETIC-INVOICE,,77.77

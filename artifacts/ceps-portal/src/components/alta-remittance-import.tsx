@@ -17,6 +17,7 @@ import { Badge } from '@/components/ui/badge';
 import { useToast } from '@/hooks/use-toast';
 import { FileUp, Loader2, Upload } from 'lucide-react';
 import { stableSort, useTableSort } from '@/lib/table-sorting';
+import { trackAnalyticsEvent } from '@/lib/analytics';
 
 // ⚠️ The Alta "Payment Detail Report" CSV column mapping is INTERIM (pending a
 // real sample) and lives server-side in the isolated parser
@@ -69,6 +70,14 @@ export function AltaRemittanceImport({ onImported }: { onImported: (result: Alta
                 description: res.parseProblems.slice(0, 3).join(' '),
               });
             }
+            trackAnalyticsEvent('remittance_report_imported', {
+              parsed: res.parsed,
+              imported: res.imported,
+              errored: res.errored,
+              auto_matched: res.autoMatched,
+              needs_manual_match: res.needsManualMatch,
+              skipped_duplicate: res.skippedDuplicate,
+            });
             setResult(res);
             onImported(res);
           },

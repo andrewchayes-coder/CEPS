@@ -16,6 +16,7 @@ import { useToast } from '@/hooks/use-toast';
 import { ChevronLeft, ChevronRight, AlertTriangle, CheckCircle2, Users, FileText } from 'lucide-react';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { FileUpload } from '@/components/file-upload';
+import { trackAnalyticsEvent } from '@/lib/analytics';
 
 // -----------------------------------------------------------------------------
 // Validation Schemas (Step by Step to manage complex conditional logic)
@@ -228,6 +229,9 @@ export default function ReferralNewPage() {
       }
     }, {
       onSuccess: (res) => {
+        trackAnalyticsEvent('referral_submitted', {
+          supporting_document_supplied: Boolean(supportingDocumentUrl),
+        });
         toast({
           title: "Referral Submitted",
           description: "The referral has been saved and the signature email has been sent.",

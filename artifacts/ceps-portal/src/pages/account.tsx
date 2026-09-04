@@ -11,6 +11,7 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/hooks/use-toast';
+import { trackAnalyticsEvent } from '@/lib/analytics';
 
 const accountSchema = z.object({
   name: z.string().min(1, 'Name is required'),
@@ -47,6 +48,7 @@ export default function AccountPage() {
       { data: payload },
       {
         onSuccess: (updated) => {
+          trackAnalyticsEvent('account_updated', { role: updated.role });
           // Refresh the auth session cache so the shell shows the new name immediately
           queryClient.setQueryData(getGetCurrentUserQueryKey(), updated);
           form.reset({ name: updated.name, email: updated.email });
@@ -120,6 +122,7 @@ export default function AccountPage() {
           <VendorBusinessProfile
             id={user.linkedRecordId}
             contactCardTitle="Business Profile & W-9"
+            w9AnalyticsLocation="account"
           />
         </div>
       )}

@@ -21,6 +21,7 @@ import {
 import { useToast } from '@/hooks/use-toast';
 import { Download, FileUp, Loader2, Upload, CheckCircle2, RotateCcw } from 'lucide-react';
 import { stableSort, useTableSort } from '@/lib/table-sorting';
+import { trackAnalyticsEvent } from '@/lib/analytics';
 
 // The five entities the bulk-import system covers, in the documented build
 // order. Kept in sync with the server-side field registry (importRegistry.ts).
@@ -124,7 +125,15 @@ export default function AdminImportPage() {
     commitMutation.mutate(
       { entity, data: { csvText } },
       {
-        onSuccess: (res) => setCommitResult(res),
+        onSuccess: (res) => {
+          trackAnalyticsEvent('bulk_import_completed', {
+            entity,
+            imported: res.imported,
+            errored: res.errored,
+            duplicate: res.skippedDuplicate,
+          });
+          setCommitResult(res);
+        },
         onError: (err: unknown) =>
           toast({
             title: 'Import failed',

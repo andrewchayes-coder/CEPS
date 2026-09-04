@@ -15,6 +15,8 @@ import { useToast } from '@/hooks/use-toast';
 import { ArrowLeft, Save, FileText } from 'lucide-react';
 import { Link } from 'wouter';
 import { FileUpload } from '@/components/file-upload';
+import { useAuth } from '@/components/auth/auth-provider';
+import { trackAnalyticsEvent } from '@/lib/analytics';
 
 const formSchema = z.object({
   clientId: z.string().min(1, 'Participant is required'),
@@ -29,6 +31,7 @@ export default function InvoiceNewPage() {
   const [, setLocation] = useLocation();
   const { toast } = useToast();
   const createInvoice = useCreateInvoice();
+  const { user } = useAuth();
   const [documentUrl, setDocumentUrl] = React.useState<string | undefined>(undefined);
   
   const { data: clientsData, isLoading: clientsLoading } = useListClients({ limit: 1000 });
@@ -89,6 +92,10 @@ export default function InvoiceNewPage() {
       }
     }, {
       onSuccess: () => {
+        trackAnalyticsEvent('invoice_created', {
+          role: user?.role ?? 'unknown',
+          status: 'submitted',
+        });
         toast({ title: "Invoice Submitted", description: "The invoice has been added to the queue." });
         setLocation('/invoices');
       },

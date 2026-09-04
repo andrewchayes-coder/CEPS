@@ -7,6 +7,7 @@ import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { useToast } from '@/hooks/use-toast';
 import { Save, FileText, ExternalLink } from 'lucide-react';
+import { trackAnalyticsEvent } from '@/lib/analytics';
 
 interface ContactFormData {
   contactPerson: string;
@@ -21,6 +22,8 @@ interface VendorBusinessProfileProps {
   id: string;
   /** Optional heading for the contact card. Defaults to "Vendor Profile". */
   contactCardTitle?: string;
+  /** Analytics location for successful W-9 attachment. */
+  w9AnalyticsLocation?: 'account' | 'vendor_detail';
 }
 
 /**
@@ -28,7 +31,11 @@ interface VendorBusinessProfileProps {
  * Shared between the staff-facing vendor detail page (vendor-user branch) and
  * the vendor's own account page. Reuses useUpdateVendorContact / useUploadVendorW9.
  */
-export function VendorBusinessProfile({ id, contactCardTitle = 'Vendor Profile' }: VendorBusinessProfileProps) {
+export function VendorBusinessProfile({
+  id,
+  contactCardTitle = 'Vendor Profile',
+  w9AnalyticsLocation = 'vendor_detail',
+}: VendorBusinessProfileProps) {
   const { toast } = useToast();
   const { data: vendor, isLoading, refetch } = useGetVendor(id, { query: { enabled: !!id, queryKey: ['vendor', id] } });
   const updateVendorContact = useUpdateVendorContact();
@@ -194,6 +201,7 @@ export function VendorBusinessProfile({ id, contactCardTitle = 'Vendor Profile' 
                 { id, data: { w9DocumentUrl: r.objectPath } },
                 {
                   onSuccess: () => {
+                    trackAnalyticsEvent('w9_uploaded', { location: w9AnalyticsLocation });
                     toast({ title: 'W-9 Uploaded', description: 'The W-9 is now on file.' });
                     refetch();
                   },

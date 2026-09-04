@@ -7,6 +7,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useToast } from '@/hooks/use-toast';
 import { Plus } from 'lucide-react';
+import { trackAnalyticsEvent } from '@/lib/analytics';
 
 const emptyForm = { clientId: '', authorizationId: '', altaReference: '', remittanceDate: '', amount: '', paymentMonth: '' };
 
@@ -36,6 +37,7 @@ export function CreateRemittanceDialog({ onSaved }: { onSaved?: () => void }) {
     };
     createRemittance.mutate({ data }, {
       onSuccess: () => {
+        trackAnalyticsEvent('remittance_created', { source: 'manual' });
         toast({ title: 'Remittance created' });
         setOpen(false);
         reset();

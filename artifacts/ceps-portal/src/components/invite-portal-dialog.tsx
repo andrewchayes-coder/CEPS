@@ -20,6 +20,7 @@ import {
 } from '@/components/ui/select';
 import { useToast } from '@/hooks/use-toast';
 import { UserPlus, Copy, Check } from 'lucide-react';
+import { trackAnalyticsEvent } from '@/lib/analytics';
 
 type Props = {
   linkedRecordType: 'vendor' | 'client';
@@ -57,6 +58,10 @@ export function InvitePortalDialog({ linkedRecordType, linkedRecordId, recordNam
       },
       {
         onSuccess: (data) => {
+          trackAnalyticsEvent('invite_created', {
+            linked_record_type: linkedRecordType,
+            role: resolvedRole,
+          });
           setInviteUrl(data.inviteUrl);
           toast({ title: 'Invite created', description: 'Share the link below with the invitee.' });
         },

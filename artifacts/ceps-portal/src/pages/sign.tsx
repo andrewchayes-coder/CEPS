@@ -10,6 +10,7 @@ import { Label } from '@/components/ui/label';
 import { useToast } from '@/hooks/use-toast';
 import { FileSignature, CheckCircle2, ShieldCheck } from 'lucide-react';
 import { Separator } from '@/components/ui/separator';
+import { trackAnalyticsEvent } from '@/lib/analytics';
 
 export default function SignaturePage() {
   const { token } = useParams<{ token: string }>();
@@ -134,6 +135,12 @@ export default function SignaturePage() {
         : { typedName, agreed },
     }, {
       onSuccess: (result) => {
+        trackAnalyticsEvent('signature_completed', {
+          account_creation_requested: createAccount,
+          account_outcome: createAccount
+            ? (result?.accountCreated ? 'created' : 'already_exists')
+            : 'not_requested',
+        });
         toast({
           title: "Successfully Signed",
           description: "Thank you. The authorization has been submitted.",

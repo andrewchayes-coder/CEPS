@@ -24,6 +24,7 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from '@/components/ui/alert-dialog';
+import { trackAnalyticsEvent } from '@/lib/analytics';
 
 export default function VendorDetailPage() {
   const { id } = useParams<{ id: string }>();
@@ -287,6 +288,7 @@ export default function VendorDetailPage() {
                     { id, data: { w9DocumentUrl: r.objectPath } },
                     {
                       onSuccess: () => {
+                        trackAnalyticsEvent('w9_uploaded', { location: 'vendor_detail' });
                         toast({ title: 'W-9 Uploaded', description: 'The W-9 is now on file.' });
                         refetch();
                       },

@@ -6,6 +6,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { useToast } from '@/hooks/use-toast';
 import { Link2 } from 'lucide-react';
 import { format } from 'date-fns';
+import { trackAnalyticsEvent } from '@/lib/analytics';
 
 export function MatchRemittanceDialog({ remittance, onSaved }: { remittance: Remittance; onSaved?: () => void }) {
   const [open, setOpen] = useState(false);
@@ -25,7 +26,12 @@ export function MatchRemittanceDialog({ remittance, onSaved }: { remittance: Rem
   const submit = () => {
     if (!paymentId) { toast({ variant: 'destructive', title: 'Payment required', description: 'Select an eligible payment before matching.' }); return; }
     match.mutate({ id: remittance.id, data: { paymentId } }, {
-      onSuccess: () => { toast({ title: 'Payment matched' }); close(); onSaved?.(); },
+      onSuccess: () => {
+        trackAnalyticsEvent('remittance_matched', { source: 'manual' });
+        toast({ title: 'Payment matched' });
+        close();
+        onSaved?.();
+      },
       onError: (error: unknown) => toast({ variant: 'destructive', title: 'Could not match payment', description: (error as { data?: { error?: string } })?.data?.error ?? 'The payment may already be remitted. Refresh and try again.' }),
     });
   };

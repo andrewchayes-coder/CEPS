@@ -31,6 +31,7 @@ import {
 } from '@/components/ui/select';
 import { useToast } from '@/hooks/use-toast';
 import { Plus, AlertTriangle } from 'lucide-react';
+import { trackAnalyticsEvent } from '@/lib/analytics';
 
 const PAYMENT_TYPES = ['direct_payment', 'reimbursement', 'fee'];
 
@@ -112,6 +113,10 @@ export function LogPaymentDialog({ onSaved, defaultClientId }: Props) {
       { data },
       {
         onSuccess: () => {
+          trackAnalyticsEvent('payment_recorded', {
+            payment_type: form.paymentType,
+            source: 'manual',
+          });
           toast({ title: override ? 'Payment logged (duplicate overridden)' : 'Payment logged' });
           setOpen(false);
           reset();

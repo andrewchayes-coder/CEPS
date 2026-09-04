@@ -5,6 +5,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { useToast } from '@/hooks/use-toast';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Loader2 } from 'lucide-react';
+import { trackAnalyticsEvent } from '@/lib/analytics';
 
 export default function MagicLinkConsumePage() {
   const [location, setLocation] = useLocation();
@@ -29,6 +30,7 @@ export default function MagicLinkConsumePage() {
     consumeMutation.mutate({ data: { token } }, {
       onSuccess: (user) => {
         queryClient.setQueryData(getGetCurrentUserQueryKey(), user);
+        trackAnalyticsEvent('login_completed', { method: 'magic_link', role: user.role });
         toast({
           title: 'Welcome Back',
           description: 'You have successfully signed in.',

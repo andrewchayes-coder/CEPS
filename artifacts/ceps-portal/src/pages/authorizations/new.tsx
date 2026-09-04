@@ -16,6 +16,7 @@ import { Link } from 'wouter';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { FileUpload } from '@/components/file-upload';
+import { trackAnalyticsEvent } from '@/lib/analytics';
 
 const formSchema = z.object({
   clientId: z.string().min(1, 'Participant is required'),
@@ -160,6 +161,10 @@ export default function AuthorizationNewPage() {
             description: "Please review the warnings before forcing save.",
           });
         } else {
+          trackAnalyticsEvent('authorization_created', {
+            payment_type: data.paymentType,
+            service_code: data.serviceCode,
+          });
           toast({
             title: "Authorization Created",
             description: "The POS has been saved successfully.",

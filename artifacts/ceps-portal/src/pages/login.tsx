@@ -13,6 +13,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter }
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { useToast } from '@/hooks/use-toast';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { trackAnalyticsEvent } from '@/lib/analytics';
 
 const loginSchema = z.object({
   email: z.string().email('Please enter a valid email address'),
@@ -51,6 +52,7 @@ export default function LoginPage() {
     loginMutation.mutate({ data: { email, password: 'ceps-demo-2026' } }, {
       onSuccess: (user) => {
         queryClient.setQueryData(getGetCurrentUserQueryKey(), user);
+        trackAnalyticsEvent('login_completed', { method: 'demo', role: user.role });
         // Full page load: guarantees a clean authenticated boot of the app.
         window.location.assign(import.meta.env.BASE_URL);
       },
@@ -68,6 +70,7 @@ export default function LoginPage() {
     loginMutation.mutate({ data: values }, {
       onSuccess: (user) => {
         queryClient.setQueryData(getGetCurrentUserQueryKey(), user);
+        trackAnalyticsEvent('login_completed', { method: 'password', role: user.role });
         window.location.assign(import.meta.env.BASE_URL);
       },
       onError: (err: any) => {

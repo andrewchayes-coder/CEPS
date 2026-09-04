@@ -20,6 +20,7 @@ import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Plus, Search, Filter, ChevronLeft, ChevronRight } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
+import { ClientLink } from '@/components/entity-links';
 
 const PAGE_SIZE = 50;
 
@@ -81,7 +82,7 @@ export default function ReferralsPage() {
               <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
               <Input
                 type="search"
-                placeholder="Search clients or coordinators..."
+                placeholder="Search participants or coordinators..."
                 className="pl-8"
                 value={search}
                 onChange={(e) => { setSearch(e.target.value); setPage(0); }}
@@ -112,7 +113,7 @@ export default function ReferralsPage() {
             <TableHeader>
               <TableRow>
                 <SortableTableHead label="Date" sortKey="referralDate" activeSortBy={sort.sortBy} sortDirection={sort.sortDirection} onSort={onSort} />
-                <SortableTableHead label="Client" sortKey="clientName" activeSortBy={sort.sortBy} sortDirection={sort.sortDirection} onSort={onSort} />
+                <SortableTableHead label="Participant" sortKey="clientName" activeSortBy={sort.sortBy} sortDirection={sort.sortDirection} onSort={onSort} />
                 <SortableTableHead label="Coordinator" sortKey="coordinatorName" activeSortBy={sort.sortBy} sortDirection={sort.sortDirection} onSort={onSort} />
                 <SortableTableHead label="Service Type" sortKey="serviceType" activeSortBy={sort.sortBy} sortDirection={sort.sortDirection} onSort={onSort} />
                 <SortableTableHead label="Status" sortKey="status" activeSortBy={sort.sortBy} sortDirection={sort.sortDirection} onSort={onSort} />
@@ -135,7 +136,7 @@ export default function ReferralsPage() {
                       {format(new Date(referral.referralDate), 'MMM d, yyyy')}
                     </TableCell>
                     <TableCell>
-                      {referral.clientName || 'Unknown Client'}
+                      <ClientLink id={referral.clientId} name={referral.clientName || 'Unknown Participant'} />
                     </TableCell>
                     <TableCell className="text-muted-foreground">
                       {referral.coordinatorName || 'Unassigned'}

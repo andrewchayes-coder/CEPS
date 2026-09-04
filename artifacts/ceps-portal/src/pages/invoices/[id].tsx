@@ -116,7 +116,7 @@ export default function InvoiceDetailPage() {
           </CardHeader>
           <CardContent className="space-y-4 text-sm">
             <dl className="grid grid-cols-3 gap-2">
-              <dt className="text-muted-foreground">Client:</dt><dd className="col-span-2 font-medium"><ClientLink id={invoice.clientId} name={invoice.clientName} /></dd>
+              <dt className="text-muted-foreground">Participant:</dt><dd className="col-span-2 font-medium"><ClientLink id={invoice.clientId} name={invoice.clientName} /></dd>
               <dt className="text-muted-foreground">Vendor:</dt><dd className="col-span-2"><VendorLink id={invoice.vendorId} name={invoice.vendorName} /></dd>
               <dt className="text-muted-foreground">Auth Number:</dt><dd className="col-span-2 font-mono">
                 {invoice.authorizationId && invoice.authNumber ? (

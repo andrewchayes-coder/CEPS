@@ -193,7 +193,7 @@ export function CheckRegisterImport({ onImported }: { onImported: () => void }) 
         <DialogHeader>
           <DialogTitle>Import Check Register</DialogTitle>
           <DialogDescription>
-            Upload a QuickBooks check-register CSV. Rows are matched to clients by name; duplicates
+            Upload a QuickBooks check-register CSV. Rows are matched to participants by name; duplicates
             (by check number) are skipped automatically.
           </DialogDescription>
         </DialogHeader>
@@ -218,7 +218,7 @@ export function CheckRegisterImport({ onImported }: { onImported: () => void }) 
                   <FileUp className="h-6 w-6 text-muted-foreground" />
                   <p className="text-muted-foreground">Click to choose the check-register CSV</p>
                   <p className="text-xs text-muted-foreground">
-                    Needs columns for check number, date, and amount (client name recommended)
+                    Needs columns for check number, date, and amount (participant name recommended)
                   </p>
                 </>
               )}
@@ -280,7 +280,7 @@ export function CheckRegisterImport({ onImported }: { onImported: () => void }) 
             {result.unmatched > 0 && (
               <p className="text-sm text-muted-foreground">
                 Unmatched rows were not imported. Create those payments manually from the payment form,
-                or fix the client names in the CSV and re-import (already-imported checks are skipped).
+                or fix the participant names in the CSV and re-import (already-imported checks are skipped).
               </p>
             )}
 

@@ -67,7 +67,7 @@ export default function PendingAuthReport() {
         offset += res.items.length;
         if (res.items.length < batch || offset >= res.total) break;
       }
-      const headers = ['Client', 'Referral Date', 'Days Waiting', 'Service Coordinator'];
+      const headers = ['Participant', 'Referral Date', 'Days Waiting', 'Service Coordinator'];
       const rows = all.map((r: any) => [
         r.clientName ?? '',
         r.referralDate ?? '',
@@ -102,11 +102,11 @@ export default function PendingAuthReport() {
               </Select>
             </div>
             <div className="space-y-1">
-              <Label htmlFor="pending-auth-search" className="text-xs">Client</Label>
+              <Label htmlFor="pending-auth-search" className="text-xs">Participant</Label>
               <Input
                 id="pending-auth-search"
                 data-testid="input-pending-auth-search"
-                placeholder="Search client…"
+                placeholder="Search participant…"
                 value={search}
                 onChange={(e) => setFilter(setSearch)(e.target.value)}
               />
@@ -121,7 +121,7 @@ export default function PendingAuthReport() {
         <Table data-testid="table-pending-auth">
           <TableHeader>
             <TableRow>
-              <SortableTableHead sortDirection={sort.key === 'clientName' ? sort.direction : null} onSort={() => changeSort('clientName')}>Client</SortableTableHead>
+              <SortableTableHead sortDirection={sort.key === 'clientName' ? sort.direction : null} onSort={() => changeSort('clientName')}>Participant</SortableTableHead>
               <SortableTableHead sortDirection={sort.key === 'referralDate' ? sort.direction : null} onSort={() => changeSort('referralDate')}>Referral Date</SortableTableHead>
               <SortableTableHead className="text-right" sortDirection={sort.key === 'daysWaiting' ? sort.direction : null} onSort={() => changeSort('daysWaiting')}>Days Waiting</SortableTableHead>
               <SortableTableHead sortDirection={sort.key === 'coordinatorName' ? sort.direction : null} onSort={() => changeSort('coordinatorName')}>Service Coordinator</SortableTableHead>

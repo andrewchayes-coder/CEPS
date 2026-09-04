@@ -17,7 +17,7 @@ import { Link } from 'wouter';
 import { FileUpload } from '@/components/file-upload';
 
 const formSchema = z.object({
-  clientId: z.string().min(1, 'Client is required'),
+  clientId: z.string().min(1, 'Participant is required'),
   vendorId: z.string().optional(),
   serviceMonth: z.string().regex(/^\d{4}-\d{2}$/, 'Must be YYYY-MM format'),
   amountRequested: z.string().min(1, 'Amount is required'),
@@ -124,9 +124,9 @@ export default function InvoiceNewPage() {
               <div className="grid grid-cols-2 gap-4">
                 <FormField control={form.control} name="clientId" render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Client</FormLabel>
+                    <FormLabel>Participant</FormLabel>
                     <Select onValueChange={field.onChange} defaultValue={field.value}>
-                      <FormControl><SelectTrigger><SelectValue placeholder={clientsLoading ? "Loading..." : "Select client"} /></SelectTrigger></FormControl>
+                      <FormControl><SelectTrigger><SelectValue placeholder={clientsLoading ? "Loading..." : "Select participant"} /></SelectTrigger></FormControl>
                       <SelectContent>
                         {clients?.map(c => <SelectItem key={c.id} value={c.id}>{c.firstName} {c.lastName}</SelectItem>)}
                       </SelectContent>
@@ -142,7 +142,7 @@ export default function InvoiceNewPage() {
                         <SelectTrigger>
                           <SelectValue placeholder={
                             !selectedClientId
-                              ? "Select a client first"
+                              ? "Select a participant first"
                               : vendorsLoading
                                 ? "Loading..."
                                 : filteredVendors.length === 0

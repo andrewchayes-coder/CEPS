@@ -25,7 +25,7 @@ import { stableSort, useTableSort } from '@/lib/table-sorting';
 // The five entities the bulk-import system covers, in the documented build
 // order. Kept in sync with the server-side field registry (importRegistry.ts).
 const ENTITIES = [
-  { value: 'clients', label: 'Clients' },
+  { value: 'clients', label: 'Participants' },
   { value: 'vendors', label: 'Vendors' },
   { value: 'authorizations', label: 'Authorizations' },
   { value: 'payments', label: 'Payments (historical — no fee auto-generated)' },
@@ -156,7 +156,7 @@ export default function AdminImportPage() {
       <div>
         <h1 className="text-3xl font-bold tracking-tight">Bulk Import</h1>
         <p className="text-muted-foreground mt-1">
-          Import clients, vendors, authorizations, payments, and remittances from a CSV. Download the
+          Import participants, vendors, authorizations, payments, and remittances from a CSV. Download the
           template, fill it in, then upload to preview and confirm. Duplicates are skipped, unresolvable
           rows are reported — nothing is guessed.
         </p>

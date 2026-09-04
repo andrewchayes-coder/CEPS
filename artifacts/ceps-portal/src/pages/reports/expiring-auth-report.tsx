@@ -66,7 +66,7 @@ export default function ExpiringAuthReport() {
         offset += res.items.length;
         if (res.items.length < batch || offset >= res.total) break;
       }
-      const headers = ['Auth Number', 'Client', 'Vendor', 'Service Code', 'Expires', 'Days Until Expiry', 'Max Period Amount'];
+      const headers = ['Auth Number', 'Participant', 'Vendor', 'Service Code', 'Expires', 'Days Until Expiry', 'Max Period Amount'];
       const rows = all.map((r: any) => [
         r.authNumber ?? '',
         r.clientName ?? '',
@@ -113,7 +113,7 @@ export default function ExpiringAuthReport() {
           <TableHeader>
             <TableRow>
               <SortableTableHead sortDirection={sort.key === 'authNumber' ? sort.direction : null} onSort={() => changeSort('authNumber')}>Auth #</SortableTableHead>
-              <SortableTableHead sortDirection={sort.key === 'clientName' ? sort.direction : null} onSort={() => changeSort('clientName')}>Client</SortableTableHead>
+              <SortableTableHead sortDirection={sort.key === 'clientName' ? sort.direction : null} onSort={() => changeSort('clientName')}>Participant</SortableTableHead>
               <SortableTableHead sortDirection={sort.key === 'vendorName' ? sort.direction : null} onSort={() => changeSort('vendorName')}>Vendor</SortableTableHead>
               <SortableTableHead sortDirection={sort.key === 'servicePeriodEnd' ? sort.direction : null} onSort={() => changeSort('servicePeriodEnd')}>Expires</SortableTableHead>
               <SortableTableHead className="text-right" sortDirection={sort.key === 'daysUntilExpiry' ? sort.direction : null} onSort={() => changeSort('daysUntilExpiry')}>Days Left</SortableTableHead>

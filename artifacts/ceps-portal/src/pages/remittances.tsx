@@ -167,7 +167,7 @@ export default function RemittancesPage() {
                 <SortableTableHead label="Date Received" sortKey="remittanceDate" activeSortBy={sort.sortBy} sortDirection={sort.sortDirection} onSort={onSort} />
                 <SortableTableHead label="Reference" sortKey="altaReference" activeSortBy={sort.sortBy} sortDirection={sort.sortDirection} onSort={onSort} />
                 <SortableTableHead label="Batch" sortKey="remittanceBatchId" activeSortBy={sort.sortBy} sortDirection={sort.sortDirection} onSort={onSort} />
-                <SortableTableHead label="Client" sortKey="clientName" activeSortBy={sort.sortBy} sortDirection={sort.sortDirection} onSort={onSort} />
+                <SortableTableHead label="Participant" sortKey="clientName" activeSortBy={sort.sortBy} sortDirection={sort.sortDirection} onSort={onSort} />
                 <SortableTableHead label="Auth #" sortKey="authNumber" activeSortBy={sort.sortBy} sortDirection={sort.sortDirection} onSort={onSort} />
                 <SortableTableHead label="Amount" sortKey="amount" activeSortBy={sort.sortBy} sortDirection={sort.sortDirection} onSort={onSort} className="text-right" />
                 <SortableTableHead label="Status" sortKey="status" activeSortBy={sort.sortBy} sortDirection={sort.sortDirection} onSort={onSort} />

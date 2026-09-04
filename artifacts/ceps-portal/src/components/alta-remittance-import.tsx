@@ -109,7 +109,7 @@ export function AltaRemittanceImport({ onImported }: { onImported: (result: Alta
           <DialogTitle>Import Alta Payment Detail Report</DialogTitle>
           <DialogDescription>
             Upload one Alta Payment Detail Report CSV. Each line becomes a remittance sharing a
-            single batch id; rows are resolved to clients by UCI number and auto-matched to payments
+            single batch id; rows are resolved to participants by UCI number and auto-matched to payments
             like manual entries. Unresolvable rows are reported, never guessed.
           </DialogDescription>
         </DialogHeader>
@@ -134,7 +134,7 @@ export function AltaRemittanceImport({ onImported }: { onImported: (result: Alta
                   <FileUp className="h-6 w-6 text-muted-foreground" />
                   <p className="text-muted-foreground">Click to choose the Alta Payment Detail Report CSV</p>
                   <p className="text-xs text-muted-foreground">
-                    Interim columns: Client UCI Number, Amount, Payment Date (Authorization Number,
+                    Interim columns: Participant UCI Number, Amount, Payment Date (Authorization Number,
                     Service Month, Check/Payment Number optional)
                   </p>
                 </>

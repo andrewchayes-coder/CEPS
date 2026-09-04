@@ -83,7 +83,7 @@ export default function SignaturePage() {
             <CardContent className="space-y-4">
               <p className="text-sm text-muted-foreground">
                 Your portal account has been created. You can now log in to track this
-                client's services, invoices, and payments.
+                participant's services, invoices, and payments.
               </p>
               <Button className="w-full" onClick={() => setLocation('/login')}>
                 Go to Login
@@ -170,7 +170,7 @@ export default function SignaturePage() {
             <h3 className="font-semibold text-base border-b pb-2">Service Details</h3>
             <div className="grid sm:grid-cols-2 gap-4">
               <div>
-                <p className="text-muted-foreground">Client Name</p>
+                <p className="text-muted-foreground">Participant Name</p>
                 <p className="font-medium">{pageData.clientName}</p>
               </div>
               <div>
@@ -248,7 +248,7 @@ export default function SignaturePage() {
                     Create your portal account (optional)
                   </label>
                   <p className="text-sm text-muted-foreground">
-                    Set a password to log in and follow this client's services, invoices, and payments.
+                    Set a password to log in and follow this participant's services, invoices, and payments.
                   </p>
                 </div>
               </div>

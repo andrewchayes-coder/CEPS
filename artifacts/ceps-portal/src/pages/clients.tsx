@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Search, ChevronLeft, ChevronRight } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
+import { ClientLink } from '@/components/entity-links';
 
 const PAGE_SIZE = 50;
 
@@ -43,8 +44,8 @@ export default function ClientsPage() {
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight">Clients</h1>
-          <p className="text-muted-foreground mt-1">Manage client records and service history.</p>
+          <h1 className="text-3xl font-bold tracking-tight">Participants</h1>
+          <p className="text-muted-foreground mt-1">Manage participant records and service history.</p>
         </div>
       </div>
 
@@ -79,14 +80,14 @@ export default function ClientsPage() {
               ) : !clients || clients.length === 0 ? (
                 <TableRow>
                   <TableCell colSpan={6} className="h-24 text-center text-muted-foreground">
-                    No clients found.
+                    No participants found.
                   </TableCell>
                 </TableRow>
               ) : (
                 clients.map((client) => (
                   <TableRow key={client.id}>
                     <TableCell className="font-medium">
-                      {client.firstName} {client.lastName}
+                      <ClientLink id={client.id} name={`${client.firstName} ${client.lastName}`} />
                     </TableCell>
                     <TableCell className="font-mono text-sm">{client.uciNumber}</TableCell>
                     <TableCell>{client.dateOfBirth}</TableCell>
@@ -109,8 +110,8 @@ export default function ClientsPage() {
           <div className="flex items-center justify-between px-4 py-3 border-t">
             <p className="text-sm text-muted-foreground" data-testid="text-clients-pagination">
               {total === 0
-                ? 'No clients'
-                : `Showing ${page * PAGE_SIZE + 1}–${Math.min((page + 1) * PAGE_SIZE, total)} of ${total} clients`}
+                ? 'No participants'
+                : `Showing ${page * PAGE_SIZE + 1}–${Math.min((page + 1) * PAGE_SIZE, total)} of ${total} participants`}
             </p>
             <div className="flex items-center gap-2">
               <Button

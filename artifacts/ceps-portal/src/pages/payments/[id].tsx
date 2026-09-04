@@ -60,7 +60,7 @@ export default function PaymentDetailPage() {
         </CardHeader>
         <CardContent className="space-y-4 text-sm">
           <dl className="grid grid-cols-3 gap-2">
-            <dt className="text-muted-foreground">Client:</dt>
+            <dt className="text-muted-foreground">Participant:</dt>
             <dd className="col-span-2"><ClientLink id={payment.clientId} name={payment.clientName} testId="link-payment-client" /></dd>
             <dt className="text-muted-foreground">Payee (Vendor):</dt>
             <dd className="col-span-2"><VendorLink id={payment.vendorId} name={payment.vendorName} testId="link-payment-vendor" /></dd>

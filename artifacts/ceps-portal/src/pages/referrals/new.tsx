@@ -122,7 +122,7 @@ const fullSchema = z.object({
 
 type FormValues = z.infer<typeof fullSchema>;
 
-const STEPS = ['Coordinator', 'Vendor', 'Activity', 'Client', 'Documents', 'Review'];
+const STEPS = ['Coordinator', 'Vendor', 'Activity', 'Participant', 'Documents', 'Review'];
 
 export default function ReferralNewPage() {
   const [, setLocation] = useLocation();
@@ -515,7 +515,7 @@ export default function ReferralNewPage() {
           {currentStep === 3 && (
             <Card>
               <CardHeader>
-                <CardTitle>Client Information</CardTitle>
+                <CardTitle>Participant Information</CardTitle>
               </CardHeader>
               <CardContent className="space-y-6">
                 <div className="grid grid-cols-2 gap-4">
@@ -537,7 +537,7 @@ export default function ReferralNewPage() {
 
                 <FormField control={form.control} name="clientIsMinor" render={({ field }) => (
                   <FormItem className="space-y-3">
-                    <FormLabel>Is the client a minor?</FormLabel>
+                    <FormLabel>Is the participant a minor?</FormLabel>
                     <FormControl>
                       <RadioGroup onValueChange={(val) => field.onChange(val === 'true')} defaultValue={field.value ? 'true' : 'false'} className="flex space-x-4">
                         <FormItem className="flex items-center space-x-2 space-y-0"><FormControl><RadioGroupItem value="true" /></FormControl><FormLabel className="font-normal">Yes</FormLabel></FormItem>
@@ -550,7 +550,7 @@ export default function ReferralNewPage() {
                 <div className="bg-secondary/30 p-4 rounded-lg border space-y-4">
                   <h3 className="text-sm font-medium flex items-center gap-2">
                     <Users className="h-4 w-4 text-primary" />
-                    {clientIsMinor ? "Parent/Guardian Contact Info" : "Client Contact Info"}
+                    {clientIsMinor ? "Parent/Guardian Contact Info" : "Participant Contact Info"}
                   </h3>
                   <p className="text-xs text-muted-foreground">
                     This email will receive the digital signature request to authorize services.
@@ -589,7 +589,7 @@ export default function ReferralNewPage() {
                 <div className="space-y-4">
                   <h3 className="text-sm font-medium">Diagnosis & Eligibility <span className="text-muted-foreground font-normal">(Optional)</span></h3>
                   <p className="text-xs text-muted-foreground">
-                    If known, record the client's diagnosis and regional-center eligibility category. Both fields are optional.
+                    If known, record the participant's diagnosis and regional-center eligibility category. Both fields are optional.
                   </p>
                   <FormField control={form.control} name="diagnosis" render={({ field }) => (
                     <FormItem>
@@ -674,7 +674,7 @@ export default function ReferralNewPage() {
                   </div>
                   <div className="space-y-4">
                     <div>
-                      <h4 className="font-semibold text-primary border-b pb-1 mb-2">Client</h4>
+                      <h4 className="font-semibold text-primary border-b pb-1 mb-2">Participant</h4>
                       <dl className="grid grid-cols-3 gap-1">
                         <dt className="text-muted-foreground">Name:</dt><dd className="col-span-2">{watch('clientFirstName')} {watch('clientLastName')}</dd>
                         <dt className="text-muted-foreground">UCI:</dt><dd className="col-span-2">{watch('clientUci')}</dd>

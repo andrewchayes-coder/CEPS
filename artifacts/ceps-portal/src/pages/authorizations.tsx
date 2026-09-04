@@ -66,7 +66,7 @@ export default function AuthorizationsPage() {
             <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
             <Input
               type="search"
-              placeholder="Search by Auth #, Client, or Vendor..."
+              placeholder="Search by Auth #, Participant, or Vendor..."
               className="pl-8"
               value={search}
               onChange={(e) => { setSearch(e.target.value); setPage(0); }}
@@ -78,7 +78,7 @@ export default function AuthorizationsPage() {
             <TableHeader>
               <TableRow>
                 <SortableTableHead label="Auth #" sortKey="authNumber" activeSortBy={sort.sortBy} sortDirection={sort.sortDirection} onSort={onSort} />
-                <SortableTableHead label="Client" sortKey="clientName" activeSortBy={sort.sortBy} sortDirection={sort.sortDirection} onSort={onSort} />
+                <SortableTableHead label="Participant" sortKey="clientName" activeSortBy={sort.sortBy} sortDirection={sort.sortDirection} onSort={onSort} />
                 <SortableTableHead label="Vendor" sortKey="vendorName" activeSortBy={sort.sortBy} sortDirection={sort.sortDirection} onSort={onSort} />
                 <SortableTableHead label="Service Period" sortKey="servicePeriodStart" activeSortBy={sort.sortBy} sortDirection={sort.sortDirection} onSort={onSort} />
                 <SortableTableHead label="Max Amount" sortKey="maxPeriodAmount" activeSortBy={sort.sortBy} sortDirection={sort.sortDirection} onSort={onSort} className="text-right" />

@@ -33,7 +33,7 @@ interface NavItem {
 const navItems: NavItem[] = [
   { title: 'Dashboard', href: '/', icon: LayoutDashboard, roles: ['staff', 'service_coordinator', 'vendor', 'parent_guardian', 'self'] },
   { title: 'Referrals', href: '/referrals', icon: FileText, roles: ['staff', 'service_coordinator'] },
-  { title: 'Clients', href: '/clients', icon: Users, roles: ['staff', 'service_coordinator'] },
+  { title: 'Participants', href: '/clients', icon: Users, roles: ['staff', 'service_coordinator'] },
   { title: 'Authorizations', href: '/authorizations', icon: FileCheck, roles: ['staff', 'service_coordinator', 'vendor'] },
   { title: 'Invoices', href: '/invoices', icon: Receipt, roles: ['staff', 'service_coordinator', 'vendor', 'parent_guardian', 'self'] },
   { title: 'Payments', href: '/payments', icon: CreditCard, roles: ['staff', 'vendor', 'parent_guardian', 'self'] },

@@ -89,7 +89,7 @@ export function LogPaymentDialog({ onSaved, defaultClientId }: Props) {
 
   const submit = (override: boolean) => {
     if (!form.clientId) {
-      toast({ variant: 'destructive', title: 'Client required', description: 'Choose a client for this payment.' });
+      toast({ variant: 'destructive', title: 'Participant required', description: 'Choose a participant for this payment.' });
       return;
     }
     if (override && justification.trim() === '') {
@@ -151,9 +151,9 @@ export function LogPaymentDialog({ onSaved, defaultClientId }: Props) {
         </DialogHeader>
         <div className="grid grid-cols-2 gap-4 py-2">
           <div className="space-y-2 col-span-2">
-            <Label>Client</Label>
+            <Label>Participant</Label>
             <Select value={form.clientId} onValueChange={(v) => set('clientId', v)}>
-              <SelectTrigger data-testid="select-payment-client-id"><SelectValue placeholder="Select a client" /></SelectTrigger>
+              <SelectTrigger data-testid="select-payment-client-id"><SelectValue placeholder="Select a participant" /></SelectTrigger>
               <SelectContent>
                 {clients?.map((c) => (
                   <SelectItem key={c.id} value={c.id}>{`${c.firstName} ${c.lastName}`}</SelectItem>
@@ -240,7 +240,7 @@ export function LogPaymentDialog({ onSaved, defaultClientId }: Props) {
               <div className="space-y-1">
                 <p className="font-medium text-amber-900">Duplicate payment — hard stop</p>
                 <p className="text-sm text-amber-800">
-                  A payment already exists for this client, authorization, and month. This is a hard
+                  A payment already exists for this participant, authorization, and month. This is a hard
                   stop. To proceed you must enter a written justification and confirm the override.
                 </p>
               </div>

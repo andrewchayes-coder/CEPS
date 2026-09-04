@@ -66,7 +66,7 @@ export default function MissingDocumentsReport({ initialDocType }: { initialDocT
         offset += res.items.length;
         if (res.items.length < batch || offset >= res.total) break;
       }
-      const headers = ['Document Type', 'Record', 'Client', 'Description'];
+      const headers = ['Document Type', 'Record', 'Participant', 'Description'];
       const rows = all.map((r: any) => [
         DOC_LABELS[r.docType] ?? r.docType,
         r.entityName ?? '',
@@ -112,7 +112,7 @@ export default function MissingDocumentsReport({ initialDocType }: { initialDocT
             <TableRow>
               <SortableTableHead sortDirection={sort.key === 'docType' ? sort.direction : null} onSort={() => changeSort('docType')}>Document</SortableTableHead>
               <SortableTableHead sortDirection={sort.key === 'entityName' ? sort.direction : null} onSort={() => changeSort('entityName')}>Record</SortableTableHead>
-              <SortableTableHead sortDirection={sort.key === 'clientName' ? sort.direction : null} onSort={() => changeSort('clientName')}>Client</SortableTableHead>
+              <SortableTableHead sortDirection={sort.key === 'clientName' ? sort.direction : null} onSort={() => changeSort('clientName')}>Participant</SortableTableHead>
               <SortableTableHead sortDirection={sort.key === 'description' ? sort.direction : null} onSort={() => changeSort('description')}>Description</SortableTableHead>
             </TableRow>
           </TableHeader>

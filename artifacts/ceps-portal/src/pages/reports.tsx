@@ -114,7 +114,7 @@ function VendorPaymentsReport() {
     const headers = ['Metric', 'Value'];
     const t = summary.totals;
     const rows: (string | number)[][] = [
-      ['Active Clients', t.activeClients],
+      ['Active Participants', t.activeClients],
       ['Active Authorizations', t.activeAuthorizations],
       ['Pending Invoices', t.pendingInvoices],
       ['Vendors Missing W-9', t.vendorsMissingW9],
@@ -153,7 +153,7 @@ function VendorPaymentsReport() {
             <div className="space-y-6" data-testid="dashboard-summary-stats">
               <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4">
                 {[
-                  { label: 'Active Clients', value: summary.totals.activeClients, testid: 'stat-active-clients' },
+                  { label: 'Active Participants', value: summary.totals.activeClients, testid: 'stat-active-clients' },
                   { label: 'Active Authorizations', value: summary.totals.activeAuthorizations, testid: 'stat-active-authorizations' },
                   { label: 'Pending Invoices', value: summary.totals.pendingInvoices, testid: 'stat-pending-invoices' },
                   { label: 'Vendors Missing W-9', value: summary.totals.vendorsMissingW9, testid: 'stat-vendors-missing-w9' },

@@ -28,32 +28,32 @@ export const roleDocs: RoleDoc[] = [
     role: 'staff',
     label: 'CEPS Admin',
     overview:
-      'CEPS staff administer the entire payee support program: intake of new referrals, client records, vendor management, purchase-of-service authorizations, invoice review, payment recording, Alta remittance reconciliation, and user administration.',
+      'CEPS staff administer the entire payee support program: intake of new referrals, participant records, vendor management, purchase-of-service authorizations, invoice review, payment recording, Alta remittance reconciliation, and user administration.',
     stories: [
-      { as: 'a CEPS staff member', want: 'to review incoming referrals from service coordinators', soThat: 'new clients can be onboarded into the program quickly and accurately' },
-      { as: 'a CEPS staff member', want: 'to send agreements for e-signature to families and clients', soThat: 'program enrollment is documented without paper forms' },
+      { as: 'a CEPS staff member', want: 'to review incoming referrals from service coordinators', soThat: 'new participants can be onboarded into the program quickly and accurately' },
+      { as: 'a CEPS staff member', want: 'to send agreements for e-signature to families and participants', soThat: 'program enrollment is documented without paper forms' },
       { as: 'a CEPS staff member', want: 'to create and track purchase-of-service authorizations', soThat: 'vendor services stay within approved units and date ranges' },
       { as: 'a CEPS staff member', want: 'to review vendor invoices against active authorizations', soThat: 'only valid, authorized services are approved for payment' },
       { as: 'a CEPS staff member', want: 'to record payments and reconcile Alta remittance reports', soThat: 'the check register matches funding received from the regional center' },
-      { as: 'a CEPS staff member', want: 'to manage user accounts for all roles', soThat: 'coordinators, families, clients, and vendors can access their own portals securely' },
-      { as: 'a CEPS staff member', want: 'to view program-wide reports', soThat: 'I can monitor spending, vendor activity, and client status at a glance' },
+      { as: 'a CEPS staff member', want: 'to manage user accounts for all roles', soThat: 'coordinators, families, participants, and vendors can access their own portals securely' },
+      { as: 'a CEPS staff member', want: 'to view program-wide reports', soThat: 'I can monitor spending, vendor activity, and participant status at a glance' },
     ],
     workflows: [
       {
-        name: 'Referral intake & client onboarding',
-        summary: 'Turn a new referral from a service coordinator into an active client.',
+        name: 'Referral intake & participant onboarding',
+        summary: 'Turn a new referral from a service coordinator into an active participant.',
         steps: [
-          { title: 'Review the referral', description: 'Open Referrals, review client details, UCI number, and the coordinator\u2019s notes.' },
-          { title: 'Convert to client', description: 'Accept the referral to create the client record, or follow up with the coordinator if information is missing.' },
-          { title: 'Send the agreement', description: 'Send the CEPS participation agreement for e-signature to the parent/guardian or self-representing client.' },
-          { title: 'Activate the client', description: 'Once the agreement is signed, the client becomes active and services can be authorized.' },
+          { title: 'Review the referral', description: 'Open Referrals, review participant details, UCI number, and the coordinator\u2019s notes.' },
+          { title: 'Convert to participant', description: 'Accept the referral to create the participant record, or follow up with the coordinator if information is missing.' },
+          { title: 'Send the agreement', description: 'Send the CEPS participation agreement for e-signature to the parent/guardian or self-representing participant.' },
+          { title: 'Activate the participant', description: 'Once the agreement is signed, the participant becomes active and services can be authorized.' },
         ],
       },
       {
         name: 'Authorization management',
         summary: 'Create and maintain purchase-of-service authorizations tied to Alta POS documents.',
         steps: [
-          { title: 'Create the authorization', description: 'From Authorizations, choose the client and vendor, then enter service code, units, rate, and date range. You can also upload the Alta POS PDF for AI-assisted drafting, then review before saving.' },
+          { title: 'Create the authorization', description: 'From Authorizations, choose the participant and vendor, then enter service code, units, rate, and date range. You can also upload the Alta POS PDF for AI-assisted drafting, then review before saving.' },
           { title: 'Resolve warnings', description: 'If the system flags overlaps or missing data, review the warnings and correct the draft before saving.' },
           { title: 'Monitor utilization', description: 'Track units used as invoices are approved; renew or amend the authorization before it expires.' },
         ],
@@ -80,9 +80,9 @@ export const roleDocs: RoleDoc[] = [
         name: 'User administration',
         summary: 'Manage portal access for every role.',
         steps: [
-          { title: 'Create the user', description: 'From Users, add the person with the correct role and link them to their client or vendor record where applicable.' },
+          { title: 'Create the user', description: 'From Users, add the person with the correct role and link them to their participant or vendor record where applicable.' },
           { title: 'Send a magic link', description: 'Send a sign-in link so they can access the portal without a password, or set an initial password.' },
-          { title: 'Deactivate when needed', description: 'Deactivate accounts promptly when a family, client, or vendor leaves the program.' },
+          { title: 'Deactivate when needed', description: 'Deactivate accounts promptly when a family, participant, or vendor leaves the program.' },
         ],
       },
     ],
@@ -91,29 +91,29 @@ export const roleDocs: RoleDoc[] = [
     role: 'service_coordinator',
     label: 'Service Coordinator',
     overview:
-      'Alta Regional Center service coordinators refer clients into the CEPS program and monitor the services and authorizations for the clients on their caseload.',
+      'Alta Regional Center service coordinators refer participants into the CEPS program and monitor the services and authorizations for the participants on their caseload.',
     stories: [
-      { as: 'a service coordinator', want: 'to submit a referral for a client who needs payee support', soThat: 'the family can start receiving FMS services through CEPS' },
-      { as: 'a service coordinator', want: 'to see the status of my referrals', soThat: 'I know when a client has been onboarded or if CEPS needs more information' },
-      { as: 'a service coordinator', want: 'to view the clients on my caseload and their authorizations', soThat: 'I can verify services match the IPP and stay within approved funding' },
+      { as: 'a service coordinator', want: 'to submit a referral for a participant who needs payee support', soThat: 'the family can start receiving FMS services through CEPS' },
+      { as: 'a service coordinator', want: 'to see the status of my referrals', soThat: 'I know when a participant has been onboarded or if CEPS needs more information' },
+      { as: 'a service coordinator', want: 'to view the participants on my caseload and their authorizations', soThat: 'I can verify services match the IPP and stay within approved funding' },
       { as: 'a service coordinator', want: 'to view reports for my caseload', soThat: 'I can prepare for planning meetings with accurate service data' },
     ],
     workflows: [
       {
         name: 'Submitting a referral',
-        summary: 'Refer a client into the CEPS program.',
+        summary: 'Refer a participant into the CEPS program.',
         steps: [
-          { title: 'Start the referral', description: 'From Referrals, choose New Referral and enter the client\u2019s details, UCI number, and the services being requested.' },
-          { title: 'Add context', description: 'Include notes about the family\u2019s situation and who will represent the client (parent/guardian or self).' },
+          { title: 'Start the referral', description: 'From Referrals, choose New Referral and enter the participant\u2019s details, UCI number, and the services being requested.' },
+          { title: 'Add context', description: 'Include notes about the family\u2019s situation and who will represent the participant (parent/guardian or self).' },
           { title: 'Track progress', description: 'Watch the referral status \u2014 CEPS staff will accept it, request more information, or contact the family directly.' },
         ],
       },
       {
         name: 'Monitoring your caseload',
-        summary: 'Keep an eye on clients, authorizations, and utilization.',
+        summary: 'Keep an eye on participants, authorizations, and utilization.',
         steps: [
-          { title: 'Review clients', description: 'Open Clients to see everyone on your caseload with their program status.' },
-          { title: 'Check authorizations', description: 'Open a client to see active authorizations, units used, and expiration dates.' },
+          { title: 'Review participants', description: 'Open Participants to see everyone on your caseload with their program status.' },
+          { title: 'Check authorizations', description: 'Open a participant to see active authorizations, units used, and expiration dates.' },
           { title: 'Flag issues early', description: 'If an authorization is close to exhausted or expiring, coordinate with CEPS staff before services lapse.' },
         ],
       },
@@ -153,14 +153,14 @@ export const roleDocs: RoleDoc[] = [
   },
   {
     role: 'self',
-    label: 'Self-Representing Client',
+    label: 'Self-Representing Participant',
     overview:
-      'Self-representing clients manage their own participation in the CEPS program: they sign their own agreement and can see every invoice and payment made with their funding.',
+      'Self-representing participants manage their own participation in the CEPS program: they sign their own agreement and can see every invoice and payment made with their funding.',
     stories: [
-      { as: 'a self-representing client', want: 'to sign my own CEPS agreement online', soThat: 'I stay in control of my program enrollment' },
-      { as: 'a self-representing client', want: 'to see the invoices my vendors submit', soThat: 'I know what services are billed under my name' },
-      { as: 'a self-representing client', want: 'to see the payments made to my vendors', soThat: 'I can verify my funding is used the way I planned' },
-      { as: 'a self-representing client', want: 'to sign in with an emailed link', soThat: 'access is simple and secure' },
+      { as: 'a self-representing participant', want: 'to sign my own CEPS agreement online', soThat: 'I stay in control of my program enrollment' },
+      { as: 'a self-representing participant', want: 'to see the invoices my vendors submit', soThat: 'I know what services are billed under my name' },
+      { as: 'a self-representing participant', want: 'to see the payments made to my vendors', soThat: 'I can verify my funding is used the way I planned' },
+      { as: 'a self-representing participant', want: 'to sign in with an emailed link', soThat: 'access is simple and secure' },
     ],
     workflows: [
       {
@@ -199,7 +199,7 @@ export const roleDocs: RoleDoc[] = [
         name: 'Submitting an invoice',
         summary: 'Bill for services delivered under an authorization.',
         steps: [
-          { title: 'Check the authorization', description: 'Open Authorizations and confirm the client, service code, remaining units, and date range.' },
+          { title: 'Check the authorization', description: 'Open Authorizations and confirm the participant, service code, remaining units, and date range.' },
           { title: 'Create the invoice', description: 'From Invoices, choose New Invoice, select the authorization, and enter service dates and units for each line.' },
           { title: 'Submit for review', description: 'Submit the invoice \u2014 CEPS staff will review it against the authorization.' },
           { title: 'Fix rejections quickly', description: 'If an invoice is rejected, read the note, correct the lines, and resubmit.' },

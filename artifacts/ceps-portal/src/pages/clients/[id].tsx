@@ -7,7 +7,7 @@ import { EditClientDialog } from '@/components/edit-client-dialog';
 import { EditContactInfoDialog } from '@/components/edit-contact-info-dialog';
 import { EditFeeDialog } from '@/components/edit-fee-dialog';
 import { DeleteEntityButton } from '@/components/delete-entity-button';
-import { VendorLink } from '@/components/entity-links';
+import { ClientLink, VendorLink } from '@/components/entity-links';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -45,7 +45,7 @@ export default function ClientDetailPage() {
   const referralsSort = useTableSort<string>('referralDate', 'desc');
 
   if (isLoading) return <div className="p-8 text-center">Loading case record...</div>;
-  if (!caseData) return <div className="p-8 text-center">Client not found.</div>;
+  if (!caseData) return <div className="p-8 text-center">Participant not found.</div>;
 
   const { client, authorizations, invoices, payments, remittances, referrals } = caseData;
   const feeList = fees ?? [];
@@ -88,7 +88,7 @@ export default function ClientDetailPage() {
     <div className="space-y-6 pb-10">
       {(user?.role === 'staff' || user?.role === 'service_coordinator') && (
         <Button variant="ghost" size="sm" asChild className="-ml-2 text-muted-foreground">
-          <Link href="/clients"><ArrowLeft className="w-4 h-4 mr-2" /> Back to Clients</Link>
+          <Link href="/clients"><ArrowLeft className="w-4 h-4 mr-2" /> Back to Participants</Link>
         </Button>
       )}
 
@@ -98,7 +98,9 @@ export default function ClientDetailPage() {
             <User className="h-8 w-8 text-primary" />
           </div>
           <div className="min-w-0">
-            <h1 className="text-2xl font-bold tracking-tight">{client.firstName} {client.lastName}</h1>
+            <h1 className="text-2xl font-bold tracking-tight">
+              <ClientLink id={client.id} name={`${client.firstName} ${client.lastName}`} />
+            </h1>
             <div className="flex items-center gap-3 mt-1 text-sm text-muted-foreground">
               <span className="font-mono bg-muted px-1.5 py-0.5 rounded">UCI: {client.uciNumber}</span>
               <span>DOB: {client.dateOfBirth}</span>
@@ -152,7 +154,7 @@ export default function ClientDetailPage() {
             <div className="flex items-center gap-2">
               <EditClientDialog id={id} client={client} onSaved={() => refetch()} />
               <DeleteEntityButton
-                entityLabel="Client"
+                entityLabel="Participant"
                 testId="button-delete-client"
                 onDelete={() => deleteClient.mutateAsync({ id })}
                 onDeleted={() => navigate('/clients')}

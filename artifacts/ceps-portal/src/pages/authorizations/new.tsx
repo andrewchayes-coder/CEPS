@@ -18,7 +18,7 @@ import { Badge } from '@/components/ui/badge';
 import { FileUpload } from '@/components/file-upload';
 
 const formSchema = z.object({
-  clientId: z.string().min(1, 'Client is required'),
+  clientId: z.string().min(1, 'Participant is required'),
   vendorId: z.string().optional(),
   authNumber: z.string().min(1, 'Authorization number is required'),
   serviceCode: z.enum(['459', '024', '490']),
@@ -120,7 +120,7 @@ export default function AuthorizationNewPage() {
             setAutoFilled(filled);
             setParseNote(
               f.clientName && !filled.has('clientId')
-                ? `PDF parsed. Could not match client "${f.clientName}" automatically — please select the client manually.`
+                ? `PDF parsed. Could not match participant "${f.clientName}" automatically — please select the participant manually.`
                 : 'PDF parsed. Review every auto-filled field before saving.',
             );
             toast({ title: 'POS PDF Parsed', description: 'Fields were pre-filled from the PDF. Please review them.' });
@@ -273,11 +273,11 @@ export default function AuthorizationNewPage() {
               <div className="grid grid-cols-2 gap-4">
                 <FormField control={form.control} name="clientId" render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Client<AutoBadge name="clientId" /></FormLabel>
+                    <FormLabel>Participant<AutoBadge name="clientId" /></FormLabel>
                     <Select onValueChange={field.onChange} defaultValue={field.value}>
                       <FormControl>
                         <SelectTrigger>
-                          <SelectValue placeholder={clientsLoading ? "Loading..." : "Select client"} />
+                          <SelectValue placeholder={clientsLoading ? "Loading..." : "Select participant"} />
                         </SelectTrigger>
                       </FormControl>
                       <SelectContent>

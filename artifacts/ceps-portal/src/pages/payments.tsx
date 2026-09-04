@@ -85,7 +85,7 @@ export default function PaymentsPage() {
                 <SortableTableHead label="Date" sortKey="checkDate" activeSortBy={sort.sortBy} sortDirection={sort.sortDirection} onSort={onSort} />
                 <SortableTableHead label="Check #" sortKey="qbCheckNumber" activeSortBy={sort.sortBy} sortDirection={sort.sortDirection} onSort={onSort} />
                 <SortableTableHead label="Payee (Vendor)" sortKey="vendorName" activeSortBy={sort.sortBy} sortDirection={sort.sortDirection} onSort={onSort} />
-                <SortableTableHead label="Client" sortKey="clientName" activeSortBy={sort.sortBy} sortDirection={sort.sortDirection} onSort={onSort} />
+                <SortableTableHead label="Participant" sortKey="clientName" activeSortBy={sort.sortBy} sortDirection={sort.sortDirection} onSort={onSort} />
                 <SortableTableHead label="Amount" sortKey="amount" activeSortBy={sort.sortBy} sortDirection={sort.sortDirection} onSort={onSort} className="text-right" />
                 <SortableTableHead label="Remitted" sortKey="remitted" activeSortBy={sort.sortBy} sortDirection={sort.sortDirection} onSort={onSort} />
                 {isStaff && <TableHead className="text-right">Actions</TableHead>}

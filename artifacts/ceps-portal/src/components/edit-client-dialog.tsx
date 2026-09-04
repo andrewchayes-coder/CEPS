@@ -65,11 +65,11 @@ export function EditClientDialog({ id, client, onSaved }: Props) {
       { id, data: form as any },
       {
         onSuccess: () => {
-          toast({ title: 'Client updated' });
+          toast({ title: 'Participant updated' });
           setOpen(false);
           onSaved?.();
         },
-        onError: () => toast({ variant: 'destructive', title: 'Error', description: 'Could not update client.' }),
+        onError: () => toast({ variant: 'destructive', title: 'Error', description: 'Could not update participant.' }),
       },
     );
   };
@@ -83,8 +83,8 @@ export function EditClientDialog({ id, client, onSaved }: Props) {
       </DialogTrigger>
       <DialogContent className="max-w-lg">
         <DialogHeader>
-          <DialogTitle>Edit Client</DialogTitle>
-          <DialogDescription>Update the client's core details.</DialogDescription>
+          <DialogTitle>Edit Participant</DialogTitle>
+          <DialogDescription>Update the participant's core details.</DialogDescription>
         </DialogHeader>
         <div className="grid grid-cols-2 gap-4 py-2">
           <div className="space-y-2">

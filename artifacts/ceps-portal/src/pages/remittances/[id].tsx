@@ -63,7 +63,7 @@ export default function RemittanceDetailPage() {
         </CardHeader>
         <CardContent className="space-y-4 text-sm">
           <dl className="grid grid-cols-3 gap-2">
-            <dt className="text-muted-foreground">Client:</dt>
+            <dt className="text-muted-foreground">Participant:</dt>
             <dd className="col-span-2"><ClientLink id={remittance.clientId} name={remittance.clientName} testId="link-remittance-client" /></dd>
             <dt className="text-muted-foreground">Authorization:</dt>
             <dd className="col-span-2 font-mono">

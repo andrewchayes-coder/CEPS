@@ -70,7 +70,7 @@ export default function AuthorizationDetailPage() {
           </CardHeader>
           <CardContent className="space-y-4 text-sm">
             <dl className="grid grid-cols-3 gap-2">
-              <dt className="text-muted-foreground">Client:</dt>
+              <dt className="text-muted-foreground">Participant:</dt>
               <dd className="col-span-2"><ClientLink id={auth.clientId} name={auth.clientName} testId="link-authorization-client" /></dd>
               <dt className="text-muted-foreground">Vendor:</dt>
               <dd className="col-span-2"><VendorLink id={auth.vendorId} name={auth.vendorName} testId="link-authorization-vendor" /></dd>

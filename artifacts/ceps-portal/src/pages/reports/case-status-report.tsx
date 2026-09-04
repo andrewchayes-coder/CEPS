@@ -90,7 +90,7 @@ export default function CaseStatusReport({ initialStatus }: { initialStatus?: st
         offset += res.items.length;
         if (res.items.length < batch || offset >= res.total) break;
       }
-      const headers = ['Client', 'Status', 'Referral Date', 'Service Coordinator'];
+      const headers = ['Participant', 'Status', 'Referral Date', 'Service Coordinator'];
       const rows = all.map((r: any) => [
         r.clientName ?? '',
         STATUS_LABELS[r.status] ?? r.status,
@@ -137,11 +137,11 @@ export default function CaseStatusReport({ initialStatus }: { initialStatus?: st
               </Select>
             </div>
             <div className="space-y-1">
-              <Label htmlFor="case-status-search" className="text-xs">Client</Label>
+              <Label htmlFor="case-status-search" className="text-xs">Participant</Label>
               <Input
                 id="case-status-search"
                 data-testid="input-case-status-search"
-                placeholder="Search client…"
+                placeholder="Search participant…"
                 value={search}
                 onChange={(e) => setFilter(setSearch)(e.target.value)}
               />
@@ -156,7 +156,7 @@ export default function CaseStatusReport({ initialStatus }: { initialStatus?: st
         <Table data-testid="table-case-status">
           <TableHeader>
             <TableRow>
-              <SortableTableHead sortDirection={sort.key === 'clientName' ? sort.direction : null} onSort={() => changeSort('clientName')}>Client</SortableTableHead>
+              <SortableTableHead sortDirection={sort.key === 'clientName' ? sort.direction : null} onSort={() => changeSort('clientName')}>Participant</SortableTableHead>
               <SortableTableHead sortDirection={sort.key === 'status' ? sort.direction : null} onSort={() => changeSort('status')}>Status</SortableTableHead>
               <SortableTableHead sortDirection={sort.key === 'referralDate' ? sort.direction : null} onSort={() => changeSort('referralDate')}>Referral Date</SortableTableHead>
               <SortableTableHead sortDirection={sort.key === 'coordinatorName' ? sort.direction : null} onSort={() => changeSort('coordinatorName')}>Service Coordinator</SortableTableHead>

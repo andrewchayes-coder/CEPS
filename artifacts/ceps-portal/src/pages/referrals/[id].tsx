@@ -12,6 +12,7 @@ import { useToast } from '@/hooks/use-toast';
 import { Mail, CheckCircle2, AlertTriangle, FileText, ArrowLeft, RefreshCw } from 'lucide-react';
 import { format } from 'date-fns';
 import { Link } from 'wouter';
+import { ClientLink } from '@/components/entity-links';
 
 export default function ReferralDetailPage() {
   const { id } = useParams<{ id: string }>();
@@ -65,7 +66,9 @@ export default function ReferralDetailPage() {
 
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight">Referral: {referral.clientName}</h1>
+          <h1 className="text-3xl font-bold tracking-tight">
+            Referral: <ClientLink id={referral.clientId} name={referral.clientName || 'Unknown Participant'} />
+          </h1>
           <p className="text-muted-foreground mt-1">Submitted on {format(new Date(referral.referralDate), 'MMMM d, yyyy')}</p>
         </div>
         <div className="flex items-center gap-2">
@@ -87,7 +90,7 @@ export default function ReferralDetailPage() {
                       variant: 'destructive',
                       title: 'Cannot delete referral',
                       description:
-                        'This referral has been converted to an active client case and cannot be deleted.',
+                        'This referral has been converted to an active participant case and cannot be deleted.',
                     });
                     throw err;
                   }
@@ -111,8 +114,17 @@ export default function ReferralDetailPage() {
             </CardHeader>
             <CardContent className="pt-4 grid sm:grid-cols-2 gap-y-6 gap-x-8 text-sm">
               <div className="space-y-1">
-                <p className="text-muted-foreground font-medium">Client Info</p>
-                <p className="font-semibold">{intake?.clientFirstName} {intake?.clientLastName}</p>
+                <p className="text-muted-foreground font-medium">Participant Info</p>
+                <p className="font-semibold">
+                  <ClientLink
+                    id={referral.clientId}
+                    name={
+                      intake?.clientFirstName && intake?.clientLastName
+                        ? `${intake.clientFirstName} ${intake.clientLastName}`
+                        : referral.clientName || 'Unknown Participant'
+                    }
+                  />
+                </p>
                 <p>DOB: {intake?.clientDob}</p>
                 <p>UCI: {intake?.clientUci}</p>
                 <p>Language: {intake?.preferredLanguage}</p>

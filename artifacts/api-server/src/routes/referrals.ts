@@ -241,6 +241,10 @@ router.get("/referrals/:id", requireAuth, async (req, res): Promise<void> => {
     return;
   }
   const u = req.user!;
+  if (u.role === "service_coordinator" && referral.serviceCoordinatorId !== u.id) {
+    res.status(403).json({ error: "Forbidden" });
+    return;
+  }
   if ((u.role === "parent_guardian" || u.role === "self") && referral.clientId !== u.linkedRecordId) {
     res.status(403).json({ error: "Forbidden" });
     return;
@@ -286,6 +290,28 @@ router.patch("/referrals/:id", requireStaffOrCoordinator, async (req, res): Prom
   if (req.user!.role === "service_coordinator" && existing.serviceCoordinatorId !== req.user!.id) {
     res.status(403).json({ error: "Forbidden" });
     return;
+  }
+  if ("serviceCoordinatorId" in parsed.data) {
+    if (req.user!.role === "service_coordinator") {
+      res.status(403).json({ error: "Only staff can reassign a referral" });
+      return;
+    }
+    if (parsed.data.serviceCoordinatorId) {
+      const [coordinator] = await db
+        .select({ id: usersTable.id })
+        .from(usersTable)
+        .where(
+          and(
+            eq(usersTable.id, parsed.data.serviceCoordinatorId),
+            eq(usersTable.role, "service_coordinator"),
+            eq(usersTable.active, true),
+          ),
+        );
+      if (!coordinator) {
+        res.status(400).json({ error: "Service Coordinator must be an active coordinator account" });
+        return;
+      }
+    }
   }
   const [referral] = await db.update(referralsTable).set(updates).where(eq(referralsTable.id, id)).returning();
   if (!referral) {
@@ -334,6 +360,10 @@ router.post("/referrals/:id/send-magic-link", requireStaffOrCoordinator, async (
   const [referral] = await db.select().from(referralsTable).where(eq(referralsTable.id, id));
   if (!referral) {
     res.status(404).json({ error: "Referral not found" });
+    return;
+  }
+  if (req.user!.role === "service_coordinator" && referral.serviceCoordinatorId !== req.user!.id) {
+    res.status(403).json({ error: "Forbidden" });
     return;
   }
   if (!referral.parentEmail) {

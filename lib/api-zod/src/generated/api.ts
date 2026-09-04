@@ -218,7 +218,8 @@ export const AcceptInviteResponse = zod.object({
  * @summary List users (staff only)
  */
 export const ListUsersQueryParams = zod.object({
-  "role": zod.coerce.string().optional()
+  "role": zod.coerce.string().optional(),
+  "active": zod.coerce.boolean().optional()
 })
 
 export const ListUsersResponseItem = zod.object({
@@ -967,7 +968,7 @@ export const GetReferralResponse = zod.object({
 
 
 /**
- * @summary Update referral (status, notes)
+ * @summary Update referral (status, notes, and staff-only coordinator assignment)
  */
 export const UpdateReferralParams = zod.object({
   "id": zod.coerce.string()

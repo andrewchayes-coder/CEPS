@@ -1657,6 +1657,7 @@ export interface ExpiringAuthRow {
 
 export type ListUsersParams = {
 role?: string;
+active?: boolean;
 };
 
 export type ListAuditLogParams = {

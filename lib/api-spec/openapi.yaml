@@ -306,6 +306,9 @@ paths:
         - name: role
           in: query
           schema: { type: string }
+        - name: active
+          in: query
+          schema: { type: boolean }
       responses:
         "200":
           description: Users
@@ -633,7 +636,7 @@ paths:
     patch:
       operationId: updateReferral
       tags: [referrals]
-      summary: Update referral (status, notes)
+      summary: Update referral (status, notes, and staff-only coordinator assignment)
       parameters:
         - name: id
           in: path

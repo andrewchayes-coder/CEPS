@@ -8,4 +8,5 @@
 
 export type ListUsersParams = {
 role?: string;
+active?: boolean;
 };

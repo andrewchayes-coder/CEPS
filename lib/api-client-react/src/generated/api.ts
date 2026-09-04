@@ -2172,7 +2172,7 @@ export const getUpdateReferralUrl = (id: string,) => {
 }
 
 /**
- * @summary Update referral (status, notes)
+ * @summary Update referral (status, notes, and staff-only coordinator assignment)
  */
 export const updateReferral = async (id: string,
     referralUpdate: ReferralUpdate, options?: Parameters<typeof customFetch>[1]): Promise<Referral> => {
@@ -2222,7 +2222,7 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
     export type UpdateReferralMutationError = ErrorType<unknown>
 
     /**
- * @summary Update referral (status, notes)
+ * @summary Update referral (status, notes, and staff-only coordinator assignment)
  */
 export const useUpdateReferral = <TError = ErrorType<unknown>,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateReferral>>, TError,{id: string;data: BodyType<ReferralUpdate>}, TContext>, request?: SecondParameter<typeof customFetch>}

@@ -6,6 +6,7 @@ import { InvitePortalDialog } from '@/components/invite-portal-dialog';
 import { EditClientDialog } from '@/components/edit-client-dialog';
 import { EditContactInfoDialog } from '@/components/edit-contact-info-dialog';
 import { EditFeeDialog } from '@/components/edit-fee-dialog';
+import { CreateRemittanceDialog } from '@/components/create-remittance-dialog';
 import { DeleteEntityButton } from '@/components/delete-entity-button';
 import { ClientLink, VendorLink } from '@/components/entity-links';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -83,6 +84,10 @@ export default function ClientDetailPage() {
     coordinatorName: (referral) => referral.coordinatorName,
     status: (referral) => referral.status,
   });
+  const matchedRemittances = remittances.filter((remittance) => remittance.status === 'matched');
+  const outstandingRemittances = remittances.filter((remittance) => Number(remittance.remainingAmount ?? remittance.amount) > 0);
+  const matchedRemittanceAmount = matchedRemittances.reduce((sum, remittance) => sum + Number(remittance.allocatedAmount ?? remittance.amount), 0);
+  const outstandingRemittanceAmount = outstandingRemittances.reduce((sum, remittance) => sum + Number(remittance.remainingAmount ?? remittance.amount), 0);
 
   return (
     <div className="space-y-6 pb-10">
@@ -342,6 +347,15 @@ export default function ClientDetailPage() {
         </TabsContent>
         
         <TabsContent value="payments" className="pt-6">
+          <div className="space-y-6">
+           <div className="grid gap-4 sm:grid-cols-2">
+             <Card data-testid="participant-remittance-matched-summary">
+               <CardHeader className="pb-2"><CardDescription>Matched remittances</CardDescription><CardTitle>{matchedRemittances.length} · ${matchedRemittanceAmount.toFixed(2)}</CardTitle></CardHeader>
+             </Card>
+             <Card data-testid="participant-remittance-outstanding-summary">
+               <CardHeader className="pb-2"><CardDescription>Outstanding remittances</CardDescription><CardTitle>{outstandingRemittances.length} · ${outstandingRemittanceAmount.toFixed(2)}</CardTitle></CardHeader>
+             </Card>
+           </div>
            <Card>
             <CardContent className="p-0">
               <Table>
@@ -381,6 +395,37 @@ export default function ClientDetailPage() {
               </Table>
             </CardContent>
           </Card>
+           <Card>
+             <CardHeader className="flex flex-row items-center justify-between gap-4">
+               <div>
+                 <CardTitle className="text-lg">Remittances</CardTitle>
+                 <CardDescription>Participant reimbursements and their current matching status.</CardDescription>
+               </div>
+               {isStaff && <CreateRemittanceDialog preselectedClientId={id} onSaved={() => refetch()} />}
+             </CardHeader>
+             <CardContent className="p-0">
+               <Table>
+                 <TableHeader><TableRow><TableHead>Date</TableHead><TableHead>Reference</TableHead><TableHead>Auth #</TableHead><TableHead className="text-right">Amount</TableHead><TableHead>Status</TableHead><TableHead className="text-right">Actions</TableHead></TableRow></TableHeader>
+                 <TableBody>
+                   {remittances.map((remittance) => (
+                     <TableRow key={remittance.id}>
+                       <TableCell className="whitespace-nowrap">{format(new Date(remittance.remittanceDate), 'MMM d, yyyy')}</TableCell>
+                       <TableCell className="font-mono text-sm">{remittance.altaReference || '—'}</TableCell>
+                       <TableCell>{remittance.authorizationId ? <Link href={`/authorizations/${remittance.authorizationId}`} className="text-primary hover:underline">{remittance.authNumber}</Link> : (remittance.authNumber || '—')}</TableCell>
+                       <TableCell className="text-right font-medium">
+                         ${Number(remittance.amount).toFixed(2)}
+                         <div className="text-xs font-normal text-muted-foreground">${Number(remittance.remainingAmount ?? remittance.amount).toFixed(2)} remaining</div>
+                       </TableCell>
+                       <TableCell><Badge variant="outline" className={remittance.status === 'matched' ? 'bg-chart-5/10 text-chart-5 border-chart-5/20' : remittance.status === 'pending' ? 'bg-chart-2/10 text-chart-2 border-chart-2/20' : ''}>{remittance.status}</Badge></TableCell>
+                       <TableCell className="text-right"><Button variant="ghost" size="sm" asChild><Link href={`/remittances/${remittance.id}`}>View</Link></Button></TableCell>
+                     </TableRow>
+                   ))}
+                   {remittances.length === 0 && <TableRow><TableCell colSpan={6} className="text-center py-8 text-muted-foreground">No remittances found for this participant.</TableCell></TableRow>}
+                 </TableBody>
+               </Table>
+             </CardContent>
+           </Card>
+          </div>
         </TabsContent>
 
         <TabsContent value="fees" className="pt-6">

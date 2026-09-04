@@ -11,16 +11,17 @@ import { trackAnalyticsEvent } from '@/lib/analytics';
 
 const emptyForm = { clientId: '', authorizationId: '', altaReference: '', remittanceDate: '', amount: '', paymentMonth: '' };
 
-export function CreateRemittanceDialog({ onSaved }: { onSaved?: () => void }) {
+export function CreateRemittanceDialog({ onSaved, preselectedClientId }: { onSaved?: () => void; preselectedClientId?: string }) {
   const [open, setOpen] = useState(false);
-  const [form, setForm] = useState(emptyForm);
+  const initialForm = () => ({ ...emptyForm, clientId: preselectedClientId ?? '' });
+  const [form, setForm] = useState(initialForm);
   const { toast } = useToast();
   const createRemittance = useCreateRemittance();
   const { data: clientsData } = useListClients({ limit: 1000 });
   const { data: authorizationsData } = useListAuthorizations({ limit: 1000 });
   const authorizations = authorizationsData?.items?.filter((authorization) => authorization.clientId === form.clientId) ?? [];
   const set = (key: keyof typeof emptyForm, value: string) => setForm((current) => ({ ...current, [key]: value }));
-  const reset = () => setForm(emptyForm);
+  const reset = () => setForm(initialForm());
 
   const submit = () => {
     if (!form.clientId || !form.authorizationId || !form.altaReference.trim() || !form.remittanceDate || !form.amount || !form.paymentMonth) {
@@ -47,12 +48,12 @@ export function CreateRemittanceDialog({ onSaved }: { onSaved?: () => void }) {
     });
   };
 
-  return <Dialog open={open} onOpenChange={(next) => { setOpen(next); if (!next) reset(); }}>
+  return <Dialog open={open} onOpenChange={(next) => { setOpen(next); reset(); }}>
     <DialogTrigger asChild><Button data-testid="button-create-remittance"><Plus className="mr-2 h-4 w-4" /> Create Remittance</Button></DialogTrigger>
     <DialogContent className="max-w-lg">
       <DialogHeader><DialogTitle>Create Remittance</DialogTitle><DialogDescription>Record a remittance manually. This creates a new line and does not change an existing remittance.</DialogDescription></DialogHeader>
       <div className="grid grid-cols-2 gap-4 py-2">
-        <div className="col-span-2 space-y-2"><Label>Participant</Label><Select value={form.clientId} onValueChange={(value) => setForm((current) => ({ ...current, clientId: value, authorizationId: '' }))}><SelectTrigger data-testid="select-create-remittance-client"><SelectValue placeholder="Select a participant" /></SelectTrigger><SelectContent>{clientsData?.items?.map((client) => <SelectItem key={client.id} value={client.id}>{client.firstName} {client.lastName}</SelectItem>)}</SelectContent></Select></div>
+        <div className="col-span-2 space-y-2"><Label>Participant</Label><Select value={form.clientId} onValueChange={(value) => setForm((current) => ({ ...current, clientId: value, authorizationId: '' }))} disabled={!!preselectedClientId}><SelectTrigger data-testid="select-create-remittance-client"><SelectValue placeholder="Select a participant" /></SelectTrigger><SelectContent>{clientsData?.items?.map((client) => <SelectItem key={client.id} value={client.id}>{client.firstName} {client.lastName}</SelectItem>)}</SelectContent></Select></div>
         <div className="col-span-2 space-y-2"><Label>Authorization</Label><Select value={form.authorizationId} onValueChange={(value) => set('authorizationId', value)} disabled={!form.clientId}><SelectTrigger data-testid="select-create-remittance-authorization"><SelectValue placeholder="Select an authorization" /></SelectTrigger><SelectContent>{authorizations.map((authorization) => <SelectItem key={authorization.id} value={authorization.id}>{authorization.authNumber}</SelectItem>)}</SelectContent></Select></div>
         <div className="space-y-2"><Label>Source / payment reference</Label><Input value={form.altaReference} onChange={(event) => set('altaReference', event.target.value)} data-testid="input-create-remittance-reference" /></div>
         <div className="space-y-2"><Label>Date received</Label><Input type="date" value={form.remittanceDate} onChange={(event) => set('remittanceDate', event.target.value)} data-testid="input-create-remittance-date" /></div>

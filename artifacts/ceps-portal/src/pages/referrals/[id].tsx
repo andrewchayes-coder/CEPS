@@ -147,10 +147,10 @@ export default function ReferralDetailPage() {
               </div>
 
               <div className="space-y-1">
-                <p className="text-muted-foreground font-medium">Coordinator</p>
-                <p className="font-semibold">{intake?.coordinatorName}</p>
+                <p className="text-muted-foreground font-medium">Service Coordinator</p>
+                <p className="font-semibold" data-testid="text-referral-assigned-coordinator">{referral.coordinatorName || 'Unassigned'}</p>
                 <p>{intake?.regionalCenterName}</p>
-                <p>{intake?.coordinatorEmail}</p>
+                {intake?.coordinatorName && <p className="text-xs text-muted-foreground">Referral contact: {intake.coordinatorName} · {intake.coordinatorEmail}</p>}
               </div>
             </CardContent>
           </Card>

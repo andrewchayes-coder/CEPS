@@ -23,8 +23,17 @@ router.get("/users", requireStaff, async (req, res): Promise<void> => {
     res.status(400).json({ error: query.error.message });
     return;
   }
-  let users = await db.select().from(usersTable).orderBy(usersTable.name);
-  if (query.data.role) users = users.filter((u) => u.role === query.data.role);
+  const conditions = [];
+  if (query.data.role) conditions.push(eq(usersTable.role, query.data.role));
+  const rawActive = req.query.active;
+  if (typeof rawActive === "string" && (rawActive === "true" || rawActive === "false")) {
+    conditions.push(eq(usersTable.active, rawActive === "true"));
+  }
+  const users = await db
+    .select()
+    .from(usersTable)
+    .where(conditions.length ? and(...conditions) : undefined)
+    .orderBy(usersTable.name);
   res.json(ListUsersResponse.parse(users.map(userJson)));
 });
 

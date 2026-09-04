@@ -3,6 +3,7 @@ import { expect, test, type Page } from '@playwright/test';
 const participantId = 'participant-1';
 const referralId = 'referral-1';
 const participantName = 'Jordan Rivera';
+const remittanceId = 'remittance-1';
 
 const baseUser = {
   id: 'user-1',
@@ -127,4 +128,95 @@ test('referral participant names remain plain text when the role cannot open cli
 
   await expect(page.getByText(participantName)).toHaveCount(2);
   await expect(page.getByRole('link', { name: participantName })).toHaveCount(0);
+});
+
+test('staff creates and immediately assigns a coordinator without losing referral edits', async ({ page }) => {
+  await mockSession(page, 'staff');
+  await mockReferralDetail(page);
+  await page.route('**/api/users?*', (route) =>
+    route.fulfill({ json: [{ ...baseUser, id: 'coordinator-1', name: 'Existing Coordinator', role: 'service_coordinator' }] }),
+  );
+  await page.route('**/api/users', async (route) => {
+    const body = route.request().postDataJSON();
+    expect(body).toEqual({ name: 'New Coordinator', email: 'new@example.test', role: 'service_coordinator' });
+    await route.fulfill({ status: 201, json: { ...baseUser, id: 'coordinator-2', name: body.name, email: body.email, role: body.role } });
+  });
+  await page.route(`**/api/referrals/${referralId}`, async (route) => {
+    if (route.request().method() !== 'PATCH') return route.fallback();
+    const body = route.request().postDataJSON();
+    expect(body.notes).toBe('Keep these edits');
+    expect(body.serviceCoordinatorId).toBe('coordinator-2');
+    await route.fulfill({ json: { ...referral, ...body, coordinatorName: 'New Coordinator' } });
+  });
+
+  await page.goto(`/referrals/${referralId}`);
+  await page.getByTestId('button-edit-referral').click();
+  await page.locator('textarea').fill('Keep these edits');
+  await page.getByTestId('button-add-referral-coordinator').click();
+  await page.getByTestId('input-new-coordinator-name').fill('New Coordinator');
+  await page.getByTestId('input-new-coordinator-email').fill('new@example.test');
+  await page.getByTestId('button-create-referral-coordinator').click();
+  await expect(page.getByText('Coordinator created and selected')).toBeVisible();
+  await page.getByTestId('button-save-referral').click();
+  await expect(page.getByText('Referral updated', { exact: true })).toBeVisible();
+});
+
+test('participant Payments tab shows remittance totals, links, and prefilled creation', async ({ page }) => {
+  await mockSession(page, 'staff');
+  const client = {
+    id: participantId,
+    firstName: 'Jordan',
+    lastName: 'Rivera',
+    uciNumber: 'UCI-100',
+    dateOfBirth: '2000-01-01',
+    status: 'active',
+    assignedCoordinatorName: 'Case Coordinator',
+  };
+  const remittance = {
+    id: remittanceId,
+    clientId: participantId,
+    clientName: participantName,
+    authorizationId: 'auth-1',
+    authNumber: 'AUTH-100',
+    altaReference: 'ALTA-100',
+    remittanceDate: '2026-09-03',
+    amount: '125.00',
+    allocatedAmount: '100.00',
+    remainingAmount: '25.00',
+    status: 'received',
+    source: 'manual',
+    autoMatched: false,
+    allocations: [],
+  };
+  await page.route(`**/api/clients/${participantId}/case`, (route) =>
+    route.fulfill({ json: { client, referrals: [], authorizations: [{ id: 'auth-1', clientId: participantId, authNumber: 'AUTH-100', vendorId: 'vendor-1', vendorName: 'Vendor', serviceCode: '459', servicePeriodStart: '2026-01-01', servicePeriodEnd: '2026-12-31', maxPeriodAmount: '1000.00', totalPaid: '0.00', status: 'active' }], invoices: [], payments: [], remittances: [remittance] } }),
+  );
+  await page.route('**/api/fees?*', (route) => route.fulfill({ json: [] }));
+  await page.route('**/api/clients?*', (route) => route.fulfill({ json: { items: [client], total: 1 } }));
+  await page.route('**/api/authorizations?*', (route) => route.fulfill({ json: { items: [], total: 0 } }));
+
+  await page.goto(`/clients/${participantId}`);
+  await page.getByRole('tab', { name: /Payments/ }).click();
+  await expect(page.getByTestId('participant-remittance-matched-summary')).toContainText('0 · $0.00');
+  await expect(page.getByTestId('participant-remittance-outstanding-summary')).toContainText('1 · $25.00');
+  await expect(page.getByText('ALTA-100')).toBeVisible();
+  await expect(page.getByRole('link', { name: 'View' })).toHaveAttribute('href', `/remittances/${remittanceId}`);
+
+  await page.getByTestId('button-create-remittance').click();
+  await expect(page.getByTestId('select-create-remittance-client')).toBeDisabled();
+  await expect(page.getByTestId('select-create-remittance-client')).toContainText(participantName);
+});
+
+test('participant Payments tab has a remittance empty state', async ({ page }) => {
+  await mockSession(page, 'staff');
+  await page.route(`**/api/clients/${participantId}/case`, (route) =>
+    route.fulfill({ json: { client: { id: participantId, firstName: 'Jordan', lastName: 'Rivera', uciNumber: 'UCI-100', dateOfBirth: '2000-01-01', status: 'active' }, referrals: [], authorizations: [], invoices: [], payments: [], remittances: [] } }),
+  );
+  await page.route('**/api/fees?*', (route) => route.fulfill({ json: [] }));
+  await page.route('**/api/clients?*', (route) => route.fulfill({ json: { items: [], total: 0 } }));
+  await page.route('**/api/authorizations?*', (route) => route.fulfill({ json: { items: [], total: 0 } }));
+
+  await page.goto(`/clients/${participantId}`);
+  await page.getByRole('tab', { name: /Payments/ }).click();
+  await expect(page.getByText('No remittances found for this participant.')).toBeVisible();
 });

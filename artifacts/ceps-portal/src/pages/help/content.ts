@@ -28,13 +28,13 @@ export const roleDocs: RoleDoc[] = [
     role: 'staff',
     label: 'CEPS Admin',
     overview:
-      'CEPS staff administer the entire payee support program: intake of new referrals, participant records, vendor management, purchase-of-service authorizations, invoice review, payment recording, Alta remittance reconciliation, and user administration.',
+      'CEPS staff administer the entire payee support program: intake of new referrals, participant records, vendor management, purchase-of-service authorizations, invoice review, payment recording, Remittance Report reconciliation, and user administration.',
     stories: [
       { as: 'a CEPS staff member', want: 'to review incoming referrals from service coordinators', soThat: 'new participants can be onboarded into the program quickly and accurately' },
       { as: 'a CEPS staff member', want: 'to send agreements for e-signature to families and participants', soThat: 'program enrollment is documented without paper forms' },
       { as: 'a CEPS staff member', want: 'to create and track purchase-of-service authorizations', soThat: 'vendor services stay within approved units and date ranges' },
       { as: 'a CEPS staff member', want: 'to review vendor invoices against active authorizations', soThat: 'only valid, authorized services are approved for payment' },
-      { as: 'a CEPS staff member', want: 'to record payments and reconcile Alta remittance reports', soThat: 'the check register matches funding received from the regional center' },
+      { as: 'a CEPS staff member', want: 'to record payments and reconcile Remittance Reports', soThat: 'the check register matches funding received from the regional center' },
       { as: 'a CEPS staff member', want: 'to manage user accounts for all roles', soThat: 'coordinators, families, participants, and vendors can access their own portals securely' },
       { as: 'a CEPS staff member', want: 'to view program-wide reports', soThat: 'I can monitor spending, vendor activity, and participant status at a glance' },
     ],
@@ -69,9 +69,9 @@ export const roleDocs: RoleDoc[] = [
       },
       {
         name: 'Remittance reconciliation',
-        summary: 'Match Alta remittance reports against the CEPS check register.',
+        summary: 'Match Remittance Reports against the CEPS check register.',
         steps: [
-          { title: 'Import the remittance', description: 'From Remittances, add the Alta remittance report for the funding period.' },
+          { title: 'Import the remittance', description: 'From Remittances, add the Remittance Report for the funding period.' },
           { title: 'Match line items', description: 'Match remittance lines to recorded payments; investigate any unmatched or partially funded lines.' },
           { title: 'Close the period', description: 'When all lines are matched or explained, mark the remittance reconciled.' },
         ],

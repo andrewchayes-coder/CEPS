@@ -8,7 +8,7 @@ import { ClientLink } from '@/components/entity-links';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { ArrowLeft } from 'lucide-react';
+import { ArrowLeft, AlertTriangle } from 'lucide-react';
 import { format } from 'date-fns';
 
 export default function RemittanceDetailPage() {
@@ -33,7 +33,7 @@ export default function RemittanceDetailPage() {
 
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight">Alta Remittance</h1>
+          <h1 className="text-3xl font-bold tracking-tight">Remittance</h1>
           <p className="text-muted-foreground mt-1 font-mono">{remittance.altaReference || 'No reference'}</p>
         </div>
         <div className="flex items-center gap-2">
@@ -56,6 +56,20 @@ export default function RemittanceDetailPage() {
           )}
         </div>
       </div>
+
+      {remittance.reviewReason && (
+        <div className="flex gap-3 rounded-md border border-destructive/30 bg-destructive/10 p-4 text-sm text-destructive" data-testid="alert-remittance-review">
+          <AlertTriangle className="h-5 w-5 shrink-0" />
+          <div>
+            <p className="font-medium">Review required</p>
+            {remittance.reviewReason === 'amount_mismatch' ? (
+              <p>Actual amount ${parseFloat(remittance.amount).toFixed(2)} vs expected ${parseFloat(remittance.expectedAmount ?? '0').toFixed(2)}. This partial or amount mismatch needs review.</p>
+            ) : (
+              <p>{remittance.reviewReason.replace(/_/g, ' ').replace(/\b\w/g, (letter) => letter.toUpperCase())}</p>
+            )}
+          </div>
+        </div>
+      )}
 
       <Card>
         <CardHeader>
@@ -92,12 +106,24 @@ export default function RemittanceDetailPage() {
             <dd className="col-span-2">{remittance.paymentMonth || '-'}</dd>
             <dt className="text-muted-foreground">Amount:</dt>
             <dd className="col-span-2 font-bold text-lg">${parseFloat(remittance.amount).toFixed(2)}</dd>
+            {remittance.expectedAmount && (
+              <>
+                <dt className="text-muted-foreground">Expected amount:</dt>
+                <dd className="col-span-2">${parseFloat(remittance.expectedAmount).toFixed(2)}</dd>
+              </>
+            )}
             <dt className="text-muted-foreground">Source:</dt>
             <dd className="col-span-2 capitalize">{remittance.source?.replace('_', ' ')}</dd>
             {remittance.remittanceBatchId && (
               <>
                 <dt className="text-muted-foreground">Batch:</dt>
                 <dd className="col-span-2 font-mono text-xs">{remittance.remittanceBatchId}</dd>
+              </>
+            )}
+            {remittance.reportReference && (
+              <>
+                <dt className="text-muted-foreground">Remittance Report:</dt>
+                <dd className="col-span-2 font-mono text-xs">{remittance.reportReference}</dd>
               </>
             )}
           </dl>

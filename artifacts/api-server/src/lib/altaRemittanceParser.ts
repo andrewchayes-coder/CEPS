@@ -1,6 +1,6 @@
-// ⚠️ INTERIM PLACEHOLDER — Alta "Payment Detail Report" column mapping.
+// ⚠️ INTERIM PLACEHOLDER — Remittance Report column mapping.
 //
-// NO real sample of the Alta Payment Detail Report CSV exists yet, so the exact
+// NO real sample of the Remittance Report CSV exists yet, so the exact
 // column headers below are an EDUCATED GUESS pending confirmation from CEPS
 // (mirrors the fee placeholder pattern in routes/payments.ts — the marker
 // `interim_..._pending_confirmation` makes this trivially greppable/swappable
@@ -156,7 +156,7 @@ export function toServiceMonth(raw: string): string | null {
 }
 
 /**
- * Parse raw CSV text of an Alta Payment Detail Report into structured
+ * Parse raw CSV text of a Remittance Report into structured
  * remittance rows. Required fields (UCI, amount, payment date) that are
  * missing/invalid produce a per-row problem instead of a guessed value —
  * unresolvable rows are surfaced, never fabricated.
@@ -180,7 +180,7 @@ export function parseAltaRemittanceCsv(text: string): AltaParseResult {
       rows: [],
       problems: [],
       headerError:
-        `Could not find the required Alta columns (interim mapping: ${ALTA_INTERIM_MARKER}). ` +
+         `Could not find the required Remittance Report columns (interim mapping: ${ALTA_INTERIM_MARKER}). ` +
         `Needed: Client UCI Number, Amount, Payment Date. Found headers: ${headers.join(", ")}`,
     };
   }

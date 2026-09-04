@@ -4477,7 +4477,7 @@ export const getCreateRemittanceUrl = () => {
 }
 
 /**
- * @summary Log a remittance line from an Alta Payment Detail Report
+ * @summary Log a remittance line from a Remittance Report
  */
 export const createRemittance = async (remittanceInput: RemittanceInput, options?: Parameters<typeof customFetch>[1]): Promise<Remittance> => {
 
@@ -4526,7 +4526,7 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
     export type CreateRemittanceMutationError = ErrorType<unknown>
 
     /**
- * @summary Log a remittance line from an Alta Payment Detail Report
+ * @summary Log a remittance line from a Remittance Report
  */
 export const useCreateRemittance = <TError = ErrorType<unknown>,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createRemittance>>, TError,{data: BodyType<RemittanceInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
@@ -4840,7 +4840,7 @@ export const getImportAltaRemittancesUrl = () => {
 }
 
 /**
- * @summary Import an Alta Payment Detail Report — parsed rows become remittance line items sharing one generated remittanceBatchId, each auto-matched to a payment like a manual entry.
+ * @summary Import a Remittance Report — parsed rows become remittance line items sharing one generated remittanceBatchId, each auto-matched to a payment like a manual entry.
  */
 export const importAltaRemittances = async (altaRemittanceImportInput: AltaRemittanceImportInput, options?: Parameters<typeof customFetch>[1]): Promise<AltaRemittanceImportResult> => {
 
@@ -4889,7 +4889,7 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
     export type ImportAltaRemittancesMutationError = ErrorType<unknown>
 
     /**
- * @summary Import an Alta Payment Detail Report — parsed rows become remittance line items sharing one generated remittanceBatchId, each auto-matched to a payment like a manual entry.
+ * @summary Import a Remittance Report — parsed rows become remittance line items sharing one generated remittanceBatchId, each auto-matched to a payment like a manual entry.
  */
 export const useImportAltaRemittances = <TError = ErrorType<unknown>,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof importAltaRemittances>>, TError,{data: BodyType<AltaRemittanceImportInput>}, TContext>, request?: SecondParameter<typeof customFetch>}

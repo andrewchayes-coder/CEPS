@@ -5,8 +5,6 @@
  * CEPS Portal API — referral intake, authorizations, invoices, payments, remittances, vendors, reporting
  * OpenAPI spec version: 0.1.0
  */
-import type { RemittanceUpdateSource } from './remittanceUpdateSource';
-import type { RemittanceUpdateStatus } from './remittanceUpdateStatus';
 
 export interface RemittanceUpdate {
   /** @nullable */
@@ -17,8 +15,4 @@ export interface RemittanceUpdate {
   amount?: string;
   /** @nullable */
   paymentMonth?: string | null;
-  status?: RemittanceUpdateStatus;
-  source?: RemittanceUpdateSource;
-  /** @nullable */
-  remittanceBatchId?: string | null;
 }

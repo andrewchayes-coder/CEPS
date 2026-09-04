@@ -1026,6 +1026,12 @@ paths:
         - name: authorizationId
           in: query
           schema: { type: string }
+        - name: remitted
+          in: query
+          schema: { type: boolean }
+        - name: paymentMonth
+          in: query
+          schema: { type: string }
         - name: status
           in: query
           schema: { type: string }
@@ -1334,7 +1340,7 @@ paths:
           schema: { type: string }
         - name: remittanceBatchId
           in: query
-          description: Filter to line items imported from one Alta report (batch).
+          description: Filter to line items imported from one Remittance Report batch.
           schema: { type: string }
         - name: autoMatched
           in: query
@@ -1374,7 +1380,7 @@ paths:
     post:
       operationId: createRemittance
       tags: [remittances]
-      summary: Log a remittance line from an Alta Payment Detail Report
+      summary: Log a remittance line from a Remittance Report
       requestBody:
         required: true
         content:
@@ -1475,7 +1481,7 @@ paths:
       operationId: importAltaRemittances
       tags: [remittances]
       summary: >-
-        Import an Alta Payment Detail Report — parsed rows become remittance
+        Import a Remittance Report — parsed rows become remittance
         line items sharing one generated remittanceBatchId, each auto-matched to
         a payment like a manual entry.
       requestBody:
@@ -2542,7 +2548,7 @@ components:
         clientName: { type: ["string", "null"] }
         authorizationId: { type: ["string", "null"] }
         authNumber: { type: ["string", "null"] }
-        altaReference: { type: ["string", "null"] }
+        altaReference: { type: ["string", "null"], description: "Source payment/check reference." }
         remittanceDate: { type: string }
         amount: { type: string }
         paymentMonth: { type: ["string", "null"] }
@@ -2551,18 +2557,19 @@ components:
         matchedPaymentId: { type: ["string", "null"] }
         autoMatched: { type: boolean }
         remittanceBatchId: { type: ["string", "null"] }
+        reportReference: { type: ["string", "null"], description: "Source Remittance Report reference, distinct from the generated batch id." }
+        reviewReason: { type: ["string", "null"], description: "Stable reason a received remittance requires review." }
+        expectedAmount: { type: ["string", "null"], description: "Authorization amount expected for this remittance when known." }
     RemittanceInput:
       type: object
-      required: [clientId, remittanceDate, amount]
+      required: [clientId, authorizationId, remittanceDate, amount]
       properties:
         clientId: { type: string }
-        authorizationId: { type: ["string", "null"] }
-        altaReference: { type: string }
+        authorizationId: { type: string }
+        altaReference: { type: ["string", "null"] }
         remittanceDate: { type: string }
         amount: { type: string }
-        paymentMonth: { type: string }
-        source: { type: string, enum: [alta_regional, manual] }
-        remittanceBatchId: { type: string }
+        paymentMonth: { type: ["string", "null"] }
     RemittanceMatchInput:
       type: object
       required: [paymentId]
@@ -2575,12 +2582,12 @@ components:
         csvText:
           type: string
           description: >-
-            Raw text of the uploaded Alta Payment Detail Report CSV. Parsed
+            Raw text of the uploaded Remittance Report CSV. Parsed
             server-side by the isolated altaRemittanceParser (interim column
             mapping — pending a real sample).
         reportReference:
           type: string
-          description: Optional Alta report/check reference stamped onto every line.
+          description: Optional source Remittance Report reference stamped onto every line.
     AltaRemittanceImportRowResult:
       type: object
       required: [rowNumber, outcome]
@@ -2667,9 +2674,6 @@ components:
         remittanceDate: { type: string }
         amount: { type: string }
         paymentMonth: { type: ["string", "null"] }
-        status: { type: string, enum: [pending, received, matched] }
-        source: { type: string, enum: [alta_regional, manual] }
-        remittanceBatchId: { type: ["string", "null"] }
     Vendor:
       type: object
       required: [id, name, w9Status, preferred, active]

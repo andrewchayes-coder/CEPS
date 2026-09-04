@@ -5,16 +5,14 @@
  * CEPS Portal API — referral intake, authorizations, invoices, payments, remittances, vendors, reporting
  * OpenAPI spec version: 0.1.0
  */
-import type { RemittanceInputSource } from './remittanceInputSource';
 
 export interface RemittanceInput {
   clientId: string;
+  authorizationId: string;
   /** @nullable */
-  authorizationId?: string | null;
-  altaReference?: string;
+  altaReference?: string | null;
   remittanceDate: string;
   amount: string;
-  paymentMonth?: string;
-  source?: RemittanceInputSource;
-  remittanceBatchId?: string;
+  /** @nullable */
+  paymentMonth?: string | null;
 }

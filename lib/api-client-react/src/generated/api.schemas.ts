@@ -706,7 +706,10 @@ export interface Remittance {
   authorizationId?: string | null;
   /** @nullable */
   authNumber?: string | null;
-  /** @nullable */
+  /**
+     * Source payment/check reference.
+     * @nullable
+     */
   altaReference?: string | null;
   remittanceDate: string;
   amount: string;
@@ -719,6 +722,21 @@ export interface Remittance {
   autoMatched: boolean;
   /** @nullable */
   remittanceBatchId?: string | null;
+  /**
+     * Source Remittance Report reference, distinct from the generated batch id.
+     * @nullable
+     */
+  reportReference?: string | null;
+  /**
+     * Stable reason a received remittance requires review.
+     * @nullable
+     */
+  reviewReason?: string | null;
+  /**
+     * Authorization amount expected for this remittance when known.
+     * @nullable
+     */
+  expectedAmount?: string | null;
 }
 
 export interface ClientCase {
@@ -1237,24 +1255,15 @@ export interface ImportCommitResult {
   results: ImportCommitRowResult[];
 }
 
-export type RemittanceInputSource = typeof RemittanceInputSource[keyof typeof RemittanceInputSource];
-
-
-export const RemittanceInputSource = {
-  alta_regional: 'alta_regional',
-  manual: 'manual',
-} as const;
-
 export interface RemittanceInput {
   clientId: string;
+  authorizationId: string;
   /** @nullable */
-  authorizationId?: string | null;
-  altaReference?: string;
+  altaReference?: string | null;
   remittanceDate: string;
   amount: string;
-  paymentMonth?: string;
-  source?: RemittanceInputSource;
-  remittanceBatchId?: string;
+  /** @nullable */
+  paymentMonth?: string | null;
 }
 
 export interface RemittanceMatchInput {
@@ -1262,9 +1271,9 @@ export interface RemittanceMatchInput {
 }
 
 export interface AltaRemittanceImportInput {
-  /** Raw text of the uploaded Alta Payment Detail Report CSV. Parsed server-side by the isolated altaRemittanceParser (interim column mapping — pending a real sample). */
+  /** Raw text of the uploaded Remittance Report CSV. Parsed server-side by the isolated altaRemittanceParser (interim column mapping — pending a real sample). */
   csvText: string;
-  /** Optional Alta report/check reference stamped onto every line. */
+  /** Optional source Remittance Report reference stamped onto every line. */
   reportReference?: string;
 }
 
@@ -1408,23 +1417,6 @@ export interface PaymentUpdate {
   overrideJustification?: string;
 }
 
-export type RemittanceUpdateStatus = typeof RemittanceUpdateStatus[keyof typeof RemittanceUpdateStatus];
-
-
-export const RemittanceUpdateStatus = {
-  pending: 'pending',
-  received: 'received',
-  matched: 'matched',
-} as const;
-
-export type RemittanceUpdateSource = typeof RemittanceUpdateSource[keyof typeof RemittanceUpdateSource];
-
-
-export const RemittanceUpdateSource = {
-  alta_regional: 'alta_regional',
-  manual: 'manual',
-} as const;
-
 export interface RemittanceUpdate {
   /** @nullable */
   authorizationId?: string | null;
@@ -1434,10 +1426,6 @@ export interface RemittanceUpdate {
   amount?: string;
   /** @nullable */
   paymentMonth?: string | null;
-  status?: RemittanceUpdateStatus;
-  source?: RemittanceUpdateSource;
-  /** @nullable */
-  remittanceBatchId?: string | null;
 }
 
 export type VendorW9Status = typeof VendorW9Status[keyof typeof VendorW9Status];
@@ -1845,6 +1833,8 @@ export type ListPaymentsParams = {
 clientId?: string;
 vendorId?: string;
 authorizationId?: string;
+remitted?: boolean;
+paymentMonth?: string;
 status?: string;
 search?: string;
 limit?: number;
@@ -1889,7 +1879,7 @@ export type ListRemittancesParams = {
 clientId?: string;
 status?: string;
 /**
- * Filter to line items imported from one Alta report (batch).
+ * Filter to line items imported from one Remittance Report batch.
  */
 remittanceBatchId?: string;
 /**

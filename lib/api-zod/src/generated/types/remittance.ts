@@ -17,7 +17,10 @@ export interface Remittance {
   authorizationId?: string | null;
   /** @nullable */
   authNumber?: string | null;
-  /** @nullable */
+  /**
+     * Source payment/check reference.
+     * @nullable
+     */
   altaReference?: string | null;
   remittanceDate: string;
   amount: string;
@@ -30,4 +33,19 @@ export interface Remittance {
   autoMatched: boolean;
   /** @nullable */
   remittanceBatchId?: string | null;
+  /**
+     * Source Remittance Report reference, distinct from the generated batch id.
+     * @nullable
+     */
+  reportReference?: string | null;
+  /**
+     * Stable reason a received remittance requires review.
+     * @nullable
+     */
+  reviewReason?: string | null;
+  /**
+     * Authorization amount expected for this remittance when known.
+     * @nullable
+     */
+  expectedAmount?: string | null;
 }

@@ -115,6 +115,13 @@ router.get("/payments", requireAuth, async (req, res): Promise<void> => {
   if (query.data.clientId) conditions.push(eq(paymentsTable.clientId, query.data.clientId));
   if (query.data.vendorId) conditions.push(eq(paymentsTable.vendorId, query.data.vendorId));
   if (query.data.authorizationId) conditions.push(eq(paymentsTable.authorizationId, query.data.authorizationId));
+  if (query.data.paymentMonth) conditions.push(eq(paymentsTable.paymentMonth, query.data.paymentMonth));
+  // zod.coerce.boolean() treats the literal "false" as truthy; inspect the
+  // wire value so picker requests for eligible (unremitted) payments work.
+  const rawRemitted = req.query.remitted;
+  if (typeof rawRemitted === "string" && (rawRemitted === "true" || rawRemitted === "false")) {
+    conditions.push(eq(paymentsTable.remitted, rawRemitted === "true"));
+  }
   if (query.data.status) conditions.push(eq(paymentsTable.paymentType, query.data.status));
   if (query.data.search) {
     const like = `%${escapeLike(query.data.search)}%`;
@@ -533,7 +540,7 @@ class DuplicateFingerprint extends Error {}
 // Pass a `tx` to run inside a transaction. Candidate payments may be supplied to
 // avoid re-querying per row when importing a batch.
 async function findMatchingPayment(
-  args: { clientId: string; amount: string; paymentMonth?: string | null },
+  args: { clientId: string; authorizationId?: string | null; amount: string; paymentMonth?: string | null },
   database: typeof db = db,
   candidates?: (typeof paymentsTable.$inferSelect)[],
 ): Promise<typeof paymentsTable.$inferSelect | undefined> {
@@ -547,9 +554,29 @@ async function findMatchingPayment(
     (p) =>
       p.clientId === args.clientId &&
       !p.remitted &&
+      (!args.authorizationId || p.authorizationId === args.authorizationId) &&
       money(p.amount).equals(money(args.amount)) &&
       (!args.paymentMonth || p.paymentMonth === args.paymentMonth),
   );
+}
+
+function authorizationExpectedAmount(auth: typeof authorizationsTable.$inferSelect | null | undefined): string | null {
+  if (!auth) return null;
+  // A one-time authorization has its explicit one-time amount; otherwise a
+  // normal recurring authorization is validated against its monthly amount.
+  return auth.oneTimeAmount ?? auth.monthlyAmount ?? null;
+}
+
+function reviewForMatch(
+  auth: typeof authorizationsTable.$inferSelect | null | undefined,
+  amount: string,
+  hasCandidate: boolean,
+): { reviewReason: string | null; expectedAmount: string | null } {
+  const expectedAmount = authorizationExpectedAmount(auth);
+  if (expectedAmount && !money(expectedAmount).equals(money(amount))) {
+    return { reviewReason: "amount_mismatch", expectedAmount };
+  }
+  return { reviewReason: hasCandidate ? null : "no_eligible_payment", expectedAmount };
 }
 
 async function enrichRemittances(rows: (typeof remittancesTable.$inferSelect)[]) {
@@ -649,25 +676,43 @@ router.post("/remittances", requireStaff, async (req, res): Promise<void> => {
     res.status(400).json({ error: parsed.error.message });
     return;
   }
-  // Auto-match: unremitted payment for the same client with the same amount (and month when provided)
-  const match = await findMatchingPayment({
-    clientId: parsed.data.clientId,
-    amount: parsed.data.amount,
-    paymentMonth: parsed.data.paymentMonth,
-  });
-  const [remittance] = await db
-    .insert(remittancesTable)
-    .values({
-      ...parsed.data,
-      status: match ? "matched" : "received",
-      matchedPaymentId: match?.id ?? null,
-      autoMatched: !!match,
-    })
-    .returning();
-  if (match) {
-    await db.update(paymentsTable).set({ remitted: true }).where(eq(paymentsTable.id, match.id));
+  const values = { ...parsed.data } as Record<string, unknown>;
+  for (const key of ["authorizationId", "altaReference", "paymentMonth", "reportReference"] as const) {
+    if (values[key] === "") values[key] = null;
   }
-  await audit(req.user!.id, "create_remittance", "remittance", remittance.id, match ? `Auto-matched to check ${match.qbCheckNumber}` : "No automatic match — flagged for review");
+  const [client] = await db.select().from(clientsTable).where(and(eq(clientsTable.id, parsed.data.clientId), notDeleted(clientsTable)));
+  if (!client) {
+    res.status(400).json({ error: "Client not found or deleted" });
+    return;
+  }
+  let auth: typeof authorizationsTable.$inferSelect | null = null;
+  if (values.authorizationId) {
+    [auth] = await db.select().from(authorizationsTable).where(and(eq(authorizationsTable.id, values.authorizationId as string), notDeleted(authorizationsTable)));
+    if (!auth || auth.clientId !== client.id) {
+      res.status(400).json({ error: "Authorization must belong to the remittance client" });
+      return;
+    }
+  }
+  const expected = authorizationExpectedAmount(auth);
+  const mismatch = !!(expected && !money(expected).equals(money(parsed.data.amount)));
+  const remittance = await db.transaction(async (tx) => {
+    const txDb = tx as unknown as typeof db;
+    const candidate = mismatch ? undefined : await findMatchingPayment({ clientId: client.id, authorizationId: auth!.id, amount: parsed.data.amount, paymentMonth: values.paymentMonth as string | null }, txDb);
+    let match: typeof paymentsTable.$inferSelect | undefined;
+    if (candidate) {
+      const [claimed] = await tx.update(paymentsTable).set({ remitted: true })
+        .where(and(eq(paymentsTable.id, candidate.id), eq(paymentsTable.remitted, false), notDeleted(paymentsTable))).returning();
+      if (claimed) match = claimed;
+    }
+    const review = reviewForMatch(auth, parsed.data.amount, !!match);
+    const [created] = await tx.insert(remittancesTable).values({
+      ...values, source: "manual", status: match ? "matched" : "received",
+      matchedPaymentId: match?.id ?? null, autoMatched: !!match,
+      reviewReason: review.reviewReason, expectedAmount: review.expectedAmount,
+    } as typeof remittancesTable.$inferInsert).returning();
+    return created;
+  });
+  await audit(req.user!.id, "create_remittance", "remittance", remittance.id, remittance.matchedPaymentId ? "Auto-matched to an eligible payment" : `No automatic match — ${remittance.reviewReason ?? "flagged for review"}`);
   res.status(201).json(CreateRemittanceResponse.parse((await enrichRemittances([remittance]))[0]));
 });
 
@@ -678,26 +723,41 @@ router.post("/remittances/:id/match", requireStaff, async (req, res): Promise<vo
     res.status(400).json({ error: parsed.error.message });
     return;
   }
-  const [payment] = await db.select().from(paymentsTable).where(and(eq(paymentsTable.id, parsed.data.paymentId), notDeleted(paymentsTable)));
-  if (!payment) {
-    res.status(404).json({ error: "Payment not found" });
+  const result = await db.transaction(async (tx) => {
+    // Lock both rows before validating and conditionally claiming them.
+    await tx.execute(sql`select id from remittances where id = ${id} for update`);
+    await tx.execute(sql`select id from payments where id = ${parsed.data.paymentId} for update`);
+    const [remittance] = await tx.select().from(remittancesTable).where(eq(remittancesTable.id, id));
+    if (!remittance || remittance.isDeleted) return { error: "Remittance not found", status: 404 } as const;
+    if (remittance.status === "matched" || remittance.matchedPaymentId) return { error: "Remittance is already matched", status: 409 } as const;
+    const [payment] = await tx.select().from(paymentsTable).where(eq(paymentsTable.id, parsed.data.paymentId));
+    if (!payment || payment.isDeleted) return { error: "Payment not found", status: 404 } as const;
+    const [client] = await tx.select().from(clientsTable).where(eq(clientsTable.id, payment.clientId));
+    if (!client || client.isDeleted) return { error: "Payment client not found or deleted", status: 400 } as const;
+    if (payment.clientId !== remittance.clientId) return { error: "Payment belongs to a different client", status: 400 } as const;
+    if (remittance.authorizationId && payment.authorizationId !== remittance.authorizationId) return { error: "Payment belongs to a different authorization", status: 400 } as const;
+    if (remittance.paymentMonth && payment.paymentMonth !== remittance.paymentMonth) return { error: "Payment is for a different service month", status: 400 } as const;
+    if (!money(payment.amount).equals(money(remittance.amount))) return { error: "Payment amount does not match remittance amount", status: 400 } as const;
+    if (payment.remitted) return { error: "Payment has already been remitted", status: 409 } as const;
+    const [claimed] = await tx.update(paymentsTable).set({ remitted: true }).where(and(eq(paymentsTable.id, payment.id), eq(paymentsTable.remitted, false), notDeleted(paymentsTable))).returning();
+    if (!claimed) return { error: "Payment was claimed by another remittance", status: 409 } as const;
+    const [matched] = await tx.update(remittancesTable)
+      .set({ status: "matched", matchedPaymentId: payment.id, autoMatched: false, reviewReason: null, expectedAmount: null })
+      .where(and(eq(remittancesTable.id, id), notDeleted(remittancesTable), sql`${remittancesTable.matchedPaymentId} is null`))
+      .returning();
+    if (!matched) throw new Error("Remittance changed while matching");
+    return { remittance: matched, payment } as const;
+  });
+  if ("error" in result) {
+    res.status(result.status ?? 409).json({ error: result.error });
     return;
   }
-  const [remittance] = await db
-    .update(remittancesTable)
-    .set({ status: "matched", matchedPaymentId: payment.id, autoMatched: false })
-    .where(and(eq(remittancesTable.id, id), notDeleted(remittancesTable)))
-    .returning();
-  if (!remittance) {
-    res.status(404).json({ error: "Remittance not found" });
-    return;
-  }
-  await db.update(paymentsTable).set({ remitted: true }).where(eq(paymentsTable.id, payment.id));
+  const { remittance, payment } = result;
   await audit(req.user!.id, "match_remittance", "remittance", remittance.id, `Matched to check ${payment.qbCheckNumber}`);
   res.json(MatchRemittanceResponse.parse((await enrichRemittances([remittance]))[0]));
 });
 
-// Alta "Payment Detail Report" batch import. One uploaded report can cover many
+// Remittance Report batch import. One uploaded report can cover many
 // clients/months; every imported line item shares ONE generated
 // remittanceBatchId so staff can see which lines came from the same Alta
 // payment. Rows are resolved by UCI (client) and, when present, auth number
@@ -776,6 +836,7 @@ router.post("/remittances/import", requireStaff, async (req, res): Promise<void>
     // Resolve authorization (optional) scoped to this client. A provided but
     // unresolvable auth number is a hard row error — never guess.
     let authorizationId: string | null = null;
+    let resolvedAuth: typeof authorizationsTable.$inferSelect | null = null;
     const authNeedle = row.authNumber?.trim();
     if (authNeedle) {
       const auth = authByClientAndNumber.get(`${client.id}::${authNeedle}`);
@@ -790,6 +851,7 @@ router.post("/remittances/import", requireStaff, async (req, res): Promise<void>
         continue;
       }
       authorizationId = auth.id;
+      resolvedAuth = auth;
     }
 
     const paymentMonth = row.serviceMonth?.trim() || null;
@@ -816,7 +878,11 @@ router.post("/remittances/import", requireStaff, async (req, res): Promise<void>
       // if it is still false (RETURNING id). A concurrent import that already
       // claimed it gets no row back and this remittance falls back to
       // needs_manual_match rather than double-matching one payment.
-      const candidate = await findMatchingPayment({ clientId: client.id, amount: row.amount, paymentMonth }, txDb);
+      const expectedAmount = authorizationExpectedAmount(resolvedAuth);
+      const amountMismatch = !!(expectedAmount && !money(expectedAmount).equals(money(row.amount)));
+      const candidate = amountMismatch
+        ? undefined
+        : await findMatchingPayment({ clientId: client.id, authorizationId, amount: row.amount, paymentMonth }, txDb);
       let claimedPayment: typeof paymentsTable.$inferSelect | undefined;
       if (candidate) {
         const [claimed] = await tx
@@ -831,7 +897,9 @@ router.post("/remittances/import", requireStaff, async (req, res): Promise<void>
         .values({
           clientId: client.id,
           authorizationId,
-          altaReference: reportReference ?? row.checkNumber?.trim() ?? null,
+          // The CSV row's check/payment number is the payment reference. The
+          // upload's report reference is stored separately from the opaque batch.
+          altaReference: row.checkNumber?.trim() ?? null,
           remittanceDate: row.remittanceDate,
           amount: row.amount,
           paymentMonth,
@@ -840,6 +908,15 @@ router.post("/remittances/import", requireStaff, async (req, res): Promise<void>
           matchedPaymentId: claimedPayment?.id ?? null,
           autoMatched: !!claimedPayment,
           remittanceBatchId,
+          reportReference,
+          reviewReason: amountMismatch
+            ? "amount_mismatch"
+            : claimedPayment
+              ? null
+              : candidate
+                ? "already_claimed"
+                : "no_eligible_payment",
+          expectedAmount,
           sourceRowFingerprint: fingerprint,
         })
         // The only unique constraint that can conflict on this insert is the
@@ -880,7 +957,7 @@ router.post("/remittances/import", requireStaff, async (req, res): Promise<void>
 
   await audit(
     req.user!.id,
-    "import_alta_remittances",
+    "import_remittance_report",
     "remittance",
     undefined,
     `Batch ${remittanceBatchId}${reportReference ? ` (${reportReference})` : ""}: ${parsedRows.length} parsed, ${imported} imported, ${errored} errored, ${autoMatched} auto-matched, ${needsManualMatch} need manual match, ${skippedDuplicate} skipped as duplicate`,
@@ -949,39 +1026,64 @@ router.patch("/remittances/:id", requireStaff, async (req, res): Promise<void> =
     return;
   }
   const updates = { ...parsed.data } as Record<string, unknown>;
-  for (const k of ["authorizationId", "altaReference", "paymentMonth", "remittanceBatchId"] as const) {
+  for (const k of ["authorizationId", "altaReference", "paymentMonth"] as const) {
     if (updates[k] === "") updates[k] = null;
   }
-  const [before] = await db
-    .select()
-    .from(remittancesTable)
-    .where(and(eq(remittancesTable.id, id), notDeleted(remittancesTable)));
-  if (!before) {
-    res.status(404).json({ error: "Remittance not found" });
+  const result = await db.transaction(async (tx) => {
+    await tx.execute(sql`select id from remittances where id = ${id} for update`);
+    const [before] = await tx.select().from(remittancesTable).where(and(eq(remittancesTable.id, id), notDeleted(remittancesTable)));
+    if (!before) return { error: "Remittance not found", status: 404 } as const;
+    const reconciliationChanged = ["authorizationId", "amount", "paymentMonth"].some((key) => key in updates);
+    if (before.matchedPaymentId && reconciliationChanged) {
+      return { error: "Authorization, amount, and service month cannot be changed after matching", status: 409 } as const;
+    }
+    const effectiveAuthId = ("authorizationId" in updates ? updates.authorizationId : before.authorizationId) as string | null;
+    let auth: typeof authorizationsTable.$inferSelect | null = null;
+    if (effectiveAuthId) {
+      [auth] = await tx.select().from(authorizationsTable).where(and(eq(authorizationsTable.id, effectiveAuthId), notDeleted(authorizationsTable)));
+      if (!auth || auth.clientId !== before.clientId) {
+        return { error: "Authorization must belong to the remittance client", status: 400 } as const;
+      }
+    }
+    const next = { ...updates } as Record<string, unknown>;
+    if (!before.matchedPaymentId && reconciliationChanged) {
+      const amount = ("amount" in next ? next.amount : before.amount) as string;
+      const review = reviewForMatch(auth, amount, false);
+      next.reviewReason = review.reviewReason;
+      next.expectedAmount = review.expectedAmount;
+    }
+    const [remittance] = await tx.update(remittancesTable).set(next)
+      .where(and(eq(remittancesTable.id, id), notDeleted(remittancesTable))).returning();
+    return { before, remittance, updates: next } as const;
+  });
+  if ("error" in result) {
+    res.status(result.status ?? 409).json({ error: result.error });
     return;
   }
-  const [remittance] = await db
-    .update(remittancesTable)
-    .set(updates)
-    .where(and(eq(remittancesTable.id, id), notDeleted(remittancesTable)))
-    .returning();
+  const { before, remittance } = result;
   await audit(
     req.user!.id,
     "update_remittance",
     "remittance",
     remittance.id,
-    diffDetail(before, updates, Object.keys(updates)),
+    diffDetail(before, result.updates, Object.keys(result.updates)),
   );
   res.json(UpdateRemittanceResponse.parse((await enrichRemittances([remittance]))[0]));
 });
 
 router.delete("/remittances/:id", requireStaff, async (req, res): Promise<void> => {
   const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
-  const [remittance] = await db
-    .update(remittancesTable)
-    .set({ isDeleted: true, deletedAt: new Date(), deletedBy: req.user!.id })
-    .where(and(eq(remittancesTable.id, id), notDeleted(remittancesTable)))
-    .returning();
+  const remittance = await db.transaction(async (tx) => {
+    await tx.execute(sql`select id from remittances where id = ${id} for update`);
+    const [row] = await tx.update(remittancesTable)
+      .set({ isDeleted: true, deletedAt: new Date(), deletedBy: req.user!.id })
+      .where(and(eq(remittancesTable.id, id), notDeleted(remittancesTable))).returning();
+    if (row?.matchedPaymentId) {
+      await tx.update(paymentsTable).set({ remitted: false })
+        .where(and(eq(paymentsTable.id, row.matchedPaymentId), eq(paymentsTable.remitted, true)));
+    }
+    return row;
+  });
   if (!remittance) {
     res.status(404).json({ error: "Remittance not found" });
     return;

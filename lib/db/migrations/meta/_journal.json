@@ -43,6 +43,13 @@
       "when": 1786892777871,
       "tag": "0005_outgoing_felicia_hardy",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1788538031133,
+      "tag": "0006_odd_xavin",
+      "breakpoints": true
     }
   ]
 }

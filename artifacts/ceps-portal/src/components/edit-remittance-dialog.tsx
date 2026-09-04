@@ -13,18 +13,8 @@ import {
   DialogTitle,
   DialogTrigger,
 } from '@/components/ui/dialog';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
 import { useToast } from '@/hooks/use-toast';
 import { Pencil } from 'lucide-react';
-
-const STATUSES = ['pending', 'received', 'matched'];
-const SOURCES = ['alta_regional', 'manual'];
 
 type RemittanceLike = {
   altaReference?: string | null;
@@ -64,8 +54,6 @@ export function EditRemittanceDialog({ id, remittance, onSaved }: Props) {
       remittanceDate: form.remittanceDate || undefined,
       amount: form.amount,
       paymentMonth: form.paymentMonth === '' ? null : form.paymentMonth,
-      status: form.status as RemittanceUpdate['status'],
-      source: form.source as RemittanceUpdate['source'],
       authorizationId: form.authorizationId === '' ? null : form.authorizationId,
     };
     updateRemittance.mutate(
@@ -85,7 +73,7 @@ export function EditRemittanceDialog({ id, remittance, onSaved }: Props) {
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
         <Button variant="ghost" size="sm" data-testid="button-edit-remittance">
-          <Pencil className="w-4 h-4" />
+          <Pencil className="w-4 h-4 mr-1" /> Edit
         </Button>
       </DialogTrigger>
       <DialogContent className="max-w-lg">
@@ -95,7 +83,7 @@ export function EditRemittanceDialog({ id, remittance, onSaved }: Props) {
         </DialogHeader>
         <div className="grid grid-cols-2 gap-4 py-2">
           <div className="space-y-2">
-            <Label>Alta Reference</Label>
+            <Label>Source / payment reference</Label>
             <Input value={form.altaReference} onChange={(e) => set('altaReference', e.target.value)} data-testid="input-remittance-reference" />
           </div>
           <div className="space-y-2">
@@ -104,37 +92,15 @@ export function EditRemittanceDialog({ id, remittance, onSaved }: Props) {
           </div>
           <div className="space-y-2">
             <Label>Amount</Label>
-            <Input value={form.amount} onChange={(e) => set('amount', e.target.value)} data-testid="input-remittance-amount" />
+            <Input value={form.amount} onChange={(e) => set('amount', e.target.value)} disabled={remittance.status === 'matched'} data-testid="input-remittance-amount" />
           </div>
           <div className="space-y-2">
             <Label>Payment Month</Label>
-            <Input placeholder="YYYY-MM" value={form.paymentMonth} onChange={(e) => set('paymentMonth', e.target.value)} data-testid="input-remittance-month" />
-          </div>
-          <div className="space-y-2">
-            <Label>Status</Label>
-            <Select value={form.status} onValueChange={(v) => set('status', v)}>
-              <SelectTrigger data-testid="select-remittance-status"><SelectValue /></SelectTrigger>
-              <SelectContent>
-                {STATUSES.map((s) => (
-                  <SelectItem key={s} value={s} className="capitalize">{s}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-          <div className="space-y-2">
-            <Label>Source</Label>
-            <Select value={form.source} onValueChange={(v) => set('source', v)}>
-              <SelectTrigger data-testid="select-remittance-source"><SelectValue /></SelectTrigger>
-              <SelectContent>
-                {SOURCES.map((s) => (
-                  <SelectItem key={s} value={s} className="capitalize">{s.replace(/_/g, ' ')}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <Input type="month" value={form.paymentMonth} onChange={(e) => set('paymentMonth', e.target.value)} disabled={remittance.status === 'matched'} data-testid="input-remittance-month" />
           </div>
           <div className="space-y-2 col-span-2">
             <Label>Authorization ID</Label>
-            <Input value={form.authorizationId} onChange={(e) => set('authorizationId', e.target.value)} placeholder="Optional" data-testid="input-remittance-authorization-id" />
+            <Input value={form.authorizationId} onChange={(e) => set('authorizationId', e.target.value)} placeholder="Authorization ID" disabled={remittance.status === 'matched'} data-testid="input-remittance-authorization-id" />
           </div>
         </div>
         <DialogFooter>

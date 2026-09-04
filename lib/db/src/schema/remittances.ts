@@ -33,6 +33,12 @@ export const remittancesTable = pgTable("remittances", {
   ),
   autoMatched: boolean("auto_matched").notNull().default(false),
   remittanceBatchId: text("remittance_batch_id"),
+  // The source report/check batch label is distinct from the opaque generated
+  // remittanceBatchId used to group one import run.
+  reportReference: text("report_reference"),
+  // Stable triage data for received rows that need staff intervention.
+  reviewReason: text("review_reason"),
+  expectedAmount: numeric("expected_amount", { precision: 12, scale: 2 }),
   // sha256 of the normalized Alta source report row (uci|authNumber|serviceMonth
   // |amount|checkNumber|paymentDate). Lets a re-uploaded report be detected as a
   // duplicate row instead of re-inserted. Null for manually-entered remittances.

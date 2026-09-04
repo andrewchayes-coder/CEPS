@@ -12,6 +12,8 @@ export type ListPaymentsParams = {
 clientId?: string;
 vendorId?: string;
 authorizationId?: string;
+remitted?: boolean;
+paymentMonth?: string;
 status?: string;
 search?: string;
 limit?: number;

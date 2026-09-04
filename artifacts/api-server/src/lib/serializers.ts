@@ -290,6 +290,9 @@ export function remittanceJson(
     matchedPaymentId: r.matchedPaymentId,
     autoMatched: r.autoMatched,
     remittanceBatchId: r.remittanceBatchId,
+    reportReference: r.reportReference,
+    reviewReason: r.reviewReason,
+    expectedAmount: r.expectedAmount,
   };
 }
 

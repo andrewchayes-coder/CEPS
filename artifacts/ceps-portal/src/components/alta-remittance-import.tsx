@@ -101,14 +101,14 @@ export function AltaRemittanceImport({ onImported }: { onImported: (result: Alta
     >
       <DialogTrigger asChild>
         <Button variant="outline" data-testid="button-import-alta-remittances">
-          <Upload className="w-4 h-4 mr-2" /> Import Alta Report
+          <Upload className="w-4 h-4 mr-2" /> Import Remittance Report
         </Button>
       </DialogTrigger>
       <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>Import Alta Payment Detail Report</DialogTitle>
+          <DialogTitle>Import Remittance Report</DialogTitle>
           <DialogDescription>
-            Upload one Alta Payment Detail Report CSV. Each line becomes a remittance sharing a
+            Upload one Remittance Report CSV. Each line becomes a remittance sharing a
             single batch id; rows are resolved to participants by UCI number and auto-matched to payments
             like manual entries. Unresolvable rows are reported, never guessed.
           </DialogDescription>
@@ -132,7 +132,7 @@ export function AltaRemittanceImport({ onImported }: { onImported: (result: Alta
               ) : (
                 <>
                   <FileUp className="h-6 w-6 text-muted-foreground" />
-                  <p className="text-muted-foreground">Click to choose the Alta Payment Detail Report CSV</p>
+                  <p className="text-muted-foreground">Click to choose the Remittance Report CSV</p>
                   <p className="text-xs text-muted-foreground">
                     Interim columns: Participant UCI Number, Amount, Payment Date (Authorization Number,
                     Service Month, Check/Payment Number optional)
@@ -213,7 +213,7 @@ export function AltaRemittanceImport({ onImported }: { onImported: (result: Alta
 
             {result.errored > 0 && (
               <p className="text-sm text-muted-foreground">
-                Errored rows were not imported (unresolvable UCI or authorization). Fix the report and
+                Errored rows were not imported (unresolvable UCI or authorization). Fix the Remittance Report and
                 re-import, or log those remittances manually.
               </p>
             )}

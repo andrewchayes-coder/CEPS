@@ -1,4 +1,5 @@
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
+import { randomUUID } from "node:crypto";
 import { inArray, eq } from "drizzle-orm";
 import {
   db,
@@ -61,6 +62,7 @@ beforeAll(async () => {
     .insert(paymentsTable)
     .values({
       clientId: clientAId,
+      authorizationId: authAId,
       qbCheckNumber: `${nonce}-CHK-A`,
       checkDate: "2026-01-15",
       amount: "500.00",
@@ -94,6 +96,17 @@ afterAll(async () => {
 const CSV_HEADER = "Client UCI Number,Authorization Number,Service Month,Amount,Check/Payment Number,Payment Date";
 
 describe("POST /remittances/import (Alta batch import)", () => {
+  it("creates a staff manual remittance with required participant and authorization context", async () => {
+    const res = await request(app).post("/api/remittances").set("Cookie", cookie).send({
+      clientId: clientAId, authorizationId: authAId, altaReference: `${nonce}-MANUAL`,
+      remittanceDate: "2026-09-20", amount: "77.00", paymentMonth: "2026-09",
+    });
+    expect(res.status).toBe(201);
+    expect(res.body.source).toBe("manual");
+    expect(res.body.authorizationId).toBe(authAId);
+    expect(res.body.reviewReason).toBe("no_eligible_payment");
+  });
+
   it("imports a batch: shared batch id, auto-match runs, unresolvable rows errored, audit logged", async () => {
     const csvText = [
       CSV_HEADER,
@@ -152,6 +165,8 @@ describe("POST /remittances/import (Alta batch import)", () => {
     expect(matched?.status).toBe("matched");
     expect(matched?.autoMatched).toBe(true);
     expect(matched?.authorizationId).toBe(authAId);
+    expect(matched?.altaReference).toBe("C1");
+    expect(matched?.reportReference).toBe(`${nonce}-REPORT`);
 
     // The unmatched-but-imported line is flagged for manual matching.
     const manual = inserted.find((r) => r.matchedPaymentId === null);
@@ -163,7 +178,7 @@ describe("POST /remittances/import (Alta batch import)", () => {
       .select()
       .from(auditLogTable)
       .where(eq(auditLogTable.userId, staffId));
-    const importAudit = audits.find((a) => a.action === "import_alta_remittances");
+    const importAudit = audits.find((a) => a.action === "import_remittance_report");
     expect(importAudit).toBeTruthy();
     expect(importAudit?.detail).toContain(body.remittanceBatchId);
   });
@@ -256,5 +271,70 @@ describe("POST /remittances/import (Alta batch import)", () => {
     expect(inserted[0].matchedPaymentId).toBeNull();
     expect(inserted[0].status).toBe("received");
     void pay;
+  });
+
+  it("holds an otherwise eligible payment for review when its authorization amount differs", async () => {
+    const [auth] = await db.insert(authorizationsTable).values({
+      clientId: clientBId, authNumber: `${nonce}-MISMATCH`, serviceCode: "459",
+      paymentType: "direct_payment", servicePeriodStart: "2026-01-01",
+      servicePeriodEnd: "2026-12-31", monthlyAmount: "100.00", maxPeriodAmount: "1200.00",
+    }).returning();
+    const [payment] = await db.insert(paymentsTable).values({
+      clientId: clientBId, authorizationId: auth.id, qbCheckNumber: `${nonce}-MISMATCH`,
+      checkDate: "2026-06-15", paymentMonth: "2026-06", amount: "50.00",
+      paymentType: "direct_payment", source: "manual", remitted: false,
+    }).returning();
+    const csvText = [CSV_HEADER, `${nonce}-UCI-B,${nonce}-MISMATCH,2026-06,50.00,CHECK-50,2026-06-20`].join("\n");
+    const res = await request(app).post("/api/remittances/import").set("Cookie", cookie).send({ csvText });
+    expect(res.status).toBe(200);
+    expect(res.body.autoMatched).toBe(0);
+    const [remittance] = await db.select().from(remittancesTable).where(eq(remittancesTable.remittanceBatchId, res.body.remittanceBatchId));
+    expect(remittance.status).toBe("received");
+    expect(remittance.reviewReason).toBe("amount_mismatch");
+    expect(remittance.expectedAmount).toBe("100.00");
+    const [unclaimed] = await db.select().from(paymentsTable).where(eq(paymentsTable.id, payment.id));
+    expect(unclaimed.remitted).toBe(false);
+  });
+
+  it("only explicitly matches an exact eligible payment and releases it when the remittance is deleted", async () => {
+    const [otherAuth] = await db.insert(authorizationsTable).values({
+      clientId: clientAId, authNumber: `${nonce}-OTHER-AUTH`, serviceCode: "459",
+      paymentType: "direct_payment", servicePeriodStart: "2026-01-01",
+      servicePeriodEnd: "2026-12-31", maxPeriodAmount: "1000.00",
+    }).returning();
+    const makePayment = (values: Partial<typeof paymentsTable.$inferInsert>) => db.insert(paymentsTable).values({
+      clientId: clientAId, authorizationId: authAId, qbCheckNumber: `${nonce}-${randomUUID()}`,
+      checkDate: "2026-07-15", paymentMonth: "2026-07", amount: "99.00",
+      paymentType: "direct_payment", source: "manual", remitted: false, ...values,
+    }).returning();
+    const [crossClient] = await makePayment({ clientId: clientBId });
+    const [crossAuth] = await makePayment({ authorizationId: otherAuth.id });
+    const [crossMonth] = await makePayment({ paymentMonth: "2026-08" });
+    const [wrongAmount] = await makePayment({ amount: "98.00" });
+    const [valid] = await makePayment({});
+    const [remittance] = await db.insert(remittancesTable).values({
+      clientId: clientAId, authorizationId: authAId, remittanceDate: "2026-07-20",
+      amount: "99.00", paymentMonth: "2026-07", status: "received", source: "manual",
+    }).returning();
+    for (const payment of [crossClient, crossAuth, crossMonth, wrongAmount]) {
+      const response = await request(app).post(`/api/remittances/${remittance.id}/match`).set("Cookie", cookie).send({ paymentId: payment.id });
+      expect(response.status).toBe(400);
+    }
+    const success = await request(app).post(`/api/remittances/${remittance.id}/match`).set("Cookie", cookie).send({ paymentId: valid.id });
+    expect(success.status).toBe(200);
+    const repeated = await request(app).post(`/api/remittances/${remittance.id}/match`).set("Cookie", cookie).send({ paymentId: valid.id });
+    expect(repeated.status).toBe(409);
+    const deleted = await request(app).delete(`/api/remittances/${remittance.id}`).set("Cookie", cookie);
+    expect(deleted.status).toBe(200);
+    const [released] = await db.select().from(paymentsTable).where(eq(paymentsTable.id, valid.id));
+    expect(released.remitted).toBe(false);
+
+    const [claimed] = await makePayment({ remitted: true });
+    const [unmatched] = await db.insert(remittancesTable).values({
+      clientId: clientAId, authorizationId: authAId, remittanceDate: "2026-07-21",
+      amount: "99.00", paymentMonth: "2026-07", status: "received", source: "manual",
+    }).returning();
+    const alreadyClaimed = await request(app).post(`/api/remittances/${unmatched.id}/match`).set("Cookie", cookie).send({ paymentId: claimed.id });
+    expect(alreadyClaimed.status).toBe(409);
   });
 });

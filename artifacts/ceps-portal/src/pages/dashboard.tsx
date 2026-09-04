@@ -264,7 +264,7 @@ export default function DashboardPage() {
                 <Button variant="secondary" className="w-full justify-start h-12" asChild>
                   <Link href="/remittances">
                     <FolderSync className="mr-2 h-5 w-5" />
-                    Process Alta Remittance
+                    Process Remittance Report
                   </Link>
                 </Button>
               </>

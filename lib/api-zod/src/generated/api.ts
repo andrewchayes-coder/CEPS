@@ -676,7 +676,7 @@ export const GetClientCaseResponse = zod.object({
   "clientName": zod.string().nullish(),
   "authorizationId": zod.string().nullish(),
   "authNumber": zod.string().nullish(),
-  "altaReference": zod.string().nullish(),
+  "altaReference": zod.string().nullish().describe('Source payment\/check reference.'),
   "remittanceDate": zod.string(),
   "amount": zod.string(),
   "paymentMonth": zod.string().nullish(),
@@ -684,7 +684,10 @@ export const GetClientCaseResponse = zod.object({
   "source": zod.enum(['alta_regional', 'manual']),
   "matchedPaymentId": zod.string().nullish(),
   "autoMatched": zod.boolean(),
-  "remittanceBatchId": zod.string().nullish()
+  "remittanceBatchId": zod.string().nullish(),
+  "reportReference": zod.string().nullish().describe('Source Remittance Report reference, distinct from the generated batch id.'),
+  "reviewReason": zod.string().nullish().describe('Stable reason a received remittance requires review.'),
+  "expectedAmount": zod.string().nullish().describe('Authorization amount expected for this remittance when known.')
 }))
 })
 
@@ -1513,6 +1516,8 @@ export const ListPaymentsQueryParams = zod.object({
   "clientId": zod.coerce.string().optional(),
   "vendorId": zod.coerce.string().optional(),
   "authorizationId": zod.coerce.string().optional(),
+  "remitted": zod.coerce.boolean().optional(),
+  "paymentMonth": zod.coerce.string().optional(),
   "status": zod.coerce.string().optional(),
   "search": zod.coerce.string().optional(),
   "limit": zod.coerce.number().int().optional(),
@@ -1853,7 +1858,7 @@ export const DeleteFeeResponse = zod.object({
 export const ListRemittancesQueryParams = zod.object({
   "clientId": zod.coerce.string().optional(),
   "status": zod.coerce.string().optional(),
-  "remittanceBatchId": zod.coerce.string().optional().describe('Filter to line items imported from one Alta report (batch).'),
+  "remittanceBatchId": zod.coerce.string().optional().describe('Filter to line items imported from one Remittance Report batch.'),
   "autoMatched": zod.coerce.boolean().optional().describe('Filter by auto-match flag.'),
   "search": zod.coerce.string().optional().describe('Filter by client name (case-insensitive partial match).'),
   "limit": zod.coerce.number().int().optional(),
@@ -1869,7 +1874,7 @@ export const ListRemittancesResponse = zod.object({
   "clientName": zod.string().nullish(),
   "authorizationId": zod.string().nullish(),
   "authNumber": zod.string().nullish(),
-  "altaReference": zod.string().nullish(),
+  "altaReference": zod.string().nullish().describe('Source payment\/check reference.'),
   "remittanceDate": zod.string(),
   "amount": zod.string(),
   "paymentMonth": zod.string().nullish(),
@@ -1877,24 +1882,25 @@ export const ListRemittancesResponse = zod.object({
   "source": zod.enum(['alta_regional', 'manual']),
   "matchedPaymentId": zod.string().nullish(),
   "autoMatched": zod.boolean(),
-  "remittanceBatchId": zod.string().nullish()
+  "remittanceBatchId": zod.string().nullish(),
+  "reportReference": zod.string().nullish().describe('Source Remittance Report reference, distinct from the generated batch id.'),
+  "reviewReason": zod.string().nullish().describe('Stable reason a received remittance requires review.'),
+  "expectedAmount": zod.string().nullish().describe('Authorization amount expected for this remittance when known.')
 })),
   "total": zod.int()
 })
 
 
 /**
- * @summary Log a remittance line from an Alta Payment Detail Report
+ * @summary Log a remittance line from a Remittance Report
  */
 export const CreateRemittanceBody = zod.object({
   "clientId": zod.string(),
-  "authorizationId": zod.string().nullish(),
-  "altaReference": zod.string().optional(),
+  "authorizationId": zod.string(),
+  "altaReference": zod.string().nullish(),
   "remittanceDate": zod.string(),
   "amount": zod.string(),
-  "paymentMonth": zod.string().optional(),
-  "source": zod.enum(['alta_regional', 'manual']).optional(),
-  "remittanceBatchId": zod.string().optional()
+  "paymentMonth": zod.string().nullish()
 })
 
 export const CreateRemittanceResponse = zod.object({
@@ -1903,7 +1909,7 @@ export const CreateRemittanceResponse = zod.object({
   "clientName": zod.string().nullish(),
   "authorizationId": zod.string().nullish(),
   "authNumber": zod.string().nullish(),
-  "altaReference": zod.string().nullish(),
+  "altaReference": zod.string().nullish().describe('Source payment\/check reference.'),
   "remittanceDate": zod.string(),
   "amount": zod.string(),
   "paymentMonth": zod.string().nullish(),
@@ -1911,7 +1917,10 @@ export const CreateRemittanceResponse = zod.object({
   "source": zod.enum(['alta_regional', 'manual']),
   "matchedPaymentId": zod.string().nullish(),
   "autoMatched": zod.boolean(),
-  "remittanceBatchId": zod.string().nullish()
+  "remittanceBatchId": zod.string().nullish(),
+  "reportReference": zod.string().nullish().describe('Source Remittance Report reference, distinct from the generated batch id.'),
+  "reviewReason": zod.string().nullish().describe('Stable reason a received remittance requires review.'),
+  "expectedAmount": zod.string().nullish().describe('Authorization amount expected for this remittance when known.')
 })
 
 
@@ -1928,7 +1937,7 @@ export const GetRemittanceResponse = zod.object({
   "clientName": zod.string().nullish(),
   "authorizationId": zod.string().nullish(),
   "authNumber": zod.string().nullish(),
-  "altaReference": zod.string().nullish(),
+  "altaReference": zod.string().nullish().describe('Source payment\/check reference.'),
   "remittanceDate": zod.string(),
   "amount": zod.string(),
   "paymentMonth": zod.string().nullish(),
@@ -1936,7 +1945,10 @@ export const GetRemittanceResponse = zod.object({
   "source": zod.enum(['alta_regional', 'manual']),
   "matchedPaymentId": zod.string().nullish(),
   "autoMatched": zod.boolean(),
-  "remittanceBatchId": zod.string().nullish()
+  "remittanceBatchId": zod.string().nullish(),
+  "reportReference": zod.string().nullish().describe('Source Remittance Report reference, distinct from the generated batch id.'),
+  "reviewReason": zod.string().nullish().describe('Stable reason a received remittance requires review.'),
+  "expectedAmount": zod.string().nullish().describe('Authorization amount expected for this remittance when known.')
 })
 
 
@@ -1952,10 +1964,7 @@ export const UpdateRemittanceBody = zod.object({
   "altaReference": zod.string().nullish(),
   "remittanceDate": zod.string().optional(),
   "amount": zod.string().optional(),
-  "paymentMonth": zod.string().nullish(),
-  "status": zod.enum(['pending', 'received', 'matched']).optional(),
-  "source": zod.enum(['alta_regional', 'manual']).optional(),
-  "remittanceBatchId": zod.string().nullish()
+  "paymentMonth": zod.string().nullish()
 })
 
 export const UpdateRemittanceResponse = zod.object({
@@ -1964,7 +1973,7 @@ export const UpdateRemittanceResponse = zod.object({
   "clientName": zod.string().nullish(),
   "authorizationId": zod.string().nullish(),
   "authNumber": zod.string().nullish(),
-  "altaReference": zod.string().nullish(),
+  "altaReference": zod.string().nullish().describe('Source payment\/check reference.'),
   "remittanceDate": zod.string(),
   "amount": zod.string(),
   "paymentMonth": zod.string().nullish(),
@@ -1972,7 +1981,10 @@ export const UpdateRemittanceResponse = zod.object({
   "source": zod.enum(['alta_regional', 'manual']),
   "matchedPaymentId": zod.string().nullish(),
   "autoMatched": zod.boolean(),
-  "remittanceBatchId": zod.string().nullish()
+  "remittanceBatchId": zod.string().nullish(),
+  "reportReference": zod.string().nullish().describe('Source Remittance Report reference, distinct from the generated batch id.'),
+  "reviewReason": zod.string().nullish().describe('Stable reason a received remittance requires review.'),
+  "expectedAmount": zod.string().nullish().describe('Authorization amount expected for this remittance when known.')
 })
 
 
@@ -2005,7 +2017,7 @@ export const MatchRemittanceResponse = zod.object({
   "clientName": zod.string().nullish(),
   "authorizationId": zod.string().nullish(),
   "authNumber": zod.string().nullish(),
-  "altaReference": zod.string().nullish(),
+  "altaReference": zod.string().nullish().describe('Source payment\/check reference.'),
   "remittanceDate": zod.string(),
   "amount": zod.string(),
   "paymentMonth": zod.string().nullish(),
@@ -2013,16 +2025,19 @@ export const MatchRemittanceResponse = zod.object({
   "source": zod.enum(['alta_regional', 'manual']),
   "matchedPaymentId": zod.string().nullish(),
   "autoMatched": zod.boolean(),
-  "remittanceBatchId": zod.string().nullish()
+  "remittanceBatchId": zod.string().nullish(),
+  "reportReference": zod.string().nullish().describe('Source Remittance Report reference, distinct from the generated batch id.'),
+  "reviewReason": zod.string().nullish().describe('Stable reason a received remittance requires review.'),
+  "expectedAmount": zod.string().nullish().describe('Authorization amount expected for this remittance when known.')
 })
 
 
 /**
- * @summary Import an Alta Payment Detail Report — parsed rows become remittance line items sharing one generated remittanceBatchId, each auto-matched to a payment like a manual entry.
+ * @summary Import a Remittance Report — parsed rows become remittance line items sharing one generated remittanceBatchId, each auto-matched to a payment like a manual entry.
  */
 export const ImportAltaRemittancesBody = zod.object({
-  "csvText": zod.string().describe('Raw text of the uploaded Alta Payment Detail Report CSV. Parsed server-side by the isolated altaRemittanceParser (interim column mapping — pending a real sample).'),
-  "reportReference": zod.string().optional().describe('Optional Alta report\/check reference stamped onto every line.')
+  "csvText": zod.string().describe('Raw text of the uploaded Remittance Report CSV. Parsed server-side by the isolated altaRemittanceParser (interim column mapping — pending a real sample).'),
+  "reportReference": zod.string().optional().describe('Optional source Remittance Report reference stamped onto every line.')
 })
 
 export const ImportAltaRemittancesResponse = zod.object({

@@ -12,7 +12,7 @@ export type ListRemittancesParams = {
 clientId?: string;
 status?: string;
 /**
- * Filter to line items imported from one Alta report (batch).
+ * Filter to line items imported from one Remittance Report batch.
  */
 remittanceBatchId?: string;
 /**

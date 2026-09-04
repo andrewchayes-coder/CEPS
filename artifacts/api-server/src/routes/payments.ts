@@ -274,32 +274,47 @@ router.post("/payments/import", requireStaff, async (req, res): Promise<void> =>
   const uciNumbers = [...new Set(source.rows.map((row) => row.uciNumber))];
   const authNumbers = [...new Set(source.rows.map((row) => row.authNumber))];
   const rowFingerprints = [...new Set(source.rows.map(altaFmsPaymentRowFingerprint))];
-  const clients = uciNumbers.length
-    ? await db.select().from(clientsTable).where(and(inArray(clientsTable.uciNumber, uciNumbers), notDeleted(clientsTable)))
-    : [];
+  const LOOKUP_CHUNK_SIZE = 1_000;
+  const chunks = <T>(values: T[], size = LOOKUP_CHUNK_SIZE): T[][] => {
+    const result: T[][] = [];
+    for (let index = 0; index < values.length; index += size) result.push(values.slice(index, index + size));
+    return result;
+  };
+  const clients: (typeof clientsTable.$inferSelect)[] = [];
+  for (const uciChunk of chunks(uciNumbers)) {
+    clients.push(...await db.select().from(clientsTable).where(and(
+      inArray(clientsTable.uciNumber, uciChunk),
+      notDeleted(clientsTable),
+    )));
+  }
   const clientByUci = new Map(clients.map((client) => [client.uciNumber, client]));
   const clientIds = clients.map((client) => client.id);
-  const auths = clientIds.length && authNumbers.length
-    ? await db.select().from(authorizationsTable).where(and(
-        inArray(authorizationsTable.clientId, clientIds),
-        inArray(authorizationsTable.authNumber, authNumbers),
+  const auths: (typeof authorizationsTable.$inferSelect)[] = [];
+  // Each authorization query has two IN clauses, so keep each side below half
+  // the overall lookup budget.
+  for (const clientIdChunk of chunks(clientIds, LOOKUP_CHUNK_SIZE / 2)) {
+    for (const authNumberChunk of chunks(authNumbers, LOOKUP_CHUNK_SIZE / 2)) {
+      auths.push(...await db.select().from(authorizationsTable).where(and(
+        inArray(authorizationsTable.clientId, clientIdChunk),
+        inArray(authorizationsTable.authNumber, authNumberChunk),
         notDeleted(authorizationsTable),
-      ))
-    : [];
+      )));
+    }
+  }
   const authByClientAndNumber = new Map(auths.map((auth) => [`${auth.clientId}::${auth.authNumber}`, auth]));
-  const fingerprints = new Set(
-    rowFingerprints.length
-      ? (await db
-          .select({ fingerprint: paymentsTable.sourceRowFingerprint })
-          .from(paymentsTable)
-          .where(and(
-            inArray(paymentsTable.sourceRowFingerprint, rowFingerprints),
-            notDeleted(paymentsTable),
-          )))
-          .map((row) => row.fingerprint)
-          .filter((value): value is string => !!value)
-      : [],
-  );
+  const fingerprints = new Set<string>();
+  for (const fingerprintChunk of chunks(rowFingerprints)) {
+    const existingFingerprints = await db
+      .select({ fingerprint: paymentsTable.sourceRowFingerprint })
+      .from(paymentsTable)
+      .where(and(
+        inArray(paymentsTable.sourceRowFingerprint, fingerprintChunk),
+        notDeleted(paymentsTable),
+      ));
+    for (const row of existingFingerprints) {
+      if (row.fingerprint) fingerprints.add(row.fingerprint);
+    }
+  }
   const results: { rowNumber: number; uciNumber?: string | null; outcome: "imported" | "skipped_duplicate" | "flagged_duplicate" | "errored"; message?: string | null; paymentId?: string | null }[] = [];
   let imported = 0;
   let skippedDuplicate = 0;

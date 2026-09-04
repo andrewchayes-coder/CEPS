@@ -273,31 +273,44 @@ describe("POST /payments/import", () => {
     expect(second.body).toMatchObject({ imported: 0, skippedDuplicate: 2, errored: 3, ignoredNonCheckRows: 1 });
   });
 
-  it("preserves row outcomes when workbook keys are resolved in batches", async () => {
+  it("preserves row outcomes and ordering for a workbook larger than one lookup chunk", async () => {
+    const missingClientRows = Array.from({ length: 1_000 }, (_, index) => [
+      "05/02/2026",
+      "Check",
+      `${nonce}-BATCH-NO-CLIENT-${index}`,
+      "Vendor",
+      `Services/May 26/${authANumber}`,
+      "",
+      "25.00",
+      `Synthetic ${String(8_000_000 + index)} (1)`,
+    ]);
     const rows = [
       ["Transaction date", "Transaction type", "Num", "Name", "Description", "Split", "Amount", "Customer"],
       ["05/01/2026", "Check", `${nonce}-BATCH-NEW`, "Vendor", `Services/May 26/${authANumber}`, "", "325.00", `Synthetic ${uciA} (1)`],
-      ["05/02/2026", "Check", `${nonce}-BATCH-NO-CLIENT`, "Vendor", `Services/May 26/${authANumber}`, "", "25.00", "Synthetic 7654321 (1)"],
+      ...missingClientRows,
       ["05/03/2026", "Check", `${nonce}-BATCH-NO-AUTH`, "Vendor", "Services/May 26/NOT-IN-WORKBOOK-SCOPE", "", "25.00", `Synthetic ${uciA} (1)`],
     ];
 
     const first = await request(app).post("/api/payments/import").set("Cookie", cookie).send({ worksheetRows: rows });
     expect(first.status).toBe(200);
-    expect(first.body.results.map((row: { outcome: string }) => row.outcome)).toEqual([
-      "imported",
-      "errored",
-      "errored",
-    ]);
-    expect(first.body).toMatchObject({ imported: 1, skippedDuplicate: 0, flaggedDuplicate: 0, errored: 2 });
+    expect(first.body.results).toHaveLength(1_002);
+    expect(first.body.results[0].outcome).toBe("imported");
+    expect(first.body.results.slice(1, -1).every((row: { outcome: string }) => row.outcome === "errored")).toBe(true);
+    expect(first.body.results.at(-1).outcome).toBe("errored");
+    expect(first.body.results.map((row: { rowNumber: number }) => row.rowNumber)).toEqual(
+      Array.from({ length: 1_002 }, (_, index) => index + 2),
+    );
+    expect(first.body).toMatchObject({ imported: 1, skippedDuplicate: 0, flaggedDuplicate: 0, errored: 1_001 });
 
     const second = await request(app).post("/api/payments/import").set("Cookie", cookie).send({ worksheetRows: rows });
     expect(second.status).toBe(200);
-    expect(second.body.results.map((row: { outcome: string }) => row.outcome)).toEqual([
-      "skipped_duplicate",
-      "errored",
-      "errored",
-    ]);
-    expect(second.body).toMatchObject({ imported: 0, skippedDuplicate: 1, flaggedDuplicate: 0, errored: 2 });
+    expect(second.body.results).toHaveLength(1_002);
+    expect(second.body.results[0].outcome).toBe("skipped_duplicate");
+    expect(second.body.results.slice(1).every((row: { outcome: string }) => row.outcome === "errored")).toBe(true);
+    expect(second.body.results.map((row: { rowNumber: number }) => row.rowNumber)).toEqual(
+      Array.from({ length: 1_002 }, (_, index) => index + 2),
+    );
+    expect(second.body).toMatchObject({ imported: 0, skippedDuplicate: 1, flaggedDuplicate: 0, errored: 1_001 });
   });
 });
 

@@ -15,7 +15,7 @@ export interface SignatureInput {
   typedName: string;
   agreed: boolean;
   /** Relationship of the person signing; recorded when supplied by the agreement form. */
-  signerRelationship?: SignatureInputSignerRelationship;
+  signerRelationship: SignatureInputSignerRelationship;
   /** Opt in to creating a portal account for the signer */
   createAccount?: boolean;
   /**

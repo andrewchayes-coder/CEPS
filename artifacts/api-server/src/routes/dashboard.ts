@@ -114,6 +114,20 @@ router.get("/dashboard/summary", requireAuth, async (req, res): Promise<void> =>
     }
   }
   if (u.role === "staff") {
+    const recentSignedReferrals = referrals
+      .filter((r) => r.parentSignedAt && r.parentSignedAt.getTime() >= Date.now() - 7 * 86400000)
+      .sort((a, b) => (b.parentSignedAt?.getTime() ?? 0) - (a.parentSignedAt?.getTime() ?? 0));
+    const recentSignedClientNames = await clientNameMap(
+      recentSignedReferrals.map((r) => r.clientId),
+    );
+    alerts.unshift(
+      ...recentSignedReferrals.map((r) => ({
+        kind: "recently_completed",
+        message: `${recentSignedClientNames.get(r.clientId) ?? "A participant"} completed their intake agreement.`,
+        entityType: "referral",
+        entityId: r.id,
+      })),
+    );
     for (const v of missingW9) {
       alerts.push({ kind: "pending_w9", message: `${v.name} does not have a W-9 on file — payments are blocked.`, entityType: "vendor", entityId: v.id });
     }

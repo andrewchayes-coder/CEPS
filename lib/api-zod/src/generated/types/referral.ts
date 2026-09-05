@@ -21,6 +21,10 @@ export interface Referral {
   /** @nullable */
   clientIsMinor?: boolean | null;
   /** @nullable */
+  participantEmail?: string | null;
+  /** @nullable */
+  familyRepEmail?: string | null;
+  /** @nullable */
   serviceCoordinatorId?: string | null;
   /** @nullable */
   coordinatorName?: string | null;

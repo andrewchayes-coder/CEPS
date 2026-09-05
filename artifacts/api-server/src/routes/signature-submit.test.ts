@@ -16,9 +16,11 @@ import { newToken } from "../lib/auth";
 const nonce = `sigsub${Date.now().toString(36)}`;
 
 let clientId: string; // minor -> signer becomes parent_guardian
+let coordinatorId: string;
 let referralId: string;
 let tokenWithAccount: string;
 let tokenNoAccount: string;
+let tokenForPage: string;
 const signerEmail = `${nonce}-parent@test.local`;
 
 async function makeLink(purpose: string, refId: string, email: string) {
@@ -34,6 +36,17 @@ async function makeLink(purpose: string, refId: string, email: string) {
 }
 
 beforeAll(async () => {
+  const [coordinator] = await db
+    .insert(usersTable)
+    .values({
+      name: "Prompt Two Coordinator",
+      email: `${nonce}-coordinator@test.local`,
+      phone: "916-555-0102",
+      role: "service_coordinator",
+    })
+    .returning();
+  coordinatorId = coordinator.id;
+
   const [c] = await db
     .insert(clientsTable)
     .values({
@@ -43,6 +56,11 @@ beforeAll(async () => {
       uciNumber: `${nonce}-C`,
       status: "active",
       isMinor: true,
+      regionalCenter: "Alta California Regional Center",
+      familyRepName: "Pat Representative",
+      familyRepEmail: signerEmail,
+      familyRepPhone: "916-555-0103",
+      familyRepAddress: "123 Family Way, Sacramento, CA 95814",
     })
     .returning();
   clientId = c.id;
@@ -51,21 +69,75 @@ beforeAll(async () => {
     .insert(referralsTable)
     .values({
       clientId,
+      serviceCoordinatorId: coordinatorId,
       referralDate: "2026-01-01",
       status: "pending_signature",
       parentEmail: signerEmail,
-      intakeFields: { activityDescription: "After-school program" },
+      intakeSentTo: "family_rep",
+      intakeFields: {
+        activityDescription: "After-school program",
+        vendorName: "Community Recreation Club",
+        vendorContactPerson: "Alex Program",
+        vendorPhone: "916-555-0104",
+        vendorServiceStreet: "456 Activity Lane",
+        vendorServiceCity: "Sacramento",
+        vendorServiceState: "CA",
+        vendorServiceZip: "95814",
+        serviceStartDate: "2026-02-01",
+        serviceEndDate: "2026-06-30",
+        serviceType: "direct_pay_459",
+      },
+      serviceFrequency: "monthly",
+      cost: "210.00",
+      paymentSchedule: "$210 on the 1st of each month",
+      paymentTypeRequested: "service_payment",
     })
     .returning();
   referralId = r.id;
+  tokenForPage = await makeLink("signature", referralId, signerEmail);
 });
 
 afterAll(async () => {
   await db.delete(auditLogTable).where(eq(auditLogTable.entityId, referralId));
-  await db.delete(magicLinksTable).where(inArray(magicLinksTable.token, [tokenWithAccount, tokenNoAccount]));
+  await db.delete(magicLinksTable).where(inArray(magicLinksTable.token, [tokenWithAccount, tokenNoAccount, tokenForPage]));
   await db.delete(usersTable).where(eq(usersTable.email, signerEmail));
   await db.delete(referralsTable).where(eq(referralsTable.id, referralId));
   await db.delete(clientsTable).where(eq(clientsTable.id, clientId));
+  await db.delete(usersTable).where(eq(usersTable.id, coordinatorId));
+});
+
+describe("GET /signature/:token agreement payload", () => {
+  it("returns the participant, representative, activity, coordinator, and proposed payment details", async () => {
+    const res = await request(app).get(`/api/signature/${tokenForPage}`);
+
+    expect(res.status).toBe(200);
+    expect(res.body).toMatchObject({
+      referralId,
+      clientName: `Sig-Kid ${nonce}`,
+      participantUci: `${nonce}-C`,
+      participantDob: "2015-01-01",
+      clientIsMinor: true,
+      intakeSentTo: "family_rep",
+      serviceCoordinatorName: "Prompt Two Coordinator",
+      serviceCoordinatorPhone: "916-555-0102",
+      regionalCenter: "Alta California Regional Center",
+      representativeName: "Pat Representative",
+      contactPhone: "916-555-0103",
+      contactEmail: signerEmail,
+      mailingAddress: "123 Family Way, Sacramento, CA 95814",
+      vendorName: "Community Recreation Club",
+      activityContactName: "Alex Program",
+      activityContactPhone: "916-555-0104",
+      activityMailingAddress: "456 Activity Lane, Sacramento, CA, 95814",
+      serviceStartDate: "2026-02-01",
+      serviceEndDate: "2026-06-30",
+      serviceFrequency: "monthly",
+      cost: "210.00",
+      paymentSchedule: "$210 on the 1st of each month",
+      paymentTypeRequested: "service_payment",
+      alreadySigned: false,
+    });
+  });
 });
 
 describe("POST /signature/:token without account creation", () => {
@@ -88,6 +160,10 @@ describe("POST /signature/:token without account creation", () => {
     expect(ref.signerRelationship).toBe("parent");
     expect(ref.status).toBe("pending_auth");
 
+    const reusedPage = await request(app).get(`/api/signature/${tokenNoAccount}`);
+    expect(reusedPage.status).toBe(404);
+    expect(reusedPage.body.participantName).toBeUndefined();
+
     const [user] = await db.select().from(usersTable).where(eq(usersTable.email, signerEmail));
     expect(user).toBeUndefined();
   });
@@ -104,7 +180,7 @@ describe("POST /signature/:token with account creation", () => {
     const token = await makeLink("signature", referralId, signerEmail);
     const res = await request(app)
       .post(`/api/signature/${token}`)
-      .send({ typedName: "Short Pw", agreed: true, createAccount: true, password: "short" });
+      .send({ typedName: "Short Pw", agreed: true, signerRelationship: "parent", createAccount: true, password: "short" });
     expect(res.status).toBe(400);
 
     // The signature must NOT have been recorded — the referral stays unsigned.
@@ -127,7 +203,7 @@ describe("POST /signature/:token with account creation", () => {
     const token = await makeLink("signature", referralId, signerEmail);
     const res = await request(app)
       .post(`/api/signature/${token}`)
-      .send({ typedName: "No Pw", agreed: true, createAccount: true });
+      .send({ typedName: "No Pw", agreed: true, signerRelationship: "parent", createAccount: true });
     expect(res.status).toBe(400);
 
     const [ref] = await db.select().from(referralsTable).where(eq(referralsTable.id, referralId));
@@ -147,6 +223,7 @@ describe("POST /signature/:token with account creation", () => {
       .send({
         typedName: "Account Parent",
         agreed: true,
+        signerRelationship: "parent",
         createAccount: true,
         password: "s3cure-pass",
       });
@@ -182,6 +259,7 @@ describe("POST /signature/:token account creation when the email already exists"
         uciNumber: `${nonce}-DUP`,
         status: "active",
         isMinor: true,
+        familyRepEmail: signerEmail,
       })
       .returning();
     dupClientId = c.id;
@@ -193,6 +271,7 @@ describe("POST /signature/:token account creation when the email already exists"
         referralDate: "2026-01-01",
         status: "pending_signature",
         parentEmail: signerEmail,
+        intakeSentTo: "family_rep",
         intakeFields: { activityDescription: "After-school program" },
       })
       .returning();
@@ -218,6 +297,7 @@ describe("POST /signature/:token account creation when the email already exists"
       .send({
         typedName: "Duplicate Parent",
         agreed: true,
+        signerRelationship: "parent",
         createAccount: true,
         password: "another-s3cure-pass",
       });
@@ -234,5 +314,86 @@ describe("POST /signature/:token account creation when the email already exists"
     const after = await db.select().from(usersTable).where(eq(usersTable.email, signerEmail));
     expect(after).toHaveLength(1);
     expect(after[0].id).toBe(before[0].id);
+  });
+});
+
+describe("POST /signature/:token concurrency", () => {
+  let concurrentClientId: string;
+  let concurrentReferralId: string;
+  let concurrentToken: string;
+  const concurrentEmail = `${nonce}-concurrent@test.local`;
+
+  beforeAll(async () => {
+    const [client] = await db
+      .insert(clientsTable)
+      .values({
+        firstName: "Concurrent",
+        lastName: nonce,
+        dateOfBirth: "1990-01-01",
+        uciNumber: `${nonce}-CONCURRENT`,
+        status: "active",
+        isMinor: false,
+        email: concurrentEmail,
+      })
+      .returning();
+    concurrentClientId = client.id;
+
+    const [referral] = await db
+      .insert(referralsTable)
+      .values({
+        clientId: concurrentClientId,
+        referralDate: "2026-01-01",
+        status: "pending_signature",
+        parentEmail: concurrentEmail,
+        intakeSentTo: "participant",
+        intakeFields: { activityDescription: "Concurrent signing test" },
+      })
+      .returning();
+    concurrentReferralId = referral.id;
+    concurrentToken = await makeLink("signature", concurrentReferralId, concurrentEmail);
+  });
+
+  afterAll(async () => {
+    await db.delete(auditLogTable).where(eq(auditLogTable.entityId, concurrentReferralId));
+    await db.delete(magicLinksTable).where(eq(magicLinksTable.token, concurrentToken));
+    await db.delete(referralsTable).where(eq(referralsTable.id, concurrentReferralId));
+    await db.delete(clientsTable).where(eq(clientsTable.id, concurrentClientId));
+  });
+
+  it("accepts exactly one simultaneous submission and preserves the winner", async () => {
+    const [first, second] = await Promise.all([
+      request(app).post(`/api/signature/${concurrentToken}`).send({
+        typedName: "Concurrent Signer One",
+        agreed: true,
+        signerRelationship: "self",
+      }),
+      request(app).post(`/api/signature/${concurrentToken}`).send({
+        typedName: "Concurrent Signer Two",
+        agreed: true,
+        signerRelationship: "self",
+      }),
+    ]);
+
+    expect([first.status, second.status].sort()).toEqual([200, 404]);
+    const winningName =
+      first.status === 200 ? "Concurrent Signer One" : "Concurrent Signer Two";
+    const [referral] = await db
+      .select()
+      .from(referralsTable)
+      .where(eq(referralsTable.id, concurrentReferralId));
+    expect(referral.signedByName).toBe(winningName);
+    expect(referral.signerRelationship).toBe("self");
+
+    const audits = await db
+      .select()
+      .from(auditLogTable)
+      .where(eq(auditLogTable.entityId, concurrentReferralId));
+    expect(audits.filter((entry) => entry.action === "signature_submitted")).toHaveLength(1);
+
+    const [link] = await db
+      .select()
+      .from(magicLinksTable)
+      .where(eq(magicLinksTable.token, concurrentToken));
+    expect(link.usedAt).toBeInstanceOf(Date);
   });
 });

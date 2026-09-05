@@ -5,19 +5,60 @@
  * CEPS Portal API — referral intake, authorizations, invoices, payments, remittances, vendors, reporting
  * OpenAPI spec version: 0.1.0
  */
+import type { SignaturePageIntakeSentTo } from './signaturePageIntakeSentTo';
+import type { SignaturePagePaymentTypeRequested } from './signaturePagePaymentTypeRequested';
+import type { SignaturePageServiceFrequency } from './signaturePageServiceFrequency';
 
 export interface SignaturePage {
   referralId: string;
   clientName: string;
   /** @nullable */
-  activityDescription: string | null;
+  participantUci?: string | null;
   /** @nullable */
+  participantDob?: string | null;
+  clientIsMinor: boolean;
+  /** @nullable */
+  intakeSentTo: SignaturePageIntakeSentTo;
+  /** @nullable */
+  serviceCoordinatorName?: string | null;
+  /** @nullable */
+  serviceCoordinatorPhone?: string | null;
+  /** @nullable */
+  regionalCenter?: string | null;
+  /** @nullable */
+  representativeName?: string | null;
+  /** @nullable */
+  contactPhone?: string | null;
+  /** @nullable */
+  contactEmail?: string | null;
+  /** @nullable */
+  mailingAddress?: string | null;
+  /** @nullable */
+  activityDescription: string | null;
+  /**
+     * Recreational activity or program name
+     * @nullable
+     */
   vendorName?: string | null;
+  /** @nullable */
+  activityContactName?: string | null;
+  /** @nullable */
+  activityContactPhone?: string | null;
+  /** @nullable */
+  activityMailingAddress?: string | null;
   /** @nullable */
   serviceStartDate?: string | null;
   /** @nullable */
   serviceEndDate?: string | null;
   /** @nullable */
   serviceType?: string | null;
+  /** @nullable */
+  serviceFrequency?: SignaturePageServiceFrequency;
+  /** @nullable */
+  cost?: string | null;
+  /** @nullable */
+  paymentSchedule?: string | null;
+  /** @nullable */
+  paymentTypeRequested?: SignaturePagePaymentTypeRequested;
   alreadySigned: boolean;
 }

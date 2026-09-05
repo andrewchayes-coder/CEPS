@@ -133,12 +133,15 @@ export function referralJson(
   clientName?: string | null,
   coordinatorName?: string | null,
   clientIsMinor?: boolean | null,
+  recipientEmails?: { participant: string | null; familyRep: string | null } | null,
 ) {
   return {
     id: r.id,
     clientId: r.clientId,
     clientName: clientName ?? null,
     clientIsMinor: clientIsMinor ?? null,
+    participantEmail: recipientEmails?.participant ?? null,
+    familyRepEmail: recipientEmails?.familyRep ?? null,
     serviceCoordinatorId: r.serviceCoordinatorId,
     coordinatorName: coordinatorName ?? null,
     referralDate: r.referralDate,

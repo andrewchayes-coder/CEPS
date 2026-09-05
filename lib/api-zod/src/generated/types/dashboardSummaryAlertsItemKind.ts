@@ -15,4 +15,5 @@ export const DashboardSummaryAlertsItemKind = {
   pending_w9: 'pending_w9',
   unmatched_remittance: 'unmatched_remittance',
   pending_signature: 'pending_signature',
+  recently_completed: 'recently_completed',
 } as const;

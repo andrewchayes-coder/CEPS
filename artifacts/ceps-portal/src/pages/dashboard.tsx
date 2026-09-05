@@ -65,14 +65,18 @@ export default function DashboardPage() {
       {summary.alerts && summary.alerts.length > 0 && (
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
           {groupAlerts(summary.alerts).map((group) => (
-            <Link key={group.kind} href={getAlertLink(group.kind)} className="block">
+            <Link key={group.kind} href={getAlertLink(group)} className="block">
               <Card
                 className={`border-l-4 ${getAlertBorderColor(group.kind)} h-full cursor-pointer transition-colors hover:bg-accent/50`}
                 data-testid={`card-alert-${group.kind}`}
               >
                 <CardContent className="p-4 flex gap-4 items-start">
                   <div className={`mt-0.5 ${getAlertIconColor(group.kind)}`}>
-                    <AlertTriangle className="h-5 w-5" />
+                    {group.kind === 'recently_completed' ? (
+                      <CheckCircle2 className="h-5 w-5" />
+                    ) : (
+                      <AlertTriangle className="h-5 w-5" />
+                    )}
                   </div>
                   <div className="flex-1 min-w-0">
                     {group.alerts.length === 1 ? (
@@ -328,7 +332,7 @@ function DashboardSkeleton() {
 }
 
 // Helpers
-type DashboardAlert = { kind: string; message: string };
+type DashboardAlert = { kind: string; message: string; entityId?: string | null; entityType?: string | null };
 
 function groupAlerts(alerts: DashboardAlert[]): { kind: string; alerts: DashboardAlert[] }[] {
   const groups = new Map<string, DashboardAlert[]>();
@@ -347,6 +351,7 @@ function getAlertGroupTitle(type: string) {
     case 'pending_w9': return 'vendors missing a W-9 — payments blocked';
     case 'pending_signature': return 'referrals awaiting signature';
     case 'unmatched_remittance': return 'remittances with no matching payment';
+    case 'recently_completed': return 'recently completed intakes';
     default: return 'alerts';
   }
 }
@@ -358,6 +363,7 @@ function getAlertBorderColor(type: string) {
     case 'pending_w9': return 'border-destructive';
     case 'unmatched_remittance': return 'border-chart-2';
     case 'pending_signature': return 'border-chart-4';
+    case 'recently_completed': return 'border-chart-5';
     default: return 'border-primary';
   }
 }
@@ -369,17 +375,22 @@ function getAlertIconColor(type: string) {
     case 'pending_w9': return 'text-destructive';
     case 'unmatched_remittance': return 'text-chart-2';
     case 'pending_signature': return 'text-chart-4';
+    case 'recently_completed': return 'text-chart-5';
     default: return 'text-primary';
   }
 }
 
-function getAlertLink(type: string) {
-  switch (type) {
+function getAlertLink(group: { kind: string; alerts: DashboardAlert[] }) {
+  if (group.alerts.length === 1 && group.alerts[0].entityId && group.alerts[0].entityType === 'referral') {
+    return `/referrals/${group.alerts[0].entityId}`;
+  }
+  switch (group.kind) {
     case 'expiring_authorization': return '/reports?tab=expiring-auth';
     case 'missing_document': return '/reports?tab=missing-docs';
     case 'pending_w9': return '/reports?tab=missing-docs&docType=w9';
     case 'pending_signature': return '/reports?tab=missing-docs&docType=signature';
     case 'unmatched_remittance': return '/remittances';
+    case 'recently_completed': return '/referrals';
     default: return '/';
   }
 }

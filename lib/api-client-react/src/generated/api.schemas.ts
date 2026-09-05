@@ -560,6 +560,10 @@ export interface Referral {
   /** @nullable */
   clientIsMinor?: boolean | null;
   /** @nullable */
+  participantEmail?: string | null;
+  /** @nullable */
+  familyRepEmail?: string | null;
+  /** @nullable */
   serviceCoordinatorId?: string | null;
   /** @nullable */
   coordinatorName?: string | null;
@@ -961,19 +965,90 @@ export interface ReferralUpdate {
   altaAuthReceivedAt?: string | null;
 }
 
+/**
+ * @nullable
+ */
+export type SignaturePageIntakeSentTo = typeof SignaturePageIntakeSentTo[keyof typeof SignaturePageIntakeSentTo] | null;
+
+
+export const SignaturePageIntakeSentTo = {
+  participant: 'participant',
+  family_rep: 'family_rep',
+} as const;
+
+/**
+ * @nullable
+ */
+export type SignaturePageServiceFrequency = typeof SignaturePageServiceFrequency[keyof typeof SignaturePageServiceFrequency] | null;
+
+
+export const SignaturePageServiceFrequency = {
+  one_time: 'one_time',
+  monthly: 'monthly',
+} as const;
+
+/**
+ * @nullable
+ */
+export type SignaturePagePaymentTypeRequested = typeof SignaturePagePaymentTypeRequested[keyof typeof SignaturePagePaymentTypeRequested] | null;
+
+
+export const SignaturePagePaymentTypeRequested = {
+  service_payment: 'service_payment',
+  reimbursement: 'reimbursement',
+} as const;
+
 export interface SignaturePage {
   referralId: string;
   clientName: string;
   /** @nullable */
-  activityDescription: string | null;
+  participantUci?: string | null;
   /** @nullable */
+  participantDob?: string | null;
+  clientIsMinor: boolean;
+  /** @nullable */
+  intakeSentTo: SignaturePageIntakeSentTo;
+  /** @nullable */
+  serviceCoordinatorName?: string | null;
+  /** @nullable */
+  serviceCoordinatorPhone?: string | null;
+  /** @nullable */
+  regionalCenter?: string | null;
+  /** @nullable */
+  representativeName?: string | null;
+  /** @nullable */
+  contactPhone?: string | null;
+  /** @nullable */
+  contactEmail?: string | null;
+  /** @nullable */
+  mailingAddress?: string | null;
+  /** @nullable */
+  activityDescription: string | null;
+  /**
+     * Recreational activity or program name
+     * @nullable
+     */
   vendorName?: string | null;
+  /** @nullable */
+  activityContactName?: string | null;
+  /** @nullable */
+  activityContactPhone?: string | null;
+  /** @nullable */
+  activityMailingAddress?: string | null;
   /** @nullable */
   serviceStartDate?: string | null;
   /** @nullable */
   serviceEndDate?: string | null;
   /** @nullable */
   serviceType?: string | null;
+  /** @nullable */
+  serviceFrequency?: SignaturePageServiceFrequency;
+  /** @nullable */
+  cost?: string | null;
+  /** @nullable */
+  paymentSchedule?: string | null;
+  /** @nullable */
+  paymentTypeRequested?: SignaturePagePaymentTypeRequested;
   alreadySigned: boolean;
 }
 
@@ -998,7 +1073,7 @@ export interface SignatureInput {
   typedName: string;
   agreed: boolean;
   /** Relationship of the person signing; recorded when supplied by the agreement form. */
-  signerRelationship?: SignatureInputSignerRelationship;
+  signerRelationship: SignatureInputSignerRelationship;
   /** Opt in to creating a portal account for the signer */
   createAccount?: boolean;
   /**
@@ -1709,6 +1784,7 @@ export const DashboardSummaryAlertsItemKind = {
   pending_w9: 'pending_w9',
   unmatched_remittance: 'unmatched_remittance',
   pending_signature: 'pending_signature',
+  recently_completed: 'recently_completed',
 } as const;
 
 export type DashboardSummaryAlertsItem = {

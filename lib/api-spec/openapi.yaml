@@ -713,7 +713,7 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/SignaturePage"
-        "400": { description: Invalid or expired token }
+        "404": { description: "Invalid, expired, superseded, or recipient-mismatched token" }
     post:
       operationId: submitSignature
       tags: [signature]
@@ -738,6 +738,8 @@ paths:
                 $ref: "#/components/schemas/SignatureResult"
         "400":
           description: "Invalid or expired token, or account creation requested without a valid password"
+        "404": { description: "Invalid, expired, superseded, or recipient-mismatched token" }
+        "409": { description: Agreement has already been signed }
   /authorizations:
     get:
       operationId: listAuthorizations
@@ -2159,6 +2161,8 @@ components:
         clientId: { type: string }
         clientName: { type: ["string", "null"] }
         clientIsMinor: { type: ["boolean", "null"] }
+        participantEmail: { type: ["string", "null"] }
+        familyRepEmail: { type: ["string", "null"] }
         serviceCoordinatorId: { type: ["string", "null"] }
         coordinatorName: { type: ["string", "null"] }
         referralDate: { type: string }
@@ -2216,19 +2220,37 @@ components:
         altaAuthReceivedAt: { type: ["string", "null"] }
     SignaturePage:
       type: object
-      required: [referralId, clientName, activityDescription, alreadySigned]
+      required: [referralId, clientName, clientIsMinor, intakeSentTo, activityDescription, alreadySigned]
       properties:
         referralId: { type: string }
         clientName: { type: string }
+        participantUci: { type: ["string", "null"] }
+        participantDob: { type: ["string", "null"] }
+        clientIsMinor: { type: boolean }
+        intakeSentTo: { type: ["string", "null"], enum: [participant, family_rep, null] }
+        serviceCoordinatorName: { type: ["string", "null"] }
+        serviceCoordinatorPhone: { type: ["string", "null"] }
+        regionalCenter: { type: ["string", "null"] }
+        representativeName: { type: ["string", "null"] }
+        contactPhone: { type: ["string", "null"] }
+        contactEmail: { type: ["string", "null"] }
+        mailingAddress: { type: ["string", "null"] }
         activityDescription: { type: ["string", "null"] }
-        vendorName: { type: ["string", "null"] }
+        vendorName: { type: ["string", "null"], description: "Recreational activity or program name" }
+        activityContactName: { type: ["string", "null"] }
+        activityContactPhone: { type: ["string", "null"] }
+        activityMailingAddress: { type: ["string", "null"] }
         serviceStartDate: { type: ["string", "null"] }
         serviceEndDate: { type: ["string", "null"] }
         serviceType: { type: ["string", "null"] }
+        serviceFrequency: { type: ["string", "null"], enum: [one_time, monthly, null] }
+        cost: { type: ["string", "null"] }
+        paymentSchedule: { type: ["string", "null"] }
+        paymentTypeRequested: { type: ["string", "null"], enum: [service_payment, reimbursement, null] }
         alreadySigned: { type: boolean }
     SignatureInput:
       type: object
-      required: [typedName, agreed]
+      required: [typedName, agreed, signerRelationship]
       description: >-
         Typed-name e-signature payload. When createAccount is true a portal
         account is created for the signer and password becomes required and must
@@ -2815,7 +2837,7 @@ components:
             type: object
             required: [kind, message]
             properties:
-              kind: { type: string, enum: [expiring_authorization, missing_document, pending_w9, unmatched_remittance, pending_signature] }
+              kind: { type: string, enum: [expiring_authorization, missing_document, pending_w9, unmatched_remittance, pending_signature, recently_completed] }
               message: { type: string }
               entityType: { type: ["string", "null"] }
               entityId: { type: ["string", "null"] }

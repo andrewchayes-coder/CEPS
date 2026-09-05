@@ -553,6 +553,8 @@ export const GetClientCaseResponse = zod.object({
   "clientId": zod.string(),
   "clientName": zod.string().nullish(),
   "clientIsMinor": zod.boolean().nullish(),
+  "participantEmail": zod.string().nullish(),
+  "familyRepEmail": zod.string().nullish(),
   "serviceCoordinatorId": zod.string().nullish(),
   "coordinatorName": zod.string().nullish(),
   "referralDate": zod.string(),
@@ -731,6 +733,8 @@ export const ListReferralsResponse = zod.object({
   "clientId": zod.string(),
   "clientName": zod.string().nullish(),
   "clientIsMinor": zod.boolean().nullish(),
+  "participantEmail": zod.string().nullish(),
+  "familyRepEmail": zod.string().nullish(),
   "serviceCoordinatorId": zod.string().nullish(),
   "coordinatorName": zod.string().nullish(),
   "referralDate": zod.string(),
@@ -860,6 +864,8 @@ export const CreateReferralResponse = zod.object({
   "clientId": zod.string(),
   "clientName": zod.string().nullish(),
   "clientIsMinor": zod.boolean().nullish(),
+  "participantEmail": zod.string().nullish(),
+  "familyRepEmail": zod.string().nullish(),
   "serviceCoordinatorId": zod.string().nullish(),
   "coordinatorName": zod.string().nullish(),
   "referralDate": zod.string(),
@@ -936,6 +942,8 @@ export const GetReferralResponse = zod.object({
   "clientId": zod.string(),
   "clientName": zod.string().nullish(),
   "clientIsMinor": zod.boolean().nullish(),
+  "participantEmail": zod.string().nullish(),
+  "familyRepEmail": zod.string().nullish(),
   "serviceCoordinatorId": zod.string().nullish(),
   "coordinatorName": zod.string().nullish(),
   "referralDate": zod.string(),
@@ -1030,6 +1038,8 @@ export const UpdateReferralResponse = zod.object({
   "clientId": zod.string(),
   "clientName": zod.string().nullish(),
   "clientIsMinor": zod.boolean().nullish(),
+  "participantEmail": zod.string().nullish(),
+  "familyRepEmail": zod.string().nullish(),
   "serviceCoordinatorId": zod.string().nullish(),
   "coordinatorName": zod.string().nullish(),
   "referralDate": zod.string(),
@@ -1140,11 +1150,29 @@ export const GetSignaturePageParams = zod.object({
 export const GetSignaturePageResponse = zod.object({
   "referralId": zod.string(),
   "clientName": zod.string(),
+  "participantUci": zod.string().nullish(),
+  "participantDob": zod.string().nullish(),
+  "clientIsMinor": zod.boolean(),
+  "intakeSentTo": zod.union([zod.literal('participant'),zod.literal('family_rep'),zod.literal(null)]).nullable(),
+  "serviceCoordinatorName": zod.string().nullish(),
+  "serviceCoordinatorPhone": zod.string().nullish(),
+  "regionalCenter": zod.string().nullish(),
+  "representativeName": zod.string().nullish(),
+  "contactPhone": zod.string().nullish(),
+  "contactEmail": zod.string().nullish(),
+  "mailingAddress": zod.string().nullish(),
   "activityDescription": zod.string().nullable(),
-  "vendorName": zod.string().nullish(),
+  "vendorName": zod.string().nullish().describe('Recreational activity or program name'),
+  "activityContactName": zod.string().nullish(),
+  "activityContactPhone": zod.string().nullish(),
+  "activityMailingAddress": zod.string().nullish(),
   "serviceStartDate": zod.string().nullish(),
   "serviceEndDate": zod.string().nullish(),
   "serviceType": zod.string().nullish(),
+  "serviceFrequency": zod.union([zod.literal('one_time'),zod.literal('monthly'),zod.literal(null)]).nullish(),
+  "cost": zod.string().nullish(),
+  "paymentSchedule": zod.string().nullish(),
+  "paymentTypeRequested": zod.union([zod.literal('service_payment'),zod.literal('reimbursement'),zod.literal(null)]).nullish(),
   "alreadySigned": zod.boolean()
 })
 
@@ -1164,7 +1192,7 @@ export const submitSignatureBodyPasswordMin = 8;
 export const SubmitSignatureBody = zod.object({
   "typedName": zod.string().min(1),
   "agreed": zod.boolean(),
-  "signerRelationship": zod.enum(['self', 'parent', 'guardian', 'conservator']).optional().describe('Relationship of the person signing; recorded when supplied by the agreement form.'),
+  "signerRelationship": zod.enum(['self', 'parent', 'guardian', 'conservator']).describe('Relationship of the person signing; recorded when supplied by the agreement form.'),
   "createAccount": zod.boolean().optional().describe('Opt in to creating a portal account for the signer'),
   "password": zod.string().min(submitSignatureBodyPasswordMin).optional().describe('Portal account password (required and >= 8 chars when createAccount is true)')
 }).describe('Typed-name e-signature payload. When createAccount is true a portal account is created for the signer and password becomes required and must be at least 8 characters. If createAccount is true but password is missing or shorter than 8 characters the request is rejected with 400 and the signature is NOT recorded (the token stays valid). Because this is a conditional requirement OpenAPI cannot express fully, the rule is enforced by a zod refinement in the handler.')
@@ -2398,7 +2426,7 @@ export const GetDashboardSummaryResponse = zod.object({
   "unmatchedRemittances": zod.int().optional()
 }),
   "alerts": zod.array(zod.object({
-  "kind": zod.enum(['expiring_authorization', 'missing_document', 'pending_w9', 'unmatched_remittance', 'pending_signature']),
+  "kind": zod.enum(['expiring_authorization', 'missing_document', 'pending_w9', 'unmatched_remittance', 'pending_signature', 'recently_completed']),
   "message": zod.string(),
   "entityType": zod.string().nullish(),
   "entityId": zod.string().nullish()

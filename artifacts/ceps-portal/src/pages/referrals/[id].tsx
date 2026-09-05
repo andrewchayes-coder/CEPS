@@ -1,15 +1,16 @@
 import React from 'react';
 import { useLocation, useParams } from 'wouter';
-import { useGetReferral, useUpdateReferral, useSendIntake, useDeleteReferral } from '@workspace/api-client-react';
+import { useGetReferral, useUpdateReferral, useDeleteReferral } from '@workspace/api-client-react';
 import { useAuth } from '@/components/auth/auth-provider';
 import { EditReferralDialog } from '@/components/edit-referral-dialog';
 import { DeleteEntityButton } from '@/components/delete-entity-button';
+import { SendIntakeDialog } from '@/components/send-intake-dialog';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
 import { useToast } from '@/hooks/use-toast';
-import { Mail, CheckCircle2, AlertTriangle, FileText, ArrowLeft, RefreshCw } from 'lucide-react';
+import { CheckCircle2, AlertTriangle, FileText, ArrowLeft, RefreshCw } from 'lucide-react';
 import { format } from 'date-fns';
 import { Link } from 'wouter';
 import { ClientLink } from '@/components/entity-links';
@@ -29,33 +30,10 @@ export default function ReferralDetailPage() {
       queryKey: ['referrals', id]
     }
   });
-  const sendIntake = useSendIntake();
   const updateReferral = useUpdateReferral();
 
   if (isLoading) return <div className="p-8 text-center">Loading referral...</div>;
   if (!referral) return <div className="p-8 text-center">Referral not found.</div>;
-
-  const handleSendIntake = (recipient: 'participant' | 'family_rep') => {
-    sendIntake.mutate({ id, data: { recipient } }, {
-      onSuccess: (res) => {
-        toast({
-          title: "Link Sent",
-          description: `Signature link prepared for ${recipient === 'participant' ? 'the participant' : 'the family representative'}.`,
-        });
-        void refetch();
-        if (res.devLink) {
-          console.log("Dev Intake Link:", res.devLink);
-        }
-      },
-      onError: (error) => {
-        toast({
-          variant: "destructive",
-          title: "Error",
-          description: error instanceof Error ? error.message : "Failed to send the intake agreement.",
-        });
-      }
-    });
-  };
 
   const intake = referral.intakeFields;
 
@@ -161,53 +139,44 @@ export default function ReferralDetailPage() {
         <div className="space-y-6">
           <Card>
             <CardHeader>
-              <CardTitle className="text-lg">Signature Status</CardTitle>
+              <CardTitle className="text-lg">Intake Status</CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
               {referral.parentSignedAt ? (
                 <div className="bg-chart-5/10 text-chart-5 border border-chart-5/20 rounded-md p-4 flex gap-3">
                   <CheckCircle2 className="w-5 h-5 shrink-0" />
                   <div className="text-sm">
-                    <p className="font-semibold">Signed by {referral.signedByName}</p>
-                    <p className="opacity-90">{format(new Date(referral.parentSignedAt), 'MMM d, yyyy h:mm a')}</p>
+                    <p className="font-semibold">
+                      Signed on {format(new Date(referral.parentSignedAt), 'MMM d, yyyy')}
+                    </p>
+                    <p className="opacity-90">
+                      By {referral.signedByName}
+                      {referral.signerRelationship ? ` (${referral.signerRelationship})` : ''}
+                    </p>
+                  </div>
+                </div>
+              ) : referral.intakeSentAt ? (
+                <div className="bg-chart-4/10 text-chart-4 border border-chart-4/20 rounded-md p-4 flex gap-3">
+                  <AlertTriangle className="w-5 h-5 shrink-0 text-chart-4" />
+                  <div className="text-sm space-y-1">
+                    <p className="font-semibold">Awaiting Signature</p>
+                    <p className="opacity-90">
+                      Sent to {referral.intakeSentTo === 'participant' ? 'Participant' : 'Family Rep'} on {format(new Date(referral.intakeSentAt), 'MMM d, yyyy')}
+                    </p>
                   </div>
                 </div>
               ) : (
-                <div className="bg-chart-2/10 text-chart-2 border border-chart-2/20 rounded-md p-4 flex gap-3">
+                <div className="bg-muted text-muted-foreground border rounded-md p-4 flex gap-3">
                   <AlertTriangle className="w-5 h-5 shrink-0" />
-                  <div className="text-sm space-y-2">
-                    <p className="font-semibold">Awaiting Signature</p>
-                    <p className="opacity-90 break-all">{referral.parentEmail}</p>
+                  <div className="text-sm space-y-1">
+                    <p className="font-semibold">Not Started</p>
+                    <p className="opacity-90">Intake agreement has not been sent.</p>
                   </div>
                 </div>
               )}
               {canSendIntake && (
-                <div className="space-y-2">
-                  <p className="text-xs font-medium text-muted-foreground">
-                    {referral.intakeSentAt ? 'Send again to:' : 'Send agreement to:'}
-                  </p>
-                  {referral.clientIsMinor === false && (
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      className="w-full"
-                      onClick={() => handleSendIntake('participant')}
-                      disabled={sendIntake.isPending}
-                    >
-                      <Mail className="w-4 h-4 mr-2" />
-                      Participant
-                    </Button>
-                  )}
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    className="w-full"
-                    onClick={() => handleSendIntake('family_rep')}
-                    disabled={sendIntake.isPending}
-                  >
-                    <Mail className="w-4 h-4 mr-2" />
-                    Family Representative
-                  </Button>
+                <div className="pt-2">
+                  <SendIntakeDialog referral={referral} onSent={() => refetch()} />
                 </div>
               )}
             </CardContent>

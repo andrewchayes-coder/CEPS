@@ -19,9 +19,11 @@ let staffCookie: string;
 let minorClientId: string;
 let adultClientId: string;
 let missingEmailClientId: string;
+let unknownMinorStatusClientId: string;
 let minorReferralId: string;
 let adultReferralId: string;
 let missingEmailReferralId: string;
+let unknownMinorStatusReferralId: string;
 
 async function session(userId: string) {
   const token = newToken();
@@ -64,6 +66,8 @@ beforeAll(async () => {
         uciNumber: `${nonce}-adult`,
         isMinor: false,
         email: `${nonce}-adult@test.local`,
+        familyRepName: "Adult Family Representative",
+        familyRepEmail: `${nonce}-adult-family@test.local`,
       },
       {
         firstName: "Missing",
@@ -73,9 +77,17 @@ beforeAll(async () => {
         isMinor: true,
         familyRepEmail: null,
       },
+      {
+        firstName: "Unknown",
+        lastName: "Minor Status",
+        dateOfBirth: "1990-01-01",
+        uciNumber: `${nonce}-unknown-minor`,
+        isMinor: null,
+        email: `${nonce}-unknown-minor@test.local`,
+      },
     ])
     .returning();
-  [minorClientId, adultClientId, missingEmailClientId] = clients.map(
+  [minorClientId, adultClientId, missingEmailClientId, unknownMinorStatusClientId] = clients.map(
     (client) => client.id,
   );
 
@@ -100,16 +112,22 @@ beforeAll(async () => {
         status: "intake",
         intakeFields: {},
       },
+      {
+        clientId: unknownMinorStatusClientId,
+        referralDate: "2026-09-05",
+        status: "intake",
+        intakeFields: {},
+      },
     ])
     .returning();
-  [minorReferralId, adultReferralId, missingEmailReferralId] = referrals.map(
+  [minorReferralId, adultReferralId, missingEmailReferralId, unknownMinorStatusReferralId] = referrals.map(
     (referral) => referral.id,
   );
 });
 
 afterAll(async () => {
-  const referralIds = [minorReferralId, adultReferralId, missingEmailReferralId];
-  const clientIds = [minorClientId, adultClientId, missingEmailClientId];
+  const referralIds = [minorReferralId, adultReferralId, missingEmailReferralId, unknownMinorStatusReferralId];
+  const clientIds = [minorClientId, adultClientId, missingEmailClientId, unknownMinorStatusClientId];
   await db.delete(auditLogTable).where(inArray(auditLogTable.entityId, referralIds));
   await db.delete(magicLinksTable).where(inArray(magicLinksTable.referralId, referralIds));
   await db.delete(referralsTable).where(inArray(referralsTable.id, referralIds));
@@ -162,6 +180,16 @@ describe("POST /referrals/:id/send-intake", () => {
     expect(response.body.error).toContain("family rep record");
   });
 
+  it("fails closed when participant minor status has not been confirmed", async () => {
+    const response = await request(app)
+      .post(`/api/referrals/${unknownMinorStatusReferralId}/send-intake`)
+      .set("Cookie", staffCookie)
+      .send({ recipient: "participant" });
+
+    expect(response.status).toBe(400);
+    expect(response.body.error).toContain("Confirm that the participant is not a minor");
+  });
+
   it("rejects malformed agreement cost before writing", async () => {
     const response = await request(app)
       .post(`/api/referrals/${adultReferralId}/send-intake`)
@@ -205,6 +233,166 @@ describe("POST /referrals/:id/send-intake", () => {
     expect(referral.cost).toBe("210.00");
     expect(referral.paymentSchedule).toBe("$210 on the 1st of each month");
     expect(referral.paymentTypeRequested).toBe("service_payment");
+  });
+
+  it("invalidates the previous recipient's token when resending to someone else", async () => {
+    const [oldLink] = await db
+      .select()
+      .from(magicLinksTable)
+      .where(eq(magicLinksTable.referralId, adultReferralId));
+    expect(oldLink).toBeDefined();
+
+    const resend = await request(app)
+      .post(`/api/referrals/${adultReferralId}/send-intake`)
+      .set("Cookie", staffCookie)
+      .send({ recipient: "family_rep" });
+    expect(resend.status).toBe(200);
+
+    const oldPage = await request(app).get(`/api/signature/${oldLink.token}`);
+    expect(oldPage.status).toBe(404);
+
+    const links = await db
+      .select()
+      .from(magicLinksTable)
+      .where(eq(magicLinksTable.referralId, adultReferralId));
+    const currentLink = links.find((link) => link.id !== oldLink.id && link.usedAt === null);
+    expect(currentLink).toBeDefined();
+
+    const currentPage = await request(app).get(`/api/signature/${currentLink!.token}`);
+    expect(currentPage.status).toBe(200);
+    expect(currentPage.body.intakeSentTo).toBe("family_rep");
+    expect(currentPage.body.contactEmail).toBe(`${nonce}-adult-family@test.local`);
+  });
+
+  it("rejects a superseded token even when a resend uses the same recipient", async () => {
+    const linksBefore = await db
+      .select()
+      .from(magicLinksTable)
+      .where(eq(magicLinksTable.referralId, adultReferralId));
+    const previousLink = linksBefore.find((link) => link.usedAt === null);
+    expect(previousLink).toBeDefined();
+
+    const resend = await request(app)
+      .post(`/api/referrals/${adultReferralId}/send-intake`)
+      .set("Cookie", staffCookie)
+      .send({ recipient: "family_rep" });
+    expect(resend.status).toBe(200);
+
+    const oldPage = await request(app).get(`/api/signature/${previousLink!.token}`);
+    expect(oldPage.status).toBe(404);
+    expect(oldPage.body.participantName).toBeUndefined();
+  });
+
+  it("serializes concurrent resends and leaves exactly one usable newest token", async () => {
+    const [participantSend, familySend] = await Promise.all([
+      request(app)
+        .post(`/api/referrals/${adultReferralId}/send-intake`)
+        .set("Cookie", staffCookie)
+        .send({ recipient: "participant" }),
+      request(app)
+        .post(`/api/referrals/${adultReferralId}/send-intake`)
+        .set("Cookie", staffCookie)
+        .send({ recipient: "family_rep" }),
+    ]);
+    expect(participantSend.status).toBe(200);
+    expect(familySend.status).toBe(200);
+
+    const [currentReferral] = await db
+      .select()
+      .from(referralsTable)
+      .where(eq(referralsTable.id, adultReferralId));
+    const links = await db
+      .select()
+      .from(magicLinksTable)
+      .where(eq(magicLinksTable.referralId, adultReferralId));
+    const liveLinks = links.filter((link) => link.usedAt === null);
+
+    expect(liveLinks).toHaveLength(1);
+    expect(liveLinks[0].email).toBe(currentReferral.parentEmail);
+    expect(liveLinks[0].email).toBe(
+      currentReferral.intakeSentTo === "participant"
+        ? `${nonce}-adult@test.local`
+        : `${nonce}-adult-family@test.local`,
+    );
+
+    const currentPage = await request(app).get(`/api/signature/${liveLinks[0].token}`);
+    expect(currentPage.status).toBe(200);
+    expect(currentPage.body.intakeSentTo).toBe(currentReferral.intakeSentTo);
+  });
+
+  it("uses the participant contact committed before the locked send proceeds", async () => {
+    const updatedEmail = `${nonce}-adult-updated@test.local`;
+    let pendingSend: Promise<request.Response> | undefined;
+
+    await db.transaction(async (tx) => {
+      await tx
+        .select()
+        .from(clientsTable)
+        .where(eq(clientsTable.id, adultClientId))
+        .for("update");
+      pendingSend = Promise.resolve(
+        request(app)
+          .post(`/api/referrals/${adultReferralId}/send-intake`)
+          .set("Cookie", staffCookie)
+          .send({ recipient: "participant" }),
+      );
+      await new Promise((resolve) => setTimeout(resolve, 25));
+      await tx
+        .update(clientsTable)
+        .set({ email: updatedEmail })
+        .where(eq(clientsTable.id, adultClientId));
+    });
+
+    const response = await pendingSend!;
+    expect(response.status).toBe(200);
+    const links = await db
+      .select()
+      .from(magicLinksTable)
+      .where(eq(magicLinksTable.referralId, adultReferralId));
+    const liveLinks = links.filter((link) => link.usedAt === null);
+    expect(liveLinks).toHaveLength(1);
+    expect(liveLinks[0].email).toBe(updatedEmail);
+
+    await db
+      .update(clientsTable)
+      .set({ email: `${nonce}-adult@test.local` })
+      .where(eq(clientsTable.id, adultClientId));
+  });
+
+  it("invalidates a participant self-sign link if the participant is later marked minor", async () => {
+    const send = await request(app)
+      .post(`/api/referrals/${adultReferralId}/send-intake`)
+      .set("Cookie", staffCookie)
+      .send({ recipient: "participant" });
+    expect(send.status).toBe(200);
+
+    const links = await db
+      .select()
+      .from(magicLinksTable)
+      .where(eq(magicLinksTable.referralId, adultReferralId));
+    const liveLink = links.find((link) => link.usedAt === null);
+    expect(liveLink).toBeDefined();
+
+    await db
+      .update(clientsTable)
+      .set({ isMinor: true })
+      .where(eq(clientsTable.id, adultClientId));
+
+    const page = await request(app).get(`/api/signature/${liveLink!.token}`);
+    expect(page.status).toBe(404);
+    const signature = await request(app)
+      .post(`/api/signature/${liveLink!.token}`)
+      .send({
+        typedName: "Former Self Signer",
+        agreed: true,
+        signerRelationship: "self",
+      });
+    expect(signature.status).toBe(404);
+
+    await db
+      .update(clientsTable)
+      .set({ isMinor: false })
+      .where(eq(clientsTable.id, adultClientId));
   });
 
   it("resends without clobbering an existing signature or progress", async () => {

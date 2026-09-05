@@ -1,5 +1,5 @@
 import { Router, type IRouter } from "express";
-import { eq, and, isNull, gt, desc, count, ilike, or, sql, type SQL } from "drizzle-orm";
+import { eq, and, isNull, gt, desc, count, ilike, or, sql, ne, type SQL } from "drizzle-orm";
 import {
   db,
   clientsTable,
@@ -7,6 +7,7 @@ import {
   referralsTable,
   magicLinksTable,
   usersTable,
+  auditLogTable,
 } from "@workspace/db";
 import {
   ListReferralsQueryParams,
@@ -31,29 +32,37 @@ import {
   appBaseUrl,
   hashPassword,
 } from "../lib/auth";
-import { referralJson, clientNameMap, userNameMap } from "../lib/serializers";
+import { referralJson, clientNameMap, userNameMap, userContactMap } from "../lib/serializers";
 import { sortedOrder } from "../lib/sorting";
+import { logger } from "../lib/logger";
 
 const router: IRouter = Router();
 
-async function createSignatureLink(referralId: string, email: string): Promise<string> {
-  const token = newToken();
-  await db.insert(magicLinksTable).values({
-    token,
-    email: email.trim().toLowerCase(),
-    purpose: "signature",
-    referralId,
-    expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
-  });
-  return `${appBaseUrl()}/sign/${token}`;
-}
-
-async function sendIntakeEmail(referralId: string, email: string): Promise<string | null> {
-  const link = await createSignatureLink(referralId, email);
+async function sendIntakeEmail(
+  referralId: string,
+  email: string,
+  linkUrl: string,
+): Promise<string | null> {
   // [CONFIRM] No email provider approved yet. Keep delivery behind this helper
   // so the real provider can replace this development behavior in one place.
-  console.info(`[intake-email] Send to ${email.trim().toLowerCase()}: ${link}`);
-  return process.env.NODE_ENV === "production" ? null : link;
+  if (process.env.NODE_ENV === "production") {
+    logger.info({ referralId }, "Intake signature link prepared");
+    return null;
+  }
+  logger.info(
+    { referralId, recipientEmail: email.trim().toLowerCase(), devLink: linkUrl },
+    "Development intake signature link prepared",
+  );
+  return linkUrl;
+}
+
+class SignatureSubmissionError extends Error {
+  constructor(
+    readonly status: number,
+    message: string,
+  ) {
+    super(message);
+  }
 }
 
 const clean = (value: string | undefined | null): string | null => {
@@ -239,6 +248,7 @@ router.post("/referrals", requireStaffOrCoordinator, async (req, res): Promise<v
         `${client.firstName} ${client.lastName}`,
         referral.serviceCoordinatorId ? coordNames.get(referral.serviceCoordinatorId) : null,
         client.isMinor,
+        { participant: client.email, familyRep: client.familyRepEmail },
       ),
     ),
   );
@@ -264,7 +274,11 @@ router.get("/referrals/:id", requireAuth, async (req, res): Promise<void> => {
     clientNameMap([referral.clientId]),
     userNameMap([referral.serviceCoordinatorId]),
     db
-      .select({ isMinor: clientsTable.isMinor })
+      .select({
+        isMinor: clientsTable.isMinor,
+        email: clientsTable.email,
+        familyRepEmail: clientsTable.familyRepEmail,
+      })
       .from(clientsTable)
       .where(eq(clientsTable.id, referral.clientId)),
   ]);
@@ -275,6 +289,9 @@ router.get("/referrals/:id", requireAuth, async (req, res): Promise<void> => {
         clientNames.get(referral.clientId),
         referral.serviceCoordinatorId ? coordNames.get(referral.serviceCoordinatorId) : null,
         clients[0]?.isMinor,
+        clients[0]
+          ? { participant: clients[0].email, familyRep: clients[0].familyRepEmail }
+          : null,
       ),
     ),
   );
@@ -387,47 +404,93 @@ router.post("/referrals/:id/send-intake", requireStaffOrCoordinator, async (req,
     res.status(403).json({ error: "Forbidden" });
     return;
   }
-  const [client] = await db.select().from(clientsTable).where(eq(clientsTable.id, referral.clientId));
-  if (!client) {
-    res.status(404).json({ error: "Participant not found" });
-    return;
-  }
-  if (parsed.data.recipient === "participant" && client.isMinor) {
-    res.status(400).json({
-      error: "A minor cannot sign for themselves — send to the family rep, guardian, or conservator instead",
-    });
-    return;
-  }
-  const recipientEmail = clean(
-    parsed.data.recipient === "participant" ? client.email : client.familyRepEmail,
-  );
-  if (!recipientEmail) {
-    const recipientLabel = parsed.data.recipient === "participant" ? "participant" : "family rep";
-    res.status(400).json({
-      error: `Add an email to the ${recipientLabel} record before sending the intake agreement`,
-    });
-    return;
-  }
-  const updates: Record<string, unknown> = {
-    parentEmail: recipientEmail.toLowerCase(),
-    intakeSentTo: parsed.data.recipient,
-    intakeSentAt: new Date(),
-    status: referral.status === "intake" ? "pending_signature" : referral.status,
-  };
+  const agreementUpdates: Record<string, unknown> = {};
   for (const field of ["serviceFrequency", "cost", "paymentSchedule", "paymentTypeRequested"] as const) {
-    if (parsed.data[field] !== undefined) updates[field] = clean(parsed.data[field]);
+    if (parsed.data[field] !== undefined) agreementUpdates[field] = clean(parsed.data[field]);
   }
-  const devLink = await sendIntakeEmail(referral.id, recipientEmail);
-  await db.update(referralsTable).set(updates).where(eq(referralsTable.id, referral.id));
+  const delivery = await db.transaction(async (tx) => {
+    await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${referral.id}))`);
+    const [currentReferral] = await tx
+      .select({ status: referralsTable.status })
+      .from(referralsTable)
+      .where(eq(referralsTable.id, referral.id));
+    const [currentClient] = await tx
+      .select()
+      .from(clientsTable)
+      .where(eq(clientsTable.id, referral.clientId))
+      .for("update");
+    if (!currentClient) {
+      return { error: "Participant not found", status: 404 } as const;
+    }
+    if (parsed.data.recipient === "participant" && currentClient.isMinor !== false) {
+      return {
+        error: currentClient.isMinor
+          ? "A minor cannot sign for themselves — send to the family rep, guardian, or conservator instead"
+          : "Confirm that the participant is not a minor before sending the intake to them",
+        status: 400,
+      } as const;
+    }
+    const recipientEmail = clean(
+      parsed.data.recipient === "participant"
+        ? currentClient.email
+        : currentClient.familyRepEmail,
+    );
+    if (!recipientEmail) {
+      const recipientLabel = parsed.data.recipient === "participant" ? "participant" : "family rep";
+      return {
+        error: `Add an email to the ${recipientLabel} record before sending the intake agreement`,
+        status: 400,
+      } as const;
+    }
+    const token = newToken();
+    const [newLink] = await tx
+      .insert(magicLinksTable)
+      .values({
+        token,
+        email: recipientEmail.toLowerCase(),
+        purpose: "signature",
+        referralId: referral.id,
+        expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
+      })
+      .returning({ id: magicLinksTable.id });
+    const linkUrl = `${appBaseUrl()}/sign/${token}`;
+    const deliveredDevLink = await sendIntakeEmail(referral.id, recipientEmail, linkUrl);
+    await tx
+      .update(magicLinksTable)
+      .set({ usedAt: new Date() })
+      .where(
+        and(
+          eq(magicLinksTable.referralId, referral.id),
+          eq(magicLinksTable.purpose, "signature"),
+          ne(magicLinksTable.id, newLink.id),
+          isNull(magicLinksTable.usedAt),
+        ),
+      );
+    await tx
+      .update(referralsTable)
+      .set({
+        ...agreementUpdates,
+        parentEmail: recipientEmail.toLowerCase(),
+        intakeSentTo: parsed.data.recipient,
+        intakeSentAt: new Date(),
+        status: currentReferral?.status === "intake" ? "pending_signature" : currentReferral?.status,
+      })
+      .where(eq(referralsTable.id, referral.id));
+    return { devLink: deliveredDevLink, recipientEmail } as const;
+  });
+  if ("error" in delivery) {
+    res.status(delivery.status ?? 500).json({ error: delivery.error });
+    return;
+  }
   const recipientLabel = parsed.data.recipient === "participant" ? "participant" : "family rep";
   await audit(
     req.user!.id,
     "send_signature_link",
     "referral",
     referral.id,
-    `Sent to ${recipientLabel}: ${recipientEmail}`,
+    `Sent to ${recipientLabel}: ${delivery.recipientEmail}`,
   );
-  res.json(SendIntakeResponse.parse({ sent: true, devLink }));
+  res.json(SendIntakeResponse.parse({ sent: true, devLink: delivery.devLink }));
 });
 
 // --- Public signature endpoints (tokened, no session) ---
@@ -449,7 +512,7 @@ async function loadSignatureLink(token: string) {
 router.get("/signature/:token", async (req, res): Promise<void> => {
   const token = Array.isArray(req.params.token) ? req.params.token[0] : req.params.token;
   const link = await loadSignatureLink(token);
-  if (!link || !link.referralId) {
+  if (!link || !link.referralId || link.usedAt) {
     res.status(404).json({ error: "This signature link is invalid or has expired" });
     return;
   }
@@ -459,16 +522,75 @@ router.get("/signature/:token", async (req, res): Promise<void> => {
     return;
   }
   const f = (referral.intakeFields ?? {}) as Record<string, string | undefined>;
-  const clientNames = await clientNameMap([referral.clientId]);
+  const [clientNames, coordinatorContacts, clients] = await Promise.all([
+    clientNameMap([referral.clientId]),
+    userContactMap([referral.serviceCoordinatorId]),
+    db.select().from(clientsTable).where(eq(clientsTable.id, referral.clientId)),
+  ]);
+  const client = clients[0];
+  if (!client) {
+    res.status(404).json({ error: "Participant not found" });
+    return;
+  }
+  const coordinator = referral.serviceCoordinatorId
+    ? coordinatorContacts.get(referral.serviceCoordinatorId)
+    : undefined;
+  const sentToFamily = referral.intakeSentTo === "family_rep";
+  const selectedEmail =
+    referral.intakeSentTo === "participant"
+      ? client.email
+      : sentToFamily
+        ? client.familyRepEmail
+        : null;
+  if (
+    (referral.intakeSentTo === "participant" && client.isMinor !== false) ||
+    !selectedEmail ||
+    selectedEmail.trim().toLowerCase() !== link.email.trim().toLowerCase()
+  ) {
+    res.status(404).json({ error: "This signature link is no longer valid" });
+    return;
+  }
+  const participantName = clientNames.get(referral.clientId) ?? "Participant";
+  const contactAddress = sentToFamily ? client.familyRepAddress : client.address;
+  const fallbackContactAddress = [
+    f.contactStreet,
+    f.contactCity,
+    f.contactState,
+    f.contactZip,
+  ].filter(Boolean).join(", ");
+  const activityMailingAddress = [
+    f.vendorServiceStreet,
+    f.vendorServiceCity,
+    f.vendorServiceState,
+    f.vendorServiceZip,
+  ].filter(Boolean).join(", ");
   res.json(
     GetSignaturePageResponse.parse({
       referralId: referral.id,
-      clientName: clientNames.get(referral.clientId) ?? "Client",
+      clientName: participantName,
+      participantUci: client.uciNumber,
+      participantDob: client.dateOfBirth,
+      clientIsMinor: client.isMinor === true,
+      intakeSentTo: referral.intakeSentTo,
+      serviceCoordinatorName: coordinator?.name ?? f.coordinatorName ?? null,
+      serviceCoordinatorPhone: coordinator?.phone ?? f.coordinatorPhone ?? null,
+      regionalCenter: client.regionalCenter ?? f.regionalCenterName ?? null,
+      representativeName: sentToFamily ? client.familyRepName : participantName,
+      contactPhone: (sentToFamily ? client.familyRepPhone : client.phone) ?? f.contactPhone ?? null,
+      contactEmail: (sentToFamily ? client.familyRepEmail : client.email) ?? f.contactEmail ?? null,
+      mailingAddress: contactAddress ?? (fallbackContactAddress || null),
       activityDescription: f.activityDescription ?? null,
       vendorName: f.vendorName ?? null,
+      activityContactName: f.vendorContactPerson ?? null,
+      activityContactPhone: f.vendorPhone ?? null,
+      activityMailingAddress: activityMailingAddress || null,
       serviceStartDate: f.serviceStartDate ?? null,
       serviceEndDate: f.serviceEndDate ?? null,
       serviceType: f.serviceType ?? null,
+      serviceFrequency: referral.serviceFrequency,
+      cost: referral.cost,
+      paymentSchedule: referral.paymentSchedule,
+      paymentTypeRequested: referral.paymentTypeRequested,
       alreadySigned: !!referral.parentSignedAt || !!link.usedAt,
     }),
   );
@@ -495,61 +617,123 @@ router.post("/signature/:token", async (req, res): Promise<void> => {
     });
     return;
   }
-  const link = await loadSignatureLink(token);
-  if (!link || !link.referralId || link.usedAt) {
-    res.status(404).json({ error: "This signature link is invalid, expired, or already used" });
-    return;
-  }
-  const [referral] = await db.select().from(referralsTable).where(eq(referralsTable.id, link.referralId));
-  if (!referral) {
-    res.status(404).json({ error: "Referral not found" });
-    return;
-  }
-  if (referral.parentSignedAt) {
-    res.status(409).json({ error: "This agreement has already been signed" });
-    return;
-  }
-  await db
-    .update(referralsTable)
-    .set({
-      parentSignedAt: new Date(),
-      signedByName: parsed.data.typedName,
-      ...(parsed.data.signerRelationship
-        ? { signerRelationship: parsed.data.signerRelationship }
-        : {}),
-      signedIp: req.ip ?? null,
-      status: referral.status === "pending_signature" || referral.status === "intake" ? "pending_auth" : referral.status,
-    })
-    .where(eq(referralsTable.id, referral.id));
-  await db.update(magicLinksTable).set({ usedAt: new Date() }).where(eq(magicLinksTable.id, link.id));
+  const passwordHash =
+    parsed.data.createAccount && parsed.data.password
+      ? hashPassword(parsed.data.password)
+      : null;
+  try {
+    const outcome = await db.transaction(async (tx) => {
+      const signedAt = new Date();
+      const [link] = await tx
+        .update(magicLinksTable)
+        .set({ usedAt: signedAt })
+        .where(
+          and(
+            eq(magicLinksTable.token, token),
+            eq(magicLinksTable.purpose, "signature"),
+            gt(magicLinksTable.expiresAt, signedAt),
+            isNull(magicLinksTable.usedAt),
+          ),
+        )
+        .returning();
+      if (!link?.referralId) {
+        throw new SignatureSubmissionError(
+          404,
+          "This signature link is invalid, expired, or already used",
+        );
+      }
+      const [referral] = await tx
+        .select()
+        .from(referralsTable)
+        .where(eq(referralsTable.id, link.referralId))
+        .for("update");
+      if (!referral) {
+        throw new SignatureSubmissionError(404, "Referral not found");
+      }
+      if (referral.parentSignedAt) {
+        throw new SignatureSubmissionError(409, "This agreement has already been signed");
+      }
+      const [signingClient] = await tx
+        .select()
+        .from(clientsTable)
+        .where(eq(clientsTable.id, referral.clientId))
+        .for("update");
+      const selectedEmail =
+        referral.intakeSentTo === "participant"
+          ? signingClient?.email
+          : referral.intakeSentTo === "family_rep"
+            ? signingClient?.familyRepEmail
+            : null;
+      if (
+        (referral.intakeSentTo === "participant" && signingClient?.isMinor !== false) ||
+        !selectedEmail ||
+        selectedEmail.trim().toLowerCase() !== link.email.trim().toLowerCase()
+      ) {
+        throw new SignatureSubmissionError(404, "This signature link is no longer valid");
+      }
+      if (
+        (referral.intakeSentTo === "participant" && parsed.data.signerRelationship !== "self") ||
+        (referral.intakeSentTo === "family_rep" && parsed.data.signerRelationship === "self")
+      ) {
+        throw new SignatureSubmissionError(
+          400,
+          "Select the relationship that matches the intake recipient",
+        );
+      }
 
-  // Optional account creation for the signer. The signature is already recorded
-  // above; if a user with this email already exists we do NOT silently skip —
-  // we sign anyway and report accountCreated=false with an explicit reason so
-  // the UI can be honest with the signer.
-  let accountCreated = false;
-  let accountCreationError: string | null = null;
-  if (parsed.data.createAccount && parsed.data.password) {
-    const [existing] = await db.select().from(usersTable).where(eq(usersTable.email, link.email));
-    if (existing) {
-      accountCreationError =
-        "An account with this email already exists. Use Forgot password to sign in, or contact CEPS for help.";
-    } else {
-      const [client] = await db.select().from(clientsTable).where(eq(clientsTable.id, referral.clientId));
-      await db.insert(usersTable).values({
-        name: parsed.data.typedName,
-        email: link.email,
-        role: client?.isMinor === false ? "self" : "parent_guardian",
-        passwordHash: hashPassword(parsed.data.password),
-        linkedRecordId: referral.clientId,
-        linkedRecordType: "client",
-        accountCreatedAt: new Date(),
+      let accountCreated = false;
+      let accountCreationError: string | null = null;
+      if (passwordHash) {
+        const inserted = await tx
+          .insert(usersTable)
+          .values({
+            name: parsed.data.typedName,
+            email: link.email,
+            role: parsed.data.signerRelationship === "self" ? "self" : "parent_guardian",
+            passwordHash,
+            linkedRecordId: referral.clientId,
+            linkedRecordType: "client",
+            accountCreatedAt: signedAt,
+          })
+          .onConflictDoNothing({ target: usersTable.email })
+          .returning({ id: usersTable.id });
+        accountCreated = inserted.length === 1;
+        if (!accountCreated) {
+          accountCreationError =
+            "An account with this email already exists. Use Forgot password to sign in, or contact CEPS for help.";
+        }
+      }
+
+      await tx
+        .update(referralsTable)
+        .set({
+          parentSignedAt: signedAt,
+          signedByName: parsed.data.typedName,
+          signerRelationship: parsed.data.signerRelationship,
+          signedIp: req.ip ?? null,
+          status:
+            referral.status === "pending_signature" || referral.status === "intake"
+              ? "pending_auth"
+              : referral.status,
+        })
+        .where(and(eq(referralsTable.id, referral.id), isNull(referralsTable.parentSignedAt)));
+      await tx.insert(auditLogTable).values({
+        userId: null,
+        action: "signature_submitted",
+        entityType: "referral",
+        entityId: referral.id,
+        detail: `Signed by ${parsed.data.typedName}`,
       });
-      accountCreated = true;
+      return { accountCreated, accountCreationError };
+    });
+    res.json(SubmitSignatureResponse.parse({ ok: true, ...outcome }));
+  } catch (error) {
+    if (error instanceof SignatureSubmissionError) {
+      res.status(error.status).json({ error: error.message });
+      return;
     }
+    throw error;
   }
-  await audit(null, "signature_submitted", "referral", referral.id, `Signed by ${parsed.data.typedName}`);
-  res.json(SubmitSignatureResponse.parse({ ok: true, accountCreated, accountCreationError }));
 });
 
 export default router;

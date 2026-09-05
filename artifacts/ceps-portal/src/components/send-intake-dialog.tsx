@@ -10,6 +10,10 @@ import { useToast } from '@/hooks/use-toast';
 import { Mail, AlertCircle } from 'lucide-react';
 import { Link } from 'wouter';
 import { AgreementReview } from '@/components/agreement-review';
+import {
+  getAgreementValidationFailureReason,
+  trackAnalyticsEvent,
+} from '@/lib/analytics';
 
 function getSendErrorMessage(error: unknown) {
   if (
@@ -55,6 +59,21 @@ export function SendIntakeDialog({ referral, onSent }: { referral: Referral, onS
   const currentFingerprint = agreementInput ? JSON.stringify(agreementInput) : '';
   const previewIsCurrent = !!preview && previewFingerprint === currentFingerprint;
 
+  const trackValidationFailure = (
+    error: unknown,
+    stage: 'preview' | 'send',
+  ) => {
+    const reason = getAgreementValidationFailureReason(error);
+    if (!reason || !recipient) return;
+
+    trackAnalyticsEvent('agreement_send_validation_failed', {
+      recipient_type: recipient,
+      send_type: isFirstSend ? 'first_send' : 'resend',
+      stage,
+      reason,
+    });
+  };
+
   const handleOpenChange = (nextOpen: boolean) => {
     setOpen(nextOpen);
     if (nextOpen) {
@@ -79,6 +98,7 @@ export function SendIntakeDialog({ referral, onSent }: { referral: Referral, onS
           setPreviewFingerprint(fingerprint);
         },
         onError: (err) => {
+          trackValidationFailure(err, 'preview');
           setPreview(null);
           setPreviewFingerprint('');
           toast({
@@ -100,6 +120,10 @@ export function SendIntakeDialog({ referral, onSent }: { referral: Referral, onS
       data: agreementInput
     }, {
       onSuccess: () => {
+        trackAnalyticsEvent('agreement_send_succeeded', {
+          recipient_type: agreementInput.recipient,
+          send_type: isFirstSend ? 'first_send' : 'resend',
+        });
         toast({
           title: 'Intake Sent',
           description: `Participant Agreement link sent successfully.`
@@ -108,6 +132,7 @@ export function SendIntakeDialog({ referral, onSent }: { referral: Referral, onS
         onSent();
       },
       onError: (err) => {
+        trackValidationFailure(err, 'send');
         toast({
           variant: 'destructive',
           title: 'Failed to Send',

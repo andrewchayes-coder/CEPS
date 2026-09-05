@@ -8,6 +8,7 @@ import {
   timestamp,
   index,
   uniqueIndex,
+  check,
 } from "drizzle-orm/pg-core";
 import { sql } from "drizzle-orm";
 import { clientsTable } from "./clients";
@@ -61,6 +62,10 @@ export const remittancesTable = pgTable("remittances", {
   sourceRowFingerprintUnique: uniqueIndex("remittances_source_row_fingerprint_unique")
     .on(table.sourceRowFingerprint)
     .where(sql`${table.sourceRowFingerprint} IS NOT NULL`),
+  positiveFiniteAmount: check(
+    "remittances_positive_finite_amount",
+    sql`${table.amount} > 0 AND ${table.amount} <> 'NaN'::numeric`,
+  ),
 }));
 
 export type Remittance = typeof remittancesTable.$inferSelect;
@@ -80,6 +85,10 @@ export const remittanceAllocationsTable = pgTable("remittance_allocations", {
   remittanceIdIdx: index("remittance_allocations_remittance_id_idx").on(table.remittanceId),
   paymentIdIdx: index("remittance_allocations_payment_id_idx").on(table.paymentId),
   pairUnique: uniqueIndex("remittance_allocations_pair_unique").on(table.remittanceId, table.paymentId),
+  positiveAmount: check(
+    "remittance_allocations_positive_amount",
+    sql`${table.amount} > 0 AND ${table.amount} <> 'NaN'::numeric`,
+  ),
 }));
 
 export type RemittanceAllocation = typeof remittanceAllocationsTable.$inferSelect;

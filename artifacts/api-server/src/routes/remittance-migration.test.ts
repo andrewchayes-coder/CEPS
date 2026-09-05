@@ -12,6 +12,14 @@ const migrationStatements = readFileSync(migrationPath, "utf8")
   .map((statement) => statement.trim())
   .filter(Boolean);
 
+const balanceMigrationPath = fileURLToPath(
+  new URL("../../../../lib/db/migrations/0010_cold_nemesis.sql", import.meta.url),
+);
+const balanceMigrationStatements = readFileSync(balanceMigrationPath, "utf8")
+  .split("--> statement-breakpoint")
+  .map((statement) => statement.trim())
+  .filter(Boolean);
+
 const schemasToDrop: string[] = [];
 
 afterAll(async () => {
@@ -148,6 +156,185 @@ describe("migration 0007 remittance allocation backfill", () => {
         [ids.unmatchedRemittance, ids.deletedRemittance],
       );
       expect(excluded.rows[0].count).toBe(0);
+    } finally {
+      client.release();
+    }
+  });
+});
+
+describe("migration 0010 remittance allocation balance guards", () => {
+  it("refuses to install over invalid existing allocation totals", async () => {
+    const schema = `migration_0009_preflight_${randomUUID().replaceAll("-", "")}`;
+    schemasToDrop.push(schema);
+    const client = await pool.connect();
+    const remittanceId = randomUUID();
+    const paymentId = randomUUID();
+
+    try {
+      await client.query(`CREATE SCHEMA "${schema}"`);
+      await client.query(`SET search_path TO "${schema}"`);
+      await client.query(`
+        CREATE TABLE payments (id uuid PRIMARY KEY, amount numeric(12, 2) NOT NULL);
+        CREATE TABLE remittances (id uuid PRIMARY KEY, amount numeric(12, 2) NOT NULL);
+        CREATE TABLE remittance_allocations (
+          id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+          remittance_id uuid NOT NULL REFERENCES remittances(id),
+          payment_id uuid NOT NULL REFERENCES payments(id),
+          amount numeric(12, 2) NOT NULL
+        )
+      `);
+      await client.query(`INSERT INTO remittances (id, amount) VALUES ($1, 50.00)`, [remittanceId]);
+      await client.query(`INSERT INTO payments (id, amount) VALUES ($1, 100.00)`, [paymentId]);
+      await client.query(
+        `INSERT INTO remittance_allocations (remittance_id, payment_id, amount)
+         VALUES ($1, $2, 60.00)`,
+        [remittanceId, paymentId],
+      );
+
+      const preflight = balanceMigrationStatements.find((statement) =>
+        statement.startsWith("DO $$"),
+      );
+      expect(preflight).toBeTruthy();
+      await expect(client.query(preflight!)).rejects.toMatchObject({
+        message: expect.stringContaining(`over-allocated remittance ids: ${remittanceId}`),
+      });
+    } finally {
+      client.release();
+    }
+  });
+
+  it("rejects invalid direct writes while preserving partial many-to-many allocations", async () => {
+    const schema = `migration_0009_${randomUUID().replaceAll("-", "")}`;
+    schemasToDrop.push(schema);
+    const client = await pool.connect();
+
+    try {
+      await client.query(`CREATE SCHEMA "${schema}"`);
+      await client.query(`SET search_path TO "${schema}"`);
+      await client.query(`
+        CREATE TABLE payments (
+          id uuid PRIMARY KEY,
+          amount numeric(12, 2) NOT NULL
+        );
+        CREATE TABLE remittances (
+          id uuid PRIMARY KEY,
+          amount numeric(12, 2) NOT NULL
+        );
+        CREATE TABLE remittance_allocations (
+          id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+          remittance_id uuid NOT NULL REFERENCES remittances(id),
+          payment_id uuid NOT NULL REFERENCES payments(id),
+          amount numeric(12, 2) NOT NULL,
+          auto_matched boolean NOT NULL DEFAULT false,
+          created_at timestamp with time zone NOT NULL DEFAULT now(),
+          UNIQUE (remittance_id, payment_id)
+        )
+      `);
+
+      await client.query("BEGIN");
+      for (const statement of balanceMigrationStatements) await client.query(statement);
+      await client.query("COMMIT");
+
+      const ids = {
+        remittanceA: randomUUID(),
+        remittanceB: randomUUID(),
+        paymentA: randomUUID(),
+        paymentB: randomUUID(),
+      };
+      await client.query(
+        `INSERT INTO remittances (id, amount) VALUES ($1, 100.00), ($2, 100.00)`,
+        [ids.remittanceA, ids.remittanceB],
+      );
+      await client.query(
+        `INSERT INTO payments (id, amount) VALUES ($1, 120.00), ($2, 60.00)`,
+        [ids.paymentA, ids.paymentB],
+      );
+
+      // One remittance may fund multiple payments, and one payment may be funded
+      // by multiple remittances, with balances left partially allocated.
+      await client.query(
+        `INSERT INTO remittance_allocations (remittance_id, payment_id, amount)
+         VALUES ($1, $2, 40.00), ($1, $3, 50.00), ($4, $2, 70.00)`,
+        [ids.remittanceA, ids.paymentA, ids.paymentB, ids.remittanceB],
+      );
+
+      await expect(client.query(
+        `INSERT INTO remittance_allocations (remittance_id, payment_id, amount)
+         VALUES ($1, $2, 0)`,
+        [ids.remittanceB, ids.paymentB],
+      )).rejects.toMatchObject({ code: "23514" });
+
+      await expect(client.query(
+        `INSERT INTO remittance_allocations (remittance_id, payment_id, amount)
+         VALUES ($1, $2, 'NaN')`,
+        [ids.remittanceB, ids.paymentB],
+      )).rejects.toMatchObject({ code: "23514" });
+
+      await expect(client.query(
+        `UPDATE remittance_allocations
+         SET amount = 61.00
+         WHERE remittance_id = $1 AND payment_id = $2`,
+        [ids.remittanceA, ids.paymentB],
+      )).rejects.toMatchObject({
+        code: "23514",
+        constraint: "remittance_allocations_remittance_balance",
+      });
+
+      await expect(client.query(
+        `UPDATE remittance_allocations
+         SET amount = 81.00
+         WHERE remittance_id = $1 AND payment_id = $2`,
+        [ids.remittanceB, ids.paymentA],
+      )).rejects.toMatchObject({
+        code: "23514",
+        constraint: "remittance_allocations_payment_balance",
+      });
+
+      await expect(client.query(
+        `UPDATE remittances SET amount = 89.99 WHERE id = $1`,
+        [ids.remittanceA],
+      )).rejects.toMatchObject({
+        code: "23514",
+        constraint: "remittances_amount_covers_allocations",
+      });
+
+      await expect(client.query(
+        `UPDATE payments SET amount = 109.99 WHERE id = $1`,
+        [ids.paymentA],
+      )).rejects.toMatchObject({
+        code: "23514",
+        constraint: "payments_amount_covers_allocations",
+      });
+
+      await expect(client.query(
+        `UPDATE remittances SET amount = 'NaN' WHERE id = $1`,
+        [ids.remittanceA],
+      )).rejects.toMatchObject({
+        code: "23514",
+        constraint: "remittances_positive_finite_amount",
+      });
+
+      await expect(client.query(
+        `UPDATE payments SET amount = 'NaN' WHERE id = $1`,
+        [ids.paymentA],
+      )).rejects.toMatchObject({
+        code: "23514",
+        constraint: "payments_positive_finite_amount",
+      });
+
+      const totals = await client.query(`
+        SELECT
+          (SELECT sum(amount)::text FROM remittance_allocations WHERE remittance_id = $1) AS remittance_a,
+          (SELECT sum(amount)::text FROM remittance_allocations WHERE remittance_id = $2) AS remittance_b,
+          (SELECT sum(amount)::text FROM remittance_allocations WHERE payment_id = $3) AS payment_a,
+          (SELECT sum(amount)::text FROM remittance_allocations WHERE payment_id = $4) AS payment_b
+      `, [ids.remittanceA, ids.remittanceB, ids.paymentA, ids.paymentB]);
+      expect(totals.rows[0]).toEqual({
+        remittance_a: "90.00",
+        remittance_b: "70.00",
+        payment_a: "110.00",
+        payment_b: "50.00",
+      });
     } finally {
       client.release();
     }

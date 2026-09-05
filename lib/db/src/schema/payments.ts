@@ -8,6 +8,7 @@ import {
   timestamp,
   uniqueIndex,
   index,
+  check,
 } from "drizzle-orm/pg-core";
 import { sql } from "drizzle-orm";
 import { clientsTable } from "./clients";
@@ -57,6 +58,10 @@ export const paymentsTable = pgTable("payments", {
     table.authorizationId,
   ),
   paymentTypeIdx: index("payments_payment_type_idx").on(table.paymentType),
+  positiveFiniteAmount: check(
+    "payments_positive_finite_amount",
+    sql`${table.amount} > 0 AND ${table.amount} <> 'NaN'::numeric`,
+  ),
 }));
 
 export type Payment = typeof paymentsTable.$inferSelect;

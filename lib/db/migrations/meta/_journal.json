@@ -71,6 +71,13 @@
       "when": 1788625486054,
       "tag": "0009_gigantic_night_nurse",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1788627547941,
+      "tag": "0010_cold_nemesis",
+      "breakpoints": true
     }
   ]
 }

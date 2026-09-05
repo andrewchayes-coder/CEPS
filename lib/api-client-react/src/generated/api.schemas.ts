@@ -104,6 +104,53 @@ export interface MagicLinkResult {
   devLink?: string | null;
 }
 
+export type SendIntakeInputRecipient = typeof SendIntakeInputRecipient[keyof typeof SendIntakeInputRecipient];
+
+
+export const SendIntakeInputRecipient = {
+  participant: 'participant',
+  family_rep: 'family_rep',
+} as const;
+
+/**
+ * @nullable
+ */
+export type SendIntakeInputServiceFrequency = typeof SendIntakeInputServiceFrequency[keyof typeof SendIntakeInputServiceFrequency] | null;
+
+
+export const SendIntakeInputServiceFrequency = {
+  one_time: 'one_time',
+  monthly: 'monthly',
+  '': '',
+} as const;
+
+/**
+ * @nullable
+ */
+export type SendIntakeInputPaymentTypeRequested = typeof SendIntakeInputPaymentTypeRequested[keyof typeof SendIntakeInputPaymentTypeRequested] | null;
+
+
+export const SendIntakeInputPaymentTypeRequested = {
+  service_payment: 'service_payment',
+  reimbursement: 'reimbursement',
+  '': '',
+} as const;
+
+export interface SendIntakeInput {
+  recipient: SendIntakeInputRecipient;
+  /** @nullable */
+  serviceFrequency?: SendIntakeInputServiceFrequency;
+  /**
+     * @nullable
+     * @pattern ^\d+(\.\d{1,2})?$|^$
+     */
+  cost?: string | null;
+  /** @nullable */
+  paymentSchedule?: string | null;
+  /** @nullable */
+  paymentTypeRequested?: SendIntakeInputPaymentTypeRequested;
+}
+
 export type InviteInputRole = typeof InviteInputRole[keyof typeof InviteInputRole];
 
 
@@ -462,6 +509,30 @@ export interface ReferralIntakeFields {
 /**
  * @nullable
  */
+export type ReferralIntakeSentTo = typeof ReferralIntakeSentTo[keyof typeof ReferralIntakeSentTo] | null;
+
+
+export const ReferralIntakeSentTo = {
+  participant: 'participant',
+  family_rep: 'family_rep',
+} as const;
+
+/**
+ * @nullable
+ */
+export type ReferralSignerRelationship = typeof ReferralSignerRelationship[keyof typeof ReferralSignerRelationship] | null;
+
+
+export const ReferralSignerRelationship = {
+  self: 'self',
+  parent: 'parent',
+  guardian: 'guardian',
+  conservator: 'conservator',
+} as const;
+
+/**
+ * @nullable
+ */
 export type ReferralServiceFrequency = typeof ReferralServiceFrequency[keyof typeof ReferralServiceFrequency] | null;
 
 
@@ -470,11 +541,24 @@ export const ReferralServiceFrequency = {
   monthly: 'monthly',
 } as const;
 
+/**
+ * @nullable
+ */
+export type ReferralPaymentTypeRequested = typeof ReferralPaymentTypeRequested[keyof typeof ReferralPaymentTypeRequested] | null;
+
+
+export const ReferralPaymentTypeRequested = {
+  service_payment: 'service_payment',
+  reimbursement: 'reimbursement',
+} as const;
+
 export interface Referral {
   id: string;
   clientId: string;
   /** @nullable */
   clientName?: string | null;
+  /** @nullable */
+  clientIsMinor?: boolean | null;
   /** @nullable */
   serviceCoordinatorId?: string | null;
   /** @nullable */
@@ -487,13 +571,25 @@ export interface Referral {
   /** @nullable */
   parentEmail?: string | null;
   /** @nullable */
+  intakeSentTo?: ReferralIntakeSentTo;
+  /** @nullable */
+  intakeSentAt?: string | null;
+  /** @nullable */
   parentSignedAt?: string | null;
   /** @nullable */
   signedByName?: string | null;
   /** @nullable */
+  signerRelationship?: ReferralSignerRelationship;
+  /** @nullable */
   altaAuthReceivedAt?: string | null;
   /** @nullable */
   serviceFrequency?: ReferralServiceFrequency;
+  /** @nullable */
+  cost?: string | null;
+  /** @nullable */
+  paymentSchedule?: string | null;
+  /** @nullable */
+  paymentTypeRequested?: ReferralPaymentTypeRequested;
   /** @nullable */
   diagnosis?: string | null;
   /** @nullable */
@@ -778,11 +874,22 @@ export const ReferralInputServiceFrequency = {
   monthly: 'monthly',
 } as const;
 
+export type ReferralInputPaymentTypeRequested = typeof ReferralInputPaymentTypeRequested[keyof typeof ReferralInputPaymentTypeRequested];
+
+
+export const ReferralInputPaymentTypeRequested = {
+  service_payment: 'service_payment',
+  reimbursement: 'reimbursement',
+} as const;
+
 export interface ReferralInput {
   intakeFields: ReferralIntakeFields;
   submittedVia?: ReferralInputSubmittedVia;
-  parentEmail?: string;
   serviceFrequency?: ReferralInputServiceFrequency;
+  /** @pattern ^\d+(\.\d{1,2})?$ */
+  cost?: string;
+  paymentSchedule?: string;
+  paymentTypeRequested?: ReferralInputPaymentTypeRequested;
   diagnosis?: string;
   eligibilityCategory?: string;
   supportingDocumentUrl?: string;
@@ -802,20 +909,47 @@ export const ReferralUpdateStatus = {
   closed: 'closed',
 } as const;
 
-export type ReferralUpdateServiceFrequency = typeof ReferralUpdateServiceFrequency[keyof typeof ReferralUpdateServiceFrequency];
+/**
+ * @nullable
+ */
+export type ReferralUpdateServiceFrequency = typeof ReferralUpdateServiceFrequency[keyof typeof ReferralUpdateServiceFrequency] | null;
 
 
 export const ReferralUpdateServiceFrequency = {
   one_time: 'one_time',
   monthly: 'monthly',
+  '': '',
+} as const;
+
+/**
+ * @nullable
+ */
+export type ReferralUpdatePaymentTypeRequested = typeof ReferralUpdatePaymentTypeRequested[keyof typeof ReferralUpdatePaymentTypeRequested] | null;
+
+
+export const ReferralUpdatePaymentTypeRequested = {
+  service_payment: 'service_payment',
+  reimbursement: 'reimbursement',
+  '': '',
 } as const;
 
 export interface ReferralUpdate {
   status?: ReferralUpdateStatus;
   /** @nullable */
   serviceCoordinatorId?: string | null;
-  parentEmail?: string;
+  /** @nullable */
+  parentEmail?: string | null;
+  /** @nullable */
   serviceFrequency?: ReferralUpdateServiceFrequency;
+  /**
+     * @nullable
+     * @pattern ^\d+(\.\d{1,2})?$|^$
+     */
+  cost?: string | null;
+  /** @nullable */
+  paymentSchedule?: string | null;
+  /** @nullable */
+  paymentTypeRequested?: ReferralUpdatePaymentTypeRequested;
   /** @nullable */
   diagnosis?: string | null;
   /** @nullable */
@@ -844,12 +978,27 @@ export interface SignaturePage {
 }
 
 /**
+ * Relationship of the person signing; recorded when supplied by the agreement form.
+ */
+export type SignatureInputSignerRelationship = typeof SignatureInputSignerRelationship[keyof typeof SignatureInputSignerRelationship];
+
+
+export const SignatureInputSignerRelationship = {
+  self: 'self',
+  parent: 'parent',
+  guardian: 'guardian',
+  conservator: 'conservator',
+} as const;
+
+/**
  * Typed-name e-signature payload. When createAccount is true a portal account is created for the signer and password becomes required and must be at least 8 characters. If createAccount is true but password is missing or shorter than 8 characters the request is rejected with 400 and the signature is NOT recorded (the token stays valid). Because this is a conditional requirement OpenAPI cannot express fully, the rule is enforced by a zod refinement in the handler.
  */
 export interface SignatureInput {
   /** @minLength 1 */
   typedName: string;
   agreed: boolean;
+  /** Relationship of the person signing; recorded when supplied by the agreement form. */
+  signerRelationship?: SignatureInputSignerRelationship;
   /** Opt in to creating a portal account for the signer */
   createAccount?: boolean;
   /**

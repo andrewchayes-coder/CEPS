@@ -128,11 +128,17 @@ export function clientJson(
   };
 }
 
-export function referralJson(r: Referral, clientName?: string | null, coordinatorName?: string | null) {
+export function referralJson(
+  r: Referral,
+  clientName?: string | null,
+  coordinatorName?: string | null,
+  clientIsMinor?: boolean | null,
+) {
   return {
     id: r.id,
     clientId: r.clientId,
     clientName: clientName ?? null,
+    clientIsMinor: clientIsMinor ?? null,
     serviceCoordinatorId: r.serviceCoordinatorId,
     coordinatorName: coordinatorName ?? null,
     referralDate: r.referralDate,
@@ -140,10 +146,16 @@ export function referralJson(r: Referral, clientName?: string | null, coordinato
     submittedVia: r.submittedVia,
     intakeFields: r.intakeFields ?? {},
     parentEmail: r.parentEmail,
+    intakeSentTo: r.intakeSentTo,
+    intakeSentAt: iso(r.intakeSentAt),
     parentSignedAt: iso(r.parentSignedAt),
     signedByName: r.signedByName,
+    signerRelationship: r.signerRelationship,
     altaAuthReceivedAt: iso(r.altaAuthReceivedAt),
     serviceFrequency: r.serviceFrequency,
+    cost: r.cost,
+    paymentSchedule: r.paymentSchedule,
+    paymentTypeRequested: r.paymentTypeRequested,
     diagnosis: r.diagnosis,
     eligibilityCategory: r.eligibilityCategory,
     supportingDocumentUrl: r.supportingDocumentUrl,

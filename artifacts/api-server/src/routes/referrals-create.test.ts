@@ -105,6 +105,7 @@ describe("POST /referrals diagnosis/eligibility/document fields", () => {
       .send({
         submittedVia: "portal",
         serviceFrequency: "monthly",
+        parentEmail: "must-not-send@test.local",
         diagnosis: "Autism Spectrum Disorder",
         eligibilityCategory: "Developmental Disability",
         supportingDocumentUrl: "/objects/uploads/doc-123",
@@ -116,6 +117,9 @@ describe("POST /referrals diagnosis/eligibility/document fields", () => {
     expect(res.body.diagnosis).toBe("Autism Spectrum Disorder");
     expect(res.body.eligibilityCategory).toBe("Developmental Disability");
     expect(res.body.supportingDocumentUrl).toBe("/objects/uploads/doc-123");
+    expect(res.body.status).toBe("intake");
+    expect(res.body.parentEmail).toBeNull();
+    expect(res.body.intakeSentAt).toBeNull();
 
     // Fetch it back to confirm persistence.
     const get = await request(app).get(`/api/referrals/${res.body.id}`).set("Cookie", staffCookie);

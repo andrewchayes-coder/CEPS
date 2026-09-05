@@ -1,6 +1,6 @@
 import React from 'react';
 import { useLocation, useParams } from 'wouter';
-import { useGetReferral, useUpdateReferral, useSendReferralMagicLink, useDeleteReferral } from '@workspace/api-client-react';
+import { useGetReferral, useUpdateReferral, useSendIntake, useDeleteReferral } from '@workspace/api-client-react';
 import { useAuth } from '@/components/auth/auth-provider';
 import { EditReferralDialog } from '@/components/edit-referral-dialog';
 import { DeleteEntityButton } from '@/components/delete-entity-button';
@@ -19,6 +19,7 @@ export default function ReferralDetailPage() {
   const [, setLocation] = useLocation();
   const { user } = useAuth();
   const isStaff = user?.role === 'staff';
+  const canSendIntake = isStaff || user?.role === 'service_coordinator';
   const { toast } = useToast();
   const deleteReferral = useDeleteReferral();
 
@@ -28,29 +29,29 @@ export default function ReferralDetailPage() {
       queryKey: ['referrals', id]
     }
   });
-
-  const sendMagicLink = useSendReferralMagicLink();
+  const sendIntake = useSendIntake();
   const updateReferral = useUpdateReferral();
 
   if (isLoading) return <div className="p-8 text-center">Loading referral...</div>;
   if (!referral) return <div className="p-8 text-center">Referral not found.</div>;
 
-  const handleResendLink = () => {
-    sendMagicLink.mutate({ id }, {
+  const handleSendIntake = (recipient: 'participant' | 'family_rep') => {
+    sendIntake.mutate({ id, data: { recipient } }, {
       onSuccess: (res) => {
         toast({
           title: "Link Sent",
-          description: `Signature link emailed to ${referral.parentEmail}.`,
+          description: `Signature link prepared for ${recipient === 'participant' ? 'the participant' : 'the family representative'}.`,
         });
+        void refetch();
         if (res.devLink) {
-          console.log("Dev Magic Link:", res.devLink);
+          console.log("Dev Intake Link:", res.devLink);
         }
       },
-      onError: () => {
+      onError: (error) => {
         toast({
           variant: "destructive",
           title: "Error",
-          description: "Failed to send the magic link.",
+          description: error instanceof Error ? error.message : "Failed to send the intake agreement.",
         });
       }
     });
@@ -177,17 +178,36 @@ export default function ReferralDetailPage() {
                   <div className="text-sm space-y-2">
                     <p className="font-semibold">Awaiting Signature</p>
                     <p className="opacity-90 break-all">{referral.parentEmail}</p>
-                    <Button 
-                      size="sm" 
-                      variant="outline" 
-                      className="w-full mt-2 bg-white/50 hover:bg-white text-chart-2 border-chart-2/30"
-                      onClick={handleResendLink}
-                      disabled={sendMagicLink.isPending}
+                  </div>
+                </div>
+              )}
+              {canSendIntake && (
+                <div className="space-y-2">
+                  <p className="text-xs font-medium text-muted-foreground">
+                    {referral.intakeSentAt ? 'Send again to:' : 'Send agreement to:'}
+                  </p>
+                  {referral.clientIsMinor === false && (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="w-full"
+                      onClick={() => handleSendIntake('participant')}
+                      disabled={sendIntake.isPending}
                     >
                       <Mail className="w-4 h-4 mr-2" />
-                      {sendMagicLink.isPending ? 'Sending...' : 'Resend Link'}
+                      Participant
                     </Button>
-                  </div>
+                  )}
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="w-full"
+                    onClick={() => handleSendIntake('family_rep')}
+                    disabled={sendIntake.isPending}
+                  >
+                    <Mail className="w-4 h-4 mr-2" />
+                    Family Representative
+                  </Button>
                 </div>
               )}
             </CardContent>

@@ -214,13 +214,10 @@ export default function ReferralNewPage() {
     delete (intakeFields as any).diagnosis;
     delete (intakeFields as any).eligibilityCategory;
 
-    const parentEmail = intakeFields.contactEmail; // This triggers the magic link automatically on backend
-
     createReferral.mutate({
       data: {
         submittedVia: 'portal',
         serviceFrequency: serviceFrequency as 'one_time' | 'monthly',
-        parentEmail,
         // Portal sends '' for untouched optional fields — API normalizes '' -> null.
         diagnosis: diagnosis ?? '',
         eligibilityCategory: eligibilityCategory ?? '',
@@ -234,7 +231,7 @@ export default function ReferralNewPage() {
         });
         toast({
           title: "Referral Submitted",
-          description: "The referral has been saved and the signature email has been sent.",
+          description: "The referral has been saved. Choose the agreement recipient on the referral page.",
         });
         setLocation(`/referrals/${res.id}`);
       },

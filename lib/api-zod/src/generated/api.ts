@@ -552,6 +552,7 @@ export const GetClientCaseResponse = zod.object({
   "id": zod.string(),
   "clientId": zod.string(),
   "clientName": zod.string().nullish(),
+  "clientIsMinor": zod.boolean().nullish(),
   "serviceCoordinatorId": zod.string().nullish(),
   "coordinatorName": zod.string().nullish(),
   "referralDate": zod.string(),
@@ -598,10 +599,16 @@ export const GetClientCaseResponse = zod.object({
   "contactState": zod.string().optional()
 }).optional().describe('Structured referral form data (Section 9 field list)'),
   "parentEmail": zod.string().nullish(),
+  "intakeSentTo": zod.union([zod.literal('participant'),zod.literal('family_rep'),zod.literal(null)]).nullish(),
+  "intakeSentAt": zod.string().nullish(),
   "parentSignedAt": zod.string().nullish(),
   "signedByName": zod.string().nullish(),
+  "signerRelationship": zod.union([zod.literal('self'),zod.literal('parent'),zod.literal('guardian'),zod.literal('conservator'),zod.literal(null)]).nullish(),
   "altaAuthReceivedAt": zod.string().nullish(),
   "serviceFrequency": zod.union([zod.literal('one_time'),zod.literal('monthly'),zod.literal(null)]).nullish(),
+  "cost": zod.string().nullish(),
+  "paymentSchedule": zod.string().nullish(),
+  "paymentTypeRequested": zod.union([zod.literal('service_payment'),zod.literal('reimbursement'),zod.literal(null)]).nullish(),
   "diagnosis": zod.string().nullish(),
   "eligibilityCategory": zod.string().nullish(),
   "supportingDocumentUrl": zod.string().nullish(),
@@ -723,6 +730,7 @@ export const ListReferralsResponse = zod.object({
   "id": zod.string(),
   "clientId": zod.string(),
   "clientName": zod.string().nullish(),
+  "clientIsMinor": zod.boolean().nullish(),
   "serviceCoordinatorId": zod.string().nullish(),
   "coordinatorName": zod.string().nullish(),
   "referralDate": zod.string(),
@@ -769,10 +777,16 @@ export const ListReferralsResponse = zod.object({
   "contactState": zod.string().optional()
 }).optional().describe('Structured referral form data (Section 9 field list)'),
   "parentEmail": zod.string().nullish(),
+  "intakeSentTo": zod.union([zod.literal('participant'),zod.literal('family_rep'),zod.literal(null)]).nullish(),
+  "intakeSentAt": zod.string().nullish(),
   "parentSignedAt": zod.string().nullish(),
   "signedByName": zod.string().nullish(),
+  "signerRelationship": zod.union([zod.literal('self'),zod.literal('parent'),zod.literal('guardian'),zod.literal('conservator'),zod.literal(null)]).nullish(),
   "altaAuthReceivedAt": zod.string().nullish(),
   "serviceFrequency": zod.union([zod.literal('one_time'),zod.literal('monthly'),zod.literal(null)]).nullish(),
+  "cost": zod.string().nullish(),
+  "paymentSchedule": zod.string().nullish(),
+  "paymentTypeRequested": zod.union([zod.literal('service_payment'),zod.literal('reimbursement'),zod.literal(null)]).nullish(),
   "diagnosis": zod.string().nullish(),
   "eligibilityCategory": zod.string().nullish(),
   "supportingDocumentUrl": zod.string().nullish(),
@@ -786,6 +800,9 @@ export const ListReferralsResponse = zod.object({
 /**
  * @summary Submit referral (coordinator portal form or staff manual entry)
  */
+export const createReferralBodyCostRegExp = new RegExp('^\\d+(\\.\\d{1,2})?$');
+
+
 export const CreateReferralBody = zod.object({
   "intakeFields": zod.object({
   "regionalCenterName": zod.string().optional(),
@@ -828,8 +845,10 @@ export const CreateReferralBody = zod.object({
   "contactState": zod.string().optional()
 }).describe('Structured referral form data (Section 9 field list)'),
   "submittedVia": zod.enum(['portal', 'staff_manual_entry']).optional(),
-  "parentEmail": zod.string().optional(),
   "serviceFrequency": zod.enum(['one_time', 'monthly']).optional(),
+  "cost": zod.string().regex(createReferralBodyCostRegExp).optional(),
+  "paymentSchedule": zod.string().optional(),
+  "paymentTypeRequested": zod.enum(['service_payment', 'reimbursement']).optional(),
   "diagnosis": zod.string().optional(),
   "eligibilityCategory": zod.string().optional(),
   "supportingDocumentUrl": zod.string().optional(),
@@ -840,6 +859,7 @@ export const CreateReferralResponse = zod.object({
   "id": zod.string(),
   "clientId": zod.string(),
   "clientName": zod.string().nullish(),
+  "clientIsMinor": zod.boolean().nullish(),
   "serviceCoordinatorId": zod.string().nullish(),
   "coordinatorName": zod.string().nullish(),
   "referralDate": zod.string(),
@@ -886,10 +906,16 @@ export const CreateReferralResponse = zod.object({
   "contactState": zod.string().optional()
 }).optional().describe('Structured referral form data (Section 9 field list)'),
   "parentEmail": zod.string().nullish(),
+  "intakeSentTo": zod.union([zod.literal('participant'),zod.literal('family_rep'),zod.literal(null)]).nullish(),
+  "intakeSentAt": zod.string().nullish(),
   "parentSignedAt": zod.string().nullish(),
   "signedByName": zod.string().nullish(),
+  "signerRelationship": zod.union([zod.literal('self'),zod.literal('parent'),zod.literal('guardian'),zod.literal('conservator'),zod.literal(null)]).nullish(),
   "altaAuthReceivedAt": zod.string().nullish(),
   "serviceFrequency": zod.union([zod.literal('one_time'),zod.literal('monthly'),zod.literal(null)]).nullish(),
+  "cost": zod.string().nullish(),
+  "paymentSchedule": zod.string().nullish(),
+  "paymentTypeRequested": zod.union([zod.literal('service_payment'),zod.literal('reimbursement'),zod.literal(null)]).nullish(),
   "diagnosis": zod.string().nullish(),
   "eligibilityCategory": zod.string().nullish(),
   "supportingDocumentUrl": zod.string().nullish(),
@@ -909,6 +935,7 @@ export const GetReferralResponse = zod.object({
   "id": zod.string(),
   "clientId": zod.string(),
   "clientName": zod.string().nullish(),
+  "clientIsMinor": zod.boolean().nullish(),
   "serviceCoordinatorId": zod.string().nullish(),
   "coordinatorName": zod.string().nullish(),
   "referralDate": zod.string(),
@@ -955,10 +982,16 @@ export const GetReferralResponse = zod.object({
   "contactState": zod.string().optional()
 }).optional().describe('Structured referral form data (Section 9 field list)'),
   "parentEmail": zod.string().nullish(),
+  "intakeSentTo": zod.union([zod.literal('participant'),zod.literal('family_rep'),zod.literal(null)]).nullish(),
+  "intakeSentAt": zod.string().nullish(),
   "parentSignedAt": zod.string().nullish(),
   "signedByName": zod.string().nullish(),
+  "signerRelationship": zod.union([zod.literal('self'),zod.literal('parent'),zod.literal('guardian'),zod.literal('conservator'),zod.literal(null)]).nullish(),
   "altaAuthReceivedAt": zod.string().nullish(),
   "serviceFrequency": zod.union([zod.literal('one_time'),zod.literal('monthly'),zod.literal(null)]).nullish(),
+  "cost": zod.string().nullish(),
+  "paymentSchedule": zod.string().nullish(),
+  "paymentTypeRequested": zod.union([zod.literal('service_payment'),zod.literal('reimbursement'),zod.literal(null)]).nullish(),
   "diagnosis": zod.string().nullish(),
   "eligibilityCategory": zod.string().nullish(),
   "supportingDocumentUrl": zod.string().nullish(),
@@ -974,11 +1007,17 @@ export const UpdateReferralParams = zod.object({
   "id": zod.coerce.string()
 })
 
+export const updateReferralBodyCostRegExp = new RegExp('^\\d+(\\.\\d{1,2})?$|^$');
+
+
 export const UpdateReferralBody = zod.object({
   "status": zod.enum(['intake', 'pending_signature', 'pending_auth', 'pending_w9', 'pending_invoice', 'active', 'closed']).optional(),
   "serviceCoordinatorId": zod.string().nullish(),
-  "parentEmail": zod.string().optional(),
-  "serviceFrequency": zod.enum(['one_time', 'monthly']).optional(),
+  "parentEmail": zod.string().nullish(),
+  "serviceFrequency": zod.union([zod.literal('one_time'),zod.literal('monthly'),zod.literal(''),zod.literal(null)]).nullish(),
+  "cost": zod.string().regex(updateReferralBodyCostRegExp).nullish(),
+  "paymentSchedule": zod.string().nullish(),
+  "paymentTypeRequested": zod.union([zod.literal('service_payment'),zod.literal('reimbursement'),zod.literal(''),zod.literal(null)]).nullish(),
   "diagnosis": zod.string().nullish(),
   "eligibilityCategory": zod.string().nullish(),
   "supportingDocumentUrl": zod.string().nullish(),
@@ -990,6 +1029,7 @@ export const UpdateReferralResponse = zod.object({
   "id": zod.string(),
   "clientId": zod.string(),
   "clientName": zod.string().nullish(),
+  "clientIsMinor": zod.boolean().nullish(),
   "serviceCoordinatorId": zod.string().nullish(),
   "coordinatorName": zod.string().nullish(),
   "referralDate": zod.string(),
@@ -1036,10 +1076,16 @@ export const UpdateReferralResponse = zod.object({
   "contactState": zod.string().optional()
 }).optional().describe('Structured referral form data (Section 9 field list)'),
   "parentEmail": zod.string().nullish(),
+  "intakeSentTo": zod.union([zod.literal('participant'),zod.literal('family_rep'),zod.literal(null)]).nullish(),
+  "intakeSentAt": zod.string().nullish(),
   "parentSignedAt": zod.string().nullish(),
   "signedByName": zod.string().nullish(),
+  "signerRelationship": zod.union([zod.literal('self'),zod.literal('parent'),zod.literal('guardian'),zod.literal('conservator'),zod.literal(null)]).nullish(),
   "altaAuthReceivedAt": zod.string().nullish(),
   "serviceFrequency": zod.union([zod.literal('one_time'),zod.literal('monthly'),zod.literal(null)]).nullish(),
+  "cost": zod.string().nullish(),
+  "paymentSchedule": zod.string().nullish(),
+  "paymentTypeRequested": zod.union([zod.literal('service_payment'),zod.literal('reimbursement'),zod.literal(null)]).nullish(),
   "diagnosis": zod.string().nullish(),
   "eligibilityCategory": zod.string().nullish(),
   "supportingDocumentUrl": zod.string().nullish(),
@@ -1061,13 +1107,24 @@ export const DeleteReferralResponse = zod.object({
 
 
 /**
- * @summary (Re)send the parent/guardian e-signature magic link
+ * @summary Send or resend the referral intake and agreement link
  */
-export const SendReferralMagicLinkParams = zod.object({
+export const SendIntakeParams = zod.object({
   "id": zod.coerce.string()
 })
 
-export const SendReferralMagicLinkResponse = zod.object({
+export const sendIntakeBodyCostRegExp = new RegExp('^\\d+(\\.\\d{1,2})?$|^$');
+
+
+export const SendIntakeBody = zod.object({
+  "recipient": zod.enum(['participant', 'family_rep']),
+  "serviceFrequency": zod.union([zod.literal('one_time'),zod.literal('monthly'),zod.literal(''),zod.literal(null)]).nullish(),
+  "cost": zod.string().regex(sendIntakeBodyCostRegExp).nullish(),
+  "paymentSchedule": zod.string().nullish(),
+  "paymentTypeRequested": zod.union([zod.literal('service_payment'),zod.literal('reimbursement'),zod.literal(''),zod.literal(null)]).nullish()
+})
+
+export const SendIntakeResponse = zod.object({
   "sent": zod.boolean(),
   "devLink": zod.string().nullish().describe('Development only: the link that would have been emailed')
 })
@@ -1107,6 +1164,7 @@ export const submitSignatureBodyPasswordMin = 8;
 export const SubmitSignatureBody = zod.object({
   "typedName": zod.string().min(1),
   "agreed": zod.boolean(),
+  "signerRelationship": zod.enum(['self', 'parent', 'guardian', 'conservator']).optional().describe('Relationship of the person signing; recorded when supplied by the agreement form.'),
   "createAccount": zod.boolean().optional().describe('Opt in to creating a portal account for the signer'),
   "password": zod.string().min(submitSignatureBodyPasswordMin).optional().describe('Portal account password (required and >= 8 chars when createAccount is true)')
 }).describe('Typed-name e-signature payload. When createAccount is true a portal account is created for the signer and password becomes required and must be at least 8 characters. If createAccount is true but password is missing or shorter than 8 characters the request is rejected with 400 and the signature is NOT recorded (the token stays valid). Because this is a conditional requirement OpenAPI cannot express fully, the rule is enforced by a zod refinement in the handler.')

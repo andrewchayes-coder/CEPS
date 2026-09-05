@@ -9,11 +9,10 @@
 /**
  * @nullable
  */
-export type ReferralUpdateServiceFrequency = typeof ReferralUpdateServiceFrequency[keyof typeof ReferralUpdateServiceFrequency] | null;
+export type ReferralIntakeSentTo = typeof ReferralIntakeSentTo[keyof typeof ReferralIntakeSentTo] | null;
 
 
-export const ReferralUpdateServiceFrequency = {
-  one_time: 'one_time',
-  monthly: 'monthly',
-  '': '',
+export const ReferralIntakeSentTo = {
+  participant: 'participant',
+  family_rep: 'family_rep',
 } as const;

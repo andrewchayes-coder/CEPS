@@ -11,3 +11,4 @@
 - [List endpoint pagination](list-pagination.md) — all 7 list endpoints use {items,total} + limit/offset SQL pattern (audit-log is the reference, envelope key differs: entries).
 - [Remittance reconciliation invariants](remittance-reconciliation.md) — allocations are many-to-many, exact to cents, and transactionally bounded by both remaining balances.
 - [Release publish baseline](release-publish-baseline.md) — choose the newest publish commit on current main ancestry; timestamp-only selection can pick a sibling commit.
+- [Referral vs client ownership](referral-client-ownership.md) — referral coordinators may differ from client assignees; referral UI must not depend on separately authorized client reads.

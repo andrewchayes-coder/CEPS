@@ -96,6 +96,7 @@ import type {
   RemittanceInput,
   RemittanceMatchInput,
   RemittanceUpdate,
+  SendIntakeInput,
   SessionUser,
   SignatureInput,
   SignaturePage,
@@ -2306,25 +2307,26 @@ export const useDeleteReferral = <TError = ErrorType<void>,
       return useMutation(getDeleteReferralMutationOptions(options));
     }
 
-export const getSendReferralMagicLinkUrl = (id: string,) => {
+export const getSendIntakeUrl = (id: string,) => {
 
 
 
 
-  return `/api/referrals/${id}/send-magic-link`
+  return `/api/referrals/${id}/send-intake`
 }
 
 /**
- * @summary (Re)send the parent/guardian e-signature magic link
+ * @summary Send or resend the referral intake and agreement link
  */
-export const sendReferralMagicLink = async (id: string, options?: Parameters<typeof customFetch>[1]): Promise<MagicLinkResult> => {
+export const sendIntake = async (id: string,
+    sendIntakeInput: SendIntakeInput, options?: Parameters<typeof customFetch>[1]): Promise<MagicLinkResult> => {
 
-  return customFetch<MagicLinkResult>(getSendReferralMagicLinkUrl(id),
+  return customFetch<MagicLinkResult>(getSendIntakeUrl(id),
   {
     ...options,
-    method: 'POST'
-
-
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(sendIntakeInput)
   }
 );}
 
@@ -2332,11 +2334,11 @@ export const sendReferralMagicLink = async (id: string, options?: Parameters<typ
 
 
 
-export const getSendReferralMagicLinkMutationOptions = <TError = ErrorType<unknown>,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof sendReferralMagicLink>>, TError,{id: string}, TContext>, request?: SecondParameter<typeof customFetch>}
-): UseMutationOptions<Awaited<ReturnType<typeof sendReferralMagicLink>>, TError,{id: string}, TContext> => {
+export const getSendIntakeMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof sendIntake>>, TError,{id: string;data: BodyType<SendIntakeInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof sendIntake>>, TError,{id: string;data: BodyType<SendIntakeInput>}, TContext> => {
 
-const mutationKey = ['sendReferralMagicLink'];
+const mutationKey = ['sendIntake'];
 const {mutation: mutationOptions, request: requestOptions} = options ?
       options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
       options
@@ -2346,10 +2348,10 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
 
 
 
-      const mutationFn: MutationFunction<Awaited<ReturnType<typeof sendReferralMagicLink>>, {id: string}> = (props) => {
-          const {id} = props ?? {};
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof sendIntake>>, {id: string;data: BodyType<SendIntakeInput>}> = (props) => {
+          const {id,data} = props ?? {};
 
-          return  sendReferralMagicLink(id,requestOptions)
+          return  sendIntake(id,data,requestOptions)
         }
 
 
@@ -2359,22 +2361,22 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
 
   return  { mutationFn, ...mutationOptions }}
 
-    export type SendReferralMagicLinkMutationResult = NonNullable<Awaited<ReturnType<typeof sendReferralMagicLink>>>
-
-    export type SendReferralMagicLinkMutationError = ErrorType<unknown>
+    export type SendIntakeMutationResult = NonNullable<Awaited<ReturnType<typeof sendIntake>>>
+    export type SendIntakeMutationBody = BodyType<SendIntakeInput>
+    export type SendIntakeMutationError = ErrorType<unknown>
 
     /**
- * @summary (Re)send the parent/guardian e-signature magic link
+ * @summary Send or resend the referral intake and agreement link
  */
-export const useSendReferralMagicLink = <TError = ErrorType<unknown>,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof sendReferralMagicLink>>, TError,{id: string}, TContext>, request?: SecondParameter<typeof customFetch>}
+export const useSendIntake = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof sendIntake>>, TError,{id: string;data: BodyType<SendIntakeInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
  ): UseMutationResult<
-        Awaited<ReturnType<typeof sendReferralMagicLink>>,
+        Awaited<ReturnType<typeof sendIntake>>,
         TError,
-        {id: string},
+        {id: string;data: BodyType<SendIntakeInput>},
         TContext
       > => {
-      return useMutation(getSendReferralMagicLinkMutationOptions(options));
+      return useMutation(getSendIntakeMutationOptions(options));
     }
 
 export const getGetSignaturePageUrl = (token: string,) => {

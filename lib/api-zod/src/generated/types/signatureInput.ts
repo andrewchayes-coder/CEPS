@@ -5,6 +5,7 @@
  * CEPS Portal API — referral intake, authorizations, invoices, payments, remittances, vendors, reporting
  * OpenAPI spec version: 0.1.0
  */
+import type { SignatureInputSignerRelationship } from './signatureInputSignerRelationship';
 
 /**
  * Typed-name e-signature payload. When createAccount is true a portal account is created for the signer and password becomes required and must be at least 8 characters. If createAccount is true but password is missing or shorter than 8 characters the request is rejected with 400 and the signature is NOT recorded (the token stays valid). Because this is a conditional requirement OpenAPI cannot express fully, the rule is enforced by a zod refinement in the handler.
@@ -13,6 +14,8 @@ export interface SignatureInput {
   /** @minLength 1 */
   typedName: string;
   agreed: boolean;
+  /** Relationship of the person signing; recorded when supplied by the agreement form. */
+  signerRelationship?: SignatureInputSignerRelationship;
   /** Opt in to creating a portal account for the signer */
   createAccount?: boolean;
   /**

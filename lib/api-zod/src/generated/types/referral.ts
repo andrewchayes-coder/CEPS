@@ -6,7 +6,10 @@
  * OpenAPI spec version: 0.1.0
  */
 import type { ReferralIntakeFields } from './referralIntakeFields';
+import type { ReferralIntakeSentTo } from './referralIntakeSentTo';
+import type { ReferralPaymentTypeRequested } from './referralPaymentTypeRequested';
 import type { ReferralServiceFrequency } from './referralServiceFrequency';
+import type { ReferralSignerRelationship } from './referralSignerRelationship';
 import type { ReferralStatus } from './referralStatus';
 import type { ReferralSubmittedVia } from './referralSubmittedVia';
 
@@ -15,6 +18,8 @@ export interface Referral {
   clientId: string;
   /** @nullable */
   clientName?: string | null;
+  /** @nullable */
+  clientIsMinor?: boolean | null;
   /** @nullable */
   serviceCoordinatorId?: string | null;
   /** @nullable */
@@ -27,13 +32,25 @@ export interface Referral {
   /** @nullable */
   parentEmail?: string | null;
   /** @nullable */
+  intakeSentTo?: ReferralIntakeSentTo;
+  /** @nullable */
+  intakeSentAt?: string | null;
+  /** @nullable */
   parentSignedAt?: string | null;
   /** @nullable */
   signedByName?: string | null;
   /** @nullable */
+  signerRelationship?: ReferralSignerRelationship;
+  /** @nullable */
   altaAuthReceivedAt?: string | null;
   /** @nullable */
   serviceFrequency?: ReferralServiceFrequency;
+  /** @nullable */
+  cost?: string | null;
+  /** @nullable */
+  paymentSchedule?: string | null;
+  /** @nullable */
+  paymentTypeRequested?: ReferralPaymentTypeRequested;
   /** @nullable */
   diagnosis?: string | null;
   /** @nullable */

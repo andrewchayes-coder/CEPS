@@ -5,6 +5,7 @@ import {
   date,
   jsonb,
   timestamp,
+  numeric,
   index,
 } from "drizzle-orm/pg-core";
 import { clientsTable } from "./clients";
@@ -24,13 +25,19 @@ export const referralsTable = pgTable("referrals", {
   submittedVia: text("submitted_via"), // portal | staff_manual_entry
   intakeFields: jsonb("intake_fields"),
   parentEmail: text("parent_email"),
+  intakeSentTo: text("intake_sent_to"), // participant | family_rep
+  intakeSentAt: timestamp("intake_sent_at", { withTimezone: true }),
   parentSignedAt: timestamp("parent_signed_at", { withTimezone: true }),
   signedByName: text("signed_by_name"),
+  signerRelationship: text("signer_relationship"), // self | parent | guardian | conservator
   signedIp: text("signed_ip"),
   altaAuthReceivedAt: timestamp("alta_auth_received_at", {
     withTimezone: true,
   }),
   serviceFrequency: text("service_frequency"), // one_time | monthly
+  cost: numeric("cost", { precision: 12, scale: 2 }),
+  paymentSchedule: text("payment_schedule"),
+  paymentTypeRequested: text("payment_type_requested"), // service_payment | reimbursement
   // Diagnosis / eligibility (optional, staff- or coordinator-supplied)
   diagnosis: text("diagnosis"),
   eligibilityCategory: text("eligibility_category"),

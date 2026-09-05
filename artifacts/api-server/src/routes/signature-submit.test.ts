@@ -73,7 +73,11 @@ describe("POST /signature/:token without account creation", () => {
     tokenNoAccount = await makeLink("signature", referralId, signerEmail);
     const res = await request(app)
       .post(`/api/signature/${tokenNoAccount}`)
-      .send({ typedName: "No Account Parent", agreed: true });
+      .send({
+        typedName: "No Account Parent",
+        agreed: true,
+        signerRelationship: "parent",
+      });
     expect(res.status).toBe(200);
     expect(res.body.ok).toBe(true);
     expect(res.body.accountCreated).toBe(false);
@@ -81,6 +85,7 @@ describe("POST /signature/:token without account creation", () => {
     const [ref] = await db.select().from(referralsTable).where(eq(referralsTable.id, referralId));
     expect(ref.parentSignedAt).not.toBeNull();
     expect(ref.signedByName).toBe("No Account Parent");
+    expect(ref.signerRelationship).toBe("parent");
     expect(ref.status).toBe("pending_auth");
 
     const [user] = await db.select().from(usersTable).where(eq(usersTable.email, signerEmail));

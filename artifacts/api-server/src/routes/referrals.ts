@@ -16,7 +16,8 @@ import {
   GetReferralResponse,
   UpdateReferralBody,
   UpdateReferralResponse,
-  SendReferralMagicLinkResponse,
+  SendIntakeBody,
+  SendIntakeResponse,
   GetSignaturePageResponse,
   SubmitSignatureBody,
   SubmitSignatureResponse,
@@ -44,9 +45,22 @@ async function createSignatureLink(referralId: string, email: string): Promise<s
     referralId,
     expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
   });
-  // [CONFIRM] No email provider approved yet — dev-only link until Resend (or other) is confirmed
   return `${appBaseUrl()}/sign/${token}`;
 }
+
+async function sendIntakeEmail(referralId: string, email: string): Promise<string | null> {
+  const link = await createSignatureLink(referralId, email);
+  // [CONFIRM] No email provider approved yet. Keep delivery behind this helper
+  // so the real provider can replace this development behavior in one place.
+  console.info(`[intake-email] Send to ${email.trim().toLowerCase()}: ${link}`);
+  return process.env.NODE_ENV === "production" ? null : link;
+}
+
+const clean = (value: string | undefined | null): string | null => {
+  if (value == null) return null;
+  const trimmed = value.trim();
+  return trimmed === "" ? null : trimmed;
+};
 
 router.get("/referrals", requireAuth, async (req, res): Promise<void> => {
   const query = ListReferralsQueryParams.safeParse(req.query);
@@ -195,31 +209,27 @@ router.post("/referrals", requireStaffOrCoordinator, async (req, res): Promise<v
     }
   }
 
-  const parentEmail = parsed.data.parentEmail?.trim().toLowerCase() || null;
   // Portal sends '' for untouched optional fields — normalize to null.
-  const emptyToNull = (v: string | undefined | null): string | null =>
-    v == null || v === "" ? null : v;
   const [referral] = await db
     .insert(referralsTable)
     .values({
       clientId: client.id,
       serviceCoordinatorId: req.user!.role === "service_coordinator" ? req.user!.id : null,
       referralDate: new Date().toISOString().slice(0, 10),
-      status: parentEmail ? "pending_signature" : "intake",
+      status: "intake",
       submittedVia: parsed.data.submittedVia ?? "staff_manual_entry",
       intakeFields: f,
-      parentEmail,
       serviceFrequency: parsed.data.serviceFrequency,
-      diagnosis: emptyToNull(parsed.data.diagnosis),
-      eligibilityCategory: emptyToNull(parsed.data.eligibilityCategory),
-      supportingDocumentUrl: emptyToNull(parsed.data.supportingDocumentUrl),
+      cost: clean(parsed.data.cost),
+      paymentSchedule: clean(parsed.data.paymentSchedule),
+      paymentTypeRequested: clean(parsed.data.paymentTypeRequested),
+      diagnosis: clean(parsed.data.diagnosis),
+      eligibilityCategory: clean(parsed.data.eligibilityCategory),
+      supportingDocumentUrl: clean(parsed.data.supportingDocumentUrl),
       notes: parsed.data.notes,
     })
     .returning();
 
-  if (parentEmail) {
-    await createSignatureLink(referral.id, parentEmail);
-  }
   await audit(req.user!.id, "create_referral", "referral", referral.id, `Referral for ${client.firstName} ${client.lastName}`);
   const coordNames = await userNameMap([referral.serviceCoordinatorId]);
   res.status(201).json(
@@ -228,6 +238,7 @@ router.post("/referrals", requireStaffOrCoordinator, async (req, res): Promise<v
         referral,
         `${client.firstName} ${client.lastName}`,
         referral.serviceCoordinatorId ? coordNames.get(referral.serviceCoordinatorId) : null,
+        client.isMinor,
       ),
     ),
   );
@@ -249,9 +260,13 @@ router.get("/referrals/:id", requireAuth, async (req, res): Promise<void> => {
     res.status(403).json({ error: "Forbidden" });
     return;
   }
-  const [clientNames, coordNames] = await Promise.all([
+  const [clientNames, coordNames, clients] = await Promise.all([
     clientNameMap([referral.clientId]),
     userNameMap([referral.serviceCoordinatorId]),
+    db
+      .select({ isMinor: clientsTable.isMinor })
+      .from(clientsTable)
+      .where(eq(clientsTable.id, referral.clientId)),
   ]);
   res.json(
     GetReferralResponse.parse(
@@ -259,6 +274,7 @@ router.get("/referrals/:id", requireAuth, async (req, res): Promise<void> => {
         referral,
         clientNames.get(referral.clientId),
         referral.serviceCoordinatorId ? coordNames.get(referral.serviceCoordinatorId) : null,
+        clients[0]?.isMinor,
       ),
     ),
   );
@@ -277,7 +293,7 @@ router.patch("/referrals/:id", requireStaffOrCoordinator, async (req, res): Prom
     updates.altaAuthReceivedAt = altaAuthReceivedAt ? new Date(altaAuthReceivedAt) : null;
   }
   // Portal sends '' for untouched optional fields — normalize to null.
-  for (const k of ["diagnosis", "eligibilityCategory", "supportingDocumentUrl"] as const) {
+  for (const k of ["parentEmail", "cost", "paymentSchedule", "paymentTypeRequested", "diagnosis", "eligibilityCategory", "supportingDocumentUrl"] as const) {
     if (updates[k] === "") updates[k] = null;
   }
   if (updates.parentEmail) updates.parentEmail = String(updates.parentEmail).trim().toLowerCase();
@@ -355,8 +371,13 @@ router.delete("/referrals/:id", requireStaff, async (req, res): Promise<void> =>
   res.json({ ok: true });
 });
 
-router.post("/referrals/:id/send-magic-link", requireStaffOrCoordinator, async (req, res): Promise<void> => {
+router.post("/referrals/:id/send-intake", requireStaffOrCoordinator, async (req, res): Promise<void> => {
   const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+  const parsed = SendIntakeBody.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: parsed.error.message });
+    return;
+  }
   const [referral] = await db.select().from(referralsTable).where(eq(referralsTable.id, id));
   if (!referral) {
     res.status(404).json({ error: "Referral not found" });
@@ -366,13 +387,47 @@ router.post("/referrals/:id/send-magic-link", requireStaffOrCoordinator, async (
     res.status(403).json({ error: "Forbidden" });
     return;
   }
-  if (!referral.parentEmail) {
-    res.status(400).json({ error: "This referral has no parent/guardian email on file" });
+  const [client] = await db.select().from(clientsTable).where(eq(clientsTable.id, referral.clientId));
+  if (!client) {
+    res.status(404).json({ error: "Participant not found" });
     return;
   }
-  const devLink = await createSignatureLink(referral.id, referral.parentEmail);
-  await audit(req.user!.id, "send_signature_link", "referral", referral.id, `Sent to ${referral.parentEmail}`);
-  res.json(SendReferralMagicLinkResponse.parse({ sent: true, devLink }));
+  if (parsed.data.recipient === "participant" && client.isMinor) {
+    res.status(400).json({
+      error: "A minor cannot sign for themselves — send to the family rep, guardian, or conservator instead",
+    });
+    return;
+  }
+  const recipientEmail = clean(
+    parsed.data.recipient === "participant" ? client.email : client.familyRepEmail,
+  );
+  if (!recipientEmail) {
+    const recipientLabel = parsed.data.recipient === "participant" ? "participant" : "family rep";
+    res.status(400).json({
+      error: `Add an email to the ${recipientLabel} record before sending the intake agreement`,
+    });
+    return;
+  }
+  const updates: Record<string, unknown> = {
+    parentEmail: recipientEmail.toLowerCase(),
+    intakeSentTo: parsed.data.recipient,
+    intakeSentAt: new Date(),
+    status: referral.status === "intake" ? "pending_signature" : referral.status,
+  };
+  for (const field of ["serviceFrequency", "cost", "paymentSchedule", "paymentTypeRequested"] as const) {
+    if (parsed.data[field] !== undefined) updates[field] = clean(parsed.data[field]);
+  }
+  const devLink = await sendIntakeEmail(referral.id, recipientEmail);
+  await db.update(referralsTable).set(updates).where(eq(referralsTable.id, referral.id));
+  const recipientLabel = parsed.data.recipient === "participant" ? "participant" : "family rep";
+  await audit(
+    req.user!.id,
+    "send_signature_link",
+    "referral",
+    referral.id,
+    `Sent to ${recipientLabel}: ${recipientEmail}`,
+  );
+  res.json(SendIntakeResponse.parse({ sent: true, devLink }));
 });
 
 // --- Public signature endpoints (tokened, no session) ---
@@ -459,6 +514,9 @@ router.post("/signature/:token", async (req, res): Promise<void> => {
     .set({
       parentSignedAt: new Date(),
       signedByName: parsed.data.typedName,
+      ...(parsed.data.signerRelationship
+        ? { signerRelationship: parsed.data.signerRelationship }
+        : {}),
       signedIp: req.ip ?? null,
       status: referral.status === "pending_signature" || referral.status === "intake" ? "pending_auth" : referral.status,
     })

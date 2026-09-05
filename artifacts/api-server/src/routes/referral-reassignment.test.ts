@@ -37,6 +37,7 @@ beforeAll(async () => {
     lastName: "Assignment",
     dateOfBirth: "2000-01-01",
     uciNumber: `${nonce}-uci`,
+    isMinor: true,
   }).returning();
   clientId = client.id;
   const [referral] = await db.insert(referralsTable).values({
@@ -119,14 +120,21 @@ describe("referral coordinator reassignment", () => {
   });
 
   it("prevents another coordinator from viewing or sending a signature link for the referral", async () => {
+    const ownerDetail = await request(app)
+      .get(`/api/referrals/${referralId}`)
+      .set("Cookie", ownerCookie);
+    expect(ownerDetail.status).toBe(200);
+    expect(ownerDetail.body.clientIsMinor).toBe(true);
+
     const detail = await request(app)
       .get(`/api/referrals/${referralId}`)
       .set("Cookie", otherCoordinatorCookie);
     expect(detail.status).toBe(403);
 
     const signatureLink = await request(app)
-      .post(`/api/referrals/${referralId}/send-magic-link`)
-      .set("Cookie", otherCoordinatorCookie);
+      .post(`/api/referrals/${referralId}/send-intake`)
+      .set("Cookie", otherCoordinatorCookie)
+      .send({ recipient: "family_rep" });
     expect(signatureLink.status).toBe(403);
   });
 });

@@ -1,0 +1,84 @@
+Extend the CEPS app's referral e-signature flow so CEPS staff can start and
+resend the intake/agreement process, choosing who it goes to.
+
+SCHEMA (lib/db/src/schema/referrals.ts + a migration):
+1. Add `intakeSentTo` (text: 'participant' | 'family_rep', nullable) — who
+   the most recent send targeted.
+2. Add `intakeSentAt` (timestamptz, nullable) — when the most recent send
+   happened (separate from `parentSignedAt`, which only ever fires once).
+3. Add `signerRelationship` (text, nullable) — captured at signing time:
+   'self' | 'parent' | 'guardian' | 'conservator'.
+4. Add fields the real Participant Agreement needs that referrals don't
+   capture today: `cost` (numeric(12,2), nullable), `paymentSchedule` (text,
+   nullable, free-form e.g. "$210 on the 1st of each month"), and
+   `paymentTypeRequested` (text: 'service_payment' | 'reimbursement',
+   nullable — mirrors the packet's Service Payment / Reimbursement
+   checkboxes; distinct from `authorizations.paymentType`, which gets set
+   later once the Regional Center actually authorizes funding). Reuse the
+   EXISTING `serviceFrequency` field (already 'one_time' | 'monthly') for
+   the packet's "Cost Frequency" — don't add a duplicate field for it. All
+   new fields are nullable — they're proposed/estimated figures pending RC
+   authorization, not guaranteed final numbers.
+   Update the OpenAPI spec (lib/api-spec/openapi.yaml) — never hand-edit
+   lib/api-zod/src/generated or lib/api-client-react/src/generated, the
+   next unrelated codegen run silently wipes hand edits there. Regenerate
+   with `pnpm --filter @workspace/api-spec run codegen`, then re-apply the
+   fix that run always needs: change `import * as zod from 'zod'` to
+   `'zod/v4'` in lib/api-zod/src/generated/api.ts (zod 3.25's classic entry
+   is missing methods Orval v8 emits).
+   For the schema change itself: this repo uses versioned drizzle
+   migrations, not `drizzle-kit push` — after editing referrals.ts, run
+   `pnpm --filter @workspace/db run db:generate` then `db:migrate` in dev.
+   Production schema is applied automatically by Replit's Publish flow;
+   don't add a deploy-time migrate step.
+
+API (artifacts/api-server/src/routes/referrals.ts):
+5. Replace `POST /referrals/:id/send-magic-link` with
+   `POST /referrals/:id/send-intake`, body `{ recipient: 'participant' |
+   'family_rep', serviceFrequency?, cost?, paymentSchedule?,
+   paymentTypeRequested? }`. Carry forward the service-coordinator
+   ownership check already on the current route (a coordinator may only
+   send for a referral they're assigned to) — don't regress it.
+   Normalize '' to null on the optional string/numeric fields before
+   writing, same as every other create/update route in this codebase
+   (reuse the existing clean()-style helper rather than a new one).
+   - Look up the referral's client. Resolve the target email:
+     'participant' → client.email; 'family_rep' → client.familyRepEmail.
+   - If client.isMinor is true, reject `recipient: 'participant'` with a
+     400 ("A minor cannot sign for themselves — send to the family rep,
+     guardian, or conservator instead"). The frontend shouldn't even offer
+     that option in this case (see Prompt 2).
+   - If the resolved email is blank, return 400 with a message telling
+     staff to add that email to the participant/family rep record first —
+     don't silently fall back to the other recipient.
+   - If any of serviceFrequency/cost/paymentSchedule/paymentTypeRequested
+     are passed, persist them onto the referral (staff confirm/fill these
+     right before sending, since they may not have been known when the
+     referral was first submitted).
+   - Set `parentEmail` to the resolved address (existing field, now used
+     generically for whichever recipient was chosen), `intakeSentTo` to the
+     chosen recipient, `intakeSentAt` to now, and advance `status` to
+     `pending_signature` if it's currently `intake` (leave other statuses
+     alone so this also works as a resend without losing progress).
+   - Reuse `createSignatureLink` for the actual magic-link creation — don't
+     duplicate that logic.
+   - Audit-log this the same way the old endpoint did, but include the
+     recipient in the log message (e.g. "Sent to family rep:
+     jane@example.com").
+   - Delete the old `/send-magic-link` route and its OpenAPI operation/
+     generated types; update the frontend hook name (`useSendReferralMagicLink`
+     → e.g. `useSendIntake`) and every call site.
+
+6. Wrap the actual email delivery behind a single function (e.g. a
+   `sendIntakeEmail` helper next to `createSignatureLink`, or a new
+   `lib/email` package if that reads cleaner) so there's exactly one place
+   to plug in a real provider later. For now it should log the link
+   server-side and keep returning `devLink` in the response outside
+   production, same as today.
+
+TESTS:
+7. Add/extend tests (follow the existing referrals test files' pattern)
+   covering: minor rejects 'participant' recipient; missing email on the
+   chosen recipient 400s; a successful send sets intakeSentTo/intakeSentAt
+   and advances status; resending after a signature already exists doesn't
+   clobber parentSignedAt/signedByName.

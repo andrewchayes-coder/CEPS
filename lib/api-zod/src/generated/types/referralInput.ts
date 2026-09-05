@@ -5,6 +5,7 @@
  * CEPS Portal API — referral intake, authorizations, invoices, payments, remittances, vendors, reporting
  * OpenAPI spec version: 0.1.0
  */
+import type { ReferralInputPaymentTypeRequested } from './referralInputPaymentTypeRequested';
 import type { ReferralInputServiceFrequency } from './referralInputServiceFrequency';
 import type { ReferralInputSubmittedVia } from './referralInputSubmittedVia';
 import type { ReferralIntakeFields } from './referralIntakeFields';
@@ -12,8 +13,11 @@ import type { ReferralIntakeFields } from './referralIntakeFields';
 export interface ReferralInput {
   intakeFields: ReferralIntakeFields;
   submittedVia?: ReferralInputSubmittedVia;
-  parentEmail?: string;
   serviceFrequency?: ReferralInputServiceFrequency;
+  /** @pattern ^\d+(\.\d{1,2})?$ */
+  cost?: string;
+  paymentSchedule?: string;
+  paymentTypeRequested?: ReferralInputPaymentTypeRequested;
   diagnosis?: string;
   eligibilityCategory?: string;
   supportingDocumentUrl?: string;

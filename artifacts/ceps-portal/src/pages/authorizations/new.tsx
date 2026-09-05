@@ -17,6 +17,8 @@ import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { FileUpload } from '@/components/file-upload';
 import { trackAnalyticsEvent } from '@/lib/analytics';
+import { SearchableSelect } from '@/components/searchable-select';
+import { useDebounce } from '@/hooks/use-debounce';
 
 const formSchema = z.object({
   clientId: z.string().min(1, 'Participant is required'),
@@ -37,16 +39,24 @@ export default function AuthorizationNewPage() {
   const [, setLocation] = useLocation();
   const { toast } = useToast();
   const createAuth = useCreateAuthorization();
+
+  const [clientSearch, setClientSearch] = useState('');
+  const debouncedClientSearch = useDebounce(clientSearch, 300);
+  const { data: clientsData, isLoading: clientsLoading } = useListClients({ search: debouncedClientSearch, limit: 50 });
+  const clients = clientsData?.items ?? [];
+
+  const [vendorSearch, setVendorSearch] = useState('');
+  const debouncedVendorSearch = useDebounce(vendorSearch, 300);
+  // Do not filter vendor by participant here because this form establishes the initial participant-vendor association
+  const { data: vendorsData, isLoading: vendorsLoading } = useListVendors({ search: debouncedVendorSearch, limit: 50 });
+  const vendors = vendorsData?.items ?? [];
   
-  const { data: clientsData, isLoading: clientsLoading } = useListClients({ limit: 1000 });
-  const { data: vendorsData, isLoading: vendorsLoading } = useListVendors({ limit: 1000 });
-  const clients = clientsData?.items;
-  const vendors = vendorsData?.items;
   const [warnings, setWarnings] = useState<string[]>([]);
   const parsePdf = useParseAuthorizationPdf();
   const [posPdfUrl, setPosPdfUrl] = useState<string | undefined>(undefined);
   const [autoFilled, setAutoFilled] = useState<Set<string>>(new Set());
   const [parseNote, setParseNote] = useState<string | null>(null);
+  const [pendingParsedClientName, setPendingParsedClientName] = useState<string | null>(null);
 
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
@@ -69,6 +79,19 @@ export default function AuthorizationNewPage() {
   const { watch, setValue } = form;
   const serviceCode = watch('serviceCode');
 
+  React.useEffect(() => {
+    if (!pendingParsedClientName) return;
+    const target = pendingParsedClientName.trim().toLowerCase();
+    const match = clients.find(
+      (client) => `${client.firstName} ${client.lastName}`.trim().toLowerCase() === target,
+    );
+    if (!match) return;
+    setValue('clientId', match.id, { shouldValidate: true });
+    setAutoFilled((fields) => new Set(fields).add('clientId'));
+    setPendingParsedClientName(null);
+    setParseNote('PDF parsed. Review every auto-filled field before saving.');
+  }, [clients, pendingParsedClientName, setValue]);
+
   // Auto-set payment type based on service code
   React.useEffect(() => {
     if (serviceCode === '459') setValue('paymentType', 'direct_payment');
@@ -78,13 +101,14 @@ export default function AuthorizationNewPage() {
 
   const handlePosFile = (file: File) => {
     setParseNote(null);
+    setPendingParsedClientName(null);
     const reader = new FileReader();
     reader.onload = () => {
       const base64 = String(reader.result).split(',')[1] ?? '';
       parsePdf.mutate(
         { data: { pdfBase64: base64, fileName: file.name } },
         {
-          onSuccess: (res) => {
+          onSuccess: async (res) => {
             if (!res.success || !res.fields) {
               setParseNote(res.error || 'Could not extract fields from this PDF. Enter the details manually.');
               return;
@@ -107,21 +131,32 @@ export default function AuthorizationNewPage() {
             setIf('servicePeriodEnd', f.servicePeriodEnd);
             setIf('monthlyAmount', f.monthlyAmount);
             setIf('maxPeriodAmount', f.maxPeriodAmount);
-            // Try to match the extracted client name against the client list
-            if (f.clientName && clients) {
-              const target = f.clientName!.trim().toLowerCase();
-              const match = clients.find(
-                (c) => `${c.firstName} ${c.lastName}`.trim().toLowerCase() === target,
-              );
-              if (match) {
-                setValue('clientId', match.id, { shouldValidate: true });
-                filled.add('clientId');
-              }
+
+            // For exact name matching during PDF parsing without bulk loading, we rely on the
+            // search-based fetch already triggered if clientSearch is updated.
+            // In this specific flow, since we don't bulk load anymore, we'll try to find the client
+            // by setting the search text, and letting the user pick it if there are multiple or it's not exact.
+            // If the name happens to be in the current limited client array, select it.
+            if (f.clientName) {
+                const target = f.clientName.trim().toLowerCase();
+                const match = clients.find(
+                  (c) => `${c.firstName} ${c.lastName}`.trim().toLowerCase() === target,
+                );
+
+                if (match) {
+                  setValue('clientId', match.id, { shouldValidate: true });
+                  filled.add('clientId');
+                } else {
+                  // Prime the search input so the backend can find it
+                  setPendingParsedClientName(f.clientName.trim());
+                  setClientSearch(f.clientName.trim());
+                }
             }
+
             setAutoFilled(filled);
             setParseNote(
               f.clientName && !filled.has('clientId')
-                ? `PDF parsed. Could not match participant "${f.clientName}" automatically — please select the participant manually.`
+                ? `PDF parsed. Participant "${f.clientName}" was extracted — please verify and select from the dropdown.`
                 : 'PDF parsed. Review every auto-filled field before saving.',
             );
             toast({ title: 'POS PDF Parsed', description: 'Fields were pre-filled from the PDF. Please review them.' });
@@ -148,7 +183,8 @@ export default function AuthorizationNewPage() {
         ...data,
         posPdfUrl,
         serviceCode: data.serviceCode as AuthorizationInputServiceCode,
-        paymentType: data.paymentType as AuthorizationInputPaymentType
+        paymentType: data.paymentType as AuthorizationInputPaymentType,
+        vendorId: data.vendorId === 'none' ? undefined : data.vendorId
       }
     }, {
       onSuccess: (res) => {
@@ -279,36 +315,36 @@ export default function AuthorizationNewPage() {
                 <FormField control={form.control} name="clientId" render={({ field }) => (
                   <FormItem>
                     <FormLabel>Participant<AutoBadge name="clientId" /></FormLabel>
-                    <Select onValueChange={field.onChange} defaultValue={field.value}>
-                      <FormControl>
-                        <SelectTrigger>
-                          <SelectValue placeholder={clientsLoading ? "Loading..." : "Select participant"} />
-                        </SelectTrigger>
-                      </FormControl>
-                      <SelectContent>
-                        {clients?.map(c => (
-                          <SelectItem key={c.id} value={c.id}>{c.firstName} {c.lastName} ({c.uciNumber})</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                    <FormControl>
+                      <SearchableSelect
+                        value={field.value}
+                        onValueChange={field.onChange}
+                        options={clients.map(c => ({ value: c.id, label: `${c.firstName} ${c.lastName} (${c.uciNumber})` }))}
+                        onSearchChange={setClientSearch}
+                        loading={clientsLoading}
+                        placeholder="Select participant"
+                        data-testid="select-auth-client"
+                      />
+                    </FormControl>
                     <FormMessage />
                   </FormItem>
                 )} />
                 <FormField control={form.control} name="vendorId" render={({ field }) => (
                   <FormItem>
                     <FormLabel>Vendor</FormLabel>
-                    <Select onValueChange={field.onChange} defaultValue={field.value}>
-                      <FormControl>
-                        <SelectTrigger>
-                          <SelectValue placeholder={vendorsLoading ? "Loading..." : "Select vendor"} />
-                        </SelectTrigger>
-                      </FormControl>
-                      <SelectContent>
-                        {vendors?.map(v => (
-                          <SelectItem key={v.id} value={v.id}>{v.name}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                    <FormControl>
+                      <SearchableSelect
+                        value={field.value ?? ''}
+                        onValueChange={field.onChange}
+                        options={vendors.map(v => ({ value: v.id, label: v.name }))}
+                        onSearchChange={setVendorSearch}
+                        loading={vendorsLoading}
+                        placeholder="Select vendor"
+                        allowClear
+                        clearLabel="None"
+                        data-testid="select-auth-vendor"
+                      />
+                    </FormControl>
                     <FormMessage />
                   </FormItem>
                 )} />

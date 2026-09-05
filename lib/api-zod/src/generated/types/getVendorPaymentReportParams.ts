@@ -5,7 +5,17 @@
  * CEPS Portal API — referral intake, authorizations, invoices, payments, remittances, vendors, reporting
  * OpenAPI spec version: 0.1.0
  */
+import type { GetVendorPaymentReportAllTime } from './getVendorPaymentReportAllTime';
 
 export type GetVendorPaymentReportParams = {
+/**
+ * When "true", include all payment history if no explicit date range is supplied.
+ */
+allTime?: GetVendorPaymentReportAllTime;
 year?: number;
+vendorId?: string;
+clientId?: string;
+coordinatorId?: string;
+startDate?: string;
+endDate?: string;
 };

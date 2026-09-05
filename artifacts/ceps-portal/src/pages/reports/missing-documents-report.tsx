@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   useGetMissingDocumentsReport,
   getMissingDocumentsReport,
@@ -17,6 +17,7 @@ import { downloadCSV } from '@/lib/csv';
 import { useToast } from '@/hooks/use-toast';
 import { PAGE_SIZE, ReportPagination } from './report-pagination';
 import { useTableSort } from '@/lib/table-sorting';
+import type { GlobalReportFilters } from '../reports';
 
 const ALL = '__all__';
 type MissingDocumentsSortKey = 'docType' | 'entityName' | 'clientName' | 'description';
@@ -27,15 +28,22 @@ const DOC_LABELS: Record<string, string> = {
   auth_pdf: 'Authorization PDF',
 };
 
-export default function MissingDocumentsReport({ initialDocType }: { initialDocType?: string }) {
+export default function MissingDocumentsReport({ initialDocType, filters }: { initialDocType?: string, filters: GlobalReportFilters }) {
   const [docType, setDocType] = useState(initialDocType ?? ALL);
   const [page, setPage] = useState(0);
   const [exporting, setExporting] = useState(false);
   const { sort, onSort } = useTableSort<MissingDocumentsSortKey>('docType');
   const { toast } = useToast();
 
-  const filterParams = { ...(docType !== ALL ? { docType } : {}) };
-  const params = { ...filterParams, limit: PAGE_SIZE, offset: page * PAGE_SIZE, sortBy: sort.key, sortDirection: sort.direction };
+  useEffect(() => {
+    setPage(0);
+  }, [filters, docType, sort]);
+
+  const filterParams = {
+    ...filters,
+    ...(docType !== ALL ? { docType } : {})
+  };
+  const params: any = { ...filterParams, limit: PAGE_SIZE, offset: page * PAGE_SIZE, sortBy: sort.key, sortDirection: sort.direction };
 
   const { data, isLoading } = useGetMissingDocumentsReport(params, {
     query: { queryKey: ['missingDocumentsReport', params] },
@@ -45,13 +53,8 @@ export default function MissingDocumentsReport({ initialDocType }: { initialDocT
   const total = data?.total ?? 0;
   const pageCount = Math.max(1, Math.ceil(total / PAGE_SIZE));
 
-  const setFilter = (setter: (v: string) => void) => (value: string) => {
-    setter(value);
-    setPage(0);
-  };
   const changeSort = (key: MissingDocumentsSortKey) => {
     onSort(key);
-    setPage(0);
   };
 
   const exportCSV = async () => {
@@ -90,7 +93,7 @@ export default function MissingDocumentsReport({ initialDocType }: { initialDocT
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-4">
             <div className="space-y-1">
               <Label className="text-xs">Document Type</Label>
-              <Select value={docType} onValueChange={setFilter(setDocType)}>
+              <Select value={docType} onValueChange={setDocType}>
                 <SelectTrigger data-testid="select-missing-doc-type"><SelectValue placeholder="All documents" /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value={ALL}>All documents</SelectItem>

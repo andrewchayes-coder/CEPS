@@ -219,7 +219,9 @@ export const AcceptInviteResponse = zod.object({
  */
 export const ListUsersQueryParams = zod.object({
   "role": zod.coerce.string().optional(),
-  "active": zod.coerce.boolean().optional()
+  "active": zod.coerce.boolean().optional(),
+  "search": zod.coerce.string().optional().describe('Case-insensitive partial match on account name or email.'),
+  "limit": zod.coerce.number().int().optional().describe('Optional capped result count; omitted preserves the administrative full-list behavior.')
 })
 
 export const ListUsersResponseItem = zod.object({
@@ -315,6 +317,8 @@ export const ListAuditLogQueryParams = zod.object({
   "entityType": zod.coerce.string().optional(),
   "dateFrom": zod.coerce.string().optional(),
   "dateTo": zod.coerce.string().optional(),
+  "startDate": zod.coerce.string().optional().describe('Alias for dateFrom.'),
+  "endDate": zod.coerce.string().optional().describe('Alias for dateTo.'),
   "limit": zod.coerce.number().int().optional(),
   "offset": zod.coerce.number().int().optional(),
   "sortBy": zod.enum(['createdAt', 'userName', 'action', 'entityType', 'entityId', 'detail']).optional(),
@@ -340,8 +344,11 @@ export const ListAuditLogResponse = zod.object({
  * @summary List clients (scoped by role)
  */
 export const ListClientsQueryParams = zod.object({
+  "vendorId": zod.coerce.string().optional(),
   "status": zod.coerce.string().optional(),
   "search": zod.coerce.string().optional(),
+  "startDate": zod.coerce.string().optional(),
+  "endDate": zod.coerce.string().optional(),
   "limit": zod.coerce.number().int().optional(),
   "offset": zod.coerce.number().int().optional(),
   "sortBy": zod.enum(['name', 'uciNumber', 'dateOfBirth', 'assignedCoordinatorName', 'status', 'createdAt']).optional(),
@@ -709,7 +716,19 @@ export const GetClientCaseResponse = zod.object({
   "autoMatched": zod.boolean(),
   "createdAt": zod.string().nullish()
 }))
-}))
+})),
+  "documents": zod.array(zod.object({
+  "id": zod.string(),
+  "name": zod.string(),
+  "category": zod.enum(['participant_agreement', 'referral_attachment', 'authorization_pos', 'invoice', 'vendor_w9']),
+  "status": zod.enum(['pending', 'sent', 'received']),
+  "signatureStatus": zod.union([zod.literal('signed'),zod.literal('unsigned'),zod.literal(null)]).nullish(),
+  "recordType": zod.enum(['referral', 'authorization', 'invoice', 'vendor']),
+  "recordId": zod.string(),
+  "recordLabel": zod.string(),
+  "objectPath": zod.string().nullish(),
+  "statusDate": zod.string().nullish()
+})).describe('Staff-only read-only rollup of documents and tracked document requirements across the participant case.')
 })
 
 
@@ -721,6 +740,8 @@ export const ListReferralsQueryParams = zod.object({
   "coordinatorId": zod.coerce.string().optional(),
   "clientId": zod.coerce.string().optional(),
   "search": zod.coerce.string().optional(),
+  "startDate": zod.coerce.string().optional(),
+  "endDate": zod.coerce.string().optional(),
   "limit": zod.coerce.number().int().optional(),
   "offset": zod.coerce.number().int().optional(),
   "sortBy": zod.enum(['referralDate', 'clientName', 'coordinatorName', 'serviceType', 'status', 'createdAt']).optional(),
@@ -1261,6 +1282,8 @@ export const ListAuthorizationsQueryParams = zod.object({
   "status": zod.coerce.string().optional(),
   "expiringWithinDays": zod.coerce.number().int().optional(),
   "search": zod.coerce.string().optional(),
+  "startDate": zod.coerce.string().optional(),
+  "endDate": zod.coerce.string().optional(),
   "limit": zod.coerce.number().int().optional(),
   "offset": zod.coerce.number().int().optional(),
   "sortBy": zod.enum(['authNumber', 'clientName', 'vendorName', 'servicePeriodStart', 'servicePeriodEnd', 'maxPeriodAmount', 'status', 'createdAt']).optional(),
@@ -1480,6 +1503,8 @@ export const ListInvoicesQueryParams = zod.object({
   "clientId": zod.coerce.string().optional(),
   "vendorId": zod.coerce.string().optional(),
   "search": zod.coerce.string().optional(),
+  "startDate": zod.coerce.string().optional(),
+  "endDate": zod.coerce.string().optional(),
   "limit": zod.coerce.number().int().optional(),
   "offset": zod.coerce.number().int().optional(),
   "sortBy": zod.enum(['serviceMonth', 'vendorName', 'clientName', 'authNumber', 'amountRequested', 'status', 'submittedDate', 'createdAt']).optional(),
@@ -1666,6 +1691,8 @@ export const ListPaymentsQueryParams = zod.object({
   "paymentMonth": zod.coerce.string().optional(),
   "status": zod.coerce.string().optional(),
   "search": zod.coerce.string().optional(),
+  "startDate": zod.coerce.string().optional(),
+  "endDate": zod.coerce.string().optional(),
   "limit": zod.coerce.number().int().optional(),
   "offset": zod.coerce.number().int().optional(),
   "sortBy": zod.enum(['checkDate', 'qbCheckNumber', 'vendorName', 'clientName', 'amount', 'remitted', 'paymentType', 'createdAt']).optional(),
@@ -2013,6 +2040,8 @@ export const ListRemittancesQueryParams = zod.object({
   "remittanceBatchId": zod.coerce.string().optional().describe('Filter to line items imported from one Remittance Report batch.'),
   "autoMatched": zod.coerce.boolean().optional().describe('Filter by auto-match flag.'),
   "search": zod.coerce.string().optional().describe('Filter by client name (case-insensitive partial match).'),
+  "startDate": zod.coerce.string().optional(),
+  "endDate": zod.coerce.string().optional(),
   "limit": zod.coerce.number().int().optional(),
   "offset": zod.coerce.number().int().optional(),
   "sortBy": zod.enum(['remittanceDate', 'altaReference', 'remittanceBatchId', 'clientName', 'authNumber', 'amount', 'status', 'createdAt']).optional(),
@@ -2266,8 +2295,11 @@ export const ImportAltaRemittancesResponse = zod.object({
  * @summary List vendors (preferred first)
  */
 export const ListVendorsQueryParams = zod.object({
+  "clientId": zod.coerce.string().optional().describe('Return only vendors already linked to the participant through an authorization, invoice, or payment.'),
   "search": zod.coerce.string().optional(),
   "w9Status": zod.coerce.string().optional(),
+  "startDate": zod.coerce.string().optional(),
+  "endDate": zod.coerce.string().optional(),
   "active": zod.enum(['true', 'false']).optional(),
   "limit": zod.coerce.number().int().optional(),
   "offset": zod.coerce.number().int().optional(),
@@ -2496,7 +2528,13 @@ export const GetDashboardSummaryResponse = zod.object({
  * @summary Per-vendor payment totals (YTD; feeds Phase 2 1099s)
  */
 export const GetVendorPaymentReportQueryParams = zod.object({
-  "year": zod.coerce.number().int().optional()
+  "allTime": zod.enum(['true', 'false']).optional().describe('When \"true\", include all payment history if no explicit date range is supplied.'),
+  "year": zod.coerce.number().int().optional(),
+  "vendorId": zod.coerce.string().optional(),
+  "clientId": zod.coerce.string().optional(),
+  "coordinatorId": zod.coerce.string().optional(),
+  "startDate": zod.coerce.string().optional(),
+  "endDate": zod.coerce.string().optional()
 })
 
 export const GetVendorPaymentReportResponseItem = zod.object({
@@ -2514,7 +2552,10 @@ export const GetVendorPaymentReportResponse = zod.array(GetVendorPaymentReportRe
  * @summary Referrals/cases waiting on POS authorization from Alta (staff only)
  */
 export const GetPendingAuthReportQueryParams = zod.object({
+  "clientId": zod.coerce.string().optional(),
   "coordinatorId": zod.coerce.string().optional(),
+  "startDate": zod.coerce.string().optional(),
+  "endDate": zod.coerce.string().optional(),
   "search": zod.coerce.string().optional(),
   "limit": zod.coerce.number().int().optional(),
   "offset": zod.coerce.number().int().optional(),
@@ -2540,9 +2581,12 @@ export const GetPendingAuthReportResponse = zod.object({
  * @summary Program-level case status overview as a list (staff only)
  */
 export const GetCaseStatusReportQueryParams = zod.object({
+  "clientId": zod.coerce.string().optional(),
   "status": zod.coerce.string().optional(),
   "coordinatorId": zod.coerce.string().optional(),
   "search": zod.coerce.string().optional(),
+  "startDate": zod.coerce.string().optional(),
+  "endDate": zod.coerce.string().optional(),
   "limit": zod.coerce.number().int().optional(),
   "offset": zod.coerce.number().int().optional(),
   "sortBy": zod.enum(['clientName', 'status', 'referralDate', 'coordinatorName', 'createdAt']).optional(),
@@ -2568,6 +2612,10 @@ export const GetCaseStatusReportResponse = zod.object({
  * @summary Missing document alerts — no W-9, no parent signature, no auth PDF (staff only)
  */
 export const GetMissingDocumentsReportQueryParams = zod.object({
+  "clientId": zod.coerce.string().optional(),
+  "coordinatorId": zod.coerce.string().optional(),
+  "startDate": zod.coerce.string().optional(),
+  "endDate": zod.coerce.string().optional(),
   "docType": zod.coerce.string().optional().describe('Filter by document type (w9, signature, auth_pdf)'),
   "limit": zod.coerce.number().int().optional(),
   "offset": zod.coerce.number().int().optional(),
@@ -2593,6 +2641,10 @@ export const GetMissingDocumentsReportResponse = zod.object({
  * @summary Authorizations expiring soon (staff only)
  */
 export const GetExpiringAuthReportQueryParams = zod.object({
+  "clientId": zod.coerce.string().optional(),
+  "coordinatorId": zod.coerce.string().optional(),
+  "startDate": zod.coerce.string().optional(),
+  "endDate": zod.coerce.string().optional(),
   "withinDays": zod.coerce.number().int().optional().describe('Only include authorizations expiring within this many days (default 30).'),
   "limit": zod.coerce.number().int().optional(),
   "offset": zod.coerce.number().int().optional(),

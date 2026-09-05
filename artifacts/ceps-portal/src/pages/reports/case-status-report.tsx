@@ -1,13 +1,11 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   useGetCaseStatusReport,
   getCaseStatusReport,
-  useListUsers,
 } from '@workspace/api-client-react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHeader, TableRow, SortableTableHead } from '@/components/ui/table';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
 import { ClientLink } from '@/components/entity-links';
@@ -18,6 +16,7 @@ import { downloadCSV } from '@/lib/csv';
 import { useToast } from '@/hooks/use-toast';
 import { PAGE_SIZE, ReportPagination } from './report-pagination';
 import { useTableSort } from '@/lib/table-sorting';
+import type { GlobalReportFilters } from '../reports';
 
 const ALL = '__all__';
 type CaseStatusSortKey = 'clientName' | 'status' | 'referralDate' | 'coordinatorName';
@@ -42,40 +41,33 @@ const STATUS_LABELS: Record<string, string> = {
   closed: 'Closed',
 };
 
-export default function CaseStatusReport({ initialStatus }: { initialStatus?: string }) {
+export default function CaseStatusReport({ initialStatus, filters }: { initialStatus?: string, filters: GlobalReportFilters }) {
   const [status, setStatus] = useState(initialStatus ?? ALL);
-  const [coordinatorId, setCoordinatorId] = useState(ALL);
-  const [search, setSearch] = useState('');
   const [page, setPage] = useState(0);
   const [exporting, setExporting] = useState(false);
   const { sort, onSort } = useTableSort<CaseStatusSortKey>('clientName');
   const { toast } = useToast();
 
+  useEffect(() => {
+    setPage(0);
+  }, [filters, status, sort]);
+
   const filterParams = {
+    ...filters,
     ...(status !== ALL ? { status } : {}),
-    ...(coordinatorId !== ALL ? { coordinatorId } : {}),
-    ...(search ? { search } : {}),
   };
-  const params = { ...filterParams, limit: PAGE_SIZE, offset: page * PAGE_SIZE, sortBy: sort.key, sortDirection: sort.direction };
+  const params: any = { ...filterParams, limit: PAGE_SIZE, offset: page * PAGE_SIZE, sortBy: sort.key, sortDirection: sort.direction };
 
   const { data, isLoading } = useGetCaseStatusReport(params, {
     query: { queryKey: ['caseStatusReport', params] },
-  });
-  const { data: users } = useListUsers({ role: 'service_coordinator' }, {
-    query: { queryKey: ['users', 'service_coordinator'] },
   });
 
   const items = data?.items;
   const total = data?.total ?? 0;
   const pageCount = Math.max(1, Math.ceil(total / PAGE_SIZE));
 
-  const setFilter = (setter: (v: string) => void) => (value: string) => {
-    setter(value);
-    setPage(0);
-  };
   const changeSort = (key: CaseStatusSortKey) => {
     onSort(key);
-    setPage(0);
   };
 
   const exportCSV = async () => {
@@ -114,7 +106,7 @@ export default function CaseStatusReport({ initialStatus }: { initialStatus?: st
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mt-4">
             <div className="space-y-1">
               <Label className="text-xs">Status</Label>
-              <Select value={status} onValueChange={setFilter(setStatus)}>
+              <Select value={status} onValueChange={setStatus}>
                 <SelectTrigger data-testid="select-case-status-stage"><SelectValue placeholder="All statuses" /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value={ALL}>All statuses</SelectItem>
@@ -123,28 +115,6 @@ export default function CaseStatusReport({ initialStatus }: { initialStatus?: st
                   ))}
                 </SelectContent>
               </Select>
-            </div>
-            <div className="space-y-1">
-              <Label className="text-xs">Service Coordinator</Label>
-              <Select value={coordinatorId} onValueChange={setFilter(setCoordinatorId)}>
-                <SelectTrigger data-testid="select-case-status-coordinator"><SelectValue placeholder="All coordinators" /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value={ALL}>All coordinators</SelectItem>
-                  {(users ?? []).map((u: any) => (
-                    <SelectItem key={u.id} value={u.id}>{u.name}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-1">
-              <Label htmlFor="case-status-search" className="text-xs">Participant</Label>
-              <Input
-                id="case-status-search"
-                data-testid="input-case-status-search"
-                placeholder="Search participant…"
-                value={search}
-                onChange={(e) => setFilter(setSearch)(e.target.value)}
-              />
             </div>
           </div>
         </div>

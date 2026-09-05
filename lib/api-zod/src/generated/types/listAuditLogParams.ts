@@ -14,6 +14,14 @@ action?: string;
 entityType?: string;
 dateFrom?: string;
 dateTo?: string;
+/**
+ * Alias for dateFrom.
+ */
+startDate?: string;
+/**
+ * Alias for dateTo.
+ */
+endDate?: string;
 limit?: number;
 offset?: number;
 sortBy?: ListAuditLogSortBy;

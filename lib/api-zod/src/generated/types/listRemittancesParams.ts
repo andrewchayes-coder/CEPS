@@ -23,6 +23,8 @@ autoMatched?: boolean;
  * Filter by client name (case-insensitive partial match).
  */
 search?: string;
+startDate?: string;
+endDate?: string;
 limit?: number;
 offset?: number;
 sortBy?: ListRemittancesSortBy;

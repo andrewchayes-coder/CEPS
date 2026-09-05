@@ -1,0 +1,35 @@
+Add document visibility for staff on participant, authorization, and invoice
+records, based on CEPS testing feedback (9/4 session). Scope note: this is
+about VIEWING and tracking the status of documents that are already
+attached to existing records — it does NOT include the parent-facing
+intake/referral-packet form itself or its e-signature flow, which is a
+separate, already-in-progress track. Do not touch the referral e-signature
+/sign/:token flow, magic-link generation, or the referral packet schema as
+part of this prompt.
+
+1. Add a "Documents" tab (or section, whichever fits the existing detail-
+   page layout better) on the participant/client detail page listing every
+   document already attached to that participant across their records —
+   referral-packet pages, signature page, W-9, and any other uploaded
+   attachment. Each row should show a status: sent / pending / received
+   (with signature, where applicable). Pull this from the existing
+   attachment/upload records already tied to referrals, authorizations,
+   invoices, and vendors rather than introducing a new document entity —
+   this is a read-only rollup view, not a new place documents live.
+
+2. On the Authorization detail screen, add the ability to open the
+   attached source document (the POS) in-place — a viewer/preview panel or
+   modal — so staff can visually compare it against the extracted/entered
+   data on the same screen rather than downloading the file separately.
+
+3. Do the same on the Invoice detail screen: an in-place viewer for the
+   invoice's attached document next to its entered/extracted fields.
+
+4. If a shared document-preview component doesn't already exist, build one
+   reusable component for #2 and #3 rather than two separate
+   implementations — it'll likely get reused for the participant Documents
+   tab in #1 too.
+
+Confirm with me before adding any new document/attachment database table —
+the intent is to surface documents already captured elsewhere, not to
+create a parallel document-management module.

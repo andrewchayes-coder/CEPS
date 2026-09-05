@@ -7,7 +7,7 @@ import { CreateRemittanceDialog } from '@/components/create-remittance-dialog';
 import { MatchRemittanceDialog } from '@/components/match-remittance-dialog';
 import { Link } from 'wouter';
 import { AltaRemittanceImport } from '@/components/alta-remittance-import';
-import { Card, CardContent } from '@/components/ui/card';
+import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow, SortableTableHead, useTableSort } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
@@ -16,6 +16,7 @@ import { Input } from '@/components/ui/input';
 import { format } from 'date-fns';
 import { ChevronLeft, ChevronRight, X, AlertTriangle } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
+import { DateRangeFilter } from '@/components/date-range-filter';
 
 const PAGE_SIZE = 50;
 
@@ -35,6 +36,8 @@ type RemittanceTab = 'all' | 'needs_manual_match';
 export default function RemittancesPage() {
   const [page, setPage] = useState(0);
   const [batchFilter, setBatchFilter] = useState<string>('');
+  const [startDate, setStartDate] = useState<string>();
+  const [endDate, setEndDate] = useState<string>();
   const [tab, setTab] = useState<RemittanceTab>('all');
   const sort = useTableSort<'remittanceDate' | 'altaReference' | 'remittanceBatchId' | 'authNumber' | 'amount' | 'status'>();
   const onSort = (key: Parameters<typeof sort.toggleSort>[0]) => {
@@ -50,6 +53,8 @@ export default function RemittancesPage() {
     limit: PAGE_SIZE,
     offset: page * PAGE_SIZE,
     ...(batchFilter ? { remittanceBatchId: batchFilter } : {}),
+    ...(startDate ? { startDate } : {}),
+    ...(endDate ? { endDate } : {}),
     ...(triage ? { status: 'received', autoMatched: false } : {}),
     ...(sort.sortBy ? { sortBy: sort.sortBy, sortDirection: sort.sortDirection } : {}),
   };
@@ -128,44 +133,61 @@ export default function RemittancesPage() {
         </p>
       )}
 
-      {batchFilter && (
-        <div className="flex items-center gap-2" data-testid="banner-batch-filter">
-          <Badge variant="outline" className="font-mono">
-            Batch: {batchFilter.slice(0, 8)}…
-          </Badge>
-          <span className="text-sm text-muted-foreground">Showing only line items from this Remittance Report.</span>
-          <Button
-            variant="ghost"
-            size="sm"
-            data-testid="button-clear-batch-filter"
-            onClick={() => {
-              setBatchFilter('');
-              setPage(0);
-            }}
-          >
-            <X className="w-4 h-4 mr-1" /> Clear
-          </Button>
-        </div>
-      )}
-
-      {isStaff && !batchFilter && (
-        <div className="flex items-center gap-2">
-          <Input
-            className="max-w-xs"
-            placeholder="Filter by remittance batch id…"
-            data-testid="input-batch-filter"
-            onKeyDown={(e) => {
-              if (e.key === 'Enter') {
-                setBatchFilter((e.target as HTMLInputElement).value.trim());
-                setPage(0);
-              }
-            }}
-          />
-          <span className="text-xs text-muted-foreground">Press Enter to filter to one uploaded report.</span>
-        </div>
-      )}
-
       <Card>
+        <CardHeader className="pb-3 border-b">
+          <div className="flex flex-col gap-4">
+            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+              <div className="flex-1">
+                {batchFilter ? (
+                  <div className="flex items-center gap-2" data-testid="banner-batch-filter">
+                    <Badge variant="outline" className="font-mono">
+                      Batch: {batchFilter.slice(0, 8)}…
+                    </Badge>
+                    <span className="text-sm text-muted-foreground hidden sm:inline">Showing only line items from this Remittance Report.</span>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      data-testid="button-clear-batch-filter"
+                      onClick={() => {
+                        setBatchFilter('');
+                        setPage(0);
+                      }}
+                    >
+                      <X className="w-4 h-4 mr-1" /> Clear
+                    </Button>
+                  </div>
+                ) : isStaff ? (
+                  <div className="flex items-center gap-2">
+                    <Input
+                      className="w-full sm:w-[260px]"
+                      placeholder="Filter by remittance batch id…"
+                      data-testid="input-batch-filter"
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') {
+                          setBatchFilter((e.target as HTMLInputElement).value.trim());
+                          setPage(0);
+                        }
+                      }}
+                    />
+                    <span className="text-xs text-muted-foreground hidden lg:inline">Press Enter to filter to one uploaded report.</span>
+                  </div>
+                ) : null}
+              </div>
+              <div className="w-full sm:w-auto shrink-0">
+                <DateRangeFilter
+                  label="Date range"
+                  startDate={startDate}
+                  endDate={endDate}
+                  onChange={(range) => {
+                    setStartDate(range.startDate);
+                    setEndDate(range.endDate);
+                    setPage(0);
+                  }}
+                />
+              </div>
+            </div>
+          </div>
+        </CardHeader>
         <CardContent className="p-0">
           <Table>
             <TableHeader>

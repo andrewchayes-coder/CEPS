@@ -13,6 +13,8 @@ status?: string;
 coordinatorId?: string;
 clientId?: string;
 search?: string;
+startDate?: string;
+endDate?: string;
 limit?: number;
 offset?: number;
 sortBy?: ListReferralsSortBy;

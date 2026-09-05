@@ -853,6 +853,63 @@ export interface Remittance {
   allocations: RemittanceAllocation[];
 }
 
+export type CaseDocumentCategory = typeof CaseDocumentCategory[keyof typeof CaseDocumentCategory];
+
+
+export const CaseDocumentCategory = {
+  participant_agreement: 'participant_agreement',
+  referral_attachment: 'referral_attachment',
+  authorization_pos: 'authorization_pos',
+  invoice: 'invoice',
+  vendor_w9: 'vendor_w9',
+} as const;
+
+export type CaseDocumentStatus = typeof CaseDocumentStatus[keyof typeof CaseDocumentStatus];
+
+
+export const CaseDocumentStatus = {
+  pending: 'pending',
+  sent: 'sent',
+  received: 'received',
+} as const;
+
+/**
+ * @nullable
+ */
+export type CaseDocumentSignatureStatus = typeof CaseDocumentSignatureStatus[keyof typeof CaseDocumentSignatureStatus] | null;
+
+
+export const CaseDocumentSignatureStatus = {
+  signed: 'signed',
+  unsigned: 'unsigned',
+} as const;
+
+export type CaseDocumentRecordType = typeof CaseDocumentRecordType[keyof typeof CaseDocumentRecordType];
+
+
+export const CaseDocumentRecordType = {
+  referral: 'referral',
+  authorization: 'authorization',
+  invoice: 'invoice',
+  vendor: 'vendor',
+} as const;
+
+export interface CaseDocument {
+  id: string;
+  name: string;
+  category: CaseDocumentCategory;
+  status: CaseDocumentStatus;
+  /** @nullable */
+  signatureStatus?: CaseDocumentSignatureStatus;
+  recordType: CaseDocumentRecordType;
+  recordId: string;
+  recordLabel: string;
+  /** @nullable */
+  objectPath?: string | null;
+  /** @nullable */
+  statusDate?: string | null;
+}
+
 export interface ClientCase {
   client: Client;
   referrals: Referral[];
@@ -860,6 +917,8 @@ export interface ClientCase {
   invoices: Invoice[];
   payments: Payment[];
   remittances: Remittance[];
+  /** Staff-only read-only rollup of documents and tracked document requirements across the participant case. */
+  documents: CaseDocument[];
 }
 
 export type ReferralInputSubmittedVia = typeof ReferralInputSubmittedVia[keyof typeof ReferralInputSubmittedVia];
@@ -1883,6 +1942,14 @@ export interface ExpiringAuthRow {
 export type ListUsersParams = {
 role?: string;
 active?: boolean;
+/**
+ * Case-insensitive partial match on account name or email.
+ */
+search?: string;
+/**
+ * Optional capped result count; omitted preserves the administrative full-list behavior.
+ */
+limit?: number;
 };
 
 export type ListAuditLogParams = {
@@ -1891,6 +1958,14 @@ action?: string;
 entityType?: string;
 dateFrom?: string;
 dateTo?: string;
+/**
+ * Alias for dateFrom.
+ */
+startDate?: string;
+/**
+ * Alias for dateTo.
+ */
+endDate?: string;
 limit?: number;
 offset?: number;
 sortBy?: ListAuditLogSortBy;
@@ -1923,8 +1998,11 @@ export type ListAuditLog200 = {
 };
 
 export type ListClientsParams = {
+vendorId?: string;
 status?: string;
 search?: string;
+startDate?: string;
+endDate?: string;
 limit?: number;
 offset?: number;
 sortBy?: ListClientsSortBy;
@@ -1961,6 +2039,8 @@ status?: string;
 coordinatorId?: string;
 clientId?: string;
 search?: string;
+startDate?: string;
+endDate?: string;
 limit?: number;
 offset?: number;
 sortBy?: ListReferralsSortBy;
@@ -1998,6 +2078,8 @@ vendorId?: string;
 status?: string;
 expiringWithinDays?: number;
 search?: string;
+startDate?: string;
+endDate?: string;
 limit?: number;
 offset?: number;
 sortBy?: ListAuthorizationsSortBy;
@@ -2036,6 +2118,8 @@ status?: string;
 clientId?: string;
 vendorId?: string;
 search?: string;
+startDate?: string;
+endDate?: string;
 limit?: number;
 offset?: number;
 sortBy?: ListInvoicesSortBy;
@@ -2077,6 +2161,8 @@ remitted?: boolean;
 paymentMonth?: string;
 status?: string;
 search?: string;
+startDate?: string;
+endDate?: string;
 limit?: number;
 offset?: number;
 sortBy?: ListPaymentsSortBy;
@@ -2130,6 +2216,8 @@ autoMatched?: boolean;
  * Filter by client name (case-insensitive partial match).
  */
 search?: string;
+startDate?: string;
+endDate?: string;
 limit?: number;
 offset?: number;
 sortBy?: ListRemittancesSortBy;
@@ -2164,8 +2252,14 @@ export type ListRemittances200 = {
 };
 
 export type ListVendorsParams = {
+/**
+ * Return only vendors already linked to the participant through an authorization, invoice, or payment.
+ */
+clientId?: string;
 search?: string;
 w9Status?: string;
+startDate?: string;
+endDate?: string;
 active?: ListVendorsActive;
 limit?: number;
 offset?: number;
@@ -2208,11 +2302,31 @@ export type ListVendors200 = {
 };
 
 export type GetVendorPaymentReportParams = {
+/**
+ * When "true", include all payment history if no explicit date range is supplied.
+ */
+allTime?: GetVendorPaymentReportAllTime;
 year?: number;
+vendorId?: string;
+clientId?: string;
+coordinatorId?: string;
+startDate?: string;
+endDate?: string;
 };
 
+export type GetVendorPaymentReportAllTime = typeof GetVendorPaymentReportAllTime[keyof typeof GetVendorPaymentReportAllTime];
+
+
+export const GetVendorPaymentReportAllTime = {
+  true: 'true',
+  false: 'false',
+} as const;
+
 export type GetPendingAuthReportParams = {
+clientId?: string;
 coordinatorId?: string;
+startDate?: string;
+endDate?: string;
 search?: string;
 limit?: number;
 offset?: number;
@@ -2244,9 +2358,12 @@ export type GetPendingAuthReport200 = {
 };
 
 export type GetCaseStatusReportParams = {
+clientId?: string;
 status?: string;
 coordinatorId?: string;
 search?: string;
+startDate?: string;
+endDate?: string;
 limit?: number;
 offset?: number;
 sortBy?: GetCaseStatusReportSortBy;
@@ -2278,6 +2395,10 @@ export type GetCaseStatusReport200 = {
 };
 
 export type GetMissingDocumentsReportParams = {
+clientId?: string;
+coordinatorId?: string;
+startDate?: string;
+endDate?: string;
 /**
  * Filter by document type (w9, signature, auth_pdf)
  */
@@ -2313,6 +2434,10 @@ export type GetMissingDocumentsReport200 = {
 };
 
 export type GetExpiringAuthReportParams = {
+clientId?: string;
+coordinatorId?: string;
+startDate?: string;
+endDate?: string;
 /**
  * Only include authorizations expiring within this many days (default 30).
  */

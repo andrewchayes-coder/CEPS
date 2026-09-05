@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import request from "supertest";
-import { inArray } from "drizzle-orm";
+import { eq, inArray } from "drizzle-orm";
 import {
   db,
   usersTable,
@@ -8,6 +8,8 @@ import {
   clientsTable,
   vendorsTable,
   authorizationsTable,
+  invoicesTable,
+  paymentsTable,
 } from "@workspace/db";
 import app from "../app";
 import { newToken } from "../lib/auth";
@@ -23,6 +25,7 @@ let otherCoordId: string;
 let vendorUserId: string;
 let parentUserId: string;
 let vendorId: string;
+let otherVendorId: string;
 let clientA: string; // parent user's linked client, coordId-assigned, has vendor auth
 let clientB: string; // otherCoord-assigned, no vendor auth
 let staffCookie: string;
@@ -31,6 +34,10 @@ let vendorCookie: string;
 let parentCookie: string;
 
 const createdAuthIds: string[] = [];
+const vendorLinkClientIds: string[] = [];
+const vendorLinkInvoiceIds: string[] = [];
+const vendorLinkPaymentIds: string[] = [];
+const vendorLinksNonce = `cllinks${Date.now().toString(36)}`;
 
 async function session(userId: string) {
   const token = newToken();
@@ -66,6 +73,8 @@ beforeAll(async () => {
 
   const [vendor] = await db.insert(vendorsTable).values({ name: `${nonce}-vendor` }).returning();
   vendorId = vendor.id;
+  const [otherVendor] = await db.insert(vendorsTable).values({ name: `${nonce}-vendor2` }).returning();
+  otherVendorId = otherVendor.id;
 
   const [ca] = await db
     .insert(clientsTable)
@@ -109,6 +118,53 @@ beforeAll(async () => {
     .returning();
   createdAuthIds.push(auth.id);
 
+  const createLinkedClient = async (suffix: string) => {
+    const [client] = await db
+      .insert(clientsTable)
+      .values({
+        firstName: "Vendor Link",
+        lastName: `${vendorLinksNonce}-${suffix}`,
+        dateOfBirth: "2000-01-01",
+        uciNumber: `${vendorLinksNonce}-uci-${suffix}`,
+      })
+      .returning();
+    vendorLinkClientIds.push(client.id);
+    return client.id;
+  };
+  const authorizationClient = await createLinkedClient("authorization");
+  const invoiceClient = await createLinkedClient("invoice");
+  const paymentClient = await createLinkedClient("payment");
+  const deletedClient = await createLinkedClient("deleted");
+  const unrelatedClient = await createLinkedClient("unrelated");
+
+  const [authorizationLink] = await db.insert(authorizationsTable).values({
+    clientId: authorizationClient, vendorId, authNumber: `${vendorLinksNonce}-auth`, serviceCode: "459",
+    paymentType: "direct_payment", servicePeriodStart: "2026-01-01", servicePeriodEnd: "2026-12-31",
+    maxPeriodAmount: "1000.00", status: "active",
+  }).returning();
+  createdAuthIds.push(authorizationLink.id);
+  const [invoiceLink] = await db.insert(invoicesTable).values({
+    clientId: invoiceClient, vendorId, submittedByRole: "staff", submittedDate: "2026-01-15",
+    serviceMonth: "2026-01", amountRequested: "100.00", paymentType: "direct_payment", status: "approved",
+  }).returning();
+  vendorLinkInvoiceIds.push(invoiceLink.id);
+  const [paymentLink] = await db.insert(paymentsTable).values({
+    clientId: paymentClient, vendorId, qbCheckNumber: `${vendorLinksNonce}-check`, checkDate: "2026-01-15",
+    amount: "100.00", paymentType: "direct_payment", source: "manual",
+  }).returning();
+  vendorLinkPaymentIds.push(paymentLink.id);
+  const [deletedLink] = await db.insert(invoicesTable).values({
+    clientId: deletedClient, vendorId, submittedByRole: "staff", submittedDate: "2026-01-15",
+    serviceMonth: "2026-01", amountRequested: "100.00", paymentType: "direct_payment", status: "approved",
+  }).returning();
+  vendorLinkInvoiceIds.push(deletedLink.id);
+  await db.update(invoicesTable).set({ isDeleted: true }).where(eq(invoicesTable.id, deletedLink.id));
+  const [unrelatedLink] = await db.insert(invoicesTable).values({
+    clientId: unrelatedClient, vendorId: otherVendorId, submittedByRole: "staff", submittedDate: "2026-01-15",
+    serviceMonth: "2026-01", amountRequested: "100.00", paymentType: "direct_payment", status: "approved",
+  }).returning();
+  vendorLinkInvoiceIds.push(unrelatedLink.id);
+
   const [vendorUser] = await db
     .insert(usersTable)
     .values({
@@ -140,16 +196,18 @@ beforeAll(async () => {
 });
 
 afterAll(async () => {
+  await db.delete(paymentsTable).where(inArray(paymentsTable.id, vendorLinkPaymentIds));
+  await db.delete(invoicesTable).where(inArray(invoicesTable.id, vendorLinkInvoiceIds));
   await db.delete(authorizationsTable).where(inArray(authorizationsTable.id, createdAuthIds));
   // Clients FK-reference coordinator users, so delete clients first.
-  await db.delete(clientsTable).where(inArray(clientsTable.id, [clientA, clientB]));
+  await db.delete(clientsTable).where(inArray(clientsTable.id, [clientA, clientB, ...vendorLinkClientIds]));
   await db
     .delete(sessionsTable)
     .where(inArray(sessionsTable.userId, [staffId, coordId, otherCoordId, vendorUserId, parentUserId]));
   await db
     .delete(usersTable)
     .where(inArray(usersTable.id, [staffId, coordId, otherCoordId, vendorUserId, parentUserId]));
-  await db.delete(vendorsTable).where(inArray(vendorsTable.id, [vendorId]));
+  await db.delete(vendorsTable).where(inArray(vendorsTable.id, [vendorId, otherVendorId]));
 });
 
 describe("GET /clients auth", () => {
@@ -233,6 +291,26 @@ describe("GET /clients SQL-level role scoping", () => {
     const res = await get(vendorCookie, { search: nonce, limit: 1000 });
     expect(res.body.total).toBe(1);
     expect(res.body.items[0].id).toBe(clientA);
+  });
+
+  it("vendor users cannot widen their client scope with another vendorId", async () => {
+    const res = await get(vendorCookie, { search: vendorLinksNonce, vendorId: otherVendorId, limit: 1000 });
+    expect(res.status).toBe(200);
+    expect(res.body.total).toBe(3);
+    expect(res.body.items.map((item: { id: string }) => item.id).sort()).toEqual(
+      vendorLinkClientIds.slice(0, 3).sort(),
+    );
+  });
+});
+
+describe("GET /clients vendorId filter", () => {
+  it("finds clients associated through active authorizations, invoices, or payments only", async () => {
+    const res = await get(staffCookie, { search: vendorLinksNonce, vendorId, limit: 1000 });
+    expect(res.status).toBe(200);
+    expect(res.body.total).toBe(3);
+    expect(res.body.items.map((item: { id: string }) => item.id).sort()).toEqual(
+      vendorLinkClientIds.slice(0, 3).sort(),
+    );
   });
 });
 

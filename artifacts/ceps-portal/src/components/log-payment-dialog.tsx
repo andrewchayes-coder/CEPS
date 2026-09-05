@@ -32,6 +32,8 @@ import {
 import { useToast } from '@/hooks/use-toast';
 import { Plus, AlertTriangle } from 'lucide-react';
 import { trackAnalyticsEvent } from '@/lib/analytics';
+import { SearchableSelect } from '@/components/searchable-select';
+import { useDebounce } from '@/hooks/use-debounce';
 
 const PAYMENT_TYPES = ['direct_payment', 'reimbursement', 'fee'];
 
@@ -65,22 +67,55 @@ function asDuplicateError(err: unknown): DuplicatePaymentError | null {
 export function LogPaymentDialog({ onSaved, defaultClientId }: Props) {
   const { toast } = useToast();
   const createPayment = useCreatePayment();
-  const { data: clientsData } = useListClients({ limit: 1000 });
-  const { data: vendorsData } = useListVendors({ limit: 1000 });
-  const { data: invoicesData } = useListInvoices({ limit: 1000 });
-  const { data: authorizationsData } = useListAuthorizations({ limit: 1000 });
-  const clients = clientsData?.items;
-  const vendors = vendorsData?.items;
-  const invoices = invoicesData?.items;
-  const authorizations = authorizationsData?.items;
+
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState({ ...emptyForm, clientId: defaultClientId ?? '' });
-  // Duplicate-payment hard stop state: the blocking payment(s), plus the
-  // written justification the user must supply to override.
   const [duplicate, setDuplicate] = useState<Payment[] | null>(null);
   const [justification, setJustification] = useState('');
 
+  const [clientSearch, setClientSearch] = useState('');
+  const debouncedClientSearch = useDebounce(clientSearch, 300);
+  const { data: clientsData, isLoading: clientsLoading } = useListClients(
+    { search: debouncedClientSearch, limit: 50 },
+    { query: { enabled: open, queryKey: ['clients', { search: debouncedClientSearch, limit: 50 }] } },
+  );
+  const clients = clientsData?.items;
+
+  const [vendorSearch, setVendorSearch] = useState('');
+  const debouncedVendorSearch = useDebounce(vendorSearch, 300);
+  const { data: vendorsData, isLoading: vendorsLoading } = useListVendors(
+    { clientId: form.clientId, search: debouncedVendorSearch, limit: 50 },
+    { query: { enabled: open && !!form.clientId, queryKey: ['vendors', { clientId: form.clientId, search: debouncedVendorSearch, limit: 50 }] } }
+  );
+  const vendors = vendorsData?.items;
+
+  const [invoiceSearch, setInvoiceSearch] = useState('');
+  const debouncedInvoiceSearch = useDebounce(invoiceSearch, 300);
+  const { data: invoicesData, isLoading: invoicesLoading } = useListInvoices(
+    { clientId: form.clientId, search: debouncedInvoiceSearch, limit: 50 },
+    { query: { enabled: open && !!form.clientId, queryKey: ['invoices', { clientId: form.clientId, search: debouncedInvoiceSearch, limit: 50 }] } }
+  );
+  const invoices = invoicesData?.items;
+
+  const [authSearch, setAuthSearch] = useState('');
+  const debouncedAuthSearch = useDebounce(authSearch, 300);
+  const { data: authorizationsData, isLoading: authorizationsLoading } = useListAuthorizations(
+    { clientId: form.clientId, search: debouncedAuthSearch, limit: 50 },
+    { query: { enabled: open && !!form.clientId, queryKey: ['authorizations', { clientId: form.clientId, search: debouncedAuthSearch, limit: 50 }] } }
+  );
+  const authorizations = authorizationsData?.items;
+
   const set = (k: string, v: string) => setForm((p) => ({ ...p, [k]: v }));
+
+  const handleClientChange = (v: string) => {
+    setForm((p) => ({
+      ...p,
+      clientId: v,
+      vendorId: 'none',
+      invoiceId: 'none',
+      authorizationId: 'none',
+    }));
+  };
 
   const reset = () => {
     setForm({ ...emptyForm, clientId: defaultClientId ?? '' });
@@ -125,8 +160,6 @@ export function LogPaymentDialog({ onSaved, defaultClientId }: Props) {
         onError: (err: unknown) => {
           const dup = asDuplicateError(err);
           if (dup) {
-            // Not a generic error — surface the blocking payment(s) as an inline
-            // warning with an override-with-justification path.
             setDuplicate(dup.existingPayments);
             return;
           }
@@ -157,14 +190,15 @@ export function LogPaymentDialog({ onSaved, defaultClientId }: Props) {
         <div className="grid grid-cols-2 gap-4 py-2">
           <div className="space-y-2 col-span-2">
             <Label>Participant</Label>
-            <Select value={form.clientId} onValueChange={(v) => set('clientId', v)}>
-              <SelectTrigger data-testid="select-payment-client-id"><SelectValue placeholder="Select a participant" /></SelectTrigger>
-              <SelectContent>
-                {clients?.map((c) => (
-                  <SelectItem key={c.id} value={c.id}>{`${c.firstName} ${c.lastName}`}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <SearchableSelect
+              value={form.clientId}
+              onValueChange={handleClientChange}
+              options={clients?.map((c) => ({ value: c.id, label: `${c.firstName} ${c.lastName}` })) ?? []}
+              onSearchChange={setClientSearch}
+              loading={clientsLoading}
+              placeholder="Select a participant"
+              data-testid="select-payment-client-id"
+            />
           </div>
           <div className="space-y-2">
             <Label>Check #</Label>
@@ -195,43 +229,55 @@ export function LogPaymentDialog({ onSaved, defaultClientId }: Props) {
           </div>
           <div className="space-y-2">
             <Label>Vendor</Label>
-            <Select value={form.vendorId} onValueChange={(v) => set('vendorId', v)}>
-              <SelectTrigger data-testid="select-payment-vendor-id"><SelectValue placeholder="None" /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="none">None</SelectItem>
-                {vendors?.map((v) => (
-                  <SelectItem key={v.id} value={v.id}>{v.name}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <SearchableSelect
+              value={form.vendorId}
+              onValueChange={(v) => set('vendorId', v)}
+              options={vendors?.map((v) => ({ value: v.id, label: v.name })) ?? []}
+              onSearchChange={setVendorSearch}
+              loading={vendorsLoading}
+              disabled={!form.clientId}
+              placeholder="Select vendor"
+              allowClear
+              clearLabel="None"
+              data-testid="select-payment-vendor-id"
+            />
           </div>
           <div className="space-y-2">
             <Label>Invoice</Label>
-            <Select value={form.invoiceId} onValueChange={(v) => set('invoiceId', v)}>
-              <SelectTrigger data-testid="select-payment-invoice-id"><SelectValue placeholder="None" /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="none">None</SelectItem>
-                {invoices?.map((i) => (
-                  <SelectItem key={i.id} value={i.id}>
-                    {`${i.clientName ?? 'Unknown'} – ${i.serviceMonth} – $${parseFloat(i.amountRequested).toFixed(2)}`}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <SearchableSelect
+              value={form.invoiceId}
+              onValueChange={(v) => set('invoiceId', v)}
+              options={invoices?.map((i) => ({
+                value: i.id,
+                label: `${i.serviceMonth} – $${parseFloat(i.amountRequested).toFixed(2)}`
+              })) ?? []}
+              onSearchChange={setInvoiceSearch}
+              loading={invoicesLoading}
+              disabled={!form.clientId}
+              placeholder="Select invoice"
+              allowClear
+              clearLabel="None"
+              data-testid="select-payment-invoice-id"
+            />
           </div>
           <div className="space-y-2">
             <Label>Authorization</Label>
-            <Select value={form.authorizationId} onValueChange={(v) => set('authorizationId', v)}>
-              <SelectTrigger data-testid="select-payment-authorization-id"><SelectValue placeholder="None" /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="none">None</SelectItem>
-                {authorizations?.map((a) => (
-                  <SelectItem key={a.id} value={a.id}>
-                    {`${a.authNumber} – ${a.clientName ?? 'Unknown'}`}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <SearchableSelect
+              value={form.authorizationId}
+              onValueChange={(v) => set('authorizationId', v)}
+              options={authorizations?.map((a) => ({
+                value: a.id,
+                label: a.authNumber,
+                subtitle: a.activityDescription ?? undefined
+              })) ?? []}
+              onSearchChange={setAuthSearch}
+              loading={authorizationsLoading}
+              disabled={!form.clientId}
+              placeholder="Select authorization"
+              allowClear
+              clearLabel="None"
+              data-testid="select-payment-authorization-id"
+            />
           </div>
         </div>
 

@@ -1,5 +1,5 @@
 import { Router, type IRouter } from "express";
-import { eq, and, ilike, asc, desc, count, sql, type SQL } from "drizzle-orm";
+import { eq, and, ilike, asc, desc, count, sql, gte, lte, type SQL } from "drizzle-orm";
 import { db, vendorsTable } from "@workspace/db";
 import {
   ListVendorsQueryParams,
@@ -49,6 +49,10 @@ router.get("/vendors", requireAuth, async (req, res): Promise<void> => {
     res.status(400).json({ error: query.error.message });
     return;
   }
+  if (query.data.startDate && query.data.endDate && query.data.startDate > query.data.endDate) {
+    res.status(400).json({ error: "startDate must be on or before endDate" });
+    return;
+  }
   const escapeLike = (s: string) => s.replace(/[\\%_]/g, (c) => `\\${c}`);
   const conditions: SQL[] = [];
   // Role scoping — mirrors the payments/audit-log SQL-WHERE pattern:
@@ -58,8 +62,31 @@ router.get("/vendors", requireAuth, async (req, res): Promise<void> => {
     conditions.push(eq(vendorsTable.id, u.linkedRecordId ?? ""));
   }
   // Query-string filters
+  if (query.data.clientId) {
+    conditions.push(sql`exists (
+      select 1
+      from authorizations
+      where authorizations.vendor_id = ${vendorsTable.id}
+        and authorizations.client_id = ${query.data.clientId}
+        and authorizations.is_deleted = false
+      union all
+      select 1
+      from invoices
+      where invoices.vendor_id = ${vendorsTable.id}
+        and invoices.client_id = ${query.data.clientId}
+        and invoices.is_deleted = false
+      union all
+      select 1
+      from payments
+      where payments.vendor_id = ${vendorsTable.id}
+        and payments.client_id = ${query.data.clientId}
+        and payments.is_deleted = false
+    )`);
+  }
   if (query.data.search) conditions.push(ilike(vendorsTable.name, `%${escapeLike(query.data.search)}%`));
   if (query.data.w9Status) conditions.push(eq(vendorsTable.w9Status, query.data.w9Status));
+  if (query.data.startDate) conditions.push(gte(vendorsTable.createdAt, new Date(`${query.data.startDate}T00:00:00.000Z`)));
+  if (query.data.endDate) conditions.push(lte(vendorsTable.createdAt, new Date(`${query.data.endDate}T23:59:59.999Z`)));
   if (query.data.active != null) conditions.push(eq(vendorsTable.active, query.data.active === "true"));
   const where = conditions.length ? and(...conditions) : undefined;
   const limit = Math.min(Math.max(query.data.limit ?? 50, 1), 1000);

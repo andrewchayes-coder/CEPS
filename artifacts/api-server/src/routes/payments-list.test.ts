@@ -51,6 +51,7 @@ async function insertPayment(opts: {
   clientId: string;
   vendorId?: string | null;
   amount?: string;
+  checkDate?: string;
 }) {
   const [p] = await db
     .insert(paymentsTable)
@@ -58,7 +59,7 @@ async function insertPayment(opts: {
       clientId: opts.clientId,
       vendorId: opts.vendorId ?? null,
       qbCheckNumber: nextCheck(),
-      checkDate: "2026-01-15",
+      checkDate: opts.checkDate ?? "2026-01-15",
       amount: opts.amount ?? "100.00",
       paymentType: "direct_payment",
       source: "manual",
@@ -593,5 +594,15 @@ describe("GET /payments inactive vendor visibility", () => {
     expect(unfiltered.status).toBe(200);
     const ids = unfiltered.body.items.map((p: { id: string }) => p.id);
     expect(ids).toContain(ivPaymentId);
+  });
+});
+
+describe("GET /payments date bounds", () => {
+  it("includes checkDate boundaries and rejects reversed ranges", async () => {
+    const first = await insertPayment({ clientId: clientA, vendorId, checkDate: "2026-05-01" });
+    const last = await insertPayment({ clientId: clientA, vendorId, checkDate: "2026-05-31" });
+    const res = await get(staffCookie, { startDate: "2026-05-01", endDate: "2026-05-31", limit: 100 });
+    expect(res.body.items.map((p: any) => p.id)).toEqual(expect.arrayContaining([first.id, last.id]));
+    expect((await get(staffCookie, { startDate: "2026-06-01", endDate: "2026-05-01", limit: 10 })).status).toBe(400);
   });
 });

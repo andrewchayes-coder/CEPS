@@ -47,6 +47,7 @@ async function insertInvoice(opts: {
   clientId: string;
   vendorId?: string | null;
   status?: string;
+  serviceMonth?: string;
 }) {
   const [i] = await db
     .insert(invoicesTable)
@@ -55,7 +56,7 @@ async function insertInvoice(opts: {
       vendorId: opts.vendorId ?? null,
       submittedByRole: "staff",
       submittedDate: "2026-01-15",
-      serviceMonth: nextMonth(),
+      serviceMonth: opts.serviceMonth ?? nextMonth(),
       amountRequested: "100.00",
       paymentType: "direct_payment",
       status: opts.status ?? "pending_review",
@@ -262,5 +263,17 @@ describe("GET /invoices filters", () => {
     const res = await get(staffCookie, { clientId: clientA, status: "approved", limit: 1000 });
     expect(res.body.total).toBe(1);
     expect(res.body.items[0].status).toBe("approved");
+  });
+});
+
+describe("GET /invoices service-month range", () => {
+  it("converts date bounds to inclusive YYYY-MM service-month bounds", async () => {
+    const first = await insertInvoice({ clientId: clientA, vendorId, serviceMonth: "2026-05" });
+    const last = await insertInvoice({ clientId: clientA, vendorId, serviceMonth: "2026-06" });
+    const outside = await insertInvoice({ clientId: clientA, vendorId, serviceMonth: "2026-07" });
+    const res = await get(staffCookie, { startDate: "2026-05-31", endDate: "2026-06-01", limit: 100 });
+    const ids = res.body.items.map((i: any) => i.id);
+    expect(ids).toEqual(expect.arrayContaining([first.id, last.id]));
+    expect(ids).not.toContain(outside.id);
   });
 });

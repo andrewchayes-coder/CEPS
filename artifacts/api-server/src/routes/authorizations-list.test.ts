@@ -53,6 +53,7 @@ async function insertAuth(opts: {
   clientId: string;
   vendorId?: string | null;
   status?: string;
+  servicePeriodStart?: string;
   servicePeriodEnd?: string;
 }) {
   const [a] = await db
@@ -63,7 +64,7 @@ async function insertAuth(opts: {
       authNumber: `${nonce}-${createdAuthIds.length}`,
       serviceCode: "459",
       paymentType: "direct_payment",
-      servicePeriodStart: "2026-01-01",
+      servicePeriodStart: opts.servicePeriodStart ?? "2026-01-01",
       servicePeriodEnd: opts.servicePeriodEnd ?? "2027-06-30",
       maxPeriodAmount: "1000.00",
       status: opts.status ?? "active",
@@ -263,5 +264,17 @@ describe("GET /authorizations derived filters", () => {
     expect(ids).toContain(authExpiringSoon);
     expect(ids).not.toContain(authActive);
     expect(ids).not.toContain(authExpired);
+  });
+});
+
+describe("GET /authorizations service-period range", () => {
+  it("uses inclusive overlap boundaries and excludes non-overlapping periods", async () => {
+    const startsAtEnd = await insertAuth({ clientId: clientA, vendorId, servicePeriodStart: "2026-05-31", servicePeriodEnd: "2026-06-15" });
+    const endsAtStart = await insertAuth({ clientId: clientA, vendorId, servicePeriodStart: "2026-04-15", servicePeriodEnd: "2026-05-01" });
+    const outside = await insertAuth({ clientId: clientA, vendorId, servicePeriodStart: "2026-06-01", servicePeriodEnd: "2026-06-30" });
+    const res = await get(staffCookie, { startDate: "2026-05-01", endDate: "2026-05-31", limit: 100 });
+    const ids = res.body.items.map((a: any) => a.id);
+    expect(ids).toEqual(expect.arrayContaining([startsAtEnd.id, endsAtStart.id]));
+    expect(ids).not.toContain(outside.id);
   });
 });

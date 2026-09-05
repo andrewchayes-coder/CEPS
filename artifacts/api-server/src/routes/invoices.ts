@@ -1,5 +1,5 @@
 import { Router, type IRouter } from "express";
-import { eq, and, desc, sql, count, ilike, or, type SQL } from "drizzle-orm";
+import { eq, and, desc, sql, count, ilike, or, gte, lte, type SQL } from "drizzle-orm";
 import { db, invoicesTable, authorizationsTable, paymentsTable, vendorsTable } from "@workspace/db";
 import { money } from "../lib/money";
 import {
@@ -43,6 +43,10 @@ router.get("/invoices", requireAuth, async (req, res): Promise<void> => {
     res.status(400).json({ error: query.error.message });
     return;
   }
+  if (query.data.startDate && query.data.endDate && query.data.startDate > query.data.endDate) {
+    res.status(400).json({ error: "startDate must be on or before endDate" });
+    return;
+  }
   const conditions: SQL[] = [notDeleted(invoicesTable)];
   // Role scoping — mirrors the payments/audit-log SQL-WHERE pattern:
   // vendors see only their own invoices; parent/self only their linked client's;
@@ -63,6 +67,8 @@ router.get("/invoices", requireAuth, async (req, res): Promise<void> => {
   if (query.data.status) conditions.push(eq(invoicesTable.status, query.data.status));
   if (query.data.clientId) conditions.push(eq(invoicesTable.clientId, query.data.clientId));
   if (query.data.vendorId) conditions.push(eq(invoicesTable.vendorId, query.data.vendorId));
+  if (query.data.startDate) conditions.push(gte(invoicesTable.serviceMonth, query.data.startDate.slice(0, 7)));
+  if (query.data.endDate) conditions.push(lte(invoicesTable.serviceMonth, query.data.endDate.slice(0, 7)));
   if (query.data.search) {
     const like = `%${escapeLike(query.data.search)}%`;
     conditions.push(

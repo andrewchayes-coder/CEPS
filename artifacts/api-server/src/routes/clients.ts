@@ -1,5 +1,5 @@
 import { Router, type IRouter } from "express";
-import { eq, or, ilike, desc, and, inArray, sql, count, type SQL } from "drizzle-orm";
+import { eq, or, ilike, desc, and, inArray, sql, count, gte, lte, type SQL } from "drizzle-orm";
 import {
   db,
   clientsTable,
@@ -8,6 +8,7 @@ import {
   invoicesTable,
   paymentsTable,
   remittancesTable,
+  vendorsTable,
 } from "@workspace/db";
 import {
   ListClientsQueryParams,
@@ -47,9 +48,33 @@ function scopeClientId(req: { user?: { role: string; linkedRecordType: string | 
   return null;
 }
 
-// The set of client IDs a vendor user is allowed to see: clients that have an
-// authorization linked to the vendor's record. Returns null when the user is
-// not a properly-linked vendor (i.e. this scope does not apply to them).
+function associatedWithVendor(vendorId: string): SQL {
+  // This is deliberately the inverse of the /vendors?clientId association:
+  // an active authorization, invoice, or payment establishes the relationship.
+  return sql`exists (
+    select 1
+    from authorizations
+    where authorizations.client_id = ${clientsTable.id}
+      and authorizations.vendor_id = ${vendorId}
+      and authorizations.is_deleted = false
+    union all
+    select 1
+    from invoices
+    where invoices.client_id = ${clientsTable.id}
+      and invoices.vendor_id = ${vendorId}
+      and invoices.is_deleted = false
+    union all
+    select 1
+    from payments
+    where payments.client_id = ${clientsTable.id}
+      and payments.vendor_id = ${vendorId}
+      and payments.is_deleted = false
+  )`;
+}
+
+// Detail and case access retain their established authorization-only vendor
+// scope. The list endpoint uses associatedWithVendor() for its broader inverse
+// vendor/client filter.
 async function vendorClientIds(req: {
   user?: { role: string; linkedRecordType: string | null; linkedRecordId: string | null };
 }): Promise<Set<string> | null> {
@@ -70,24 +95,34 @@ router.get("/clients", requireAuth, async (req, res): Promise<void> => {
     res.status(400).json({ error: query.error.message });
     return;
   }
+  if (query.data.startDate && query.data.endDate && query.data.startDate > query.data.endDate) {
+    res.status(400).json({ error: "startDate must be on or before endDate" });
+    return;
+  }
   const escapeLike = (s: string) => s.replace(/[\\%_]/g, (c) => `\\${c}`);
   const scoped = scopeClientId(req);
-  const vendorIds = await vendorClientIds(req);
   const conditions: SQL[] = [notDeleted(clientsTable)];
   // Role scoping — mirrors the payments/audit-log SQL-WHERE pattern.
   // parent/self only their linked client; coordinators only their caseload;
-  // vendors only clients they hold an authorization for.
+  // vendors only clients associated with their linked vendor.
   if (scoped) conditions.push(eq(clientsTable.id, scoped));
   if (req.user!.role === "service_coordinator") {
     conditions.push(eq(clientsTable.assignedCoordinatorId, req.user!.id));
   }
-  if (vendorIds) {
-    // Empty set → vendor sees no clients (unsatisfiable condition).
-    const ids = [...vendorIds];
-    conditions.push(ids.length ? inArray(clientsTable.id, ids) : sql`false`);
+  const userVendorId =
+    req.user!.role === "vendor" && req.user!.linkedRecordType === "vendor"
+      ? req.user!.linkedRecordId
+      : null;
+  if (req.user!.role === "vendor") {
+    // A vendor query parameter cannot replace the user's linked vendor.
+    conditions.push(userVendorId ? associatedWithVendor(userVendorId) : sql`false`);
+  } else if (query.data.vendorId) {
+    conditions.push(associatedWithVendor(query.data.vendorId));
   }
   // Query-string filters
   if (query.data.status) conditions.push(eq(clientsTable.status, query.data.status));
+  if (query.data.startDate) conditions.push(gte(clientsTable.createdAt, new Date(`${query.data.startDate}T00:00:00.000Z`)));
+  if (query.data.endDate) conditions.push(lte(clientsTable.createdAt, new Date(`${query.data.endDate}T23:59:59.999Z`)));
   if (query.data.search) {
     const like = `%${escapeLike(query.data.search)}%`;
     // Matches the JS filter: "firstName lastName" concat OR uciNumber (case-insensitive).
@@ -309,6 +344,98 @@ router.get("/clients/:id/case", requireAuth, async (req, res): Promise<void> => 
     userContactMap([client.assignedCoordinatorId, ...referrals.map((r) => r.serviceCoordinatorId)]),
     authorizationTotalsPaid(authorizations.map((a) => a.id)),
   ]);
+  const uniqueVendorIds = [...new Set(vendorIds.filter((vendorId): vendorId is string => !!vendorId))];
+  const vendors =
+    req.user!.role === "staff" && uniqueVendorIds.length > 0
+      ? await db
+          .select({
+            id: vendorsTable.id,
+            name: vendorsTable.name,
+            w9Status: vendorsTable.w9Status,
+            w9DocumentUrl: vendorsTable.w9DocumentUrl,
+            createdAt: vendorsTable.createdAt,
+          })
+          .from(vendorsTable)
+          .where(inArray(vendorsTable.id, uniqueVendorIds))
+      : [];
+  const documents =
+    req.user!.role === "staff"
+      ? [
+          ...referrals.flatMap((referral) => [
+            {
+              id: `referral:${referral.id}:agreement`,
+              name: "Participant Agreement",
+              category: "participant_agreement",
+              status: referral.parentSignedAt
+                ? "received"
+                : referral.intakeSentAt
+                  ? "sent"
+                  : "pending",
+              signatureStatus: referral.parentSignedAt ? "signed" : "unsigned",
+              recordType: "referral",
+              recordId: referral.id,
+              recordLabel: `Referral · ${referral.referralDate}`,
+              objectPath: null,
+              statusDate:
+                referral.parentSignedAt?.toISOString() ??
+                referral.intakeSentAt?.toISOString() ??
+                referral.createdAt.toISOString(),
+            },
+            ...(referral.supportingDocumentUrl
+              ? [
+                  {
+                    id: `referral:${referral.id}:attachment`,
+                    name: "Referral Supporting Document",
+                    category: "referral_attachment",
+                    status: "received",
+                    signatureStatus: null,
+                    recordType: "referral",
+                    recordId: referral.id,
+                    recordLabel: `Referral · ${referral.referralDate}`,
+                    objectPath: referral.supportingDocumentUrl,
+                    statusDate: referral.createdAt.toISOString(),
+                  },
+                ]
+              : []),
+          ]),
+          ...authorizations.map((authorization) => ({
+            id: `authorization:${authorization.id}:pos`,
+            name: "Authorization (POS)",
+            category: "authorization_pos",
+            status: authorization.posPdfUrl ? "received" : "pending",
+            signatureStatus: null,
+            recordType: "authorization",
+            recordId: authorization.id,
+            recordLabel: authorization.authNumber,
+            objectPath: authorization.posPdfUrl,
+            statusDate: authorization.receivedDate ?? authorization.createdAt.toISOString(),
+          })),
+          ...invoices.map((invoice) => ({
+            id: `invoice:${invoice.id}:document`,
+            name: "Invoice",
+            category: "invoice",
+            status: invoice.documentUrl ? "received" : "pending",
+            signatureStatus: null,
+            recordType: "invoice",
+            recordId: invoice.id,
+            recordLabel: `${invoice.serviceMonth} · ${vendorNames.get(invoice.vendorId ?? "") ?? "Vendor"}`,
+            objectPath: invoice.documentUrl,
+            statusDate: invoice.submittedDate,
+          })),
+          ...vendors.map((vendor) => ({
+            id: `vendor:${vendor.id}:w9`,
+            name: "Vendor W-9",
+            category: "vendor_w9",
+            status: vendor.w9Status === "on_file" && vendor.w9DocumentUrl ? "received" : "pending",
+            signatureStatus: null,
+            recordType: "vendor",
+            recordId: vendor.id,
+            recordLabel: vendor.name,
+            objectPath: vendor.w9DocumentUrl,
+            statusDate: vendor.createdAt.toISOString(),
+          })),
+        ]
+      : [];
   const coordNames = new Map([...coordContacts].map(([id, c]) => [id, c.name]));
   const authNums = new Map(authorizations.map((a) => [a.id, a.authNumber]));
   res.json(
@@ -352,6 +479,7 @@ router.get("/clients/:id/case", requireAuth, async (req, res): Promise<void> => 
           authNumber: r.authorizationId ? authNums.get(r.authorizationId) : null,
         }),
       ),
+      documents,
     }),
   );
 });

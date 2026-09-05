@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { useUpdateRemittance } from '@workspace/api-client-react';
+import { useUpdateRemittance, useListAuthorizations } from '@workspace/api-client-react';
 import type { RemittanceUpdate } from '@workspace/api-client-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -15,8 +15,11 @@ import {
 } from '@/components/ui/dialog';
 import { useToast } from '@/hooks/use-toast';
 import { Pencil } from 'lucide-react';
+import { SearchableSelect } from '@/components/searchable-select';
+import { useDebounce } from '@/hooks/use-debounce';
 
 type RemittanceLike = {
+  clientId: string;
   altaReference?: string | null;
   remittanceDate: string;
   amount: string;
@@ -24,6 +27,7 @@ type RemittanceLike = {
   status: string;
   source: string;
   authorizationId?: string | null;
+  authNumber?: string | null;
 };
 
 type Props = {
@@ -46,6 +50,14 @@ export function EditRemittanceDialog({ id, remittance, onSaved }: Props) {
     authorizationId: remittance.authorizationId ?? '',
   });
 
+  const [authSearch, setAuthSearch] = useState('');
+  const debouncedAuthSearch = useDebounce(authSearch, 300);
+  const { data: authorizationsData, isLoading: authorizationsLoading } = useListAuthorizations(
+    { clientId: remittance.clientId, search: debouncedAuthSearch, limit: 50 },
+    { query: { enabled: open, queryKey: ['authorizations', { clientId: remittance.clientId, search: debouncedAuthSearch, limit: 50 }] } }
+  );
+  const authorizations = authorizationsData?.items ?? [];
+
   const set = (k: string, v: string) => setForm((p) => ({ ...p, [k]: v }));
 
   const handleSave = () => {
@@ -54,7 +66,7 @@ export function EditRemittanceDialog({ id, remittance, onSaved }: Props) {
       remittanceDate: form.remittanceDate || undefined,
       amount: form.amount,
       paymentMonth: form.paymentMonth === '' ? null : form.paymentMonth,
-      authorizationId: form.authorizationId === '' ? null : form.authorizationId,
+      authorizationId: form.authorizationId === '' || form.authorizationId === 'none' ? null : form.authorizationId,
     };
     updateRemittance.mutate(
       { id, data },
@@ -99,8 +111,20 @@ export function EditRemittanceDialog({ id, remittance, onSaved }: Props) {
             <Input type="month" value={form.paymentMonth} onChange={(e) => set('paymentMonth', e.target.value)} disabled={remittance.status === 'matched'} data-testid="input-remittance-month" />
           </div>
           <div className="space-y-2 col-span-2">
-            <Label>Authorization ID</Label>
-            <Input value={form.authorizationId} onChange={(e) => set('authorizationId', e.target.value)} placeholder="Authorization ID" disabled={remittance.status === 'matched'} data-testid="input-remittance-authorization-id" />
+            <Label>Authorization</Label>
+            <SearchableSelect
+              value={form.authorizationId}
+              onValueChange={(v) => set('authorizationId', v)}
+              options={authorizations.map(a => ({ value: a.id, label: a.authNumber }))}
+              onSearchChange={setAuthSearch}
+              loading={authorizationsLoading}
+              selectedLabelFallback={remittance.authNumber ?? undefined}
+              disabled={remittance.status === 'matched'}
+              placeholder="Select authorization"
+              allowClear
+              clearLabel="None"
+              data-testid="select-remittance-authorization-id"
+            />
           </div>
         </div>
         <DialogFooter>

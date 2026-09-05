@@ -9,6 +9,10 @@ import type { GetMissingDocumentsReportSortBy } from './getMissingDocumentsRepor
 import type { GetMissingDocumentsReportSortDirection } from './getMissingDocumentsReportSortDirection';
 
 export type GetMissingDocumentsReportParams = {
+clientId?: string;
+coordinatorId?: string;
+startDate?: string;
+endDate?: string;
 /**
  * Filter by document type (w9, signature, auth_pdf)
  */

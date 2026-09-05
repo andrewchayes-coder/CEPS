@@ -13,6 +13,8 @@ status?: string;
 clientId?: string;
 vendorId?: string;
 search?: string;
+startDate?: string;
+endDate?: string;
 limit?: number;
 offset?: number;
 sortBy?: ListInvoicesSortBy;

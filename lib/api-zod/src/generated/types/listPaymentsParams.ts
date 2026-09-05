@@ -16,6 +16,8 @@ remitted?: boolean;
 paymentMonth?: string;
 status?: string;
 search?: string;
+startDate?: string;
+endDate?: string;
 limit?: number;
 offset?: number;
 sortBy?: ListPaymentsSortBy;

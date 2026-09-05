@@ -6,6 +6,7 @@
  * OpenAPI spec version: 0.1.0
  */
 import type { Authorization } from './authorization';
+import type { CaseDocument } from './caseDocument';
 import type { Client } from './client';
 import type { Invoice } from './invoice';
 import type { Payment } from './payment';
@@ -19,4 +20,6 @@ export interface ClientCase {
   invoices: Invoice[];
   payments: Payment[];
   remittances: Remittance[];
+  /** Staff-only read-only rollup of documents and tracked document requirements across the participant case. */
+  documents: CaseDocument[];
 }

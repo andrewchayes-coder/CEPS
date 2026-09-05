@@ -1,6 +1,6 @@
 import React from 'react';
 import { useLocation, useParams } from 'wouter';
-import { useGetClientCase, useListFees, useDeleteClient, useDeleteFee } from '@workspace/api-client-react';
+import { useGetClientCase, useListFees, useDeleteClient, useDeleteFee, type CaseDocument } from '@workspace/api-client-react';
 import { useAuth } from '@/components/auth/auth-provider';
 import { InvitePortalDialog } from '@/components/invite-portal-dialog';
 import { EditClientDialog } from '@/components/edit-client-dialog';
@@ -19,6 +19,26 @@ import { format } from 'date-fns';
 import { Progress } from '@/components/ui/progress';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow, SortableTableHead } from '@/components/ui/table';
 import { stableSort, useTableSort } from '@/lib/table-sorting';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import { DocumentPreview } from '@/components/document-preview';
+
+function ViewDocumentDialog({ document }: { document: CaseDocument }) {
+  return (
+    <Dialog>
+      <DialogTrigger asChild>
+        <Button variant="ghost" size="sm" data-testid={`button-view-doc-${document.id}`}>View</Button>
+      </DialogTrigger>
+      <DialogContent className="max-w-4xl max-h-[90vh] flex flex-col p-4 w-full h-[85vh]">
+        <DialogHeader className="mb-2 shrink-0">
+          <DialogTitle className="truncate pr-8">{document.name}</DialogTitle>
+        </DialogHeader>
+        <div className="flex-1 min-h-0 overflow-hidden">
+          <DocumentPreview objectPath={document.objectPath} filename={document.name} className="h-full border-0 rounded-none bg-transparent" />
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
 
 export default function ClientDetailPage() {
   const { id } = useParams<{ id: string }>();
@@ -177,6 +197,7 @@ export default function ClientDetailPage() {
           <TabsTrigger value="payments" className="data-[state=active]:bg-transparent data-[state=active]:shadow-none data-[state=active]:border-b-2 data-[state=active]:border-primary rounded-none h-12 px-6">Payments ({payments.length})</TabsTrigger>
           <TabsTrigger value="fees" className="data-[state=active]:bg-transparent data-[state=active]:shadow-none data-[state=active]:border-b-2 data-[state=active]:border-primary rounded-none h-12 px-6">Fees ({feeList.length})</TabsTrigger>
           <TabsTrigger value="referrals" className="data-[state=active]:bg-transparent data-[state=active]:shadow-none data-[state=active]:border-b-2 data-[state=active]:border-primary rounded-none h-12 px-6">Referrals ({referrals.length})</TabsTrigger>
+          {isStaff && <TabsTrigger value="documents" data-testid="tab-documents" className="data-[state=active]:bg-transparent data-[state=active]:shadow-none data-[state=active]:border-b-2 data-[state=active]:border-primary rounded-none h-12 px-6">Documents ({caseData.documents.length})</TabsTrigger>}
         </TabsList>
 
         <TabsContent value="overview" className="pt-6 space-y-6">
@@ -514,6 +535,66 @@ export default function ClientDetailPage() {
             </CardContent>
           </Card>
         </TabsContent>
+
+        {isStaff && (
+          <TabsContent value="documents" className="pt-6">
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-lg">Case Documents</CardTitle>
+                <CardDescription>Documents and tracked requirements associated with this participant's referrals, authorizations, invoices, and vendors.</CardDescription>
+              </CardHeader>
+              <CardContent className="p-0">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Document</TableHead>
+                      <TableHead>Category</TableHead>
+                      <TableHead>Record</TableHead>
+                      <TableHead>Status</TableHead>
+                      <TableHead>Date</TableHead>
+                      <TableHead className="text-right">Actions</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {caseData.documents.map((doc) => (
+                      <TableRow key={doc.id} data-testid={`row-document-${doc.id}`}>
+                        <TableCell className="font-medium max-w-[200px] truncate" title={doc.name} data-testid={`text-document-name-${doc.id}`}>{doc.name}</TableCell>
+                        <TableCell className="capitalize">{doc.category.replace(/_/g, ' ')}</TableCell>
+                        <TableCell>
+                          {doc.recordType === 'authorization' && <Link href={`/authorizations/${doc.recordId}`} className="text-primary hover:underline">{doc.recordLabel}</Link>}
+                          {doc.recordType === 'invoice' && <Link href={`/invoices/${doc.recordId}`} className="text-primary hover:underline">{doc.recordLabel}</Link>}
+                          {doc.recordType === 'referral' && <Link href={`/referrals/${doc.recordId}`} className="text-primary hover:underline">{doc.recordLabel}</Link>}
+                          {doc.recordType === 'vendor' && <VendorLink id={doc.recordId} name={doc.recordLabel} />}
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex flex-col gap-1">
+                            <Badge variant="outline" className={doc.status === 'received' ? 'border-chart-5 text-chart-5' : ''} data-testid={`status-document-${doc.id}`}>{doc.status}</Badge>
+                            {doc.signatureStatus && (
+                              <span className="text-xs text-muted-foreground">{doc.signatureStatus}</span>
+                            )}
+                          </div>
+                        </TableCell>
+                        <TableCell className="text-sm text-muted-foreground whitespace-nowrap">
+                          {doc.statusDate ? format(new Date(doc.statusDate), 'MMM d, yyyy') : '-'}
+                        </TableCell>
+                        <TableCell className="text-right">
+                          {doc.objectPath ? (
+                            <ViewDocumentDialog document={doc} />
+                          ) : (
+                            <span className="text-xs text-muted-foreground">No file</span>
+                          )}
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                    {caseData.documents.length === 0 && (
+                      <TableRow><TableCell colSpan={6} className="text-center py-8 text-muted-foreground">No documents found.</TableCell></TableRow>
+                    )}
+                  </TableBody>
+                </Table>
+              </CardContent>
+            </Card>
+          </TabsContent>
+        )}
 
       </Tabs>
     </div>

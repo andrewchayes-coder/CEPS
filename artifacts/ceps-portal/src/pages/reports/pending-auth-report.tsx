@@ -1,58 +1,44 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   useGetPendingAuthReport,
   getPendingAuthReport,
-  useListUsers,
 } from '@workspace/api-client-react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHeader, TableRow, SortableTableHead } from '@/components/ui/table';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
 import { ClientLink } from '@/components/entity-links';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Download } from 'lucide-react';
 import { downloadCSV } from '@/lib/csv';
 import { useToast } from '@/hooks/use-toast';
 import { PAGE_SIZE, ReportPagination } from './report-pagination';
 import { useTableSort } from '@/lib/table-sorting';
+import type { GlobalReportFilters } from '../reports';
 
-const ALL = '__all__';
 type PendingAuthSortKey = 'clientName' | 'referralDate' | 'daysWaiting' | 'coordinatorName';
 
-export default function PendingAuthReport() {
-  const [coordinatorId, setCoordinatorId] = useState(ALL);
-  const [search, setSearch] = useState('');
+export default function PendingAuthReport({ filters }: { filters: GlobalReportFilters }) {
   const [page, setPage] = useState(0);
   const [exporting, setExporting] = useState(false);
   const { sort, onSort } = useTableSort<PendingAuthSortKey>('clientName');
   const { toast } = useToast();
 
-  const filterParams = {
-    ...(coordinatorId !== ALL ? { coordinatorId } : {}),
-    ...(search ? { search } : {}),
-  };
-  const params = { ...filterParams, limit: PAGE_SIZE, offset: page * PAGE_SIZE, sortBy: sort.key, sortDirection: sort.direction };
+  useEffect(() => {
+    setPage(0);
+  }, [filters, sort]);
+
+  const params: any = { ...filters, limit: PAGE_SIZE, offset: page * PAGE_SIZE, sortBy: sort.key, sortDirection: sort.direction };
 
   const { data, isLoading } = useGetPendingAuthReport(params, {
     query: { queryKey: ['pendingAuthReport', params] },
-  });
-  const { data: users } = useListUsers({ role: 'service_coordinator' }, {
-    query: { queryKey: ['users', 'service_coordinator'] },
   });
 
   const items = data?.items;
   const total = data?.total ?? 0;
   const pageCount = Math.max(1, Math.ceil(total / PAGE_SIZE));
 
-  const setFilter = (setter: (v: string) => void) => (value: string) => {
-    setter(value);
-    setPage(0);
-  };
   const changeSort = (key: PendingAuthSortKey) => {
     onSort(key);
-    setPage(0);
   };
 
   const exportCSV = async () => {
@@ -62,7 +48,7 @@ export default function PendingAuthReport() {
       const batch = 1000;
       let offset = 0;
       for (;;) {
-        const res = await getPendingAuthReport({ ...filterParams, limit: batch, offset, sortBy: sort.key, sortDirection: sort.direction } as any);
+        const res = await getPendingAuthReport({ ...filters, limit: batch, offset, sortBy: sort.key, sortDirection: sort.direction } as any);
         all.push(...res.items);
         offset += res.items.length;
         if (res.items.length < batch || offset >= res.total) break;
@@ -88,30 +74,6 @@ export default function PendingAuthReport() {
         <div className="flex-1">
           <CardTitle>Pending Authorization Tracker</CardTitle>
           <CardDescription>Cases waiting on POS authorization from Alta.</CardDescription>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-4">
-            <div className="space-y-1">
-              <Label className="text-xs">Service Coordinator</Label>
-              <Select value={coordinatorId} onValueChange={setFilter(setCoordinatorId)}>
-                <SelectTrigger data-testid="select-pending-auth-coordinator"><SelectValue placeholder="All coordinators" /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value={ALL}>All coordinators</SelectItem>
-                  {(users ?? []).map((u: any) => (
-                    <SelectItem key={u.id} value={u.id}>{u.name}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-1">
-              <Label htmlFor="pending-auth-search" className="text-xs">Participant</Label>
-              <Input
-                id="pending-auth-search"
-                data-testid="input-pending-auth-search"
-                placeholder="Search participant…"
-                value={search}
-                onChange={(e) => setFilter(setSearch)(e.target.value)}
-              />
-            </div>
-          </div>
         </div>
         <Button variant="outline" size="sm" onClick={exportCSV} disabled={exporting || total === 0} data-testid="button-export-pending-auth" className="shrink-0">
           <Download className="w-4 h-4 mr-2" />{exporting ? 'Exporting…' : 'Export CSV'}

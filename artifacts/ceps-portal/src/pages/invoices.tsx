@@ -12,12 +12,15 @@ import { Input } from '@/components/ui/input';
 import { Plus, Search, Receipt, ChevronLeft, ChevronRight } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useAuth } from '@/components/auth/auth-provider';
+import { DateRangeFilter } from '@/components/date-range-filter';
 
 const PAGE_SIZE = 50;
 
 export default function InvoicesPage() {
   const { user } = useAuth();
   const [search, setSearch] = useState('');
+  const [startDate, setStartDate] = useState<string>();
+  const [endDate, setEndDate] = useState<string>();
   const [page, setPage] = useState(0);
   const sort = useTableSort<'serviceMonth' | 'vendorName' | 'clientName' | 'authNumber' | 'amountRequested' | 'status'>();
   const onSort = (key: Parameters<typeof sort.toggleSort>[0]) => {
@@ -29,6 +32,8 @@ export default function InvoicesPage() {
     limit: PAGE_SIZE,
     offset: page * PAGE_SIZE,
     ...(search ? { search } : {}),
+    ...(startDate ? { startDate } : {}),
+    ...(endDate ? { endDate } : {}),
     ...(sort.sortBy ? { sortBy: sort.sortBy, sortDirection: sort.sortDirection } : {}),
   };
   const { data, isLoading } = useListInvoices(params, {
@@ -55,15 +60,29 @@ export default function InvoicesPage() {
 
       <Card>
         <CardHeader className="pb-3 border-b">
-          <div className="relative w-full sm:max-w-md">
-            <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-            <Input
-              type="search"
-              placeholder="Search by vendor, participant, or auth #..."
-              className="pl-8"
-              value={search}
-              onChange={(e) => { setSearch(e.target.value); setPage(0); }}
-            />
+          <div className="flex flex-col sm:flex-row gap-4 items-center justify-between">
+            <div className="relative w-full sm:max-w-md">
+              <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+              <Input
+                type="search"
+                placeholder="Search by vendor, participant, or auth #..."
+                className="pl-8"
+                value={search}
+                onChange={(e) => { setSearch(e.target.value); setPage(0); }}
+              />
+            </div>
+            <div className="w-full sm:w-auto">
+              <DateRangeFilter
+                label="Service month"
+                startDate={startDate}
+                endDate={endDate}
+                onChange={(range) => {
+                  setStartDate(range.startDate);
+                  setEndDate(range.endDate);
+                  setPage(0);
+                }}
+              />
+            </div>
           </div>
         </CardHeader>
         <CardContent className="p-0">

@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
-import { useUpdateInvoice } from '@workspace/api-client-react';
+import { useUpdateInvoice, useListVendors, useListAuthorizations } from '@workspace/api-client-react';
+import type { InvoiceUpdate } from '@workspace/api-client-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -22,8 +23,16 @@ import {
 } from '@/components/ui/select';
 import { useToast } from '@/hooks/use-toast';
 import { Pencil } from 'lucide-react';
+import { SearchableSelect } from '@/components/searchable-select';
+import { useDebounce } from '@/hooks/use-debounce';
 
 type InvoiceLike = {
+  clientId: string;
+  clientName?: string | null;
+  authorizationId?: string | null;
+  authNumber?: string | null;
+  vendorId?: string | null;
+  vendorName?: string | null;
   serviceMonth: string;
   amountRequested: string;
   paymentType: string;
@@ -42,6 +51,8 @@ export function EditInvoiceDialog({ id, invoice, onSaved }: Props) {
   const updateInvoice = useUpdateInvoice();
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState({
+    authorizationId: invoice.authorizationId ?? 'none',
+    vendorId: invoice.vendorId ?? 'none',
     serviceMonth: invoice.serviceMonth,
     amountRequested: invoice.amountRequested,
     paymentType: invoice.paymentType,
@@ -49,11 +60,36 @@ export function EditInvoiceDialog({ id, invoice, onSaved }: Props) {
     notes: invoice.notes ?? '',
   });
 
+  const [vendorSearch, setVendorSearch] = useState('');
+  const debouncedVendorSearch = useDebounce(vendorSearch, 300);
+  const { data: vendorsData, isLoading: vendorsLoading } = useListVendors(
+    { clientId: invoice.clientId, search: debouncedVendorSearch, limit: 50 },
+    { query: { enabled: open, queryKey: ['vendors', { clientId: invoice.clientId, search: debouncedVendorSearch, limit: 50 }] } }
+  );
+  const vendors = vendorsData?.items ?? [];
+
+  const [authSearch, setAuthSearch] = useState('');
+  const debouncedAuthSearch = useDebounce(authSearch, 300);
+  const { data: authorizationsData, isLoading: authorizationsLoading } = useListAuthorizations(
+    { clientId: invoice.clientId, search: debouncedAuthSearch, limit: 50 },
+    { query: { enabled: open, queryKey: ['authorizations', { clientId: invoice.clientId, search: debouncedAuthSearch, limit: 50 }] } }
+  );
+  const authorizations = authorizationsData?.items ?? [];
+
   const set = (k: string, v: string) => setForm((p) => ({ ...p, [k]: v }));
 
   const handleSave = () => {
+    const data: InvoiceUpdate = {
+      authorizationId: form.authorizationId === 'none' ? null : form.authorizationId,
+      vendorId: form.vendorId === 'none' ? null : form.vendorId,
+      serviceMonth: form.serviceMonth,
+      amountRequested: form.amountRequested,
+      paymentType: form.paymentType as InvoiceUpdate['paymentType'],
+      status: form.status as InvoiceUpdate['status'],
+      notes: form.notes === '' ? undefined : form.notes,
+    };
     updateInvoice.mutate(
-      { id, data: form as any },
+      { id, data },
       {
         onSuccess: () => {
           toast({ title: 'Invoice updated' });
@@ -78,6 +114,40 @@ export function EditInvoiceDialog({ id, invoice, onSaved }: Props) {
           <DialogDescription>Update the invoice details.</DialogDescription>
         </DialogHeader>
         <div className="grid grid-cols-2 gap-4 py-2">
+          <div className="space-y-2 col-span-2">
+            <Label>Participant</Label>
+            <Input value={invoice.clientName ?? invoice.clientId} disabled />
+          </div>
+          <div className="space-y-2">
+            <Label>Authorization</Label>
+            <SearchableSelect
+              value={form.authorizationId}
+              onValueChange={(v) => set('authorizationId', v)}
+              options={authorizations.map(a => ({ value: a.id, label: a.authNumber, subtitle: a.activityDescription ?? undefined }))}
+              onSearchChange={setAuthSearch}
+              loading={authorizationsLoading}
+              placeholder="Select authorization"
+              selectedLabelFallback={invoice.authNumber ?? undefined}
+              allowClear
+              clearLabel="None"
+              data-testid="select-invoice-authorization"
+            />
+          </div>
+          <div className="space-y-2">
+            <Label>Vendor</Label>
+            <SearchableSelect
+              value={form.vendorId}
+              onValueChange={(v) => set('vendorId', v)}
+              options={vendors.map(v => ({ value: v.id, label: v.name }))}
+              onSearchChange={setVendorSearch}
+              loading={vendorsLoading}
+              placeholder="Select vendor"
+              selectedLabelFallback={invoice.vendorName ?? undefined}
+              allowClear
+              clearLabel="None"
+              data-testid="select-invoice-vendor"
+            />
+          </div>
           <div className="space-y-2">
             <Label>Service Month</Label>
             <Input placeholder="YYYY-MM" value={form.serviceMonth} onChange={(e) => set('serviceMonth', e.target.value)} />

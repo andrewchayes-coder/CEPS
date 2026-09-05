@@ -369,6 +369,21 @@ describe("GET /reports/missing-documents", () => {
     for (const r of res.body.items) expect(r.docType).toBe("auth_pdf");
     expect(res.body.items.some((r: any) => createdAuthIds.includes(r.entityId))).toBe(true);
   });
+
+  it("globally pages SQL-unioned alerts and scopes signature/auth rows by case and date", async () => {
+    const full = await request(app).get("/api/reports/missing-documents")
+      .query({ clientId: clientA, startDate: "2026-01-01", endDate: "2026-01-31", limit: 100 })
+      .set("Cookie", staffCookie);
+    expect(full.status).toBe(200);
+    expect(full.body.items.length).toBeGreaterThan(0);
+    expect(full.body.items.every((row: any) => row.clientId === clientA)).toBe(true);
+    const page = await request(app).get("/api/reports/missing-documents")
+      .query({ clientId: clientA, startDate: "2026-01-01", endDate: "2026-01-31", limit: 1, offset: 0 })
+      .set("Cookie", staffCookie);
+    expect(page.status).toBe(200);
+    expect(page.body.total).toBe(full.body.total);
+    expect(page.body.items).toHaveLength(1);
+  });
 });
 
 describe("coordinator caseload scoping", () => {

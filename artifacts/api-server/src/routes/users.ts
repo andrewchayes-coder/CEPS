@@ -1,5 +1,5 @@
 import { Router, type IRouter } from "express";
-import { eq, desc, and, gte, lte, ilike, count, sql, type SQL } from "drizzle-orm";
+import { eq, desc, and, or, gte, lte, ilike, count, sql, type SQL } from "drizzle-orm";
 import { db, usersTable, auditLogTable } from "@workspace/db";
 import {
   ListUsersQueryParams,
@@ -18,6 +18,9 @@ import { sortedOrder } from "../lib/sorting";
 const router: IRouter = Router();
 
 router.get("/users", requireStaff, async (req, res): Promise<void> => {
+  // Deliberately excluded from the reusable date-filter contract: this is the
+  // small administrative account picker, returns an unpaginated array, and is
+  // not a user-facing operational list despite users.createdAt being present.
   const query = ListUsersQueryParams.safeParse(req.query);
   if (!query.success) {
     res.status(400).json({ error: query.error.message });
@@ -29,11 +32,21 @@ router.get("/users", requireStaff, async (req, res): Promise<void> => {
   if (typeof rawActive === "string" && (rawActive === "true" || rawActive === "false")) {
     conditions.push(eq(usersTable.active, rawActive === "true"));
   }
-  const users = await db
+  if (query.data.search) {
+    const escaped = query.data.search.replace(/[\\%_]/g, (c) => `\\${c}`);
+    const like = `%${escaped}%`;
+    conditions.push(or(ilike(usersTable.name, like), ilike(usersTable.email, like))!);
+  }
+  const usersQuery = db
     .select()
     .from(usersTable)
     .where(conditions.length ? and(...conditions) : undefined)
     .orderBy(usersTable.name);
+  // Keep the existing administrative list response unbounded unless a picker
+  // explicitly asks for a capped search result.
+  const users = query.data.limit != null
+    ? await usersQuery.limit(Math.min(Math.max(query.data.limit, 1), 100))
+    : await usersQuery;
   res.json(ListUsersResponse.parse(users.map(userJson)));
 });
 
@@ -123,7 +136,14 @@ router.get("/audit-log", requireStaff, async (req, res): Promise<void> => {
     res.status(400).json({ error: query.error.message });
     return;
   }
-  const { userId, action, entityType, dateFrom, dateTo } = query.data;
+  const { userId, action, entityType } = query.data;
+  // Preserve dateFrom/dateTo while accepting the reusable list-filter aliases.
+  const dateFrom = query.data.dateFrom ?? query.data.startDate;
+  const dateTo = query.data.dateTo ?? query.data.endDate;
+  if (dateFrom && dateTo && new Date(`${dateFrom}T00:00:00Z`) > new Date(`${dateTo}T00:00:00Z`)) {
+    res.status(400).json({ error: "startDate must be on or before endDate" });
+    return;
+  }
   const escapeLike = (s: string) => s.replace(/[\\%_]/g, (c) => `\\${c}`);
   const conditions: SQL[] = [];
   if (userId) conditions.push(eq(auditLogTable.userId, userId));

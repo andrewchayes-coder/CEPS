@@ -1,5 +1,5 @@
 import { Router, type IRouter } from "express";
-import { eq, and, isNull, gt, desc, count, ilike, or, sql, ne, type SQL } from "drizzle-orm";
+import { eq, and, isNull, gt, desc, count, ilike, or, sql, ne, gte, lte, type SQL } from "drizzle-orm";
 import {
   db,
   clientsTable,
@@ -168,6 +168,10 @@ router.get("/referrals", requireAuth, async (req, res): Promise<void> => {
     res.status(400).json({ error: query.error.message });
     return;
   }
+  if (query.data.startDate && query.data.endDate && query.data.startDate > query.data.endDate) {
+    res.status(400).json({ error: "startDate must be on or before endDate" });
+    return;
+  }
   const conditions: SQL[] = [];
   // Role scoping — mirrors the audit-log SQL-WHERE pattern:
   // coordinators see only referrals they own; parent/self only their linked
@@ -186,6 +190,8 @@ router.get("/referrals", requireAuth, async (req, res): Promise<void> => {
   if (query.data.status) conditions.push(eq(referralsTable.status, query.data.status));
   if (query.data.coordinatorId) conditions.push(eq(referralsTable.serviceCoordinatorId, query.data.coordinatorId));
   if (query.data.clientId) conditions.push(eq(referralsTable.clientId, query.data.clientId));
+  if (query.data.startDate) conditions.push(gte(referralsTable.referralDate, query.data.startDate));
+  if (query.data.endDate) conditions.push(lte(referralsTable.referralDate, query.data.endDate));
   if (query.data.search) {
     const like = `%${escapeLike(query.data.search)}%`;
     conditions.push(

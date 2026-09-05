@@ -9,9 +9,12 @@ import type { GetCaseStatusReportSortBy } from './getCaseStatusReportSortBy';
 import type { GetCaseStatusReportSortDirection } from './getCaseStatusReportSortDirection';
 
 export type GetCaseStatusReportParams = {
+clientId?: string;
 status?: string;
 coordinatorId?: string;
 search?: string;
+startDate?: string;
+endDate?: string;
 limit?: number;
 offset?: number;
 sortBy?: GetCaseStatusReportSortBy;

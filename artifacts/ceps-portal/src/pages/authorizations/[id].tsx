@@ -11,6 +11,7 @@ import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
 import { ArrowLeft, AlertCircle } from 'lucide-react';
 import { format } from 'date-fns';
+import { DocumentPreview } from '@/components/document-preview';
 
 export default function AuthorizationDetailPage() {
   const { id } = useParams<{ id: string }>();
@@ -109,30 +110,43 @@ export default function AuthorizationDetailPage() {
           </CardContent>
         </Card>
 
-        <Card>
-          <CardHeader>
-            <CardTitle>Utilization</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4 text-sm">
-            <dl className="grid grid-cols-3 gap-2">
-              <dt className="text-muted-foreground">Max (Period):</dt><dd className="col-span-2 font-bold text-lg">${max.toFixed(2)}</dd>
-              <dt className="text-muted-foreground">Total Paid:</dt><dd className="col-span-2">${paid.toFixed(2)}</dd>
-              <dt className="text-muted-foreground">Remaining:</dt><dd className="col-span-2">${parseFloat(auth.remainingAmount ?? '0').toFixed(2)}</dd>
-            </dl>
-            <div className="space-y-2 pt-2">
-              <div className="flex justify-between text-xs text-muted-foreground">
-                <span>Utilized: ${paid.toFixed(2)}</span>
-                <span>Max: ${max.toFixed(2)}</span>
+        <div className="space-y-6">
+          <Card>
+            <CardHeader>
+              <CardTitle>Utilization</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4 text-sm">
+              <dl className="grid grid-cols-3 gap-2">
+                <dt className="text-muted-foreground">Max (Period):</dt><dd className="col-span-2 font-bold text-lg">${max.toFixed(2)}</dd>
+                <dt className="text-muted-foreground">Total Paid:</dt><dd className="col-span-2">${paid.toFixed(2)}</dd>
+                <dt className="text-muted-foreground">Remaining:</dt><dd className="col-span-2">${parseFloat(auth.remainingAmount ?? '0').toFixed(2)}</dd>
+              </dl>
+              <div className="space-y-2 pt-2">
+                <div className="flex justify-between text-xs text-muted-foreground">
+                  <span>Utilized: ${paid.toFixed(2)}</span>
+                  <span>Max: ${max.toFixed(2)}</span>
+                </div>
+                <Progress value={percent} className="h-2" />
+                {isExpiring && (
+                  <p className="text-xs text-chart-1 font-medium flex items-center gap-1 mt-2">
+                    <AlertCircle className="w-3 h-3" /> Expires in {auth.daysUntilExpiry} days
+                  </p>
+                )}
               </div>
-              <Progress value={percent} className="h-2" />
-              {isExpiring && (
-                <p className="text-xs text-chart-1 font-medium flex items-center gap-1 mt-2">
-                  <AlertCircle className="w-3 h-3" /> Expires in {auth.daysUntilExpiry} days
-                </p>
-              )}
-            </div>
-          </CardContent>
-        </Card>
+            </CardContent>
+          </Card>
+
+          {auth.posPdfUrl && (
+            <Card>
+              <CardHeader className="pb-3">
+                <CardTitle className="text-sm font-medium">Original POS Document</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <DocumentPreview objectPath={auth.posPdfUrl} filename={`POS-${auth.authNumber}.pdf`} className="max-h-[500px]" />
+              </CardContent>
+            </Card>
+          )}
+        </div>
       </div>
     </div>
   );

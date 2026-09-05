@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   useGetExpiringAuthReport,
   getExpiringAuthReport,
@@ -18,6 +18,7 @@ import { formatMoney } from '@/lib/utils';
 import { useToast } from '@/hooks/use-toast';
 import { PAGE_SIZE, ReportPagination } from './report-pagination';
 import { useTableSort } from '@/lib/table-sorting';
+import type { GlobalReportFilters } from '../reports';
 
 const WINDOWS = [
   { value: '7', label: 'Next 7 days' },
@@ -27,15 +28,19 @@ const WINDOWS = [
 ];
 type ExpiringAuthSortKey = 'authNumber' | 'clientName' | 'vendorName' | 'servicePeriodEnd' | 'daysUntilExpiry' | 'maxPeriodAmount';
 
-export default function ExpiringAuthReport() {
+export default function ExpiringAuthReport({ filters }: { filters: GlobalReportFilters }) {
   const [withinDays, setWithinDays] = useState('30');
   const [page, setPage] = useState(0);
   const [exporting, setExporting] = useState(false);
   const { sort, onSort } = useTableSort<ExpiringAuthSortKey>('servicePeriodEnd');
   const { toast } = useToast();
 
-  const filterParams = { withinDays: Number(withinDays) };
-  const params = { ...filterParams, limit: PAGE_SIZE, offset: page * PAGE_SIZE, sortBy: sort.key, sortDirection: sort.direction };
+  useEffect(() => {
+    setPage(0);
+  }, [filters, withinDays, sort]);
+
+  const filterParams = { ...filters, withinDays: Number(withinDays) };
+  const params: any = { ...filterParams, limit: PAGE_SIZE, offset: page * PAGE_SIZE, sortBy: sort.key, sortDirection: sort.direction };
 
   const { data, isLoading } = useGetExpiringAuthReport(params, {
     query: { queryKey: ['expiringAuthReport', params] },
@@ -45,13 +50,8 @@ export default function ExpiringAuthReport() {
   const total = data?.total ?? 0;
   const pageCount = Math.max(1, Math.ceil(total / PAGE_SIZE));
 
-  const setWindow = (value: string) => {
-    setWithinDays(value);
-    setPage(0);
-  };
   const changeSort = (key: ExpiringAuthSortKey) => {
     onSort(key);
-    setPage(0);
   };
 
   const exportCSV = async () => {
@@ -93,7 +93,7 @@ export default function ExpiringAuthReport() {
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-4">
             <div className="space-y-1">
               <Label className="text-xs">Window</Label>
-              <Select value={withinDays} onValueChange={setWindow}>
+              <Select value={withinDays} onValueChange={setWithinDays}>
                 <SelectTrigger data-testid="select-expiring-window"><SelectValue /></SelectTrigger>
                 <SelectContent>
                   {WINDOWS.map((w) => (

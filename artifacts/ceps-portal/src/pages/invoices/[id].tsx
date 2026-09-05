@@ -13,6 +13,7 @@ import { ArrowLeft, CheckCircle2, XCircle, AlertTriangle, ShieldCheck, FileText,
 import { Link } from 'wouter';
 import { Textarea } from '@/components/ui/textarea';
 import { FileUpload } from '@/components/file-upload';
+import { DocumentPreview } from '@/components/document-preview';
 
 export default function InvoiceDetailPage() {
   const { id } = useParams<{ id: string }>();
@@ -127,44 +128,24 @@ export default function InvoiceDetailPage() {
               <dt className="text-muted-foreground mt-2">Submitted By:</dt><dd className="col-span-2 mt-2 capitalize">{invoice.submittedByRole}</dd>
             </dl>
             <div className="pt-4 border-t space-y-3">
-              <p className="text-muted-foreground">Attachment</p>
+              <div className="flex items-center justify-between">
+                <p className="text-muted-foreground font-medium">Attachment</p>
+                {invoice.documentUrl && isStaff && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => handleDocument(null)}
+                    disabled={updateInvoice.isPending}
+                    className="h-8 text-destructive hover:text-destructive"
+                    data-testid="button-remove-invoice-document"
+                  >
+                    Remove
+                  </Button>
+                )}
+              </div>
+
               {invoice.documentUrl ? (
-                <div className="flex items-center justify-between rounded-md border p-3">
-                  <span className="flex items-center gap-2">
-                    <FileText className="w-4 h-4 text-muted-foreground" /> Document on file
-                  </span>
-                  <div className="flex items-center gap-2">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      data-testid="link-view-invoice-document"
-                      onClick={async () => {
-                        // Fetch with credentials and open a blob URL: a plain
-                        // href opened in a new top-level tab does not carry the
-                        // partitioned session cookie, so the request would 401.
-                        const res = await fetch(`${import.meta.env.BASE_URL}api/storage${invoice.documentUrl}`, { credentials: 'include' });
-                        if (!res.ok) return;
-                        const blobUrl = URL.createObjectURL(await res.blob());
-                        window.open(blobUrl, '_blank', 'noopener');
-                        setTimeout(() => URL.revokeObjectURL(blobUrl), 60_000);
-                      }}
-                    >
-                      <ExternalLink className="w-4 h-4 mr-1" /> View / Download
-                    </Button>
-                    {isStaff && (
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => handleDocument(null)}
-                        disabled={updateInvoice.isPending}
-                        className="text-destructive hover:text-destructive"
-                        data-testid="button-remove-invoice-document"
-                      >
-                        Remove
-                      </Button>
-                    )}
-                  </div>
-                </div>
+                <DocumentPreview objectPath={invoice.documentUrl} filename={`Invoice-${invoice.serviceMonth}.pdf`} className="max-h-[600px]" />
               ) : (
                 !isStaff && <p className="text-muted-foreground">No document attached.</p>
               )}

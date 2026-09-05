@@ -9,7 +9,10 @@ import type { GetPendingAuthReportSortBy } from './getPendingAuthReportSortBy';
 import type { GetPendingAuthReportSortDirection } from './getPendingAuthReportSortDirection';
 
 export type GetPendingAuthReportParams = {
+clientId?: string;
 coordinatorId?: string;
+startDate?: string;
+endDate?: string;
 search?: string;
 limit?: number;
 offset?: number;

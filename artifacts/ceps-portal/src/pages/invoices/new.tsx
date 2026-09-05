@@ -17,9 +17,12 @@ import { Link } from 'wouter';
 import { FileUpload } from '@/components/file-upload';
 import { useAuth } from '@/components/auth/auth-provider';
 import { trackAnalyticsEvent } from '@/lib/analytics';
+import { SearchableSelect } from '@/components/searchable-select';
+import { useDebounce } from '@/hooks/use-debounce';
 
 const formSchema = z.object({
   clientId: z.string().min(1, 'Participant is required'),
+  authorizationId: z.string().optional(),
   vendorId: z.string().optional(),
   serviceMonth: z.string().regex(/^\d{4}-\d{2}$/, 'Must be YYYY-MM format'),
   amountRequested: z.string().min(1, 'Amount is required'),
@@ -34,15 +37,11 @@ export default function InvoiceNewPage() {
   const { user } = useAuth();
   const [documentUrl, setDocumentUrl] = React.useState<string | undefined>(undefined);
   
-  const { data: clientsData, isLoading: clientsLoading } = useListClients({ limit: 1000 });
-  const { data: vendorsData, isLoading: vendorsLoading } = useListVendors({ limit: 1000 });
-  const clients = clientsData?.items;
-  const vendors = vendorsData?.items;
-
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
     defaultValues: {
       clientId: '',
+      authorizationId: '',
       vendorId: '',
       serviceMonth: new Date().toISOString().substring(0, 7), // YYYY-MM
       amountRequested: '',
@@ -53,40 +52,51 @@ export default function InvoiceNewPage() {
 
   const selectedClientId = form.watch('clientId');
 
-  // Only fetch authorizations once a client is chosen so we can narrow the
-  // vendor list to vendors that actually have an authorization for the client.
-  const { data: authorizationsData } = useListAuthorizations(
-    { clientId: selectedClientId, limit: 1000 },
-    { query: { enabled: !!selectedClientId, queryKey: ['authorizations', { clientId: selectedClientId }] } }
+  const [clientSearch, setClientSearch] = React.useState('');
+  const debouncedClientSearch = useDebounce(clientSearch, 300);
+  const { data: clientsData, isLoading: clientsLoading } = useListClients({ search: debouncedClientSearch, limit: 50 });
+  const clients = clientsData?.items ?? [];
+
+  const [authSearch, setAuthSearch] = React.useState('');
+  const debouncedAuthSearch = useDebounce(authSearch, 300);
+  const { data: authorizationsData, isLoading: authorizationsLoading } = useListAuthorizations(
+    { clientId: selectedClientId, search: debouncedAuthSearch, limit: 50 },
+    { query: { enabled: !!selectedClientId, queryKey: ['authorizations', { clientId: selectedClientId, search: debouncedAuthSearch, limit: 50 }] } }
   );
+  const filteredAuthorizations = authorizationsData?.items ?? [];
 
-  // Vendor ids that have at least one authorization for the selected client.
-  const allowedVendorIds = React.useMemo(() => {
-    const ids = new Set<string>();
-    for (const auth of authorizationsData?.items ?? []) {
-      if (auth.vendorId) ids.add(auth.vendorId);
-    }
-    return ids;
-  }, [authorizationsData]);
+  const [vendorSearch, setVendorSearch] = React.useState('');
+  const debouncedVendorSearch = useDebounce(vendorSearch, 300);
+  const { data: vendorsData, isLoading: vendorsLoading } = useListVendors(
+    { clientId: selectedClientId, search: debouncedVendorSearch, limit: 50 },
+    { query: { enabled: !!selectedClientId, queryKey: ['vendors', { clientId: selectedClientId, search: debouncedVendorSearch, limit: 50 }] } }
+  );
+  const filteredVendors = vendorsData?.items ?? [];
 
-  const filteredVendors = React.useMemo(() => {
-    if (!selectedClientId) return [];
-    return (vendors ?? []).filter(v => allowedVendorIds.has(v.id));
-  }, [vendors, allowedVendorIds, selectedClientId]);
-
-  // If the previously-selected vendor is no longer valid for the current client
-  // (e.g. after switching clients), clear it so we never submit a mismatch.
+  // On participant change clear authorization and vendor
   React.useEffect(() => {
-    const currentVendorId = form.getValues('vendorId');
-    if (currentVendorId && !allowedVendorIds.has(currentVendorId)) {
-      form.setValue('vendorId', '');
+    form.setValue('authorizationId', '');
+    form.setValue('vendorId', '');
+  }, [selectedClientId, form]);
+
+  const handleAuthChange = (authId: string) => {
+    form.setValue('authorizationId', authId);
+    if (!authId || authId === 'none') return;
+
+    const auth = filteredAuthorizations.find(a => a.id === authId);
+    if (auth?.vendorId) {
+      if (filteredVendors.some(v => v.id === auth.vendorId)) {
+        form.setValue('vendorId', auth.vendorId);
+      }
     }
-  }, [allowedVendorIds, form]);
+  };
 
   const onSubmit = (data: z.infer<typeof formSchema>) => {
     createInvoice.mutate({
       data: {
         ...data,
+        authorizationId: data.authorizationId === 'none' || data.authorizationId === '' ? undefined : data.authorizationId,
+        vendorId: data.vendorId === 'none' || data.vendorId === '' ? undefined : data.vendorId,
         paymentType: data.paymentType as InvoiceInputPaymentType,
         documentUrl: documentUrl || undefined
       }
@@ -132,42 +142,65 @@ export default function InvoiceNewPage() {
                 <FormField control={form.control} name="clientId" render={({ field }) => (
                   <FormItem>
                     <FormLabel>Participant</FormLabel>
-                    <Select onValueChange={field.onChange} defaultValue={field.value}>
-                      <FormControl><SelectTrigger><SelectValue placeholder={clientsLoading ? "Loading..." : "Select participant"} /></SelectTrigger></FormControl>
-                      <SelectContent>
-                        {clients?.map(c => <SelectItem key={c.id} value={c.id}>{c.firstName} {c.lastName}</SelectItem>)}
-                      </SelectContent>
-                    </Select>
+                    <FormControl>
+                      <SearchableSelect
+                        value={field.value}
+                        onValueChange={field.onChange}
+                        options={clients.map(c => ({ value: c.id, label: `${c.firstName} ${c.lastName}` }))}
+                        onSearchChange={setClientSearch}
+                        loading={clientsLoading}
+                        placeholder="Select participant"
+                        data-testid="select-invoice-client"
+                      />
+                    </FormControl>
                     <FormMessage />
                   </FormItem>
                 )} />
-                <FormField control={form.control} name="vendorId" render={({ field }) => (
+                <FormField control={form.control} name="authorizationId" render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Vendor</FormLabel>
-                    <Select onValueChange={field.onChange} value={field.value} disabled={!selectedClientId}>
-                      <FormControl>
-                        <SelectTrigger>
-                          <SelectValue placeholder={
-                            !selectedClientId
-                              ? "Select a participant first"
-                              : vendorsLoading
-                                ? "Loading..."
-                                : filteredVendors.length === 0
-                                  ? "No authorized vendors"
-                                  : "Select vendor"
-                          } />
-                        </SelectTrigger>
-                      </FormControl>
-                      <SelectContent>
-                        {filteredVendors.map(v => <SelectItem key={v.id} value={v.id}>{v.name}</SelectItem>)}
-                      </SelectContent>
-                    </Select>
+                    <FormLabel>Authorization</FormLabel>
+                    <FormControl>
+                      <SearchableSelect
+                        value={field.value ?? ''}
+                        onValueChange={handleAuthChange}
+                        options={filteredAuthorizations.map(a => ({ value: a.id, label: a.authNumber, subtitle: a.activityDescription ?? undefined }))}
+                        onSearchChange={setAuthSearch}
+                        loading={authorizationsLoading}
+                        disabled={!selectedClientId}
+                        placeholder={!selectedClientId ? "Select a participant first" : "Select authorization"}
+                        emptyMessage={!selectedClientId ? "Select a participant first" : "No authorizations found"}
+                        allowClear
+                        clearLabel="None"
+                        data-testid="select-invoice-authorization"
+                      />
+                    </FormControl>
                     <FormMessage />
                   </FormItem>
                 )} />
               </div>
 
               <div className="grid grid-cols-2 gap-4">
+                <FormField control={form.control} name="vendorId" render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Vendor</FormLabel>
+                    <FormControl>
+                      <SearchableSelect
+                        value={field.value ?? ''}
+                        onValueChange={field.onChange}
+                        options={filteredVendors.map(v => ({ value: v.id, label: v.name }))}
+                        onSearchChange={setVendorSearch}
+                        loading={vendorsLoading}
+                        disabled={!selectedClientId}
+                        placeholder={!selectedClientId ? "Select a participant first" : "Select vendor"}
+                        emptyMessage={!selectedClientId ? "Select a participant first" : "No authorized vendors found"}
+                        allowClear
+                        clearLabel="None"
+                        data-testid="select-invoice-vendor"
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )} />
                 <FormField control={form.control} name="serviceMonth" render={({ field }) => (
                   <FormItem>
                     <FormLabel>Service Month (YYYY-MM)</FormLabel>
@@ -175,6 +208,9 @@ export default function InvoiceNewPage() {
                     <FormMessage />
                   </FormItem>
                 )} />
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
                 <FormField control={form.control} name="paymentType" render={({ field }) => (
                   <FormItem>
                     <FormLabel>Payment Type</FormLabel>

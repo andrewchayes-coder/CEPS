@@ -309,6 +309,14 @@ paths:
         - name: active
           in: query
           schema: { type: boolean }
+        - name: search
+          in: query
+          description: Case-insensitive partial match on account name or email.
+          schema: { type: string }
+        - name: limit
+          in: query
+          description: Optional capped result count; omitted preserves the administrative full-list behavior.
+          schema: { type: integer }
       responses:
         "200":
           description: Users
@@ -396,6 +404,14 @@ paths:
         - name: dateTo
           in: query
           schema: { type: string }
+        - name: startDate
+          in: query
+          description: Alias for dateFrom.
+          schema: { type: string }
+        - name: endDate
+          in: query
+          description: Alias for dateTo.
+          schema: { type: string }
         - name: limit
           in: query
           schema: { type: integer }
@@ -429,10 +445,19 @@ paths:
       tags: [clients]
       summary: List clients (scoped by role)
       parameters:
+        - name: vendorId
+          in: query
+          schema: { type: string }
         - name: status
           in: query
           schema: { type: string }
         - name: search
+          in: query
+          schema: { type: string }
+        - name: startDate
+          in: query
+          schema: { type: string }
+        - name: endDate
           in: query
           schema: { type: string }
         - name: limit
@@ -569,6 +594,12 @@ paths:
           in: query
           schema: { type: string }
         - name: search
+          in: query
+          schema: { type: string }
+        - name: startDate
+          in: query
+          schema: { type: string }
+        - name: endDate
           in: query
           schema: { type: string }
         - name: limit
@@ -787,6 +818,12 @@ paths:
         - name: search
           in: query
           schema: { type: string }
+        - name: startDate
+          in: query
+          schema: { type: string }
+        - name: endDate
+          in: query
+          schema: { type: string }
         - name: limit
           in: query
           schema: { type: integer }
@@ -922,6 +959,12 @@ paths:
           in: query
           schema: { type: string }
         - name: search
+          in: query
+          schema: { type: string }
+        - name: startDate
+          in: query
+          schema: { type: string }
+        - name: endDate
           in: query
           schema: { type: string }
         - name: limit
@@ -1073,6 +1116,12 @@ paths:
           in: query
           schema: { type: string }
         - name: search
+          in: query
+          schema: { type: string }
+        - name: startDate
+          in: query
+          schema: { type: string }
+        - name: endDate
           in: query
           schema: { type: string }
         - name: limit
@@ -1387,6 +1436,12 @@ paths:
           in: query
           description: Filter by client name (case-insensitive partial match).
           schema: { type: string }
+        - name: startDate
+          in: query
+          schema: { type: string }
+        - name: endDate
+          in: query
+          schema: { type: string }
         - name: limit
           in: query
           schema: { type: integer }
@@ -1540,10 +1595,20 @@ paths:
       tags: [vendors]
       summary: List vendors (preferred first)
       parameters:
+        - name: clientId
+          in: query
+          description: Return only vendors already linked to the participant through an authorization, invoice, or payment.
+          schema: { type: string }
         - name: search
           in: query
           schema: { type: string }
         - name: w9Status
+          in: query
+          schema: { type: string }
+        - name: startDate
+          in: query
+          schema: { type: string }
+        - name: endDate
           in: query
           schema: { type: string }
         - name: active
@@ -1703,9 +1768,28 @@ paths:
       tags: [dashboard]
       summary: Per-vendor payment totals (YTD; feeds Phase 2 1099s)
       parameters:
+        - name: allTime
+          in: query
+          description: When "true", include all payment history if no explicit date range is supplied.
+          schema: { type: string, enum: ["true", "false"] }
         - name: year
           in: query
           schema: { type: integer }
+        - name: vendorId
+          in: query
+          schema: { type: string }
+        - name: clientId
+          in: query
+          schema: { type: string }
+        - name: coordinatorId
+          in: query
+          schema: { type: string }
+        - name: startDate
+          in: query
+          schema: { type: string }
+        - name: endDate
+          in: query
+          schema: { type: string }
       responses:
         "200":
           description: Vendor totals
@@ -1720,7 +1804,16 @@ paths:
       tags: [dashboard]
       summary: Referrals/cases waiting on POS authorization from Alta (staff only)
       parameters:
+        - name: clientId
+          in: query
+          schema: { type: string }
         - name: coordinatorId
+          in: query
+          schema: { type: string }
+        - name: startDate
+          in: query
+          schema: { type: string }
+        - name: endDate
           in: query
           schema: { type: string }
         - name: search
@@ -1759,6 +1852,9 @@ paths:
       tags: [dashboard]
       summary: Program-level case status overview as a list (staff only)
       parameters:
+        - name: clientId
+          in: query
+          schema: { type: string }
         - name: status
           in: query
           schema: { type: string }
@@ -1766,6 +1862,12 @@ paths:
           in: query
           schema: { type: string }
         - name: search
+          in: query
+          schema: { type: string }
+        - name: startDate
+          in: query
+          schema: { type: string }
+        - name: endDate
           in: query
           schema: { type: string }
         - name: limit
@@ -1801,6 +1903,18 @@ paths:
       tags: [dashboard]
       summary: Missing document alerts — no W-9, no parent signature, no auth PDF (staff only)
       parameters:
+        - name: clientId
+          in: query
+          schema: { type: string }
+        - name: coordinatorId
+          in: query
+          schema: { type: string }
+        - name: startDate
+          in: query
+          schema: { type: string }
+        - name: endDate
+          in: query
+          schema: { type: string }
         - name: docType
           in: query
           description: Filter by document type (w9, signature, auth_pdf)
@@ -1838,6 +1952,18 @@ paths:
       tags: [dashboard]
       summary: Authorizations expiring soon (staff only)
       parameters:
+        - name: clientId
+          in: query
+          schema: { type: string }
+        - name: coordinatorId
+          in: query
+          schema: { type: string }
+        - name: startDate
+          in: query
+          schema: { type: string }
+        - name: endDate
+          in: query
+          schema: { type: string }
         - name: withinDays
           in: query
           description: Only include authorizations expiring within this many days (default 30).
@@ -2119,7 +2245,7 @@ components:
         familyRepAddress: { type: string }
     ClientCase:
       type: object
-      required: [client, referrals, authorizations, invoices, payments, remittances]
+      required: [client, referrals, authorizations, invoices, payments, remittances, documents]
       properties:
         client: { $ref: "#/components/schemas/Client" }
         referrals:
@@ -2137,6 +2263,32 @@ components:
         remittances:
           type: array
           items: { $ref: "#/components/schemas/Remittance" }
+        documents:
+          type: array
+          description: Staff-only read-only rollup of documents and tracked document requirements across the participant case.
+          items: { $ref: "#/components/schemas/CaseDocument" }
+    CaseDocument:
+      type: object
+      required: [id, name, category, status, recordType, recordId, recordLabel]
+      properties:
+        id: { type: string }
+        name: { type: string }
+        category:
+          type: string
+          enum: [participant_agreement, referral_attachment, authorization_pos, invoice, vendor_w9]
+        status:
+          type: string
+          enum: [pending, sent, received]
+        signatureStatus:
+          type: ["string", "null"]
+          enum: [signed, unsigned, null]
+        recordType:
+          type: string
+          enum: [referral, authorization, invoice, vendor]
+        recordId: { type: string }
+        recordLabel: { type: string }
+        objectPath: { type: ["string", "null"] }
+        statusDate: { type: ["string", "null"] }
     ReferralIntakeFields:
       type: object
       description: Structured referral form data (Section 9 field list)

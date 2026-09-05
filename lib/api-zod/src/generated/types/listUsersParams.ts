@@ -9,4 +9,12 @@
 export type ListUsersParams = {
 role?: string;
 active?: boolean;
+/**
+ * Case-insensitive partial match on account name or email.
+ */
+search?: string;
+/**
+ * Optional capped result count; omitted preserves the administrative full-list behavior.
+ */
+limit?: number;
 };

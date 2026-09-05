@@ -9,6 +9,10 @@ import type { GetExpiringAuthReportSortBy } from './getExpiringAuthReportSortBy'
 import type { GetExpiringAuthReportSortDirection } from './getExpiringAuthReportSortDirection';
 
 export type GetExpiringAuthReportParams = {
+clientId?: string;
+coordinatorId?: string;
+startDate?: string;
+endDate?: string;
 /**
  * Only include authorizations expiring within this many days (default 30).
  */

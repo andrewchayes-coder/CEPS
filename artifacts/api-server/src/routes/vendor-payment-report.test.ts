@@ -23,6 +23,8 @@ let staffId: string;
 let vendorUserAId: string;
 let parentUserId: string;
 let clientId: string;
+let coordinatorId: string;
+let otherClientId: string;
 let vendorA: string;
 let vendorB: string;
 let staffCookie: string;
@@ -41,14 +43,14 @@ async function session(userId: string) {
   return `ceps_session=${token}`;
 }
 
-async function insertPayment(vendorId: string, amount: string) {
+async function insertPayment(vendorId: string, amount: string, opts: { clientId?: string; checkDate?: string } = {}) {
   const [p] = await db
     .insert(paymentsTable)
     .values({
-      clientId,
+      clientId: opts.clientId ?? clientId,
       vendorId,
       qbCheckNumber: `${nonce}-chk-${checkCounter++}`,
-      checkDate: `${year}-03-15`,
+      checkDate: opts.checkDate ?? `${year}-03-15`,
       amount,
       paymentType: "direct_payment",
       source: "manual",
@@ -70,6 +72,11 @@ beforeAll(async () => {
     .values({ firstName: "VPR", lastName: "Client", dateOfBirth: "2000-01-01", uciNumber: `${nonce}-uci` })
     .returning();
   clientId = client.id;
+  const [coordinator] = await db.insert(usersTable).values({ name: "VPR Coordinator", email: `${nonce}-coordinator@test.local`, role: "service_coordinator" }).returning();
+  coordinatorId = coordinator.id;
+  await db.update(clientsTable).set({ assignedCoordinatorId: coordinatorId }).where(inArray(clientsTable.id, [clientId]));
+  const [otherClient] = await db.insert(clientsTable).values({ firstName: "VPR", lastName: "Other", dateOfBirth: "2000-01-01", uciNumber: `${nonce}-uci-other` }).returning();
+  otherClientId = otherClient.id;
 
   const [vA] = await db
     .insert(vendorsTable)
@@ -119,9 +126,9 @@ beforeAll(async () => {
 afterAll(async () => {
   if (paymentIds.length) await db.delete(paymentsTable).where(inArray(paymentsTable.id, paymentIds));
   await db.delete(sessionsTable).where(inArray(sessionsTable.userId, [staffId, vendorUserAId, parentUserId]));
-  await db.delete(usersTable).where(inArray(usersTable.id, [staffId, vendorUserAId, parentUserId]));
   await db.delete(vendorsTable).where(inArray(vendorsTable.id, [vendorA, vendorB]));
-  await db.delete(clientsTable).where(inArray(clientsTable.id, [clientId]));
+  await db.delete(clientsTable).where(inArray(clientsTable.id, [clientId, otherClientId]));
+  await db.delete(usersTable).where(inArray(usersTable.id, [staffId, vendorUserAId, parentUserId, coordinatorId]));
 });
 
 describe("GET /reports/vendor-payments role scoping", () => {
@@ -154,5 +161,34 @@ describe("GET /reports/vendor-payments role scoping", () => {
     expect(res.status).toBe(200);
     expect(Array.isArray(res.body)).toBe(true);
     expect(res.body.length).toBe(0);
+  });
+
+  it("applies vendor, date, client, and coordinator filters before SQL aggregation", async () => {
+    await insertPayment(vendorA, "25.00", { checkDate: `${year}-05-01` });
+    await insertPayment(vendorA, "75.00", { clientId: otherClientId, checkDate: `${year}-05-15` });
+    const res = await request(app).get("/api/reports/vendor-payments")
+      .query({ vendorId: vendorA, clientId, coordinatorId, startDate: `${year}-05-01`, endDate: `${year}-05-31` })
+      .set("Cookie", staffCookie);
+    expect(res.status).toBe(200);
+    expect(res.body).toHaveLength(1);
+    expect(res.body[0]).toMatchObject({ vendorId: vendorA, totalPaid: "25.00", paymentCount: 1 });
+  });
+
+  it("uses allTime to include payment history outside the default current year", async () => {
+    await insertPayment(vendorA, "200.00", { checkDate: `${year - 1}-03-15` });
+
+    const ytd = await request(app).get("/api/reports/vendor-payments")
+      .query({ vendorId: vendorA, clientId })
+      .set("Cookie", staffCookie);
+    expect(ytd.status).toBe(200);
+    expect(ytd.body).toHaveLength(1);
+    expect(ytd.body[0]).toMatchObject({ vendorId: vendorA, totalPaid: "175.00", paymentCount: 3 });
+
+    const allTime = await request(app).get("/api/reports/vendor-payments")
+      .query({ vendorId: vendorA, clientId, allTime: "true" })
+      .set("Cookie", staffCookie);
+    expect(allTime.status).toBe(200);
+    expect(allTime.body).toHaveLength(1);
+    expect(allTime.body[0]).toMatchObject({ vendorId: vendorA, totalPaid: "375.00", paymentCount: 4 });
   });
 });

@@ -1,6 +1,6 @@
 import { Router, type IRouter } from "express";
 import { randomUUID } from "node:crypto";
-import { eq, and, desc, ilike, or, count, sql, inArray, type SQL } from "drizzle-orm";
+import { eq, and, desc, ilike, or, count, sql, inArray, gte, lte, type SQL } from "drizzle-orm";
 import { db, paymentsTable, clientsTable, remittancesTable, remittanceAllocationsTable, feesTable, authorizationsTable } from "@workspace/db";
 import {
   ListPaymentsQueryParams,
@@ -94,6 +94,10 @@ router.get("/payments", requireAuth, async (req, res): Promise<void> => {
     res.status(400).json({ error: query.error.message });
     return;
   }
+  if (query.data.startDate && query.data.endDate && query.data.startDate > query.data.endDate) {
+    res.status(400).json({ error: "startDate must be on or before endDate" });
+    return;
+  }
   const escapeLike = (s: string) => s.replace(/[\\%_]/g, (c) => `\\${c}`);
   const conditions: SQL[] = [
     notDeleted(paymentsTable),
@@ -127,6 +131,8 @@ router.get("/payments", requireAuth, async (req, res): Promise<void> => {
   if (query.data.vendorId) conditions.push(eq(paymentsTable.vendorId, query.data.vendorId));
   if (query.data.authorizationId) conditions.push(eq(paymentsTable.authorizationId, query.data.authorizationId));
   if (query.data.paymentMonth) conditions.push(eq(paymentsTable.paymentMonth, query.data.paymentMonth));
+  if (query.data.startDate) conditions.push(gte(paymentsTable.checkDate, query.data.startDate));
+  if (query.data.endDate) conditions.push(lte(paymentsTable.checkDate, query.data.endDate));
   // zod.coerce.boolean() treats the literal "false" as truthy; inspect the
   // wire value so picker requests for eligible (unremitted) payments work.
   const rawRemitted = req.query.remitted;
@@ -727,6 +733,10 @@ router.get("/remittances", requireAuth, async (req, res): Promise<void> => {
     res.status(400).json({ error: query.error.message });
     return;
   }
+  if (query.data.startDate && query.data.endDate && query.data.startDate > query.data.endDate) {
+    res.status(400).json({ error: "startDate must be on or before endDate" });
+    return;
+  }
   const conditions: SQL[] = [
     notDeleted(remittancesTable),
     // Exclude remittances belonging to soft-deleted clients — mirrors the
@@ -753,6 +763,8 @@ router.get("/remittances", requireAuth, async (req, res): Promise<void> => {
   if (query.data.clientId) conditions.push(eq(remittancesTable.clientId, query.data.clientId));
   if (query.data.status) conditions.push(eq(remittancesTable.status, query.data.status));
   if (query.data.remittanceBatchId) conditions.push(eq(remittancesTable.remittanceBatchId, query.data.remittanceBatchId));
+  if (query.data.startDate) conditions.push(gte(remittancesTable.remittanceDate, query.data.startDate));
+  if (query.data.endDate) conditions.push(lte(remittancesTable.remittanceDate, query.data.endDate));
   // Parse the autoMatched flag from the raw query string. The generated zod
   // schema uses zod.coerce.boolean(), which turns any non-empty string
   // (including "false") into true, so we interpret the literal here instead.

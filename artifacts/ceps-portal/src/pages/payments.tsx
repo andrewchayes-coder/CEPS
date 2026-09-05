@@ -14,11 +14,14 @@ import { Button } from '@/components/ui/button';
 import { format } from 'date-fns';
 import { Search, CheckCircle2, ChevronLeft, ChevronRight } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
+import { DateRangeFilter } from '@/components/date-range-filter';
 
 const PAGE_SIZE = 50;
 
 export default function PaymentsPage() {
   const [search, setSearch] = useState('');
+  const [startDate, setStartDate] = useState<string>();
+  const [endDate, setEndDate] = useState<string>();
   const [page, setPage] = useState(0);
   const sort = useTableSort<'checkDate' | 'qbCheckNumber' | 'vendorName' | 'clientName' | 'amount' | 'remitted'>();
   const onSort = (key: Parameters<typeof sort.toggleSort>[0]) => {
@@ -33,6 +36,8 @@ export default function PaymentsPage() {
   // audit-log page pattern.
   const params = {
     ...(search ? { search } : {}),
+    ...(startDate ? { startDate } : {}),
+    ...(endDate ? { endDate } : {}),
     limit: PAGE_SIZE,
     offset: page * PAGE_SIZE,
     ...(sort.sortBy ? { sortBy: sort.sortBy, sortDirection: sort.sortDirection } : {}),
@@ -67,15 +72,29 @@ export default function PaymentsPage() {
 
       <Card>
         <CardHeader className="pb-3 border-b">
-          <div className="relative w-full sm:max-w-md">
-            <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-            <Input
-              type="search"
-              placeholder="Search by check #..."
-              className="pl-8"
-              value={search}
-              onChange={(e) => onSearch(e.target.value)}
-            />
+          <div className="flex flex-col sm:flex-row gap-4 items-center justify-between">
+            <div className="relative w-full sm:max-w-md">
+              <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+              <Input
+                type="search"
+                placeholder="Search by check #..."
+                className="pl-8"
+                value={search}
+                onChange={(e) => onSearch(e.target.value)}
+              />
+            </div>
+            <div className="w-full sm:w-auto">
+              <DateRangeFilter
+                label="Date range"
+                startDate={startDate}
+                endDate={endDate}
+                onChange={(range) => {
+                  setStartDate(range.startDate);
+                  setEndDate(range.endDate);
+                  setPage(0);
+                }}
+              />
+            </div>
           </div>
         </CardHeader>
         <CardContent className="p-0">

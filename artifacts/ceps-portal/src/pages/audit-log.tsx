@@ -12,6 +12,7 @@ import { Download, ChevronLeft, ChevronRight } from 'lucide-react';
 import { format } from 'date-fns';
 import { downloadCSV } from '@/lib/csv';
 import { useToast } from '@/hooks/use-toast';
+import { DateRangeFilter } from '@/components/date-range-filter';
 
 const PAGE_SIZE = 50;
 const ALL_USERS = '__all__';
@@ -57,6 +58,12 @@ export default function AuditLogPage() {
 
   const setFilter = (setter: (v: string) => void) => (value: string) => {
     setter(value);
+    setPage(0);
+  };
+
+  const handleDateRangeChange = (range: { startDate?: string; endDate?: string }) => {
+    setDateFrom(range.startDate || '');
+    setDateTo(range.endDate || '');
     setPage(0);
   };
 
@@ -109,8 +116,8 @@ export default function AuditLogPage() {
       </div>
 
       <Card>
-        <CardHeader className="flex flex-col gap-4 pb-4 border-b sm:flex-row sm:items-end sm:justify-between">
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3 flex-1">
+        <CardHeader className="flex flex-col gap-4 pb-4 border-b lg:flex-row lg:items-end lg:justify-between">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 flex-1">
             <div className="space-y-1">
               <Label className="text-xs">User</Label>
               <Select value={userId} onValueChange={setFilter(setUserId)}>
@@ -146,23 +153,12 @@ export default function AuditLogPage() {
               />
             </div>
             <div className="space-y-1">
-              <Label htmlFor="audit-from" className="text-xs">From</Label>
-              <Input
-                id="audit-from"
-                data-testid="input-audit-date-from"
-                type="date"
-                value={dateFrom}
-                onChange={(e) => setFilter(setDateFrom)(e.target.value)}
-              />
-            </div>
-            <div className="space-y-1">
-              <Label htmlFor="audit-to" className="text-xs">To</Label>
-              <Input
-                id="audit-to"
-                data-testid="input-audit-date-to"
-                type="date"
-                value={dateTo}
-                onChange={(e) => setFilter(setDateTo)(e.target.value)}
+              <Label className="text-xs">Date Range</Label>
+              <DateRangeFilter
+                startDate={dateFrom}
+                endDate={dateTo}
+                onChange={handleDateRangeChange}
+                className="w-full"
               />
             </div>
           </div>

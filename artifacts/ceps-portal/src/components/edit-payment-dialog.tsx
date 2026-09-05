@@ -22,18 +22,23 @@ import {
 } from '@/components/ui/select';
 import { useToast } from '@/hooks/use-toast';
 import { Pencil } from 'lucide-react';
+import { SearchableSelect } from '@/components/searchable-select';
+import { useDebounce } from '@/hooks/use-debounce';
 
 const PAYMENT_TYPES = ['direct_payment', 'reimbursement', 'fee'];
 
 type PaymentLike = {
+  clientId: string;
   qbCheckNumber: string;
   checkDate: string;
   amount: string;
   paymentMonth?: string | null;
   paymentType: string;
   vendorId?: string | null;
+  vendorName?: string | null;
   invoiceId?: string | null;
   authorizationId?: string | null;
+  authNumber?: string | null;
 };
 
 type Props = {
@@ -45,12 +50,7 @@ type Props = {
 export function EditPaymentDialog({ id, payment, onSaved }: Props) {
   const { toast } = useToast();
   const updatePayment = useUpdatePayment();
-  const { data: vendorsData } = useListVendors({ limit: 1000 });
-  const { data: invoicesData } = useListInvoices({ limit: 1000 });
-  const { data: authorizationsData } = useListAuthorizations({ limit: 1000 });
-  const vendors = vendorsData?.items;
-  const invoices = invoicesData?.items;
-  const authorizations = authorizationsData?.items;
+
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState({
     qbCheckNumber: payment.qbCheckNumber,
@@ -62,6 +62,30 @@ export function EditPaymentDialog({ id, payment, onSaved }: Props) {
     invoiceId: payment.invoiceId ?? 'none',
     authorizationId: payment.authorizationId ?? 'none',
   });
+
+  const [vendorSearch, setVendorSearch] = useState('');
+  const debouncedVendorSearch = useDebounce(vendorSearch, 300);
+  const { data: vendorsData, isLoading: vendorsLoading } = useListVendors(
+    { clientId: payment.clientId, search: debouncedVendorSearch, limit: 50 },
+    { query: { enabled: open && !!payment.clientId, queryKey: ['vendors', { clientId: payment.clientId, search: debouncedVendorSearch, limit: 50 }] } }
+  );
+  const vendors = vendorsData?.items ?? [];
+
+  const [invoiceSearch, setInvoiceSearch] = useState('');
+  const debouncedInvoiceSearch = useDebounce(invoiceSearch, 300);
+  const { data: invoicesData, isLoading: invoicesLoading } = useListInvoices(
+    { clientId: payment.clientId, search: debouncedInvoiceSearch, limit: 50 },
+    { query: { enabled: open && !!payment.clientId, queryKey: ['invoices', { clientId: payment.clientId, search: debouncedInvoiceSearch, limit: 50 }] } }
+  );
+  const invoices = invoicesData?.items ?? [];
+
+  const [authSearch, setAuthSearch] = useState('');
+  const debouncedAuthSearch = useDebounce(authSearch, 300);
+  const { data: authorizationsData, isLoading: authorizationsLoading } = useListAuthorizations(
+    { clientId: payment.clientId, search: debouncedAuthSearch, limit: 50 },
+    { query: { enabled: open && !!payment.clientId, queryKey: ['authorizations', { clientId: payment.clientId, search: debouncedAuthSearch, limit: 50 }] } }
+  );
+  const authorizations = authorizationsData?.items ?? [];
 
   const set = (k: string, v: string) => setForm((p) => ({ ...p, [k]: v }));
 
@@ -131,43 +155,54 @@ export function EditPaymentDialog({ id, payment, onSaved }: Props) {
           </div>
           <div className="space-y-2">
             <Label>Vendor</Label>
-            <Select value={form.vendorId} onValueChange={(v) => set('vendorId', v)}>
-              <SelectTrigger data-testid="select-payment-vendor-id"><SelectValue placeholder="None" /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="none">None</SelectItem>
-                {vendors?.map((v) => (
-                  <SelectItem key={v.id} value={v.id}>{v.name}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <SearchableSelect
+              value={form.vendorId}
+              onValueChange={(v) => set('vendorId', v)}
+              options={vendors.map((v) => ({ value: v.id, label: v.name }))}
+              onSearchChange={setVendorSearch}
+              loading={vendorsLoading}
+              placeholder="Select vendor"
+              selectedLabelFallback={payment.vendorName ?? undefined}
+              allowClear
+              clearLabel="None"
+              data-testid="select-payment-vendor-id"
+            />
           </div>
           <div className="space-y-2">
             <Label>Invoice</Label>
-            <Select value={form.invoiceId} onValueChange={(v) => set('invoiceId', v)}>
-              <SelectTrigger data-testid="select-payment-invoice-id"><SelectValue placeholder="None" /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="none">None</SelectItem>
-                {invoices?.map((i) => (
-                  <SelectItem key={i.id} value={i.id}>
-                    {`${i.clientName ?? 'Unknown'} – ${i.serviceMonth} – $${parseFloat(i.amountRequested).toFixed(2)}`}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <SearchableSelect
+              value={form.invoiceId}
+              onValueChange={(v) => set('invoiceId', v)}
+              options={invoices.map((i) => ({
+                value: i.id,
+                label: `${i.serviceMonth} – $${parseFloat(i.amountRequested).toFixed(2)}`
+              }))}
+              onSearchChange={setInvoiceSearch}
+              loading={invoicesLoading}
+              placeholder="Select invoice"
+              allowClear
+              clearLabel="None"
+              data-testid="select-payment-invoice-id"
+            />
           </div>
           <div className="space-y-2">
             <Label>Authorization</Label>
-            <Select value={form.authorizationId} onValueChange={(v) => set('authorizationId', v)}>
-              <SelectTrigger data-testid="select-payment-authorization-id"><SelectValue placeholder="None" /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="none">None</SelectItem>
-                {authorizations?.map((a) => (
-                  <SelectItem key={a.id} value={a.id}>
-                    {`${a.authNumber} – ${a.clientName ?? 'Unknown'}`}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <SearchableSelect
+              value={form.authorizationId}
+              onValueChange={(v) => set('authorizationId', v)}
+              options={authorizations.map((a) => ({
+                value: a.id,
+                label: a.authNumber,
+                subtitle: a.activityDescription ?? undefined
+              }))}
+              onSearchChange={setAuthSearch}
+              loading={authorizationsLoading}
+              placeholder="Select authorization"
+              selectedLabelFallback={payment.authNumber ?? undefined}
+              allowClear
+              clearLabel="None"
+              data-testid="select-payment-authorization-id"
+            />
           </div>
         </div>
         <DialogFooter>

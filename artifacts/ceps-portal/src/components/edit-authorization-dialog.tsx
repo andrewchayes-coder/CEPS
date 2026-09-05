@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { useUpdateAuthorization } from '@workspace/api-client-react';
+import { useUpdateAuthorization, useListVendors } from '@workspace/api-client-react';
 import type { AuthorizationUpdate } from '@workspace/api-client-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -23,6 +23,8 @@ import {
 } from '@/components/ui/select';
 import { useToast } from '@/hooks/use-toast';
 import { Pencil } from 'lucide-react';
+import { SearchableSelect } from '@/components/searchable-select';
+import { useDebounce } from '@/hooks/use-debounce';
 
 const SERVICE_CODES = ['459', '024', '490'];
 const STATUSES = ['active', 'expired', 'pending', 'exhausted'];
@@ -37,6 +39,7 @@ type AuthorizationLike = {
   servicePeriodEnd: string;
   status: string;
   vendorId?: string | null;
+  vendorName?: string | null;
 };
 
 type Props = {
@@ -58,8 +61,17 @@ export function EditAuthorizationDialog({ id, authorization, onSaved }: Props) {
     servicePeriodStart: authorization.servicePeriodStart?.slice(0, 10) ?? '',
     servicePeriodEnd: authorization.servicePeriodEnd?.slice(0, 10) ?? '',
     status: authorization.status,
-    vendorId: authorization.vendorId ?? '',
+    vendorId: authorization.vendorId ?? 'none',
   });
+
+  const [vendorSearch, setVendorSearch] = useState('');
+  const debouncedVendorSearch = useDebounce(vendorSearch, 300);
+  // Do not participant-filter here because changing the authorization's vendor establishes that association.
+  const { data: vendorsData, isLoading: vendorsLoading } = useListVendors(
+    { search: debouncedVendorSearch, limit: 50 },
+    { query: { enabled: open, queryKey: ['vendors', { search: debouncedVendorSearch, limit: 50 }] } }
+  );
+  const vendors = vendorsData?.items ?? [];
 
   const set = (k: string, v: string) => setForm((p) => ({ ...p, [k]: v }));
 
@@ -73,7 +85,7 @@ export function EditAuthorizationDialog({ id, authorization, onSaved }: Props) {
       servicePeriodStart: form.servicePeriodStart || undefined,
       servicePeriodEnd: form.servicePeriodEnd || undefined,
       status: form.status as AuthorizationUpdate['status'],
-      vendorId: form.vendorId === '' ? null : form.vendorId,
+      vendorId: form.vendorId === 'none' ? null : form.vendorId,
     };
     updateAuthorization.mutate(
       { id, data },
@@ -148,8 +160,19 @@ export function EditAuthorizationDialog({ id, authorization, onSaved }: Props) {
             </Select>
           </div>
           <div className="space-y-2">
-            <Label>Vendor ID</Label>
-            <Input value={form.vendorId} onChange={(e) => set('vendorId', e.target.value)} placeholder="Optional" data-testid="input-auth-vendor-id" />
+            <Label>Vendor</Label>
+            <SearchableSelect
+              value={form.vendorId}
+              onValueChange={(v) => set('vendorId', v)}
+              options={vendors.map(v => ({ value: v.id, label: v.name }))}
+              onSearchChange={setVendorSearch}
+              loading={vendorsLoading}
+              placeholder="Optional"
+              selectedLabelFallback={authorization.vendorName ?? undefined}
+              allowClear
+              clearLabel="None"
+              data-testid="select-auth-vendor"
+            />
           </div>
         </div>
         <DialogFooter>

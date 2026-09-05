@@ -188,6 +188,11 @@ router.get("/reports/vendor-payments", requireAuth, async (req, res): Promise<vo
     res.status(400).json({ error: query.error.message });
     return;
   }
+  if (query.data.startDate && query.data.endDate && query.data.startDate > query.data.endDate) {
+    res.status(400).json({ error: "startDate must be on or before endDate" });
+    return;
+  }
+  const allTime = query.data.allTime === "true";
   const isVendorUser = u.role === "vendor" && u.linkedRecordType === "vendor" && !!u.linkedRecordId;
   // Staff see all vendors; a vendor user sees only their own record. Other roles
   // (coordinator/parent/self) have no vendor totals to report — return empty.
@@ -196,38 +201,34 @@ router.get("/reports/vendor-payments", requireAuth, async (req, res): Promise<vo
     return;
   }
   const year = query.data.year ?? new Date().getFullYear();
-  let [payments, vendors] = await Promise.all([
-    db.select().from(paymentsTable).where(notDeleted(paymentsTable)),
-    db.select().from(vendorsTable),
-  ]);
-  if (isVendorUser) {
-    payments = payments.filter((p) => p.vendorId === u.linkedRecordId);
-    vendors = vendors.filter((v) => v.id === u.linkedRecordId);
+  const conditions: SQL[] = [notDeleted(paymentsTable), sql`${paymentsTable.vendorId} is not null`, notDeleted(clientsTable)];
+  if (isVendorUser) conditions.push(eq(paymentsTable.vendorId, u.linkedRecordId!));
+  if (query.data.vendorId) conditions.push(eq(paymentsTable.vendorId, query.data.vendorId));
+  if (query.data.clientId) conditions.push(eq(paymentsTable.clientId, query.data.clientId));
+  if (query.data.coordinatorId) conditions.push(eq(clientsTable.assignedCoordinatorId, query.data.coordinatorId));
+  if (query.data.startDate) conditions.push(gte(paymentsTable.checkDate, query.data.startDate));
+  if (query.data.endDate) conditions.push(lte(paymentsTable.checkDate, query.data.endDate));
+  if (!allTime && !query.data.startDate && !query.data.endDate) {
+    conditions.push(sql`extract(year from ${paymentsTable.checkDate}::date) = ${year}`);
   }
-  const byVendor = new Map<string, { total: Decimal; count: number }>();
-  for (const p of payments) {
-    if (!p.vendorId) continue;
-    if (!p.checkDate.startsWith(String(year))) continue;
-    const cur = byVendor.get(p.vendorId) ?? { total: new Decimal(0), count: 0 };
-    cur.total = cur.total.plus(money(p.amount));
-    cur.count += 1;
-    byVendor.set(p.vendorId, cur);
-  }
-  const rows = vendors
-    .filter((v) => byVendor.has(v.id))
-    .map((v) => {
-      const agg = byVendor.get(v.id)!;
-      return {
-        vendorId: v.id,
-        vendorName: v.name,
-        einOnFile: !!v.ein,
-        totalPaid: agg.total.toFixed(2),
-        paymentCount: agg.count,
-        year,
-      };
+  const rows = await db
+    .select({
+      vendorId: vendorsTable.id,
+      vendorName: vendorsTable.name,
+      ein: vendorsTable.ein,
+      totalPaid: sql<string>`coalesce(sum(${paymentsTable.amount}), 0)`,
+      paymentCount: count(paymentsTable.id),
     })
-    .sort((a, b) => money(b.totalPaid).comparedTo(money(a.totalPaid)));
-  res.json(GetVendorPaymentReportResponse.parse(rows));
+    .from(paymentsTable)
+    .innerJoin(vendorsTable, eq(paymentsTable.vendorId, vendorsTable.id))
+    .innerJoin(clientsTable, eq(paymentsTable.clientId, clientsTable.id))
+    .where(and(...conditions))
+    .groupBy(vendorsTable.id, vendorsTable.name, vendorsTable.ein)
+    .orderBy(desc(sql`sum(${paymentsTable.amount})`));
+  res.json(GetVendorPaymentReportResponse.parse(rows.map((row) => ({
+    vendorId: row.vendorId, vendorName: row.vendorName, einOnFile: !!row.ein,
+    totalPaid: money(row.totalPaid).toFixed(2), paymentCount: row.paymentCount, year,
+  }))));
 });
 
 // "Pending Authorization Tracker" — referrals/cases waiting on POS authorization
@@ -239,6 +240,10 @@ router.get("/reports/pending-authorizations", requireStaffOrCoordinator, async (
     res.status(400).json({ error: query.error.message });
     return;
   }
+  if (query.data.startDate && query.data.endDate && query.data.startDate > query.data.endDate) {
+    res.status(400).json({ error: "startDate must be on or before endDate" });
+    return;
+  }
   const u = req.user!;
   const conditions: SQL[] = [eq(referralsTable.status, "pending_auth")];
   // Coordinators only see cases in their caseload (clients assigned to them);
@@ -248,6 +253,9 @@ router.get("/reports/pending-authorizations", requireStaffOrCoordinator, async (
   } else if (query.data.coordinatorId) {
     conditions.push(eq(referralsTable.serviceCoordinatorId, query.data.coordinatorId));
   }
+  if (query.data.clientId) conditions.push(eq(referralsTable.clientId, query.data.clientId));
+  if (query.data.startDate) conditions.push(gte(referralsTable.referralDate, query.data.startDate));
+  if (query.data.endDate) conditions.push(lte(referralsTable.referralDate, query.data.endDate));
   // Client-name search runs in SQL (ilike over `first_name || ' ' || last_name`)
   // via a join, so limit/offset and the count both reflect the filter.
   if (query.data.search) conditions.push(clientNameLike(query.data.search));
@@ -311,9 +319,16 @@ router.get("/reports/case-status", requireStaff, async (req, res): Promise<void>
     res.status(400).json({ error: query.error.message });
     return;
   }
+  if (query.data.startDate && query.data.endDate && query.data.startDate > query.data.endDate) {
+    res.status(400).json({ error: "startDate must be on or before endDate" });
+    return;
+  }
   const conditions: SQL[] = [];
   if (query.data.status) conditions.push(eq(referralsTable.status, query.data.status));
   if (query.data.coordinatorId) conditions.push(eq(referralsTable.serviceCoordinatorId, query.data.coordinatorId));
+  if (query.data.clientId) conditions.push(eq(referralsTable.clientId, query.data.clientId));
+  if (query.data.startDate) conditions.push(gte(referralsTable.referralDate, query.data.startDate));
+  if (query.data.endDate) conditions.push(lte(referralsTable.referralDate, query.data.endDate));
   // Client-name search runs in SQL via the clients join so limit/offset and
   // the count both reflect the filter.
   if (query.data.search) conditions.push(clientNameLike(query.data.search));
@@ -375,87 +390,56 @@ router.get("/reports/missing-documents", requireStaff, async (req, res): Promise
     res.status(400).json({ error: query.error.message });
     return;
   }
-  const docType = query.data.docType;
-  const rows: {
-    docType: "w9" | "signature" | "auth_pdf";
-    entityType: string;
-    entityId: string;
-    entityName: string;
-    description: string;
-    clientId: string | null;
-    clientName: string | null;
-  }[] = [];
-
-  if (!docType || docType === "w9") {
-    const vendors = await db
-      .select()
-      .from(vendorsTable)
-      .where(and(eq(vendorsTable.active, true), or(isNull(vendorsTable.w9Status), eq(vendorsTable.w9Status, "pending"), eq(vendorsTable.w9Status, "expired"))!));
-    for (const v of vendors) {
-      rows.push({
-        docType: "w9",
-        entityType: "vendor",
-        entityId: v.id,
-        entityName: v.name,
-        description: `No W-9 on file (status: ${v.w9Status}) — payments are blocked.`,
-        clientId: null,
-        clientName: null,
-      });
-    }
+  if (query.data.startDate && query.data.endDate && query.data.startDate > query.data.endDate) {
+    res.status(400).json({ error: "startDate must be on or before endDate" });
+    return;
   }
-
-  if (!docType || docType === "signature") {
-    const referrals = await db
-      .select()
-      .from(referralsTable)
-      .where(and(eq(referralsTable.status, "pending_signature"), isNull(referralsTable.parentSignedAt)));
-    const clientNames = await clientNameMap(referrals.map((r) => r.clientId));
-    for (const r of referrals) {
-      rows.push({
-        docType: "signature",
-        entityType: "referral",
-        entityId: r.id,
-        entityName: clientNames.get(r.clientId) ?? r.id,
-        description: "Waiting on parent/guardian e-signature.",
-        clientId: r.clientId,
-        clientName: clientNames.get(r.clientId) ?? null,
-      });
-    }
-  }
-
-  if (!docType || docType === "auth_pdf") {
-    const auths = await db
-      .select()
-      .from(authorizationsTable)
-      .where(and(notDeleted(authorizationsTable), or(isNull(authorizationsTable.posPdfUrl), eq(authorizationsTable.posPdfUrl, ""))!));
-    const [clientNames, vendorNames] = await Promise.all([
-      clientNameMap(auths.map((a) => a.clientId)),
-      vendorNameMap(auths.map((a) => a.vendorId)),
-    ]);
-    for (const a of auths) {
-      rows.push({
-        docType: "auth_pdf",
-        entityType: "authorization",
-        entityId: a.id,
-        entityName: a.authNumber,
-        description: `Authorization ${a.authNumber}${a.vendorId ? ` (${vendorNames.get(a.vendorId) ?? "vendor"})` : ""} has no POS PDF attached.`,
-        clientId: a.clientId,
-        clientName: clientNames.get(a.clientId) ?? null,
-      });
-    }
-  }
-
-  const orderedRows = sortRows(
-    rows,
-    query.data.sortBy ?? "docType",
-    query.data.sortDirection ?? "asc",
-    (row, key) => row[key as keyof typeof row] as string | null,
-    (row) => `${row.entityType}:${row.entityId}`,
-  );
-  const total = orderedRows.length;
+  const docType = query.data.docType ?? null;
+  const clientId = query.data.clientId ?? null;
+  const coordinatorId = query.data.coordinatorId ?? null;
+  const startDate = query.data.startDate ?? null;
+  const endDate = query.data.endDate ?? null;
   const limit = Math.min(Math.max(query.data.limit ?? 50, 1), 1000);
   const offset = Math.max(query.data.offset ?? 0, 0);
-  const items = orderedRows.slice(offset, offset + limit);
+  // One SQL relation guarantees filters apply before the global count and page.
+  // Values are bound; only this fixed whitelist can affect ORDER BY.
+  const alerts = sql`
+    with alerts as (
+      select 'w9'::text doc_type, 'vendor'::text entity_type, v.id::text entity_id, v.name entity_name,
+        ('No W-9 on file (status: ' || v.w9_status || ') — payments are blocked.') description,
+        null::text client_id, null::text client_name
+      from vendors v
+      where (${docType}::text is null or ${docType} = 'w9') and ${clientId}::text is null and ${coordinatorId}::text is null
+        and v.active and (v.w9_status is null or v.w9_status in ('pending', 'expired'))
+        and (${startDate}::text is null or v.created_at >= ${startDate}::date)
+        and (${endDate}::text is null or v.created_at < (${endDate}::date + interval '1 day'))
+      union all
+      select 'signature', 'referral', r.id::text, coalesce(c.first_name || ' ' || c.last_name, r.id::text),
+        'Waiting on parent/guardian e-signature.', r.client_id::text, c.first_name || ' ' || c.last_name
+      from referrals r join clients c on c.id = r.client_id
+      where (${docType}::text is null or ${docType} = 'signature') and r.status = 'pending_signature' and r.parent_signed_at is null
+        and (${clientId}::text is null or r.client_id = ${clientId}::uuid)
+        and (${coordinatorId}::text is null or c.assigned_coordinator_id = ${coordinatorId}::uuid)
+        and (${startDate}::text is null or r.referral_date >= ${startDate}::date) and (${endDate}::text is null or r.referral_date <= ${endDate}::date)
+      union all
+      select 'auth_pdf', 'authorization', a.id::text, a.auth_number,
+        ('Authorization ' || a.auth_number || coalesce(' (' || v.name || ')', '') || ' has no POS PDF attached.'),
+        a.client_id::text, c.first_name || ' ' || c.last_name
+      from authorizations a join clients c on c.id = a.client_id left join vendors v on v.id = a.vendor_id
+      where (${docType}::text is null or ${docType} = 'auth_pdf') and not a.is_deleted and (a.pos_pdf_url is null or a.pos_pdf_url = '')
+        and (${clientId}::text is null or a.client_id = ${clientId}::uuid)
+        and (${coordinatorId}::text is null or c.assigned_coordinator_id = ${coordinatorId}::uuid)
+        and (${startDate}::text is null or coalesce(a.received_date, a.service_period_start) >= ${startDate}::date)
+        and (${endDate}::text is null or coalesce(a.received_date, a.service_period_start) <= ${endDate}::date)
+    )`;
+  const sortColumn = { docType: sql`doc_type`, entityType: sql`entity_type`, entityName: sql`entity_name`, description: sql`description`, clientName: sql`client_name` }[query.data.sortBy ?? "docType"]!;
+  const direction = query.data.sortDirection === "desc" ? sql`desc` : sql`asc`;
+  const [countResult, pageResult] = await Promise.all([
+    db.execute(sql`${alerts} select count(*)::int total from alerts`),
+    db.execute(sql`${alerts} select doc_type "docType", entity_type "entityType", entity_id "entityId", entity_name "entityName", description, client_id "clientId", client_name "clientName" from alerts order by ${sortColumn} ${direction}, entity_type, entity_id limit ${limit} offset ${offset}`),
+  ]);
+  const total = Number((countResult.rows[0] as { total: number }).total);
+  const items = pageResult.rows;
   res.json(GetMissingDocumentsReportResponse.parse({ items, total }));
 });
 
@@ -468,15 +452,22 @@ router.get("/reports/expiring-authorizations", requireStaffOrCoordinator, async 
     res.status(400).json({ error: query.error.message });
     return;
   }
+  if (query.data.startDate && query.data.endDate && query.data.startDate > query.data.endDate) {
+    res.status(400).json({ error: "startDate must be on or before endDate" });
+    return;
+  }
   const u = req.user!;
   const withinDays = Math.min(Math.max(query.data.withinDays ?? 30, 0), 3650);
   const today = new Date().toISOString().slice(0, 10);
   const horizon = new Date(Date.now() + withinDays * 86400000).toISOString().slice(0, 10);
-  const conditions: SQL[] = [
-    notDeleted(authorizationsTable),
-    gte(authorizationsTable.servicePeriodEnd, today),
-    lte(authorizationsTable.servicePeriodEnd, horizon),
-  ];
+  const conditions: SQL[] = [notDeleted(authorizationsTable)];
+  if (query.data.startDate || query.data.endDate) {
+    if (query.data.startDate) conditions.push(gte(authorizationsTable.servicePeriodEnd, query.data.startDate));
+    if (query.data.endDate) conditions.push(lte(authorizationsTable.servicePeriodEnd, query.data.endDate));
+  } else {
+    conditions.push(gte(authorizationsTable.servicePeriodEnd, today), lte(authorizationsTable.servicePeriodEnd, horizon));
+  }
+  if (query.data.clientId) conditions.push(eq(authorizationsTable.clientId, query.data.clientId));
   // Coordinators only see authorizations for clients in their caseload.
   if (u.role === "service_coordinator") {
     const myClients = await db
@@ -489,6 +480,8 @@ router.get("/reports/expiring-authorizations", requireStaffOrCoordinator, async 
       return;
     }
     conditions.push(inArray(authorizationsTable.clientId, ids));
+  } else if (query.data.coordinatorId) {
+    conditions.push(sql`${authorizationsTable.clientId} in (select id from clients where assigned_coordinator_id = ${query.data.coordinatorId} and is_deleted = false)`);
   }
   const where = and(...conditions);
   const auths = await db

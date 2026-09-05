@@ -21,6 +21,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Plus, Search, Filter, ChevronLeft, ChevronRight } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
 import { ClientLink } from '@/components/entity-links';
+import { DateRangeFilter } from '@/components/date-range-filter';
 
 const PAGE_SIZE = 50;
 
@@ -28,6 +29,8 @@ export default function ReferralsPage() {
   const { user } = useAuth();
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [search, setSearch] = useState('');
+  const [startDate, setStartDate] = useState<string>();
+  const [endDate, setEndDate] = useState<string>();
   const [page, setPage] = useState(0);
   const sort = useTableSort<'referralDate' | 'clientName' | 'coordinatorName' | 'serviceType' | 'status'>();
   const onSort = (key: Parameters<typeof sort.toggleSort>[0]) => {
@@ -39,6 +42,8 @@ export default function ReferralsPage() {
   const params = {
     ...(statusFilter !== 'all' ? { status: statusFilter } : {}),
     ...(search ? { search } : {}),
+    ...(startDate ? { startDate } : {}),
+    ...(endDate ? { endDate } : {}),
     limit: PAGE_SIZE,
     offset: page * PAGE_SIZE,
     ...(sort.sortBy ? { sortBy: sort.sortBy, sortDirection: sort.sortDirection } : {}),
@@ -88,23 +93,34 @@ export default function ReferralsPage() {
                 onChange={(e) => { setSearch(e.target.value); setPage(0); }}
               />
             </div>
-            <div className="flex items-center gap-2 w-full sm:w-auto">
-              <Filter className="h-4 w-4 text-muted-foreground shrink-0" />
-              <Select value={statusFilter} onValueChange={onStatusChange}>
-                <SelectTrigger className="w-full sm:w-[180px]">
-                  <SelectValue placeholder="All Statuses" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All Statuses</SelectItem>
-                  <SelectItem value="intake">Intake</SelectItem>
-                  <SelectItem value="pending_signature">Pending Signature</SelectItem>
-                  <SelectItem value="pending_auth">Pending POS</SelectItem>
-                  <SelectItem value="pending_w9">Pending W-9</SelectItem>
-                  <SelectItem value="pending_invoice">Pending Invoice</SelectItem>
-                  <SelectItem value="active">Active</SelectItem>
-                  <SelectItem value="closed">Closed</SelectItem>
-                </SelectContent>
-              </Select>
+            <div className="flex flex-col sm:flex-row items-center gap-2 w-full sm:w-auto">
+              <DateRangeFilter
+                startDate={startDate}
+                endDate={endDate}
+                onChange={(range) => {
+                  setStartDate(range.startDate);
+                  setEndDate(range.endDate);
+                  setPage(0);
+                }}
+              />
+              <div className="flex items-center gap-2 w-full sm:w-auto">
+                <Filter className="h-4 w-4 text-muted-foreground shrink-0 hidden sm:block" />
+                <Select value={statusFilter} onValueChange={onStatusChange}>
+                  <SelectTrigger className="w-full sm:w-[180px]">
+                    <SelectValue placeholder="All Statuses" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Statuses</SelectItem>
+                    <SelectItem value="intake">Intake</SelectItem>
+                    <SelectItem value="pending_signature">Pending Signature</SelectItem>
+                    <SelectItem value="pending_auth">Pending POS</SelectItem>
+                    <SelectItem value="pending_w9">Pending W-9</SelectItem>
+                    <SelectItem value="pending_invoice">Pending Invoice</SelectItem>
+                    <SelectItem value="active">Active</SelectItem>
+                    <SelectItem value="closed">Closed</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
             </div>
           </div>
         </CardHeader>

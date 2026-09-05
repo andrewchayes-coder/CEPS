@@ -14,6 +14,8 @@ vendorId?: string;
 status?: string;
 expiringWithinDays?: number;
 search?: string;
+startDate?: string;
+endDate?: string;
 limit?: number;
 offset?: number;
 sortBy?: ListAuthorizationsSortBy;

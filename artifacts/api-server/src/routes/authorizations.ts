@@ -1,5 +1,5 @@
 import { Router, type IRouter } from "express";
-import { eq, desc, and, count, sql, ilike, or, type SQL } from "drizzle-orm";
+import { eq, desc, and, count, sql, ilike, or, lte, gte, type SQL } from "drizzle-orm";
 import { anthropic } from "@workspace/integrations-anthropic-ai";
 import { db, authorizationsTable, referralsTable, vendorsTable, paymentsTable } from "@workspace/db";
 import {
@@ -64,6 +64,10 @@ router.get("/authorizations", requireAuth, async (req, res): Promise<void> => {
     res.status(400).json({ error: query.error.message });
     return;
   }
+  if (query.data.startDate && query.data.endDate && query.data.startDate > query.data.endDate) {
+    res.status(400).json({ error: "startDate must be on or before endDate" });
+    return;
+  }
   const conditions: SQL[] = [notDeleted(authorizationsTable)];
   // Role scoping — mirrors the payments/audit-log SQL-WHERE pattern:
   // vendors see only their own vendor's auths; parent/self only their linked
@@ -78,6 +82,10 @@ router.get("/authorizations", requireAuth, async (req, res): Promise<void> => {
   // Query-string filters on plain columns.
   if (query.data.clientId) conditions.push(eq(authorizationsTable.clientId, query.data.clientId));
   if (query.data.vendorId) conditions.push(eq(authorizationsTable.vendorId, query.data.vendorId));
+  // Service-period overlap: rows that began before the requested end and end
+  // after the requested start are included (including exact boundaries).
+  if (query.data.startDate) conditions.push(gte(authorizationsTable.servicePeriodEnd, query.data.startDate));
+  if (query.data.endDate) conditions.push(lte(authorizationsTable.servicePeriodStart, query.data.endDate));
   if (query.data.search) {
     const like = `%${escapeLike(query.data.search)}%`;
     conditions.push(

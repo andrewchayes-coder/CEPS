@@ -9,11 +9,14 @@ import { Badge } from '@/components/ui/badge';
 import { Search, ChevronLeft, ChevronRight } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
 import { ClientLink } from '@/components/entity-links';
+import { DateRangeFilter } from '@/components/date-range-filter';
 
 const PAGE_SIZE = 50;
 
 export default function ClientsPage() {
   const [search, setSearch] = useState('');
+  const [startDate, setStartDate] = useState<string>();
+  const [endDate, setEndDate] = useState<string>();
   const [page, setPage] = useState(0);
   const sort = useTableSort<'name' | 'uciNumber' | 'dateOfBirth' | 'assignedCoordinatorName' | 'status'>();
   const onSort = (key: Parameters<typeof sort.toggleSort>[0]) => {
@@ -24,6 +27,8 @@ export default function ClientsPage() {
   // Server-driven search (name + UCI) + pagination — mirrors the audit-log page.
   const params = {
     ...(search ? { search } : {}),
+    ...(startDate ? { startDate } : {}),
+    ...(endDate ? { endDate } : {}),
     limit: PAGE_SIZE,
     offset: page * PAGE_SIZE,
     ...(sort.sortBy ? { sortBy: sort.sortBy, sortDirection: sort.sortDirection } : {}),
@@ -51,15 +56,29 @@ export default function ClientsPage() {
 
       <Card>
         <CardHeader className="pb-3 border-b">
-          <div className="relative w-full sm:max-w-md">
-            <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-            <Input
-              type="search"
-              placeholder="Search by name or UCI..."
-              className="pl-8"
-              value={search}
-              onChange={(e) => onSearch(e.target.value)}
-            />
+          <div className="flex flex-col sm:flex-row gap-4 items-center justify-between">
+            <div className="relative w-full sm:max-w-md">
+              <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+              <Input
+                type="search"
+                placeholder="Search by name or UCI..."
+                className="pl-8"
+                value={search}
+                onChange={(e) => onSearch(e.target.value)}
+              />
+            </div>
+            <div className="w-full sm:w-auto">
+              <DateRangeFilter
+                label="Created date"
+                startDate={startDate}
+                endDate={endDate}
+                onChange={(range) => {
+                  setStartDate(range.startDate);
+                  setEndDate(range.endDate);
+                  setPage(0);
+                }}
+              />
+            </div>
           </div>
         </CardHeader>
         <CardContent className="p-0">

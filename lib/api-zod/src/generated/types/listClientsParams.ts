@@ -9,8 +9,11 @@ import type { ListClientsSortBy } from './listClientsSortBy';
 import type { ListClientsSortDirection } from './listClientsSortDirection';
 
 export type ListClientsParams = {
+vendorId?: string;
 status?: string;
 search?: string;
+startDate?: string;
+endDate?: string;
 limit?: number;
 offset?: number;
 sortBy?: ListClientsSortBy;

@@ -41,13 +41,14 @@ async function insertReferral(opts: {
   coordinatorId?: string | null;
   status?: string;
   createdAt?: Date;
+  referralDate?: string;
 }) {
   const [r] = await db
     .insert(referralsTable)
     .values({
       clientId: opts.clientId,
       serviceCoordinatorId: opts.coordinatorId ?? null,
-      referralDate: "2026-01-15",
+      referralDate: opts.referralDate ?? "2026-01-15",
       status: opts.status ?? "intake",
       createdAt: opts.createdAt ?? new Date(),
     })
@@ -194,5 +195,17 @@ describe("GET /referrals filters", () => {
     const res = await get(staffCookie, { coordinatorId: otherCoordId, limit: 1000 });
     expect(res.body.total).toBe(1);
     expect(res.body.items[0].clientId).toBe(clientB);
+  });
+});
+
+describe("GET /referrals date range", () => {
+  it("includes both referralDate boundaries and rejects reversed ranges", async () => {
+    const left = await insertReferral({ clientId: clientA, coordinatorId: coordId, referralDate: "2026-05-01" });
+    const right = await insertReferral({ clientId: clientA, coordinatorId: coordId, referralDate: "2026-05-31" });
+    const res = await get(staffCookie, { startDate: "2026-05-01", endDate: "2026-05-31", limit: 100 });
+    expect(res.status).toBe(200);
+    expect(res.body.items.map((r: any) => r.id)).toEqual(expect.arrayContaining([left.id, right.id]));
+    const invalid = await get(staffCookie, { startDate: "2026-06-01", endDate: "2026-05-01", limit: 10 });
+    expect(invalid.status).toBe(400);
   });
 });

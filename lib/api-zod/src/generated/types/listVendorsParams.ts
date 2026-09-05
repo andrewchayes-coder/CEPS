@@ -10,8 +10,14 @@ import type { ListVendorsSortBy } from './listVendorsSortBy';
 import type { ListVendorsSortDirection } from './listVendorsSortDirection';
 
 export type ListVendorsParams = {
+/**
+ * Return only vendors already linked to the participant through an authorization, invoice, or payment.
+ */
+clientId?: string;
 search?: string;
 w9Status?: string;
+startDate?: string;
+endDate?: string;
 active?: ListVendorsActive;
 limit?: number;
 offset?: number;

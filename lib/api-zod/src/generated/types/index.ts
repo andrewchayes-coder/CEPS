@@ -196,6 +196,8 @@ export * from './signaturePageIntakeSentTo';
 export * from './signaturePagePaymentTypeRequested';
 export * from './signaturePageServiceFrequency';
 export * from './signatureResult';
+export * from './signedAgreementSnapshot';
+export * from './signedAgreementSnapshotSignerRelationship';
 export * from './statusCount';
 export * from './updateMeInput';
 export * from './uploadUrlRequest';

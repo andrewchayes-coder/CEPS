@@ -31,6 +31,7 @@ export const referralsTable = pgTable("referrals", {
   signedByName: text("signed_by_name"),
   signerRelationship: text("signer_relationship"), // self | parent | guardian | conservator
   signedIp: text("signed_ip"),
+  agreementSnapshot: jsonb("agreement_snapshot"),
   altaAuthReceivedAt: timestamp("alta_auth_received_at", {
     withTimezone: true,
   }),

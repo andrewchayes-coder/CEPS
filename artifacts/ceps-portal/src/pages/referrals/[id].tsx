@@ -14,6 +14,7 @@ import { CheckCircle2, AlertTriangle, FileText, ArrowLeft, RefreshCw } from 'luc
 import { format } from 'date-fns';
 import { Link } from 'wouter';
 import { ClientLink } from '@/components/entity-links';
+import { AgreementReview } from '@/components/agreement-review';
 
 export default function ReferralDetailPage() {
   const { id } = useParams<{ id: string }>();
@@ -133,6 +134,22 @@ export default function ReferralDetailPage() {
               </div>
             </CardContent>
           </Card>
+          {referral.agreementSnapshot && (
+            <Card data-testid="signed-agreement-snapshot">
+              <CardHeader className="border-b">
+                <CardTitle className="text-lg">Accepted Agreement</CardTitle>
+                <CardDescription>
+                  Immutable copy accepted by {referral.agreementSnapshot.signedByName} on{' '}
+                  {format(new Date(referral.agreementSnapshot.signedAt), 'MMMM d, yyyy \'at\' h:mm a')}
+                  {' · '}{referral.agreementSnapshot.signerRelationship.replace('_', ' ')}
+                  {' · '}{referral.agreementSnapshot.recipientEmail}
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="pt-6">
+                <AgreementReview data={referral.agreementSnapshot} />
+              </CardContent>
+            </Card>
+          )}
         </div>
 
         {/* Sidebar Actions */}

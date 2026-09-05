@@ -154,6 +154,7 @@ export function referralJson(
     parentSignedAt: iso(r.parentSignedAt),
     signedByName: r.signedByName,
     signerRelationship: r.signerRelationship,
+    agreementSnapshot: r.agreementSnapshot ?? null,
     altaAuthReceivedAt: iso(r.altaAuthReceivedAt),
     serviceFrequency: r.serviceFrequency,
     cost: r.cost,

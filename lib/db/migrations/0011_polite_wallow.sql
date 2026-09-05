@@ -1,0 +1,1 @@
+ALTER TABLE "referrals" ADD COLUMN "agreement_snapshot" jsonb;

@@ -159,6 +159,42 @@ describe("POST /signature/:token without account creation", () => {
     expect(ref.signedByName).toBe("No Account Parent");
     expect(ref.signerRelationship).toBe("parent");
     expect(ref.status).toBe("pending_auth");
+    expect(ref.agreementSnapshot).toMatchObject({
+      referralId,
+      clientName: `Sig-Kid ${nonce}`,
+      recipientEmail: signerEmail,
+      signedByName: "No Account Parent",
+      signerRelationship: "parent",
+      representativeName: "Pat Representative",
+      cost: "210.00",
+      paymentSchedule: "$210 on the 1st of each month",
+      agreementText: expect.stringContaining("1. Purpose of RC Funds"),
+    });
+    expect((ref.agreementSnapshot as { signedAt?: string }).signedAt).toBe(
+      ref.parentSignedAt?.toISOString(),
+    );
+
+    await db
+      .update(referralsTable)
+      .set({ cost: "999.00", paymentSchedule: "Changed after signing" })
+      .where(eq(referralsTable.id, referralId));
+    await db
+      .update(clientsTable)
+      .set({ familyRepName: "Changed Representative" })
+      .where(eq(clientsTable.id, clientId));
+    const [edited] = await db
+      .select()
+      .from(referralsTable)
+      .where(eq(referralsTable.id, referralId));
+    expect(edited.agreementSnapshot).toEqual(ref.agreementSnapshot);
+    await db
+      .update(referralsTable)
+      .set({ cost: "210.00", paymentSchedule: "$210 on the 1st of each month" })
+      .where(eq(referralsTable.id, referralId));
+    await db
+      .update(clientsTable)
+      .set({ familyRepName: "Pat Representative" })
+      .where(eq(clientsTable.id, clientId));
 
     const reusedPage = await request(app).get(`/api/signature/${tokenNoAccount}`);
     expect(reusedPage.status).toBe(404);
@@ -174,7 +210,7 @@ describe("POST /signature/:token with account creation", () => {
     // Reset the referral first — the earlier no-account sign marked it signed.
     await db
       .update(referralsTable)
-      .set({ parentSignedAt: null, signedByName: null, status: "pending_signature" })
+      .set({ parentSignedAt: null, signedByName: null, agreementSnapshot: null, status: "pending_signature" })
       .where(eq(referralsTable.id, referralId));
 
     const token = await makeLink("signature", referralId, signerEmail);

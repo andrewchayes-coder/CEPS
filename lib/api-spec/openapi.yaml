@@ -2355,6 +2355,10 @@ components:
         parentSignedAt: { type: ["string", "null"] }
         signedByName: { type: ["string", "null"] }
         signerRelationship: { type: ["string", "null"], enum: [self, parent, guardian, conservator, null] }
+        agreementSnapshot:
+          oneOf:
+            - $ref: "#/components/schemas/SignedAgreementSnapshot"
+            - type: "null"
         altaAuthReceivedAt: { type: ["string", "null"] }
         serviceFrequency: { type: ["string", "null"], enum: [one_time, monthly, null] }
         cost: { type: ["string", "null"] }
@@ -2398,7 +2402,7 @@ components:
         altaAuthReceivedAt: { type: ["string", "null"] }
     SignaturePage:
       type: object
-      required: [referralId, clientName, clientIsMinor, intakeSentTo, activityDescription, alreadySigned]
+      required: [referralId, clientName, clientIsMinor, intakeSentTo, activityDescription, agreementText, alreadySigned]
       properties:
         referralId: { type: string }
         clientName: { type: string }
@@ -2425,7 +2429,18 @@ components:
         cost: { type: ["string", "null"] }
         paymentSchedule: { type: ["string", "null"] }
         paymentTypeRequested: { type: ["string", "null"], enum: [service_payment, reimbursement, null] }
+        agreementText: { type: string }
         alreadySigned: { type: boolean }
+    SignedAgreementSnapshot:
+      allOf:
+        - $ref: "#/components/schemas/SignaturePage"
+        - type: object
+          required: [recipientEmail, signedByName, signerRelationship, signedAt]
+          properties:
+            recipientEmail: { type: string }
+            signedByName: { type: string }
+            signerRelationship: { type: string, enum: [self, parent, guardian, conservator] }
+            signedAt: { type: string }
     SignatureInput:
       type: object
       required: [typedName, agreed, signerRelationship]

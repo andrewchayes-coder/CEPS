@@ -60,5 +60,6 @@ export interface SignaturePage {
   paymentSchedule?: string | null;
   /** @nullable */
   paymentTypeRequested?: SignaturePagePaymentTypeRequested;
+  agreementText: string;
   alreadySigned: boolean;
 }

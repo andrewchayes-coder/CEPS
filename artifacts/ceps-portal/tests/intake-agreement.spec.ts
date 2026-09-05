@@ -2,6 +2,10 @@ import { expect, test, type Page } from '@playwright/test';
 
 const referralId = 'agreement-referral';
 const staff = { id: 'staff-1', name: 'Staff User', email: 'staff@test.local', role: 'staff' };
+const agreementText = `1. Purpose of RC Funds
+Accepted agreement terms preserved for testing.
+
+5. Service Payment and/or Reimbursement Process`;
 
 function referral(overrides: Record<string, unknown> = {}) {
   return {
@@ -82,6 +86,7 @@ function canonicalAgreement(overrides: Record<string, unknown> = {}) {
     cost: '210.00',
     paymentSchedule: '$210 on the 1st',
     paymentTypeRequested: 'service_payment',
+    agreementText,
     alreadySigned: false,
     ...overrides,
   };
@@ -183,6 +188,42 @@ test('resend still exposes and submits the full agreement terms', async ({ page 
   });
 });
 
+test('referral detail renders the accepted snapshot instead of later live values', async ({ page }) => {
+  await mockStaff(page);
+  await page.route(`**/api/referrals/${referralId}`, (route) =>
+    route.fulfill({
+      json: referral({
+        parentSignedAt: '2026-09-05T12:00:00.000Z',
+        signedByName: 'Pat Rivera',
+        signerRelationship: 'guardian',
+        cost: '999.00',
+        paymentSchedule: 'Changed after signing',
+        agreementSnapshot: canonicalAgreement({
+          clientName: 'Jordan At Signing',
+          representativeName: 'Pat At Signing',
+          cost: '210.00',
+          paymentSchedule: '$210 on the 1st',
+          recipientEmail: 'accepted-recipient@test.local',
+          signedByName: 'Pat Rivera',
+          signerRelationship: 'guardian',
+          signedAt: '2026-09-05T12:00:00.000Z',
+          alreadySigned: false,
+        }),
+      }),
+    }),
+  );
+
+  await page.goto(`/referrals/${referralId}`);
+  const snapshot = page.getByTestId('signed-agreement-snapshot');
+  await expect(snapshot).toBeVisible();
+  await expect(snapshot).toContainText('Jordan At Signing');
+  await expect(snapshot).toContainText('Pat At Signing');
+  await expect(snapshot).toContainText('accepted-recipient@test.local');
+  await expect(snapshot.getByTestId('agreement-cost')).toHaveText('$210.00');
+  await expect(snapshot.getByTestId('agreement-payment-schedule')).toHaveText('$210 on the 1st');
+  await expect(snapshot).not.toContainText('Changed after signing');
+});
+
 test('minor cannot choose participant and missing family email displays the API action', async ({ page }) => {
   await mockStaff(page);
   await page.route(`**/api/referrals/${referralId}/agreement-preview`, (route) =>
@@ -232,6 +273,7 @@ test('public agreement shows proposed terms and submits the selected relationshi
         cost: '225.50',
         paymentSchedule: '$225.50 monthly',
         paymentTypeRequested: 'service_payment',
+        agreementText,
         alreadySigned: false,
       },
     });
@@ -261,6 +303,7 @@ test('adult participant agreement fixes the relationship to self', async ({ page
         clientIsMinor: false,
         intakeSentTo: 'participant',
         activityDescription: 'Community art class',
+        agreementText,
         alreadySigned: false,
       },
     }),

@@ -533,6 +533,111 @@ export const ReferralSignerRelationship = {
 /**
  * @nullable
  */
+export type SignaturePageIntakeSentTo = typeof SignaturePageIntakeSentTo[keyof typeof SignaturePageIntakeSentTo] | null;
+
+
+export const SignaturePageIntakeSentTo = {
+  participant: 'participant',
+  family_rep: 'family_rep',
+} as const;
+
+/**
+ * @nullable
+ */
+export type SignaturePageServiceFrequency = typeof SignaturePageServiceFrequency[keyof typeof SignaturePageServiceFrequency] | null;
+
+
+export const SignaturePageServiceFrequency = {
+  one_time: 'one_time',
+  monthly: 'monthly',
+} as const;
+
+/**
+ * @nullable
+ */
+export type SignaturePagePaymentTypeRequested = typeof SignaturePagePaymentTypeRequested[keyof typeof SignaturePagePaymentTypeRequested] | null;
+
+
+export const SignaturePagePaymentTypeRequested = {
+  service_payment: 'service_payment',
+  reimbursement: 'reimbursement',
+} as const;
+
+export interface SignaturePage {
+  referralId: string;
+  clientName: string;
+  /** @nullable */
+  participantUci?: string | null;
+  /** @nullable */
+  participantDob?: string | null;
+  clientIsMinor: boolean;
+  /** @nullable */
+  intakeSentTo: SignaturePageIntakeSentTo;
+  /** @nullable */
+  serviceCoordinatorName?: string | null;
+  /** @nullable */
+  serviceCoordinatorPhone?: string | null;
+  /** @nullable */
+  regionalCenter?: string | null;
+  /** @nullable */
+  representativeName?: string | null;
+  /** @nullable */
+  contactPhone?: string | null;
+  /** @nullable */
+  contactEmail?: string | null;
+  /** @nullable */
+  mailingAddress?: string | null;
+  /** @nullable */
+  activityDescription: string | null;
+  /**
+     * Recreational activity or program name
+     * @nullable
+     */
+  vendorName?: string | null;
+  /** @nullable */
+  activityContactName?: string | null;
+  /** @nullable */
+  activityContactPhone?: string | null;
+  /** @nullable */
+  activityMailingAddress?: string | null;
+  /** @nullable */
+  serviceStartDate?: string | null;
+  /** @nullable */
+  serviceEndDate?: string | null;
+  /** @nullable */
+  serviceType?: string | null;
+  /** @nullable */
+  serviceFrequency?: SignaturePageServiceFrequency;
+  /** @nullable */
+  cost?: string | null;
+  /** @nullable */
+  paymentSchedule?: string | null;
+  /** @nullable */
+  paymentTypeRequested?: SignaturePagePaymentTypeRequested;
+  agreementText: string;
+  alreadySigned: boolean;
+}
+
+export type SignedAgreementSnapshotSignerRelationship = typeof SignedAgreementSnapshotSignerRelationship[keyof typeof SignedAgreementSnapshotSignerRelationship];
+
+
+export const SignedAgreementSnapshotSignerRelationship = {
+  self: 'self',
+  parent: 'parent',
+  guardian: 'guardian',
+  conservator: 'conservator',
+} as const;
+
+export type SignedAgreementSnapshot = SignaturePage & {
+  recipientEmail: string;
+  signedByName: string;
+  signerRelationship: SignedAgreementSnapshotSignerRelationship;
+  signedAt: string;
+};
+
+/**
+ * @nullable
+ */
 export type ReferralServiceFrequency = typeof ReferralServiceFrequency[keyof typeof ReferralServiceFrequency] | null;
 
 
@@ -584,6 +689,7 @@ export interface Referral {
   signedByName?: string | null;
   /** @nullable */
   signerRelationship?: ReferralSignerRelationship;
+  agreementSnapshot?: SignedAgreementSnapshot | null;
   /** @nullable */
   altaAuthReceivedAt?: string | null;
   /** @nullable */
@@ -1022,93 +1128,6 @@ export interface ReferralUpdate {
   notes?: string;
   /** @nullable */
   altaAuthReceivedAt?: string | null;
-}
-
-/**
- * @nullable
- */
-export type SignaturePageIntakeSentTo = typeof SignaturePageIntakeSentTo[keyof typeof SignaturePageIntakeSentTo] | null;
-
-
-export const SignaturePageIntakeSentTo = {
-  participant: 'participant',
-  family_rep: 'family_rep',
-} as const;
-
-/**
- * @nullable
- */
-export type SignaturePageServiceFrequency = typeof SignaturePageServiceFrequency[keyof typeof SignaturePageServiceFrequency] | null;
-
-
-export const SignaturePageServiceFrequency = {
-  one_time: 'one_time',
-  monthly: 'monthly',
-} as const;
-
-/**
- * @nullable
- */
-export type SignaturePagePaymentTypeRequested = typeof SignaturePagePaymentTypeRequested[keyof typeof SignaturePagePaymentTypeRequested] | null;
-
-
-export const SignaturePagePaymentTypeRequested = {
-  service_payment: 'service_payment',
-  reimbursement: 'reimbursement',
-} as const;
-
-export interface SignaturePage {
-  referralId: string;
-  clientName: string;
-  /** @nullable */
-  participantUci?: string | null;
-  /** @nullable */
-  participantDob?: string | null;
-  clientIsMinor: boolean;
-  /** @nullable */
-  intakeSentTo: SignaturePageIntakeSentTo;
-  /** @nullable */
-  serviceCoordinatorName?: string | null;
-  /** @nullable */
-  serviceCoordinatorPhone?: string | null;
-  /** @nullable */
-  regionalCenter?: string | null;
-  /** @nullable */
-  representativeName?: string | null;
-  /** @nullable */
-  contactPhone?: string | null;
-  /** @nullable */
-  contactEmail?: string | null;
-  /** @nullable */
-  mailingAddress?: string | null;
-  /** @nullable */
-  activityDescription: string | null;
-  /**
-     * Recreational activity or program name
-     * @nullable
-     */
-  vendorName?: string | null;
-  /** @nullable */
-  activityContactName?: string | null;
-  /** @nullable */
-  activityContactPhone?: string | null;
-  /** @nullable */
-  activityMailingAddress?: string | null;
-  /** @nullable */
-  serviceStartDate?: string | null;
-  /** @nullable */
-  serviceEndDate?: string | null;
-  /** @nullable */
-  serviceType?: string | null;
-  /** @nullable */
-  serviceFrequency?: SignaturePageServiceFrequency;
-  /** @nullable */
-  cost?: string | null;
-  /** @nullable */
-  paymentSchedule?: string | null;
-  /** @nullable */
-  paymentTypeRequested?: SignaturePagePaymentTypeRequested;
-  alreadySigned: boolean;
 }
 
 /**

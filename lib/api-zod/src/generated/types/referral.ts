@@ -12,6 +12,7 @@ import type { ReferralServiceFrequency } from './referralServiceFrequency';
 import type { ReferralSignerRelationship } from './referralSignerRelationship';
 import type { ReferralStatus } from './referralStatus';
 import type { ReferralSubmittedVia } from './referralSubmittedVia';
+import type { SignedAgreementSnapshot } from './signedAgreementSnapshot';
 
 export interface Referral {
   id: string;
@@ -45,6 +46,7 @@ export interface Referral {
   signedByName?: string | null;
   /** @nullable */
   signerRelationship?: ReferralSignerRelationship;
+  agreementSnapshot?: SignedAgreementSnapshot | null;
   /** @nullable */
   altaAuthReceivedAt?: string | null;
   /** @nullable */

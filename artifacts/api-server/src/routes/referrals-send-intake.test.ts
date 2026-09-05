@@ -235,6 +235,71 @@ describe("POST /referrals/:id/send-intake", () => {
     expect(referral.paymentTypeRequested).toBe("service_payment");
   });
 
+  it("previews the same canonical current-record agreement that the recipient receives", async () => {
+    await db
+      .update(referralsTable)
+      .set({
+        intakeFields: {
+          clientFirstName: "Stale",
+          clientLastName: "Intake Name",
+          familyRepName: "Stale Intake Representative",
+          contactEmail: "stale-intake@test.local",
+          contactStreet: "1 Old Intake Road",
+          regionalCenterName: "Stale Intake Regional Center",
+          activityDescription: "Current activity terms",
+        },
+      })
+      .where(eq(referralsTable.id, adultReferralId));
+    await db
+      .update(clientsTable)
+      .set({
+        familyRepName: "Current Family Representative",
+        familyRepAddress: "99 Current Record Way",
+        regionalCenter: "Current Regional Center",
+      })
+      .where(eq(clientsTable.id, adultClientId));
+
+    const agreement = {
+      recipient: "family_rep" as const,
+      serviceFrequency: "one_time" as const,
+      cost: "325.00",
+      paymentSchedule: "One payment after service",
+      paymentTypeRequested: "reimbursement" as const,
+    };
+    const preview = await request(app)
+      .post(`/api/referrals/${adultReferralId}/agreement-preview`)
+      .set("Cookie", staffCookie)
+      .send(agreement);
+    expect(preview.status).toBe(200);
+    expect(preview.body).toMatchObject({
+      clientName: `Adult Signer`,
+      representativeName: "Current Family Representative",
+      contactEmail: `${nonce}-adult-family@test.local`,
+      mailingAddress: "99 Current Record Way",
+      regionalCenter: "Current Regional Center",
+      cost: "325.00",
+      serviceFrequency: "one_time",
+      paymentSchedule: "One payment after service",
+      paymentTypeRequested: "reimbursement",
+    });
+    expect(preview.body.representativeName).not.toBe("Stale Intake Representative");
+
+    const send = await request(app)
+      .post(`/api/referrals/${adultReferralId}/send-intake`)
+      .set("Cookie", staffCookie)
+      .send(agreement);
+    expect(send.status).toBe(200);
+    const links = await db
+      .select()
+      .from(magicLinksTable)
+      .where(eq(magicLinksTable.referralId, adultReferralId));
+    const liveLink = links.find((link) => link.usedAt === null);
+    expect(liveLink).toBeDefined();
+    const signaturePage = await request(app).get(`/api/signature/${liveLink!.token}`);
+    expect(signaturePage.status).toBe(200);
+    expect(signaturePage.body).toEqual(preview.body);
+  });
+
   it("invalidates the previous recipient's token when resending to someone else", async () => {
     const [oldLink] = await db
       .select()

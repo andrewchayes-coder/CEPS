@@ -19,6 +19,8 @@ import {
   UpdateReferralResponse,
   SendIntakeBody,
   SendIntakeResponse,
+  PreviewIntakeAgreementBody,
+  PreviewIntakeAgreementResponse,
   GetSignaturePageResponse,
   SubmitSignatureBody,
   SubmitSignatureResponse,
@@ -70,6 +72,95 @@ const clean = (value: string | undefined | null): string | null => {
   const trimmed = value.trim();
   return trimmed === "" ? null : trimmed;
 };
+
+async function buildAgreementPage(
+  referral: typeof referralsTable.$inferSelect,
+  recipient: "participant" | "family_rep",
+  draft: Partial<{
+    serviceFrequency: string | null;
+    cost: string | null;
+    paymentSchedule: string | null;
+    paymentTypeRequested: string | null;
+  }> = {},
+) {
+  const f = (referral.intakeFields ?? {}) as Record<string, string | undefined>;
+  const [clientNames, coordinatorContacts, clients] = await Promise.all([
+    clientNameMap([referral.clientId]),
+    userContactMap([referral.serviceCoordinatorId]),
+    db.select().from(clientsTable).where(eq(clientsTable.id, referral.clientId)),
+  ]);
+  const client = clients[0];
+  if (!client) return { error: "Participant not found", status: 404 } as const;
+  if (recipient === "participant" && client.isMinor !== false) {
+    return {
+      error: client.isMinor
+        ? "A minor cannot sign for themselves — send to the family rep, guardian, or conservator instead"
+        : "Confirm that the participant is not a minor before sending the intake to them",
+      status: 400,
+    } as const;
+  }
+  const sentToFamily = recipient === "family_rep";
+  const selectedEmail = clean(sentToFamily ? client.familyRepEmail : client.email);
+  if (!selectedEmail) {
+    return {
+      error: `Add an email to the ${sentToFamily ? "family rep" : "participant"} record before sending the intake agreement`,
+      status: 400,
+    } as const;
+  }
+  const coordinator = referral.serviceCoordinatorId
+    ? coordinatorContacts.get(referral.serviceCoordinatorId)
+    : undefined;
+  const participantName = clientNames.get(referral.clientId) ?? "Participant";
+  const contactAddress = sentToFamily ? client.familyRepAddress : client.address;
+  const fallbackContactAddress = [
+    f.contactStreet,
+    f.contactCity,
+    f.contactState,
+    f.contactZip,
+  ].filter(Boolean).join(", ");
+  const activityMailingAddress = [
+    f.vendorServiceStreet,
+    f.vendorServiceCity,
+    f.vendorServiceState,
+    f.vendorServiceZip,
+  ].filter(Boolean).join(", ");
+  const draftValue = (
+    field: keyof typeof draft,
+    stored: string | null,
+  ) => field in draft ? clean(draft[field]) : stored;
+
+  return {
+    selectedEmail,
+    data: {
+      referralId: referral.id,
+      clientName: participantName,
+      participantUci: client.uciNumber,
+      participantDob: client.dateOfBirth,
+      clientIsMinor: client.isMinor === true,
+      intakeSentTo: recipient,
+      serviceCoordinatorName: coordinator?.name ?? f.coordinatorName ?? null,
+      serviceCoordinatorPhone: coordinator?.phone ?? f.coordinatorPhone ?? null,
+      regionalCenter: client.regionalCenter ?? f.regionalCenterName ?? null,
+      representativeName: sentToFamily ? client.familyRepName : participantName,
+      contactPhone: (sentToFamily ? client.familyRepPhone : client.phone) ?? f.contactPhone ?? null,
+      contactEmail: selectedEmail,
+      mailingAddress: contactAddress ?? (fallbackContactAddress || null),
+      activityDescription: f.activityDescription ?? null,
+      vendorName: f.vendorName ?? null,
+      activityContactName: f.vendorContactPerson ?? null,
+      activityContactPhone: f.vendorPhone ?? null,
+      activityMailingAddress: activityMailingAddress || null,
+      serviceStartDate: f.serviceStartDate ?? null,
+      serviceEndDate: f.serviceEndDate ?? null,
+      serviceType: f.serviceType ?? null,
+      serviceFrequency: draftValue("serviceFrequency", referral.serviceFrequency),
+      cost: draftValue("cost", referral.cost),
+      paymentSchedule: draftValue("paymentSchedule", referral.paymentSchedule),
+      paymentTypeRequested: draftValue("paymentTypeRequested", referral.paymentTypeRequested),
+      alreadySigned: !!referral.parentSignedAt,
+    },
+  } as const;
+}
 
 router.get("/referrals", requireAuth, async (req, res): Promise<void> => {
   const query = ListReferralsQueryParams.safeParse(req.query);
@@ -493,6 +584,35 @@ router.post("/referrals/:id/send-intake", requireStaffOrCoordinator, async (req,
   res.json(SendIntakeResponse.parse({ sent: true, devLink: delivery.devLink }));
 });
 
+router.post("/referrals/:id/agreement-preview", requireStaffOrCoordinator, async (req, res): Promise<void> => {
+  const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+  const parsed = PreviewIntakeAgreementBody.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: parsed.error.message });
+    return;
+  }
+  const [referral] = await db.select().from(referralsTable).where(eq(referralsTable.id, id));
+  if (!referral) {
+    res.status(404).json({ error: "Referral not found" });
+    return;
+  }
+  if (req.user!.role === "service_coordinator" && referral.serviceCoordinatorId !== req.user!.id) {
+    res.status(403).json({ error: "Forbidden" });
+    return;
+  }
+  const preview = await buildAgreementPage(referral, parsed.data.recipient, {
+    serviceFrequency: parsed.data.serviceFrequency,
+    cost: parsed.data.cost,
+    paymentSchedule: parsed.data.paymentSchedule,
+    paymentTypeRequested: parsed.data.paymentTypeRequested,
+  });
+  if ("error" in preview) {
+    res.status(preview.status ?? 500).json({ error: preview.error });
+    return;
+  }
+  res.json(PreviewIntakeAgreementResponse.parse(preview.data));
+});
+
 // --- Public signature endpoints (tokened, no session) ---
 
 async function loadSignatureLink(token: string) {
@@ -521,79 +641,19 @@ router.get("/signature/:token", async (req, res): Promise<void> => {
     res.status(404).json({ error: "Referral not found" });
     return;
   }
-  const f = (referral.intakeFields ?? {}) as Record<string, string | undefined>;
-  const [clientNames, coordinatorContacts, clients] = await Promise.all([
-    clientNameMap([referral.clientId]),
-    userContactMap([referral.serviceCoordinatorId]),
-    db.select().from(clientsTable).where(eq(clientsTable.id, referral.clientId)),
-  ]);
-  const client = clients[0];
-  if (!client) {
-    res.status(404).json({ error: "Participant not found" });
+  if (referral.intakeSentTo !== "participant" && referral.intakeSentTo !== "family_rep") {
+    res.status(404).json({ error: "This signature link is no longer valid" });
     return;
   }
-  const coordinator = referral.serviceCoordinatorId
-    ? coordinatorContacts.get(referral.serviceCoordinatorId)
-    : undefined;
-  const sentToFamily = referral.intakeSentTo === "family_rep";
-  const selectedEmail =
-    referral.intakeSentTo === "participant"
-      ? client.email
-      : sentToFamily
-        ? client.familyRepEmail
-        : null;
+  const page = await buildAgreementPage(referral, referral.intakeSentTo);
   if (
-    (referral.intakeSentTo === "participant" && client.isMinor !== false) ||
-    !selectedEmail ||
-    selectedEmail.trim().toLowerCase() !== link.email.trim().toLowerCase()
+    "error" in page ||
+    page.selectedEmail.toLowerCase() !== link.email.trim().toLowerCase()
   ) {
     res.status(404).json({ error: "This signature link is no longer valid" });
     return;
   }
-  const participantName = clientNames.get(referral.clientId) ?? "Participant";
-  const contactAddress = sentToFamily ? client.familyRepAddress : client.address;
-  const fallbackContactAddress = [
-    f.contactStreet,
-    f.contactCity,
-    f.contactState,
-    f.contactZip,
-  ].filter(Boolean).join(", ");
-  const activityMailingAddress = [
-    f.vendorServiceStreet,
-    f.vendorServiceCity,
-    f.vendorServiceState,
-    f.vendorServiceZip,
-  ].filter(Boolean).join(", ");
-  res.json(
-    GetSignaturePageResponse.parse({
-      referralId: referral.id,
-      clientName: participantName,
-      participantUci: client.uciNumber,
-      participantDob: client.dateOfBirth,
-      clientIsMinor: client.isMinor === true,
-      intakeSentTo: referral.intakeSentTo,
-      serviceCoordinatorName: coordinator?.name ?? f.coordinatorName ?? null,
-      serviceCoordinatorPhone: coordinator?.phone ?? f.coordinatorPhone ?? null,
-      regionalCenter: client.regionalCenter ?? f.regionalCenterName ?? null,
-      representativeName: sentToFamily ? client.familyRepName : participantName,
-      contactPhone: (sentToFamily ? client.familyRepPhone : client.phone) ?? f.contactPhone ?? null,
-      contactEmail: (sentToFamily ? client.familyRepEmail : client.email) ?? f.contactEmail ?? null,
-      mailingAddress: contactAddress ?? (fallbackContactAddress || null),
-      activityDescription: f.activityDescription ?? null,
-      vendorName: f.vendorName ?? null,
-      activityContactName: f.vendorContactPerson ?? null,
-      activityContactPhone: f.vendorPhone ?? null,
-      activityMailingAddress: activityMailingAddress || null,
-      serviceStartDate: f.serviceStartDate ?? null,
-      serviceEndDate: f.serviceEndDate ?? null,
-      serviceType: f.serviceType ?? null,
-      serviceFrequency: referral.serviceFrequency,
-      cost: referral.cost,
-      paymentSchedule: referral.paymentSchedule,
-      paymentTypeRequested: referral.paymentTypeRequested,
-      alreadySigned: !!referral.parentSignedAt || !!link.usedAt,
-    }),
-  );
+  res.json(GetSignaturePageResponse.parse(page.data));
 });
 
 router.post("/signature/:token", async (req, res): Promise<void> => {

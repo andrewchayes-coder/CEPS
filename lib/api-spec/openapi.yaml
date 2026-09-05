@@ -696,6 +696,32 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/MagicLinkResult"
+  /referrals/{id}/agreement-preview:
+    post:
+      operationId: previewIntakeAgreement
+      tags: [referrals]
+      summary: Preview the canonical agreement for a selected recipient before sending
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SendIntakeInput"
+      responses:
+        "200":
+          description: Canonical agreement preview
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SignaturePage"
+        "400": { description: Recipient is not eligible }
+        "403": { description: Forbidden }
+        "404": { description: Referral or participant not found }
   /signature/{token}:
     get:
       operationId: getSignaturePage

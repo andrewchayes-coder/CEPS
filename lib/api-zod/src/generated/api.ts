@@ -1141,6 +1141,54 @@ export const SendIntakeResponse = zod.object({
 
 
 /**
+ * @summary Preview the canonical agreement for a selected recipient before sending
+ */
+export const PreviewIntakeAgreementParams = zod.object({
+  "id": zod.coerce.string()
+})
+
+export const previewIntakeAgreementBodyCostRegExp = new RegExp('^\\d+(\\.\\d{1,2})?$|^$');
+
+
+export const PreviewIntakeAgreementBody = zod.object({
+  "recipient": zod.enum(['participant', 'family_rep']),
+  "serviceFrequency": zod.union([zod.literal('one_time'),zod.literal('monthly'),zod.literal(''),zod.literal(null)]).nullish(),
+  "cost": zod.string().regex(previewIntakeAgreementBodyCostRegExp).nullish(),
+  "paymentSchedule": zod.string().nullish(),
+  "paymentTypeRequested": zod.union([zod.literal('service_payment'),zod.literal('reimbursement'),zod.literal(''),zod.literal(null)]).nullish()
+})
+
+export const PreviewIntakeAgreementResponse = zod.object({
+  "referralId": zod.string(),
+  "clientName": zod.string(),
+  "participantUci": zod.string().nullish(),
+  "participantDob": zod.string().nullish(),
+  "clientIsMinor": zod.boolean(),
+  "intakeSentTo": zod.union([zod.literal('participant'),zod.literal('family_rep'),zod.literal(null)]).nullable(),
+  "serviceCoordinatorName": zod.string().nullish(),
+  "serviceCoordinatorPhone": zod.string().nullish(),
+  "regionalCenter": zod.string().nullish(),
+  "representativeName": zod.string().nullish(),
+  "contactPhone": zod.string().nullish(),
+  "contactEmail": zod.string().nullish(),
+  "mailingAddress": zod.string().nullish(),
+  "activityDescription": zod.string().nullable(),
+  "vendorName": zod.string().nullish().describe('Recreational activity or program name'),
+  "activityContactName": zod.string().nullish(),
+  "activityContactPhone": zod.string().nullish(),
+  "activityMailingAddress": zod.string().nullish(),
+  "serviceStartDate": zod.string().nullish(),
+  "serviceEndDate": zod.string().nullish(),
+  "serviceType": zod.string().nullish(),
+  "serviceFrequency": zod.union([zod.literal('one_time'),zod.literal('monthly'),zod.literal(null)]).nullish(),
+  "cost": zod.string().nullish(),
+  "paymentSchedule": zod.string().nullish(),
+  "paymentTypeRequested": zod.union([zod.literal('service_payment'),zod.literal('reimbursement'),zod.literal(null)]).nullish(),
+  "alreadySigned": zod.boolean()
+})
+
+
+/**
  * @summary Load agreement data for a magic-link token (no session required)
  */
 export const GetSignaturePageParams = zod.object({

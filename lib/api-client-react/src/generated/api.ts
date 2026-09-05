@@ -2379,6 +2379,78 @@ export const useSendIntake = <TError = ErrorType<unknown>,
       return useMutation(getSendIntakeMutationOptions(options));
     }
 
+export const getPreviewIntakeAgreementUrl = (id: string,) => {
+
+
+
+
+  return `/api/referrals/${id}/agreement-preview`
+}
+
+/**
+ * @summary Preview the canonical agreement for a selected recipient before sending
+ */
+export const previewIntakeAgreement = async (id: string,
+    sendIntakeInput: SendIntakeInput, options?: Parameters<typeof customFetch>[1]): Promise<SignaturePage> => {
+
+  return customFetch<SignaturePage>(getPreviewIntakeAgreementUrl(id),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(sendIntakeInput)
+  }
+);}
+
+
+
+
+
+export const getPreviewIntakeAgreementMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof previewIntakeAgreement>>, TError,{id: string;data: BodyType<SendIntakeInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof previewIntakeAgreement>>, TError,{id: string;data: BodyType<SendIntakeInput>}, TContext> => {
+
+const mutationKey = ['previewIntakeAgreement'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof previewIntakeAgreement>>, {id: string;data: BodyType<SendIntakeInput>}> = (props) => {
+          const {id,data} = props ?? {};
+
+          return  previewIntakeAgreement(id,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type PreviewIntakeAgreementMutationResult = NonNullable<Awaited<ReturnType<typeof previewIntakeAgreement>>>
+    export type PreviewIntakeAgreementMutationBody = BodyType<SendIntakeInput>
+    export type PreviewIntakeAgreementMutationError = ErrorType<void>
+
+    /**
+ * @summary Preview the canonical agreement for a selected recipient before sending
+ */
+export const usePreviewIntakeAgreement = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof previewIntakeAgreement>>, TError,{id: string;data: BodyType<SendIntakeInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof previewIntakeAgreement>>,
+        TError,
+        {id: string;data: BodyType<SendIntakeInput>},
+        TContext
+      > => {
+      return useMutation(getPreviewIntakeAgreementMutationOptions(options));
+    }
+
 export const getGetSignaturePageUrl = (token: string,) => {
 
 

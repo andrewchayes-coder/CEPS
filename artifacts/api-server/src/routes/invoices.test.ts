@@ -9,6 +9,7 @@ const nonce = `inv${Date.now().toString(36)}`;
 
 let staffId: string;
 let clientId: string;
+let otherClientId: string;
 let cookie: string;
 
 beforeAll(async () => {
@@ -23,6 +24,11 @@ beforeAll(async () => {
     .values({ firstName: "Inv", lastName: "Client", dateOfBirth: "2000-01-01", uciNumber: `${nonce}-uci` })
     .returning();
   clientId = client.id;
+  const [otherClient] = await db
+    .insert(clientsTable)
+    .values({ firstName: "Other", lastName: "Participant", dateOfBirth: "2000-01-01", uciNumber: `${nonce}-other-uci` })
+    .returning();
+  otherClientId = otherClient.id;
 
   const token = newToken();
   await db.insert(sessionsTable).values({
@@ -38,11 +44,12 @@ const vendorIds: string[] = [];
 afterAll(async () => {
   await db.delete(paymentsTable).where(eq(paymentsTable.clientId, clientId));
   await db.delete(invoicesTable).where(eq(invoicesTable.clientId, clientId));
-  await db.delete(authorizationsTable).where(eq(authorizationsTable.clientId, clientId));
+  await db.delete(authorizationsTable).where(inArray(authorizationsTable.clientId, [clientId, otherClientId]));
   await db.delete(auditLogTable).where(eq(auditLogTable.userId, staffId));
   await db.delete(sessionsTable).where(eq(sessionsTable.userId, staffId));
   if (vendorIds.length) await db.delete(vendorsTable).where(inArray(vendorsTable.id, vendorIds));
   await db.delete(clientsTable).where(eq(clientsTable.id, clientId));
+  await db.delete(clientsTable).where(eq(clientsTable.id, otherClientId));
   await db.delete(usersTable).where(inArray(usersTable.id, [staffId]));
 });
 
@@ -183,6 +190,46 @@ describe("PATCH /invoices/:id status reset on material edit", () => {
     expect(res.status).toBe(200);
     expect(res.body.status).toBe("approved");
     expect(res.body.reviewedBy).toBe(staffId);
+  });
+});
+
+describe("PATCH /invoices/:id participant links", () => {
+  it("accepts an authorization belonging to the invoice participant", async () => {
+    const auth = await makeAuth({ maxPeriodAmount: "1000.00" });
+    const inv = await makeInvoice("validated");
+    const res = await request(app).patch(`/api/invoices/${inv.id}`).set("Cookie", cookie).send({ authorizationId: auth.id });
+    expect(res.status).toBe(200);
+    expect(res.body.authorizationId).toBe(auth.id);
+    expect(res.body.status).toBe("pending_review");
+  });
+
+  it("rejects a deleted authorization without changing invoice status", async () => {
+    const auth = await makeAuth({ maxPeriodAmount: "1000.00" });
+    await db.update(authorizationsTable).set({ isDeleted: true }).where(eq(authorizationsTable.id, auth.id));
+    const inv = await makeInvoice("validated");
+    const res = await request(app).patch(`/api/invoices/${inv.id}`).set("Cookie", cookie).send({ authorizationId: auth.id });
+    expect(res.status).toBe(400);
+    expect(res.body.error).toContain("non-deleted authorization");
+    const [unchanged] = await db.select().from(invoicesTable).where(eq(invoicesTable.id, inv.id));
+    expect(unchanged.authorizationId).toBeNull();
+    expect(unchanged.status).toBe("validated");
+  });
+
+  it("rejects an authorization belonging to another participant", async () => {
+    const [auth] = await db.insert(authorizationsTable).values({
+      clientId: otherClientId,
+      authNumber: `${nonce}-other-auth`,
+      serviceCode: "459",
+      paymentType: "direct_payment",
+      servicePeriodStart: "2026-01-01",
+      servicePeriodEnd: "2099-12-31",
+      maxPeriodAmount: "1000.00",
+      status: "active",
+    }).returning();
+    const inv = await makeInvoice("validated");
+    const res = await request(app).patch(`/api/invoices/${inv.id}`).set("Cookie", cookie).send({ authorizationId: auth.id });
+    expect(res.status).toBe(400);
+    expect(res.body.error).toContain("belong to clientId");
   });
 });
 

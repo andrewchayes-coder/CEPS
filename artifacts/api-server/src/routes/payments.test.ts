@@ -1,6 +1,9 @@
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { inArray, eq, and } from "drizzle-orm";
-import { db, usersTable, sessionsTable, clientsTable, paymentsTable, feesTable, auditLogTable } from "@workspace/db";
+import {
+  db, usersTable, sessionsTable, clientsTable, paymentsTable, feesTable, auditLogTable,
+  authorizationsTable, invoicesTable, vendorsTable, remittancesTable,
+} from "@workspace/db";
 import request from "supertest";
 import app from "../app";
 import { newToken } from "../lib/auth";
@@ -10,6 +13,7 @@ const INTERIM_FEE_RULE = "interim_flat_percent_5_pending_confirmation";
 
 let staffId: string;
 let clientId: string;
+let otherClientId: string;
 let cookie: string;
 let checkCounter = 0;
 
@@ -25,6 +29,11 @@ beforeAll(async () => {
     .values({ firstName: "Pay", lastName: "Client", dateOfBirth: "2000-01-01", uciNumber: `${nonce}-uci` })
     .returning();
   clientId = client.id;
+  const [otherClient] = await db
+    .insert(clientsTable)
+    .values({ firstName: "Other", lastName: "Participant", dateOfBirth: "2000-01-01", uciNumber: `${nonce}-other-uci` })
+    .returning();
+  otherClientId = otherClient.id;
 
   const token = newToken();
   await db.insert(sessionsTable).values({
@@ -37,10 +46,14 @@ beforeAll(async () => {
 
 afterAll(async () => {
   await db.delete(feesTable).where(eq(feesTable.clientId, clientId));
+  await db.delete(remittancesTable).where(inArray(remittancesTable.clientId, [clientId, otherClientId]));
   await db.delete(paymentsTable).where(eq(paymentsTable.clientId, clientId));
+  await db.delete(invoicesTable).where(inArray(invoicesTable.clientId, [clientId, otherClientId]));
+  await db.delete(authorizationsTable).where(inArray(authorizationsTable.clientId, [clientId, otherClientId]));
   await db.delete(auditLogTable).where(eq(auditLogTable.userId, staffId));
   await db.delete(sessionsTable).where(eq(sessionsTable.userId, staffId));
-  await db.delete(clientsTable).where(eq(clientsTable.id, clientId));
+  await db.delete(clientsTable).where(inArray(clientsTable.id, [clientId, otherClientId]));
+  await db.delete(vendorsTable).where(inArray(vendorsTable.name, [`${nonce}-valid-vendor`, `${nonce}-other-vendor`, `${nonce}-other-vendor-2`]));
   await db.delete(usersTable).where(inArray(usersTable.id, [staffId]));
 });
 
@@ -104,6 +117,104 @@ describe("PATCH /payments/:id fee recalculation", () => {
     expect(res.status).toBe(200);
     const [feeAfter] = await linkedFees(p.id);
     expect(feeAfter.amount).toBe("42.00");
+  });
+});
+
+describe("financial PATCH participant links", () => {
+  async function makeAuthorization(ownerId: string, vendorId?: string) {
+    const [auth] = await db.insert(authorizationsTable).values({
+      clientId: ownerId,
+      vendorId: vendorId ?? null,
+      authNumber: `${nonce}-auth-${checkCounter++}`,
+      serviceCode: "459",
+      paymentType: "direct_payment",
+      servicePeriodStart: "2026-01-01",
+      servicePeriodEnd: "2099-12-31",
+      maxPeriodAmount: "1000.00",
+      status: "active",
+    }).returning();
+    return auth;
+  }
+
+  it("accepts valid effective payment links", async () => {
+    const [vendor] = await db.insert(vendorsTable).values({ name: `${nonce}-valid-vendor`, active: true }).returning();
+    const auth = await makeAuthorization(clientId, vendor.id);
+    const [invoice] = await db.insert(invoicesTable).values({
+      clientId, authorizationId: auth.id, vendorId: vendor.id, submittedByRole: "staff",
+      submittedDate: "2026-01-01", serviceMonth: "2026-01", amountRequested: "100.00",
+      paymentType: "direct_payment", status: "pending_review",
+    }).returning();
+    const payment = await createPayment("100.00");
+    const res = await request(app).patch(`/api/payments/${payment.id}`).set("Cookie", cookie)
+      .send({ authorizationId: auth.id, invoiceId: invoice.id, vendorId: vendor.id });
+    expect(res.status).toBe(200);
+    expect(res.body.authorizationId).toBe(auth.id);
+    expect(res.body.invoiceId).toBe(invoice.id);
+    expect(res.body.vendorId).toBe(vendor.id);
+  });
+
+  it("rejects cross-participant payment links before changing the payment or fee", async () => {
+    const [vendor] = await db.insert(vendorsTable).values({ name: `${nonce}-other-vendor-2`, active: true }).returning();
+    const auth = await makeAuthorization(otherClientId, vendor.id);
+    const [invoice] = await db.insert(invoicesTable).values({
+      clientId: otherClientId, authorizationId: auth.id, vendorId: vendor.id, submittedByRole: "staff",
+      submittedDate: "2026-01-01", serviceMonth: "2026-01", amountRequested: "100.00",
+      paymentType: "direct_payment", status: "pending_review",
+    }).returning();
+    const payment = await createPayment("100.00");
+    const [feeBefore] = await linkedFees(payment.id);
+    const res = await request(app).patch(`/api/payments/${payment.id}`).set("Cookie", cookie)
+      .send({ authorizationId: auth.id, invoiceId: invoice.id, vendorId: vendor.id, amount: "200.00" });
+    expect(res.status).toBe(400);
+    expect(res.body.error).toContain("belong to clientId");
+    const [unchanged] = await db.select().from(paymentsTable).where(eq(paymentsTable.id, payment.id));
+    const [feeAfter] = await linkedFees(payment.id);
+    expect(unchanged.amount).toBe("100.00");
+    expect(unchanged.authorizationId).toBeNull();
+    expect(feeAfter.amount).toBe(feeBefore.amount);
+  });
+
+  it("rejects a cross-participant invoice when the authorization is unchanged", async () => {
+    const auth = await makeAuthorization(otherClientId);
+    const [invoice] = await db.insert(invoicesTable).values({
+      clientId: otherClientId, authorizationId: auth.id, submittedByRole: "staff",
+      submittedDate: "2026-01-01", serviceMonth: "2026-01", amountRequested: "100.00",
+      paymentType: "direct_payment", status: "pending_review",
+    }).returning();
+    const payment = await createPayment("100.00");
+    const res = await request(app).patch(`/api/payments/${payment.id}`).set("Cookie", cookie)
+      .send({ invoiceId: invoice.id });
+    expect(res.status).toBe(400);
+    expect(res.body.error).toContain("invoiceId must belong to clientId");
+  });
+
+  it("rejects a vendor associated only with another participant", async () => {
+    const [vendor] = await db.insert(vendorsTable).values({ name: `${nonce}-other-vendor`, active: true }).returning();
+    await makeAuthorization(otherClientId, vendor.id);
+    const payment = await createPayment("100.00");
+    const res = await request(app).patch(`/api/payments/${payment.id}`).set("Cookie", cookie)
+      .send({ vendorId: vendor.id });
+    expect(res.status).toBe(400);
+    expect(res.body.error).toContain("vendorId must already be associated with clientId");
+  });
+
+  it("validates the effective remittance authorization", async () => {
+    const ownAuth = await makeAuthorization(clientId);
+    const otherAuth = await makeAuthorization(otherClientId);
+    const [remittance] = await db.insert(remittancesTable).values({
+      clientId, authorizationId: ownAuth.id, remittanceDate: "2026-01-15",
+      amount: "100.00", status: "received", source: "manual",
+    }).returning();
+    const valid = await request(app).patch(`/api/remittances/${remittance.id}`).set("Cookie", cookie)
+      .send({ authorizationId: ownAuth.id, altaReference: "valid-edit" });
+    expect(valid.status).toBe(200);
+    const invalid = await request(app).patch(`/api/remittances/${remittance.id}`).set("Cookie", cookie)
+      .send({ authorizationId: otherAuth.id, amount: "200.00" });
+    expect(invalid.status).toBe(400);
+    expect(invalid.body.error).toContain("belong to clientId");
+    const [unchanged] = await db.select().from(remittancesTable).where(eq(remittancesTable.id, remittance.id));
+    expect(unchanged.authorizationId).toBe(ownAuth.id);
+    expect(unchanged.amount).toBe("100.00");
   });
 });
 

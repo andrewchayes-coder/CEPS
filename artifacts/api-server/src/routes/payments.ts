@@ -505,6 +505,8 @@ router.patch("/payments/:id", requireStaff, async (req, res): Promise<void> => {
   // immutable via this endpoint, so it always comes from the existing row.
   const effClientId = before.clientId;
   const effAuthorizationId = ("authorizationId" in updates ? updates.authorizationId : before.authorizationId) as string | null;
+  const effInvoiceId = ("invoiceId" in updates ? updates.invoiceId : before.invoiceId) as string | null;
+  const effVendorId = ("vendorId" in updates ? updates.vendorId : before.vendorId) as string | null;
   const effPaymentMonth = ("paymentMonth" in updates ? updates.paymentMonth : before.paymentMonth) as string | null;
   const dupFieldChanged =
     effAuthorizationId !== before.authorizationId ||
@@ -522,9 +524,18 @@ router.patch("/payments/:id", requireStaff, async (req, res): Promise<void> => {
     "amount" in updateData && String(before.amount) !== String(updates.amount);
   let duplicateBlocked: Awaited<ReturnType<typeof enrichPayments>> | null = null;
   let allocationBlocked = false;
+  let relationshipError: string | undefined;
   const { payment, recalculatedFees } = await db.transaction(async (tx) => {
     const txDb = tx as unknown as typeof db;
     await tx.execute(sql`select id from payments where id = ${id} for update`);
+    relationshipError = (await validateParticipantLinks(txDb, effClientId, {
+      authorizationId: effAuthorizationId,
+      invoiceId: effInvoiceId,
+      vendorId: effVendorId,
+    })).error;
+    if (relationshipError) {
+      return { payment: null as typeof paymentsTable.$inferSelect | null, recalculatedFees: [] as { id: string; before: string; after: string }[] };
+    }
     if (amountChanged || dupFieldChanged) {
       const [allocation] = await tx.select({ id: remittanceAllocationsTable.id })
         .from(remittanceAllocationsTable)
@@ -583,6 +594,10 @@ router.patch("/payments/:id", requireStaff, async (req, res): Promise<void> => {
     return { payment: p, recalculatedFees: recalculated };
   });
   if (!payment) {
+    if (relationshipError) {
+      res.status(400).json({ error: relationshipError });
+      return;
+    }
     if (allocationBlocked) {
       res.status(409).json({ error: "Amount, authorization, and service month cannot be changed after a remittance allocation" });
       return;
@@ -1225,22 +1240,19 @@ router.patch("/remittances/:id", requireStaff, async (req, res): Promise<void> =
     if (updates[k] === "") updates[k] = null;
   }
   const result = await db.transaction(async (tx) => {
+    const txDb = tx as unknown as typeof db;
     await tx.execute(sql`select id from remittances where id = ${id} for update`);
     const [before] = await tx.select().from(remittancesTable).where(and(eq(remittancesTable.id, id), notDeleted(remittancesTable)));
     if (!before) return { error: "Remittance not found", status: 404 } as const;
+    const effectiveAuthId = ("authorizationId" in updates ? updates.authorizationId : before.authorizationId) as string | null;
+    const validation = await validateParticipantLinks(txDb, before.clientId, { authorizationId: effectiveAuthId });
+    if (validation.error) return { error: validation.error, status: 400 } as const;
     const reconciliationChanged = ["authorizationId", "amount", "paymentMonth"].some((key) => key in updates);
     const [allocation] = await tx.select({ id: remittanceAllocationsTable.id }).from(remittanceAllocationsTable).where(eq(remittanceAllocationsTable.remittanceId, id)).limit(1);
     if ((before.matchedPaymentId || allocation) && reconciliationChanged) {
       return { error: "Authorization, amount, and service month cannot be changed after matching", status: 409 } as const;
     }
-    const effectiveAuthId = ("authorizationId" in updates ? updates.authorizationId : before.authorizationId) as string | null;
-    let auth: typeof authorizationsTable.$inferSelect | null = null;
-    if (effectiveAuthId) {
-      [auth] = await tx.select().from(authorizationsTable).where(and(eq(authorizationsTable.id, effectiveAuthId), notDeleted(authorizationsTable)));
-      if (!auth || auth.clientId !== before.clientId) {
-        return { error: "Authorization must belong to the remittance client", status: 400 } as const;
-      }
-    }
+    const auth = validation.authorization ?? null;
     const next = { ...updates } as Record<string, unknown>;
     if (!before.matchedPaymentId && !allocation && reconciliationChanged) {
       const amount = ("amount" in next ? next.amount : before.amount) as string;

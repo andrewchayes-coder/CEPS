@@ -206,11 +206,28 @@ router.patch("/invoices/:id", requireStaff, async (req, res): Promise<void> => {
   if (materiallyChanged && (parsed.data.status === undefined || parsed.data.status === before.status)) {
     updates.status = "pending_review";
   }
-  const [invoice] = await db
-    .update(invoicesTable)
-    .set(updates)
-    .where(and(eq(invoicesTable.id, id), notDeleted(invoicesTable)))
-    .returning();
+  const effectiveAuthorizationId = ("authorizationId" in updates ? updates.authorizationId : before.authorizationId) as string | null;
+  const effectiveVendorId = ("vendorId" in updates ? updates.vendorId : before.vendorId) as string | null;
+  let relationshipError: string | undefined;
+  const invoice = await db.transaction(async (tx) => {
+    const txDb = tx as unknown as typeof db;
+    await tx.execute(sql`select id from invoices where id = ${id} for update`);
+    relationshipError = (await validateParticipantLinks(txDb, before.clientId, {
+      authorizationId: effectiveAuthorizationId,
+      vendorId: effectiveVendorId,
+    })).error;
+    if (relationshipError) return null;
+    const [updated] = await tx
+      .update(invoicesTable)
+      .set(updates)
+      .where(and(eq(invoicesTable.id, id), notDeleted(invoicesTable)))
+      .returning();
+    return updated;
+  });
+  if (!invoice) {
+    res.status(400).json({ error: relationshipError ?? "Invoice not found" });
+    return;
+  }
   await audit(
     req.user!.id,
     "update_invoice",

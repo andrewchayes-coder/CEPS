@@ -9,6 +9,7 @@ export type ParticipantLinkValidation = {
   error?: string;
   authorization?: typeof authorizationsTable.$inferSelect;
   invoice?: typeof invoicesTable.$inferSelect;
+  payment?: typeof paymentsTable.$inferSelect;
 };
 
 /**
@@ -18,7 +19,7 @@ export type ParticipantLinkValidation = {
 export async function validateParticipantLinks(
   tx: DbHandle,
   clientId: string,
-  links: { authorizationId?: string | null; invoiceId?: string | null; vendorId?: string | null },
+  links: { authorizationId?: string | null; invoiceId?: string | null; paymentId?: string | null; vendorId?: string | null },
 ): Promise<ParticipantLinkValidation> {
   const [client] = await tx.select().from(clientsTable)
     .where(and(eq(clientsTable.id, clientId), notDeleted(clientsTable))).for("share");
@@ -38,6 +39,14 @@ export async function validateParticipantLinks(
       .where(and(eq(invoicesTable.id, links.invoiceId), notDeleted(invoicesTable))).for("share");
     if (!invoice) return { error: "invoiceId must reference a non-deleted invoice" };
     if (invoice.clientId !== clientId) return { error: "invoiceId must belong to clientId" };
+  }
+
+  let payment: typeof paymentsTable.$inferSelect | undefined;
+  if (links.paymentId) {
+    [payment] = await tx.select().from(paymentsTable)
+      .where(and(eq(paymentsTable.id, links.paymentId), notDeleted(paymentsTable))).for("share");
+    if (!payment) return { error: "paymentId must reference a non-deleted payment" };
+    if (payment.clientId !== clientId) return { error: "paymentId must belong to clientId" };
   }
 
   if (links.vendorId) {
@@ -61,5 +70,5 @@ export async function validateParticipantLinks(
     }
   }
 
-  return { authorization, invoice };
+  return { authorization, invoice, payment };
 }

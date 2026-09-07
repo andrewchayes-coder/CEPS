@@ -31,6 +31,7 @@ import { money } from "../lib/money";
 import { parseAltaRemittanceCsv, altaRowFingerprint } from "../lib/altaRemittanceParser";
 import { altaFmsPaymentRowFingerprint, parseAltaFmsPaymentWorksheet } from "../lib/altaFmsPaymentParser";
 import { sortedOrder } from "../lib/sorting";
+import { validateParticipantLinks } from "../lib/participantLinks";
 
 const router: IRouter = Router();
 
@@ -219,8 +220,15 @@ router.post("/payments", requireStaff, async (req, res): Promise<void> => {
   // same client + authorization + month can't slip past the SELECT-then-INSERT
   // window (a unique index isn't viable — justified overrides allow duplicates).
   let duplicateBlocked: Awaited<ReturnType<typeof enrichPayments>> | null = null;
+  let relationshipError: string | undefined;
   const payment = await db.transaction(async (tx) => {
     const txDb = tx as unknown as typeof db;
+    relationshipError = (await validateParticipantLinks(txDb, dupClientId, {
+      authorizationId: dupAuthorizationId,
+      invoiceId: values.invoiceId as string | null,
+      vendorId: values.vendorId as string | null,
+    })).error;
+    if (relationshipError) return null;
     if (runDupCheck) {
       await lockDuplicatePaymentKey(txDb, {
         clientId: dupClientId,
@@ -252,6 +260,10 @@ router.post("/payments", requireStaff, async (req, res): Promise<void> => {
     return p;
   });
   if (!payment) {
+    if (relationshipError) {
+      res.status(400).json({ error: relationshipError });
+      return;
+    }
     res.status(409).json({
       error: `A payment already exists for this client, authorization, and month (${dupPaymentMonth}). This is a hard stop — override requires a written justification.`,
       code: "duplicate_payment",
@@ -821,24 +833,25 @@ router.post("/remittances", requireStaff, async (req, res): Promise<void> => {
   for (const key of ["authorizationId", "altaReference", "paymentMonth", "reportReference"] as const) {
     if (values[key] === "") values[key] = null;
   }
-  const [client] = await db.select().from(clientsTable).where(and(eq(clientsTable.id, parsed.data.clientId), notDeleted(clientsTable)));
-  if (!client) {
-    res.status(400).json({ error: "Client not found or deleted" });
-    return;
-  }
-  let auth: typeof authorizationsTable.$inferSelect | null = null;
-  if (values.authorizationId) {
-    [auth] = await db.select().from(authorizationsTable).where(and(eq(authorizationsTable.id, values.authorizationId as string), notDeleted(authorizationsTable)));
-    if (!auth || auth.clientId !== client.id) {
-      res.status(400).json({ error: "Authorization must belong to the remittance client" });
-      return;
-    }
-  }
-  const expected = authorizationExpectedAmount(auth);
-  const mismatch = !!(expected && !money(expected).equals(money(parsed.data.amount)));
+  let relationshipError: string | undefined;
   const remittance = await db.transaction(async (tx) => {
     const txDb = tx as unknown as typeof db;
-    const candidate = mismatch ? undefined : await findMatchingPayment({ clientId: client.id, authorizationId: auth!.id, amount: parsed.data.amount, paymentMonth: values.paymentMonth as string | null }, txDb);
+    const authorizationId = values.authorizationId as string | null;
+    if (!authorizationId) {
+      relationshipError = "authorizationId is required";
+      return null;
+    }
+    const validation = await validateParticipantLinks(txDb, parsed.data.clientId, { authorizationId });
+    relationshipError = validation.error;
+    if (relationshipError) return null;
+    const auth = validation.authorization;
+    if (!auth) {
+      relationshipError = "authorizationId must reference a non-deleted authorization";
+      return null;
+    }
+    const expected = authorizationExpectedAmount(auth);
+    const mismatch = !!(expected && !money(expected).equals(money(parsed.data.amount)));
+    const candidate = mismatch ? undefined : await findMatchingPayment({ clientId: parsed.data.clientId, authorizationId, amount: parsed.data.amount, paymentMonth: values.paymentMonth as string | null }, txDb);
     let match: typeof paymentsTable.$inferSelect | undefined;
     if (candidate) {
       const [claimed] = await tx.update(paymentsTable).set({ remitted: true })
@@ -866,6 +879,10 @@ router.post("/remittances", requireStaff, async (req, res): Promise<void> => {
     }
     return created;
   });
+  if (!remittance) {
+    res.status(400).json({ error: relationshipError! });
+    return;
+  }
   await audit(req.user!.id, "create_remittance", "remittance", remittance.id, remittance.matchedPaymentId ? "Auto-matched to an eligible payment" : `No automatic match — ${remittance.reviewReason ?? "flagged for review"}`);
   res.status(201).json(CreateRemittanceResponse.parse((await enrichRemittances([remittance]))[0]));
 });

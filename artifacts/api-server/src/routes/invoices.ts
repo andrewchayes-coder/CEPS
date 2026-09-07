@@ -17,6 +17,7 @@ import { requireAuth, requireStaff, audit } from "../lib/auth";
 import { invoiceJson, clientNameMap, vendorNameMap, authNumberMap, userNameMap, notDeleted, diffDetail } from "../lib/serializers";
 import { checkDuplicatePayment } from "../lib/paymentDuplicateCheck";
 import { sortedOrder } from "../lib/sorting";
+import { validateParticipantLinks } from "../lib/participantLinks";
 
 const router: IRouter = Router();
 
@@ -124,15 +125,28 @@ router.post("/invoices", requireAuth, async (req, res): Promise<void> => {
     res.status(403).json({ error: "You can only submit invoices for your own client record" });
     return;
   }
-  const [invoice] = await db
-    .insert(invoicesTable)
-    .values({
-      ...parsed.data,
-      vendorId: submittedByRole === "vendor" ? u.linkedRecordId : parsed.data.vendorId,
-      submittedByRole,
-      submittedDate: new Date().toISOString().slice(0, 10),
-    })
-    .returning();
+  const values = {
+    ...parsed.data,
+    authorizationId: parsed.data.authorizationId || null,
+    vendorId: (submittedByRole === "vendor" ? u.linkedRecordId : parsed.data.vendorId) || null,
+    submittedByRole,
+    submittedDate: new Date().toISOString().slice(0, 10),
+  };
+  let relationshipError: string | undefined;
+  const invoice = await db.transaction(async (tx) => {
+    const txDb = tx as unknown as typeof db;
+    relationshipError = (await validateParticipantLinks(txDb, values.clientId, {
+      authorizationId: values.authorizationId,
+      vendorId: values.vendorId,
+    })).error;
+    if (relationshipError) return null;
+    const [created] = await tx.insert(invoicesTable).values(values).returning();
+    return created;
+  });
+  if (!invoice) {
+    res.status(400).json({ error: relationshipError! });
+    return;
+  }
   await audit(u.id, "create_invoice", "invoice", invoice.id, `${invoice.serviceMonth} — $${invoice.amountRequested}`);
   res.status(201).json(CreateInvoiceResponse.parse((await enrich([invoice]))[0]));
 });

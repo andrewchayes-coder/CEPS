@@ -14,3 +14,4 @@
 - [Referral vs client ownership](referral-client-ownership.md) — referral coordinators may differ from client assignees; referral UI must not depend on separately authorized client reads.
 - [Signature-link lifecycle](signature-link-lifecycle.md) — signature links are recipient-bound and single-use; resend/sign operations must be atomic, and consumed links must never return agreement PII.
 - [Date-range semantics](date-range-semantics.md) — shared date controls map to each module’s business date; authorization ranges use overlap, not creation date.
+- [Participant link integrity](participant-link-integrity.md) — financial writes must reuse participant/vendor associations established by authorizations and validate all related records transactionally.

@@ -141,9 +141,10 @@ export default function InvoiceNewPage() {
               <div className="grid grid-cols-2 gap-4">
                 <FormField control={form.control} name="clientId" render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Participant</FormLabel>
+                    <FormLabel htmlFor="invoice-client">Participant</FormLabel>
                     <FormControl>
                       <SearchableSelect
+                        id="invoice-client"
                         value={field.value}
                         onValueChange={field.onChange}
                         options={clients.map(c => ({ value: c.id, label: `${c.firstName} ${c.lastName}` }))}
@@ -158,9 +159,10 @@ export default function InvoiceNewPage() {
                 )} />
                 <FormField control={form.control} name="authorizationId" render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Authorization</FormLabel>
+                    <FormLabel htmlFor="invoice-authorization">Authorization</FormLabel>
                     <FormControl>
                       <SearchableSelect
+                        id="invoice-authorization"
                         value={field.value ?? ''}
                         onValueChange={handleAuthChange}
                         options={filteredAuthorizations.map(a => ({ value: a.id, label: a.authNumber, subtitle: a.activityDescription ?? undefined }))}
@@ -182,9 +184,10 @@ export default function InvoiceNewPage() {
               <div className="grid grid-cols-2 gap-4">
                 <FormField control={form.control} name="vendorId" render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Vendor</FormLabel>
+                    <FormLabel htmlFor="invoice-vendor">Vendor</FormLabel>
                     <FormControl>
                       <SearchableSelect
+                        id="invoice-vendor"
                         value={field.value ?? ''}
                         onValueChange={field.onChange}
                         options={filteredVendors.map(v => ({ value: v.id, label: v.name }))}
@@ -203,8 +206,8 @@ export default function InvoiceNewPage() {
                 )} />
                 <FormField control={form.control} name="serviceMonth" render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Service Month (YYYY-MM)</FormLabel>
-                    <FormControl><Input type="month" {...field} /></FormControl>
+                    <FormLabel htmlFor="invoice-service-month">Service Month (YYYY-MM)</FormLabel>
+                    <FormControl><Input id="invoice-service-month" type="month" {...field} /></FormControl>
                     <FormMessage />
                   </FormItem>
                 )} />
@@ -213,9 +216,9 @@ export default function InvoiceNewPage() {
               <div className="grid grid-cols-2 gap-4">
                 <FormField control={form.control} name="paymentType" render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Payment Type</FormLabel>
+                    <FormLabel htmlFor="invoice-payment-type">Payment Type</FormLabel>
                     <Select onValueChange={field.onChange} defaultValue={field.value}>
-                      <FormControl><SelectTrigger><SelectValue /></SelectTrigger></FormControl>
+                      <FormControl><SelectTrigger id="invoice-payment-type"><SelectValue /></SelectTrigger></FormControl>
                       <SelectContent>
                         <SelectItem value="direct_payment">Direct Payment</SelectItem>
                         <SelectItem value="reimbursement">Reimbursement</SelectItem>
@@ -228,11 +231,11 @@ export default function InvoiceNewPage() {
 
               <FormField control={form.control} name="amountRequested" render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Amount Requested</FormLabel>
+                  <FormLabel htmlFor="invoice-amount-requested">Amount Requested</FormLabel>
                   <FormControl>
                     <div className="relative">
                       <span className="absolute left-3 top-2.5 text-muted-foreground">$</span>
-                      <Input className="pl-7" placeholder="0.00" {...field} />
+                      <Input id="invoice-amount-requested" className="pl-7" placeholder="0.00" {...field} />
                     </div>
                   </FormControl>
                   <FormMessage />
@@ -241,8 +244,8 @@ export default function InvoiceNewPage() {
 
               <FormField control={form.control} name="notes" render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Notes (Optional)</FormLabel>
-                  <FormControl><Textarea {...field} /></FormControl>
+                  <FormLabel htmlFor="invoice-notes">Notes (Optional)</FormLabel>
+                  <FormControl><Textarea id="invoice-notes" {...field} /></FormControl>
                   <FormMessage />
                 </FormItem>
               )} />

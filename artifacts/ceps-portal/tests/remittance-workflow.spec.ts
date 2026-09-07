@@ -137,3 +137,20 @@ test('staff remittance list, manual create, and eligible-payment picker stay wir
   await page.getByTestId('match-payment-option-payment-1').click();
   await expect(confirm).toBeEnabled();
 });
+
+test('remittance edit fields expose their visible labels as accessible names', async ({ page }) => {
+  await mockStaffSession(page);
+  await page.route('**/api/remittances?*', (route) =>
+    route.fulfill({ json: { total: 1, items: [remittance] } }),
+  );
+
+  await page.goto('/remittances');
+  await page.getByTestId('button-edit-remittance').click();
+
+  const dialog = page.getByRole('dialog', { name: 'Edit Remittance' });
+  await expect(dialog.getByLabel('Source / payment reference')).toBeVisible();
+  await expect(dialog.getByLabel('Date Received')).toBeVisible();
+  await expect(dialog.getByLabel('Amount')).toBeVisible();
+  await expect(dialog.getByLabel('Payment Month')).toBeVisible();
+  await expect(dialog.getByRole('combobox', { name: 'Authorization' })).toBeVisible();
+});

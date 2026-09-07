@@ -12,6 +12,7 @@ export type SearchableSelectOption = {
 };
 
 export type SearchableSelectProps = {
+  id?: string;
   value: string;
   onValueChange: (value: string) => void;
   options: SearchableSelectOption[];
@@ -28,6 +29,7 @@ export type SearchableSelectProps = {
 };
 
 export function SearchableSelect({
+  id,
   value,
   onValueChange,
   options,
@@ -72,6 +74,7 @@ export function SearchableSelect({
     >
       <PopoverTrigger asChild>
         <Button
+          id={id}
           variant="outline"
           role="combobox"
           aria-expanded={open}

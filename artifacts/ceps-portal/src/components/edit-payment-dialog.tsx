@@ -127,25 +127,25 @@ export function EditPaymentDialog({ id, payment, onSaved }: Props) {
         </DialogHeader>
         <div className="grid grid-cols-2 gap-4 py-2">
           <div className="space-y-2">
-            <Label>Check #</Label>
-            <Input value={form.qbCheckNumber} onChange={(e) => set('qbCheckNumber', e.target.value)} data-testid="input-payment-check-number" />
+            <Label htmlFor="edit-payment-check-number">Check #</Label>
+            <Input id="edit-payment-check-number" value={form.qbCheckNumber} onChange={(e) => set('qbCheckNumber', e.target.value)} data-testid="input-payment-check-number" />
           </div>
           <div className="space-y-2">
-            <Label>Payment Date</Label>
-            <Input type="date" value={form.checkDate} onChange={(e) => set('checkDate', e.target.value)} data-testid="input-payment-date" />
+            <Label htmlFor="edit-payment-date">Payment Date</Label>
+            <Input id="edit-payment-date" type="date" value={form.checkDate} onChange={(e) => set('checkDate', e.target.value)} data-testid="input-payment-date" />
           </div>
           <div className="space-y-2">
-            <Label>Amount</Label>
-            <Input value={form.amount} onChange={(e) => set('amount', e.target.value)} data-testid="input-payment-amount" />
+            <Label htmlFor="edit-payment-amount">Amount</Label>
+            <Input id="edit-payment-amount" value={form.amount} onChange={(e) => set('amount', e.target.value)} data-testid="input-payment-amount" />
           </div>
           <div className="space-y-2">
-            <Label>Payment Month</Label>
-            <Input placeholder="YYYY-MM" value={form.paymentMonth} onChange={(e) => set('paymentMonth', e.target.value)} data-testid="input-payment-month" />
+            <Label htmlFor="edit-payment-month">Payment Month</Label>
+            <Input id="edit-payment-month" placeholder="YYYY-MM" value={form.paymentMonth} onChange={(e) => set('paymentMonth', e.target.value)} data-testid="input-payment-month" />
           </div>
           <div className="space-y-2">
-            <Label>Payment Type</Label>
+            <Label htmlFor="edit-payment-type">Payment Type</Label>
             <Select value={form.paymentType} onValueChange={(v) => set('paymentType', v)}>
-              <SelectTrigger data-testid="select-payment-type"><SelectValue /></SelectTrigger>
+              <SelectTrigger id="edit-payment-type" data-testid="select-payment-type"><SelectValue /></SelectTrigger>
               <SelectContent>
                 {PAYMENT_TYPES.map((t) => (
                   <SelectItem key={t} value={t} className="capitalize">{t.replace(/_/g, ' ')}</SelectItem>
@@ -154,8 +154,9 @@ export function EditPaymentDialog({ id, payment, onSaved }: Props) {
             </Select>
           </div>
           <div className="space-y-2">
-            <Label>Vendor</Label>
+            <Label htmlFor="edit-payment-vendor">Vendor</Label>
             <SearchableSelect
+              id="edit-payment-vendor"
               value={form.vendorId}
               onValueChange={(v) => set('vendorId', v)}
               options={vendors.map((v) => ({ value: v.id, label: v.name }))}
@@ -169,8 +170,9 @@ export function EditPaymentDialog({ id, payment, onSaved }: Props) {
             />
           </div>
           <div className="space-y-2">
-            <Label>Invoice</Label>
+            <Label htmlFor="edit-payment-invoice">Invoice</Label>
             <SearchableSelect
+              id="edit-payment-invoice"
               value={form.invoiceId}
               onValueChange={(v) => set('invoiceId', v)}
               options={invoices.map((i) => ({
@@ -186,8 +188,9 @@ export function EditPaymentDialog({ id, payment, onSaved }: Props) {
             />
           </div>
           <div className="space-y-2">
-            <Label>Authorization</Label>
+            <Label htmlFor="edit-payment-authorization">Authorization</Label>
             <SearchableSelect
+              id="edit-payment-authorization"
               value={form.authorizationId}
               onValueChange={(v) => set('authorizationId', v)}
               options={authorizations.map((a) => ({

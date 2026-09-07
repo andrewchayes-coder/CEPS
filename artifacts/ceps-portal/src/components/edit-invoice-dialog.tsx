@@ -115,12 +115,13 @@ export function EditInvoiceDialog({ id, invoice, onSaved }: Props) {
         </DialogHeader>
         <div className="grid grid-cols-2 gap-4 py-2">
           <div className="space-y-2 col-span-2">
-            <Label>Participant</Label>
-            <Input value={invoice.clientName ?? invoice.clientId} disabled />
+            <Label htmlFor="edit-invoice-participant">Participant</Label>
+            <Input id="edit-invoice-participant" value={invoice.clientName ?? invoice.clientId} disabled />
           </div>
           <div className="space-y-2">
-            <Label>Authorization</Label>
+            <Label htmlFor="edit-invoice-authorization">Authorization</Label>
             <SearchableSelect
+              id="edit-invoice-authorization"
               value={form.authorizationId}
               onValueChange={(v) => set('authorizationId', v)}
               options={authorizations.map(a => ({ value: a.id, label: a.authNumber, subtitle: a.activityDescription ?? undefined }))}
@@ -134,8 +135,9 @@ export function EditInvoiceDialog({ id, invoice, onSaved }: Props) {
             />
           </div>
           <div className="space-y-2">
-            <Label>Vendor</Label>
+            <Label htmlFor="edit-invoice-vendor">Vendor</Label>
             <SearchableSelect
+              id="edit-invoice-vendor"
               value={form.vendorId}
               onValueChange={(v) => set('vendorId', v)}
               options={vendors.map(v => ({ value: v.id, label: v.name }))}
@@ -149,17 +151,17 @@ export function EditInvoiceDialog({ id, invoice, onSaved }: Props) {
             />
           </div>
           <div className="space-y-2">
-            <Label>Service Month</Label>
-            <Input placeholder="YYYY-MM" value={form.serviceMonth} onChange={(e) => set('serviceMonth', e.target.value)} />
+            <Label htmlFor="edit-invoice-service-month">Service Month</Label>
+            <Input id="edit-invoice-service-month" placeholder="YYYY-MM" value={form.serviceMonth} onChange={(e) => set('serviceMonth', e.target.value)} />
           </div>
           <div className="space-y-2">
-            <Label>Amount Requested</Label>
-            <Input value={form.amountRequested} onChange={(e) => set('amountRequested', e.target.value)} />
+            <Label htmlFor="edit-invoice-amount">Amount Requested</Label>
+            <Input id="edit-invoice-amount" value={form.amountRequested} onChange={(e) => set('amountRequested', e.target.value)} />
           </div>
           <div className="space-y-2">
-            <Label>Payment Type</Label>
+            <Label htmlFor="edit-invoice-payment-type">Payment Type</Label>
             <Select value={form.paymentType} onValueChange={(v) => set('paymentType', v)}>
-              <SelectTrigger><SelectValue /></SelectTrigger>
+              <SelectTrigger id="edit-invoice-payment-type"><SelectValue /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="direct_payment">Direct Payment</SelectItem>
                 <SelectItem value="reimbursement">Reimbursement</SelectItem>
@@ -167,9 +169,9 @@ export function EditInvoiceDialog({ id, invoice, onSaved }: Props) {
             </Select>
           </div>
           <div className="space-y-2">
-            <Label>Status</Label>
+            <Label htmlFor="edit-invoice-status">Status</Label>
             <Select value={form.status} onValueChange={(v) => set('status', v)}>
-              <SelectTrigger><SelectValue /></SelectTrigger>
+              <SelectTrigger id="edit-invoice-status"><SelectValue /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="pending_review">Pending Review</SelectItem>
                 <SelectItem value="validated">Validated</SelectItem>
@@ -180,8 +182,8 @@ export function EditInvoiceDialog({ id, invoice, onSaved }: Props) {
             </Select>
           </div>
           <div className="space-y-2 col-span-2">
-            <Label>Notes</Label>
-            <Textarea value={form.notes} onChange={(e) => set('notes', e.target.value)} />
+            <Label htmlFor="edit-invoice-notes">Notes</Label>
+            <Textarea id="edit-invoice-notes" value={form.notes} onChange={(e) => set('notes', e.target.value)} />
           </div>
         </div>
         <DialogFooter>

@@ -95,24 +95,25 @@ export function EditRemittanceDialog({ id, remittance, onSaved }: Props) {
         </DialogHeader>
         <div className="grid grid-cols-2 gap-4 py-2">
           <div className="space-y-2">
-            <Label>Source / payment reference</Label>
-            <Input value={form.altaReference} onChange={(e) => set('altaReference', e.target.value)} data-testid="input-remittance-reference" />
+            <Label htmlFor="edit-remittance-reference">Source / payment reference</Label>
+            <Input id="edit-remittance-reference" value={form.altaReference} onChange={(e) => set('altaReference', e.target.value)} data-testid="input-remittance-reference" />
           </div>
           <div className="space-y-2">
-            <Label>Date Received</Label>
-            <Input type="date" value={form.remittanceDate} onChange={(e) => set('remittanceDate', e.target.value)} data-testid="input-remittance-date" />
+            <Label htmlFor="edit-remittance-date">Date Received</Label>
+            <Input id="edit-remittance-date" type="date" value={form.remittanceDate} onChange={(e) => set('remittanceDate', e.target.value)} data-testid="input-remittance-date" />
           </div>
           <div className="space-y-2">
-            <Label>Amount</Label>
-            <Input value={form.amount} onChange={(e) => set('amount', e.target.value)} disabled={remittance.status === 'matched'} data-testid="input-remittance-amount" />
+            <Label htmlFor="edit-remittance-amount">Amount</Label>
+            <Input id="edit-remittance-amount" value={form.amount} onChange={(e) => set('amount', e.target.value)} disabled={remittance.status === 'matched'} data-testid="input-remittance-amount" />
           </div>
           <div className="space-y-2">
-            <Label>Payment Month</Label>
-            <Input type="month" value={form.paymentMonth} onChange={(e) => set('paymentMonth', e.target.value)} disabled={remittance.status === 'matched'} data-testid="input-remittance-month" />
+            <Label htmlFor="edit-remittance-month">Payment Month</Label>
+            <Input id="edit-remittance-month" type="month" value={form.paymentMonth} onChange={(e) => set('paymentMonth', e.target.value)} disabled={remittance.status === 'matched'} data-testid="input-remittance-month" />
           </div>
           <div className="space-y-2 col-span-2">
-            <Label>Authorization</Label>
+            <Label htmlFor="edit-remittance-authorization">Authorization</Label>
             <SearchableSelect
+              id="edit-remittance-authorization"
               value={form.authorizationId}
               onValueChange={(v) => set('authorizationId', v)}
               options={authorizations.map(a => ({ value: a.id, label: a.authNumber }))}

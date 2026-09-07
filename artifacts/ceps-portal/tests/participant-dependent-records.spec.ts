@@ -88,6 +88,14 @@ test('invoice submission keeps authorization and vendor scoped to the selected p
 
   await page.goto('/invoices/new');
 
+  await expect(page.getByRole('combobox', { name: 'Participant' })).toBeVisible();
+  await expect(page.getByRole('combobox', { name: 'Authorization' })).toBeVisible();
+  await expect(page.getByRole('combobox', { name: 'Vendor' })).toBeVisible();
+  await expect(page.getByLabel('Service Month (YYYY-MM)')).toBeVisible();
+  await expect(page.getByRole('combobox', { name: 'Payment Type' })).toBeVisible();
+  await expect(page.getByLabel('Amount Requested')).toBeVisible();
+  await expect(page.getByLabel('Notes (Optional)')).toBeVisible();
+
   await expect(page.getByTestId('select-invoice-authorization')).toBeDisabled();
   await expect(page.getByTestId('select-invoice-vendor')).toBeDisabled();
   expect(requests.authorizations).toHaveLength(0);
@@ -132,6 +140,17 @@ test('payment logging clears all participant-owned choices and submits only the 
 
   await page.goto('/payments');
   await page.getByTestId('button-log-payment').click();
+
+  const paymentDialog = page.getByRole('dialog', { name: 'Log Payment' });
+  await expect(paymentDialog.getByRole('combobox', { name: 'Participant' })).toBeVisible();
+  await expect(paymentDialog.getByLabel('Check #')).toBeVisible();
+  await expect(paymentDialog.getByLabel('Payment Date')).toBeVisible();
+  await expect(paymentDialog.getByLabel('Amount')).toBeVisible();
+  await expect(paymentDialog.getByLabel('Payment Month')).toBeVisible();
+  await expect(paymentDialog.getByRole('combobox', { name: 'Payment Type' })).toBeVisible();
+  await expect(paymentDialog.getByRole('combobox', { name: 'Vendor' })).toBeVisible();
+  await expect(paymentDialog.getByRole('combobox', { name: 'Invoice' })).toBeVisible();
+  await expect(paymentDialog.getByRole('combobox', { name: 'Authorization' })).toBeVisible();
 
   await expect(page.getByTestId('select-payment-vendor-id')).toBeDisabled();
   await expect(page.getByTestId('select-payment-invoice-id')).toBeDisabled();
@@ -189,6 +208,14 @@ test('remittance creation scopes and clears authorization before submission', as
   await page.goto('/remittances');
   await page.getByTestId('button-create-remittance').click();
 
+  const remittanceDialog = page.getByRole('dialog', { name: 'Create Remittance' });
+  await expect(remittanceDialog.getByRole('combobox', { name: 'Participant' })).toBeVisible();
+  await expect(remittanceDialog.getByRole('combobox', { name: 'Authorization' })).toBeVisible();
+  await expect(remittanceDialog.getByLabel('Source / payment reference')).toBeVisible();
+  await expect(remittanceDialog.getByLabel('Date received')).toBeVisible();
+  await expect(remittanceDialog.getByLabel('Amount')).toBeVisible();
+  await expect(remittanceDialog.getByLabel('Service month')).toBeVisible();
+
   await expect(page.getByTestId('select-create-remittance-authorization')).toBeDisabled();
   expect(requests.authorizations).toHaveLength(0);
 
@@ -212,4 +239,88 @@ test('remittance creation scopes and clears authorization before submission', as
     authorizationId: 'authorization-2',
     altaReference: 'REMIT-200',
   });
+});
+
+test('invoice edit fields expose their visible labels as accessible names', async ({ page }) => {
+  await mockStaffSession(page);
+  await page.route('**/api/invoices/invoice-1', (route) => route.fulfill({
+    json: {
+      ...invoices['client-1'][0],
+      clientName: 'Pat Participant',
+      authorizationId: 'authorization-1',
+      authNumber: 'AUTH-100',
+      vendorId: 'vendor-1',
+      vendorName: 'Pat Provider',
+      paymentType: 'direct_payment',
+      notes: 'Existing note',
+      submittedByRole: 'staff',
+    },
+  }));
+  await page.route('**/api/invoices/invoice-1/validate', (route) => route.fulfill({
+    json: { valid: true, checks: [] },
+  }));
+  await page.route('**/api/authorizations?*', (route) => route.fulfill({
+    json: { total: 1, items: authorizations['client-1'] },
+  }));
+  await page.route('**/api/vendors?*', (route) => route.fulfill({
+    json: { total: 1, items: vendors['client-1'] },
+  }));
+
+  await page.goto('/invoices/invoice-1');
+  await page.getByTestId('button-edit-invoice').click();
+
+  const dialog = page.getByRole('dialog', { name: 'Edit Invoice' });
+  await expect(dialog.getByLabel('Participant')).toBeVisible();
+  await expect(dialog.getByRole('combobox', { name: 'Authorization' })).toBeVisible();
+  await expect(dialog.getByRole('combobox', { name: 'Vendor' })).toBeVisible();
+  await expect(dialog.getByLabel('Service Month')).toBeVisible();
+  await expect(dialog.getByLabel('Amount Requested')).toBeVisible();
+  await expect(dialog.getByRole('combobox', { name: 'Payment Type' })).toBeVisible();
+  await expect(dialog.getByRole('combobox', { name: 'Status' })).toBeVisible();
+  await expect(dialog.getByLabel('Notes')).toBeVisible();
+});
+
+test('payment edit fields expose their visible labels as accessible names', async ({ page }) => {
+  await mockStaffSession(page);
+  await page.route('**/api/payments/payment-1', (route) => route.fulfill({
+    json: {
+      id: 'payment-1',
+      clientId: 'client-1',
+      clientName: 'Pat Participant',
+      authorizationId: 'authorization-1',
+      authNumber: 'AUTH-100',
+      vendorId: 'vendor-1',
+      vendorName: 'Pat Provider',
+      invoiceId: 'invoice-1',
+      qbCheckNumber: 'CHECK-100',
+      checkDate: '2026-09-05',
+      amount: '125.00',
+      paymentMonth: '2026-07',
+      paymentType: 'direct_payment',
+      source: 'manual',
+      remitted: false,
+    },
+  }));
+  await page.route('**/api/authorizations?*', (route) => route.fulfill({
+    json: { total: 1, items: authorizations['client-1'] },
+  }));
+  await page.route('**/api/vendors?*', (route) => route.fulfill({
+    json: { total: 1, items: vendors['client-1'] },
+  }));
+  await page.route('**/api/invoices?*', (route) => route.fulfill({
+    json: { total: 1, items: invoices['client-1'] },
+  }));
+
+  await page.goto('/payments/payment-1');
+  await page.getByTestId('button-edit-payment').click();
+
+  const dialog = page.getByRole('dialog', { name: 'Edit Payment' });
+  await expect(dialog.getByLabel('Check #')).toBeVisible();
+  await expect(dialog.getByLabel('Payment Date')).toBeVisible();
+  await expect(dialog.getByLabel('Amount')).toBeVisible();
+  await expect(dialog.getByLabel('Payment Month')).toBeVisible();
+  await expect(dialog.getByRole('combobox', { name: 'Payment Type' })).toBeVisible();
+  await expect(dialog.getByRole('combobox', { name: 'Vendor' })).toBeVisible();
+  await expect(dialog.getByRole('combobox', { name: 'Invoice' })).toBeVisible();
+  await expect(dialog.getByRole('combobox', { name: 'Authorization' })).toBeVisible();
 });

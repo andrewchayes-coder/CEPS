@@ -11,6 +11,7 @@
     "test:participants": "playwright test tests/participant-language-and-links.spec.ts --config playwright.config.ts",
     "test:participant-records": "playwright test tests/participant-dependent-records.spec.ts --config playwright.config.ts",
     "test:alta-upload": "playwright test tests/alta-file-upload.spec.ts --config playwright.config.ts",
+    "test:agreement-analytics": "playwright test tests/agreement-send-analytics.spec.ts --config playwright.config.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "devDependencies": {

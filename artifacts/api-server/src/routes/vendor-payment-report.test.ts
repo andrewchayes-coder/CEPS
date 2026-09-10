@@ -6,6 +6,7 @@ import {
   sessionsTable,
   clientsTable,
   vendorsTable,
+  authorizationsTable,
   paymentsTable,
 } from "@workspace/db";
 import request from "supertest";
@@ -117,6 +118,12 @@ beforeAll(async () => {
   vendorACookie = await session(vendorUserAId);
   parentCookie = await session(parentUserId);
 
+  await db.insert(authorizationsTable).values([
+    { clientId, vendorId: vendorA, authNumber: `${nonce}-auth-a`, serviceCode: "459", paymentType: "direct_payment", servicePeriodStart: `${year}-01-01`, servicePeriodEnd: `${year}-12-31`, maxPeriodAmount: "1000.00", status: "active" },
+    { clientId, vendorId: vendorB, authNumber: `${nonce}-auth-b`, serviceCode: "459", paymentType: "direct_payment", servicePeriodStart: `${year}-01-01`, servicePeriodEnd: `${year}-12-31`, maxPeriodAmount: "1000.00", status: "active" },
+    { clientId: otherClientId, vendorId: vendorA, authNumber: `${nonce}-auth-other`, serviceCode: "459", paymentType: "direct_payment", servicePeriodStart: `${year}-01-01`, servicePeriodEnd: `${year}-12-31`, maxPeriodAmount: "1000.00", status: "active" },
+  ]);
+
   // vendorA: two payments; vendorB: one payment.
   await insertPayment(vendorA, "100.00");
   await insertPayment(vendorA, "50.00");
@@ -125,9 +132,10 @@ beforeAll(async () => {
 
 afterAll(async () => {
   if (paymentIds.length) await db.delete(paymentsTable).where(inArray(paymentsTable.id, paymentIds));
+  await db.delete(authorizationsTable).where(inArray(authorizationsTable.clientId, [clientId, otherClientId]));
   await db.delete(sessionsTable).where(inArray(sessionsTable.userId, [staffId, vendorUserAId, parentUserId]));
-  await db.delete(vendorsTable).where(inArray(vendorsTable.id, [vendorA, vendorB]));
   await db.delete(clientsTable).where(inArray(clientsTable.id, [clientId, otherClientId]));
+  await db.delete(vendorsTable).where(inArray(vendorsTable.id, [vendorA, vendorB]));
   await db.delete(usersTable).where(inArray(usersTable.id, [staffId, vendorUserAId, parentUserId, coordinatorId]));
 });
 

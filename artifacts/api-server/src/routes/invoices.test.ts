@@ -98,11 +98,12 @@ async function makeInvoice(status: string) {
   return inv;
 }
 
-async function makeAuth(opts: { monthlyAmount?: string | null; oneTimeAmount?: string | null; maxPeriodAmount: string }) {
+async function makeAuth(opts: { monthlyAmount?: string | null; oneTimeAmount?: string | null; maxPeriodAmount: string; vendorId?: string | null }) {
   const [auth] = await db
     .insert(authorizationsTable)
     .values({
       clientId,
+      vendorId: opts.vendorId ?? null,
       authNumber: `${nonce}-auth-${authCounter++}`,
       serviceCode: "459",
       paymentType: "direct_payment",
@@ -300,8 +301,8 @@ describe("POST /invoices/:id/validate decimal-safe money math", () => {
 
 describe("POST /invoices/:id/validate vendor_active check", () => {
   it("passes vendor_active when the invoice's vendor is active", async () => {
-    const auth = await makeAuth({ oneTimeAmount: "100.00", maxPeriodAmount: "1000000.00" });
     const vendor = await makeVendor(true);
+    const auth = await makeAuth({ oneTimeAmount: "100.00", maxPeriodAmount: "1000000.00", vendorId: vendor.id });
     const inv = await makeInvoiceForVendor(auth.id, vendor.id);
     const res = await request(app).post(`/api/invoices/${inv.id}/validate`).set("Cookie", cookie).send({});
     expect(res.status).toBe(200);
@@ -309,8 +310,8 @@ describe("POST /invoices/:id/validate vendor_active check", () => {
   });
 
   it("fails vendor_active when the invoice's vendor is deactivated", async () => {
-    const auth = await makeAuth({ oneTimeAmount: "100.00", maxPeriodAmount: "1000000.00" });
     const vendor = await makeVendor(false);
+    const auth = await makeAuth({ oneTimeAmount: "100.00", maxPeriodAmount: "1000000.00", vendorId: vendor.id });
     const inv = await makeInvoiceForVendor(auth.id, vendor.id);
     const res = await request(app).post(`/api/invoices/${inv.id}/validate`).set("Cookie", cookie).send({});
     expect(res.status).toBe(200);

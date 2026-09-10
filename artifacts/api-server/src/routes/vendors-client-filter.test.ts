@@ -17,7 +17,7 @@ const nonce = `vendorclient${Date.now().toString(36)}`;
 let staffId: string;
 let clientId: string;
 let otherClientId: string;
-let authorizationId: string;
+const authorizationIds: string[] = [];
 let invoiceId: string;
 let cookie: string;
 const vendorIds: string[] = [];
@@ -62,7 +62,19 @@ beforeAll(async () => {
       maxPeriodAmount: "1000.00",
     })
     .returning();
-  authorizationId = authorization.id;
+  authorizationIds.push(authorization.id);
+
+  const [invoiceVendorAuthorization] = await db.insert(authorizationsTable).values({
+    clientId,
+    vendorId: vendorIds[1],
+    authNumber: `${nonce}-invoice-auth`,
+    serviceCode: "459",
+    paymentType: "direct_payment",
+    servicePeriodStart: "2026-01-01",
+    servicePeriodEnd: "2026-12-31",
+    maxPeriodAmount: "1000.00",
+  }).returning();
+  authorizationIds.push(invoiceVendorAuthorization.id);
 
   const [invoice] = await db
     .insert(invoicesTable)
@@ -90,7 +102,7 @@ beforeAll(async () => {
 afterAll(async () => {
   await db.delete(sessionsTable).where(eq(sessionsTable.userId, staffId));
   await db.delete(invoicesTable).where(eq(invoicesTable.id, invoiceId));
-  await db.delete(authorizationsTable).where(eq(authorizationsTable.id, authorizationId));
+  await db.delete(authorizationsTable).where(inArray(authorizationsTable.id, authorizationIds));
   await db.delete(vendorsTable).where(inArray(vendorsTable.id, vendorIds));
   await db.delete(clientsTable).where(inArray(clientsTable.id, [clientId, otherClientId]));
   await db.delete(usersTable).where(eq(usersTable.id, staffId));

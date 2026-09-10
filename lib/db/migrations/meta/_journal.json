@@ -99,6 +99,13 @@
       "when": 1789055072559,
       "tag": "0013_clear_sprite",
       "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "7",
+      "when": 1789055498874,
+      "tag": "0014_financial_soft_delete_guards",
+      "breakpoints": true
     }
   ]
 }

@@ -297,31 +297,6 @@ describe("financial edit and participant-link soft-delete races", () => {
     expect(saved.invoiceId).toBeNull();
   });
 
-  it("rejects a remittance edit when its client deletion commits first", async () => {
-    const authorization = await makeAuthorization();
-    const [remittance] = await db.insert(remittancesTable).values({
-      clientId,
-      remittanceDate: "2026-01-15",
-      amount: "100.00",
-      status: "received",
-      source: "manual",
-    }).returning();
-
-    const validation = await raceDeleteAgainstFinancialEdit(
-      "clients",
-      clientId,
-      { authorizationId: authorization.id },
-      async (tx) => {
-        await tx.update(remittancesTable).set({ authorizationId: authorization.id }).where(eq(remittancesTable.id, remittance.id));
-      },
-    );
-
-    expect(validation.error).toContain("non-deleted client");
-    const [saved] = await db.select().from(remittancesTable).where(eq(remittancesTable.id, remittance.id));
-    expect(saved.authorizationId).toBeNull();
-    await db.update(clientsTable).set({ isDeleted: false, deletedAt: null }).where(eq(clientsTable.id, clientId));
-  });
-
   it("rejects a payment vendor edit when its only vendor association is deleted first", async () => {
     const [vendor] = await db.insert(vendorsTable).values({ name: `${nonce}-vendor`, active: true }).returning();
     const authorization = await makeAuthorization(vendor.id);

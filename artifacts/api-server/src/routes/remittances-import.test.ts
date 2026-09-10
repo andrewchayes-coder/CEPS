@@ -321,7 +321,7 @@ describe("POST /remittances/import (Alta batch import)", () => {
       checkDate: "2026-07-15", paymentMonth: "2026-07", amount: "99.00",
       paymentType: "direct_payment", source: "manual", remitted: false, ...values,
     }).returning();
-    const [crossClient] = await makePayment({ clientId: clientBId });
+    const [crossClient] = await makePayment({ clientId: clientBId, authorizationId: null });
     const [crossAuth] = await makePayment({ authorizationId: otherAuth.id });
     const [crossMonth] = await makePayment({ paymentMonth: "2026-08" });
     const [wrongAmount] = await makePayment({ amount: "98.00" });

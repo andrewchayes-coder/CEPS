@@ -155,6 +155,17 @@ beforeAll(async () => {
     .returning();
   authAId = authA.id;
 
+  await db.insert(authorizationsTable).values({
+    clientId: clientB,
+    vendorId: otherVendorId,
+    authNumber: `${nonce}-authB`,
+    serviceCode: "459",
+    paymentType: "direct_payment",
+    servicePeriodStart: "2026-01-01",
+    servicePeriodEnd: "2026-12-31",
+    maxPeriodAmount: "1000.00",
+  });
+
   const [paymentA] = await db
     .insert(paymentsTable)
     .values({

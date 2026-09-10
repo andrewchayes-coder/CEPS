@@ -602,27 +602,31 @@ router.delete("/payments/:id", requireStaff, async (req, res): Promise<void> => 
   const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
   const deletedAt = new Date();
   const deletedBy = req.user!.id;
-  const { payment, allocationBlocked } = await db.transaction(async (tx) => {
+  const { payment, financialLinkBlocked } = await db.transaction(async (tx) => {
     await tx.execute(sql`select id from payments where id = ${id} for update`);
     const [allocation] = await tx.select({ id: remittanceAllocationsTable.id })
       .from(remittanceAllocationsTable)
       .where(eq(remittanceAllocationsTable.paymentId, id))
       .limit(1);
-    if (allocation) {
-      return { payment: undefined, allocationBlocked: true };
+    const [matchedRemittance] = await tx.select({ id: remittancesTable.id })
+      .from(remittancesTable)
+      .where(and(eq(remittancesTable.matchedPaymentId, id), notDeleted(remittancesTable)))
+      .limit(1);
+    if (allocation || matchedRemittance) {
+      return { payment: undefined, financialLinkBlocked: true };
     }
     const [p] = await tx
       .update(paymentsTable)
       .set({ isDeleted: true, deletedAt, deletedBy })
       .where(and(eq(paymentsTable.id, id), notDeleted(paymentsTable)))
       .returning();
-    if (!p) return { payment: undefined, allocationBlocked: false };
+    if (!p) return { payment: undefined, financialLinkBlocked: false };
     await audit(req.user!.id, "delete_payment", "payment", p.id, `Check ${p.qbCheckNumber} — $${p.amount}`, tx as unknown as typeof db);
-    return { payment: p, allocationBlocked: false };
+    return { payment: p, financialLinkBlocked: false };
   });
   if (!payment) {
-    if (allocationBlocked) {
-      res.status(409).json({ error: "Payment cannot be deleted while it has remittance allocations" });
+    if (financialLinkBlocked) {
+      res.status(409).json({ error: "Payment cannot be deleted while it has active remittance links" });
       return;
     }
     res.status(404).json({ error: "Payment not found" });
@@ -1249,30 +1253,36 @@ router.delete("/remittances/:id", requireStaff, async (req, res): Promise<void> 
   const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
   const remittance = await db.transaction(async (tx) => {
     await tx.execute(sql`select id from remittances where id = ${id} for update`);
+    const [before] = await tx.select().from(remittancesTable)
+      .where(and(eq(remittancesTable.id, id), notDeleted(remittancesTable)));
+    if (!before) return undefined;
+
+    const allocations = await tx.select().from(remittanceAllocationsTable)
+      .where(eq(remittanceAllocationsTable.remittanceId, before.id));
+    const paymentIds = [...new Set(allocations.map((allocation) => allocation.paymentId))].sort();
+    if (paymentIds.length) {
+      await tx.execute(sql`
+        select id from payments
+        where id in (${sql.join(paymentIds.map((paymentId) => sql`${paymentId}`), sql`, `)})
+        order by id
+        for update
+      `);
+    }
+    await tx.delete(remittanceAllocationsTable).where(eq(remittanceAllocationsTable.remittanceId, before.id));
+    for (const allocation of allocations) {
+      const [totals] = await tx.select({ total: sql<string>`coalesce(sum(${remittanceAllocationsTable.amount}), 0)` }).from(remittanceAllocationsTable).where(eq(remittanceAllocationsTable.paymentId, allocation.paymentId));
+      const [payment] = await tx.select().from(paymentsTable).where(eq(paymentsTable.id, allocation.paymentId));
+      if (payment) await tx.update(paymentsTable).set({ remitted: money(totals.total).greaterThanOrEqualTo(payment.amount) }).where(eq(paymentsTable.id, payment.id));
+    }
+
     const [row] = await tx.update(remittancesTable)
       .set({ isDeleted: true, deletedAt: new Date(), deletedBy: req.user!.id })
       .where(and(eq(remittancesTable.id, id), notDeleted(remittancesTable))).returning();
     if (row) {
-      const allocations = await tx.select().from(remittanceAllocationsTable).where(eq(remittanceAllocationsTable.remittanceId, row.id));
-      const paymentIds = [...new Set(allocations.map((allocation) => allocation.paymentId))].sort();
-      if (paymentIds.length) {
-        await tx.execute(sql`
-          select id from payments
-          where id in (${sql.join(paymentIds.map((paymentId) => sql`${paymentId}`), sql`, `)})
-          order by id
-          for update
-        `);
+      if (row.matchedPaymentId) {
+        await tx.update(paymentsTable).set({ remitted: false })
+          .where(and(eq(paymentsTable.id, row.matchedPaymentId), eq(paymentsTable.remitted, true)));
       }
-      await tx.delete(remittanceAllocationsTable).where(eq(remittanceAllocationsTable.remittanceId, row.id));
-      for (const allocation of allocations) {
-        const [totals] = await tx.select({ total: sql<string>`coalesce(sum(${remittanceAllocationsTable.amount}), 0)` }).from(remittanceAllocationsTable).where(eq(remittanceAllocationsTable.paymentId, allocation.paymentId));
-        const [payment] = await tx.select().from(paymentsTable).where(eq(paymentsTable.id, allocation.paymentId));
-        if (payment) await tx.update(paymentsTable).set({ remitted: money(totals.total).greaterThanOrEqualTo(payment.amount) }).where(eq(paymentsTable.id, payment.id));
-      }
-    }
-    if (row?.matchedPaymentId) {
-      await tx.update(paymentsTable).set({ remitted: false })
-        .where(and(eq(paymentsTable.id, row.matchedPaymentId), eq(paymentsTable.remitted, true)));
     }
     return row;
   });

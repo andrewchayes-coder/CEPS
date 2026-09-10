@@ -6,6 +6,7 @@ import {
   sessionsTable,
   clientsTable,
   vendorsTable,
+  authorizationsTable,
   invoicesTable,
 } from "@workspace/db";
 import app from "../app";
@@ -133,6 +134,12 @@ beforeAll(async () => {
   parentCookie = await session(parentUserId);
   coordCookie = await session(coordUserId);
 
+  await db.insert(authorizationsTable).values([
+    { clientId: clientA, vendorId, authNumber: `${nonce}-auth-a`, serviceCode: "459", paymentType: "direct_payment", servicePeriodStart: "2026-01-01", servicePeriodEnd: "2026-12-31", maxPeriodAmount: "1000.00", status: "active" },
+    { clientId: clientB, vendorId, authNumber: `${nonce}-auth-b1`, serviceCode: "459", paymentType: "direct_payment", servicePeriodStart: "2026-01-01", servicePeriodEnd: "2026-12-31", maxPeriodAmount: "1000.00", status: "active" },
+    { clientId: clientB, vendorId: otherVendorId, authNumber: `${nonce}-auth-b2`, serviceCode: "459", paymentType: "direct_payment", servicePeriodStart: "2026-01-01", servicePeriodEnd: "2026-12-31", maxPeriodAmount: "1000.00", status: "active" },
+  ]);
+
   // Invoice matrix:
   //  - clientA + our vendor    (visible to parentUser AND vendorUser)
   //  - clientA + no vendor     (visible to parentUser only)
@@ -146,6 +153,7 @@ beforeAll(async () => {
 
 afterAll(async () => {
   await db.delete(invoicesTable).where(inArray(invoicesTable.clientId, [clientA, clientB]));
+  await db.delete(authorizationsTable).where(inArray(authorizationsTable.clientId, [clientA, clientB]));
   await db.delete(sessionsTable).where(inArray(sessionsTable.userId, [staffId, vendorUserId, parentUserId, coordUserId]));
   // Delete clients before users: clients.assignedCoordinatorId FK-references
   // the coordinator user, so the user rows can't be removed while the client

@@ -137,6 +137,14 @@ beforeAll(async () => {
   const deletedClient = await createLinkedClient("deleted");
   const unrelatedClient = await createLinkedClient("unrelated");
 
+  const vendorAssociationAuths = await db.insert(authorizationsTable).values([
+    { clientId: invoiceClient, vendorId, authNumber: `${vendorLinksNonce}-invoice-auth`, serviceCode: "459", paymentType: "direct_payment", servicePeriodStart: "2026-01-01", servicePeriodEnd: "2026-12-31", maxPeriodAmount: "1000.00", status: "active" },
+    { clientId: paymentClient, vendorId, authNumber: `${vendorLinksNonce}-payment-auth`, serviceCode: "459", paymentType: "direct_payment", servicePeriodStart: "2026-01-01", servicePeriodEnd: "2026-12-31", maxPeriodAmount: "1000.00", status: "active" },
+    { clientId: deletedClient, vendorId, authNumber: `${vendorLinksNonce}-deleted-auth`, serviceCode: "459", paymentType: "direct_payment", servicePeriodStart: "2026-01-01", servicePeriodEnd: "2026-12-31", maxPeriodAmount: "1000.00", status: "active" },
+    { clientId: unrelatedClient, vendorId: otherVendorId, authNumber: `${vendorLinksNonce}-unrelated-auth`, serviceCode: "459", paymentType: "direct_payment", servicePeriodStart: "2026-01-01", servicePeriodEnd: "2026-12-31", maxPeriodAmount: "1000.00", status: "active" },
+  ]).returning();
+  createdAuthIds.push(...vendorAssociationAuths.map((row) => row.id));
+
   const [authorizationLink] = await db.insert(authorizationsTable).values({
     clientId: authorizationClient, vendorId, authNumber: `${vendorLinksNonce}-auth`, serviceCode: "459",
     paymentType: "direct_payment", servicePeriodStart: "2026-01-01", servicePeriodEnd: "2026-12-31",
@@ -164,6 +172,9 @@ beforeAll(async () => {
     serviceMonth: "2026-01", amountRequested: "100.00", paymentType: "direct_payment", status: "approved",
   }).returning();
   vendorLinkInvoiceIds.push(unrelatedLink.id);
+  await db.update(authorizationsTable)
+    .set({ isDeleted: true })
+    .where(inArray(authorizationsTable.id, vendorAssociationAuths.slice(0, 3).map((row) => row.id)));
 
   const [vendorUser] = await db
     .insert(usersTable)

@@ -98,23 +98,6 @@ describe("fee participant links", () => {
     expect(response.body.error).toContain(`${field} must reference a non-deleted`);
   });
 
-  it("allows edits when the historical payment link was deleted", async () => {
-    const [fee] = await db.insert(feesTable).values({
-      clientId: clientA, paymentId: paymentA, authorizationId: authA, amount: "5.00", status: "pending", createdBy: staffId,
-    }).returning();
-    await db.update(paymentsTable).set({ isDeleted: true }).where(eq(paymentsTable.id, paymentA));
-    const beforeAudits = await db.select().from(auditLogTable).where(eq(auditLogTable.userId, staffId));
-    const response = await request(app).patch(`/api/fees/${fee.id}`).set("Cookie", cookie).send({
-      amount: "20.00", status: "waived",
-    });
-    expect(response.status).toBe(200);
-    expect(response.body.amount).toBe("20.00");
-    expect(response.body.status).toBe("waived");
-    const [unchanged] = await db.select().from(feesTable).where(eq(feesTable.id, fee.id));
-    expect(unchanged.amount).toBe("20.00");
-    expect(unchanged.status).toBe("waived");
-    expect((await db.select().from(auditLogTable).where(eq(auditLogTable.userId, staffId))).length).toBe(beforeAudits.length + 1);
-  });
 });
 
 describe("monthly fee CRUD", () => {

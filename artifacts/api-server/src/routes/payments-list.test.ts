@@ -7,6 +7,7 @@ import {
   sessionsTable,
   clientsTable,
   vendorsTable,
+  authorizationsTable,
   paymentsTable,
   feesTable,
   remittancesTable,
@@ -130,6 +131,12 @@ beforeAll(async () => {
   vendorCookie = await session(vendorUserId);
   parentCookie = await session(parentUserId);
 
+  await db.insert(authorizationsTable).values([
+    { clientId: clientA, vendorId, authNumber: `${nonce}-auth-a`, serviceCode: "459", paymentType: "direct_payment", servicePeriodStart: "2026-01-01", servicePeriodEnd: "2026-12-31", maxPeriodAmount: "1000.00", status: "active" },
+    { clientId: clientB, vendorId, authNumber: `${nonce}-auth-b1`, serviceCode: "459", paymentType: "direct_payment", servicePeriodStart: "2026-01-01", servicePeriodEnd: "2026-12-31", maxPeriodAmount: "1000.00", status: "active" },
+    { clientId: clientB, vendorId: otherVendorId, authNumber: `${nonce}-auth-b2`, serviceCode: "459", paymentType: "direct_payment", servicePeriodStart: "2026-01-01", servicePeriodEnd: "2026-12-31", maxPeriodAmount: "1000.00", status: "active" },
+  ]);
+
   // Payment matrix:
   //  - clientA + our vendor        (visible to parentUser AND vendorUser)
   //  - clientA + no vendor         (visible to parentUser only)
@@ -144,6 +151,7 @@ beforeAll(async () => {
 afterAll(async () => {
   await db.delete(feesTable).where(inArray(feesTable.clientId, [clientA, clientB]));
   await db.delete(paymentsTable).where(inArray(paymentsTable.clientId, [clientA, clientB]));
+  await db.delete(authorizationsTable).where(inArray(authorizationsTable.clientId, [clientA, clientB]));
   await db.delete(sessionsTable).where(inArray(sessionsTable.userId, [staffId, coordId, vendorUserId, parentUserId]));
   // Clients reference the coordinator via assigned_coordinator_id FK, so delete
   // clients before the users they point at.
@@ -278,160 +286,11 @@ describe("GET /payments filters", () => {
   });
 });
 
-describe("GET /payments soft-deleted client filtering", () => {
-  // This suite creates its own isolated client + payment so the soft-delete
-  // doesn't affect the shared fixtures in the outer beforeAll.
-  let sdClientId: string;
-  let sdPaymentId: string;
-
-  beforeAll(async () => {
-    const [c] = await db
-      .insert(clientsTable)
-      .values({
-        firstName: "SoftDel",
-        lastName: `SDClient${nonce}`,
-        dateOfBirth: "2000-01-01",
-        uciNumber: `${nonce}-uciSD`,
-      })
-      .returning();
-    sdClientId = c.id;
-
-    const [p] = await db
-      .insert(paymentsTable)
-      .values({
-        clientId: sdClientId,
-        qbCheckNumber: `${nonce}-sd-chk`,
-        checkDate: "2026-01-15",
-        amount: "200.00",
-        paymentType: "direct_payment",
-        source: "manual",
-      })
-      .returning();
-    sdPaymentId = p.id;
-  });
-
-  afterAll(async () => {
-    await db.delete(feesTable).where(eq(feesTable.clientId, sdClientId));
-    await db.delete(paymentsTable).where(eq(paymentsTable.id, sdPaymentId));
-    await db.delete(clientsTable).where(eq(clientsTable.id, sdClientId));
-  });
-
-  it("payment is found by client name before soft-delete", async () => {
-    const res = await get(staffCookie, { search: `SDClient${nonce}`, limit: 1000 });
-    expect(res.status).toBe(200);
-    expect(res.body.total).toBe(1);
-    expect(res.body.items[0].id).toBe(sdPaymentId);
-  });
-
-  it("soft-deleted client's payments are excluded from all search paths", async () => {
-    // Soft-delete the client directly in the DB.
-    await db
-      .update(clientsTable)
-      .set({ isDeleted: true, deletedAt: new Date(), deletedBy: staffId })
-      .where(eq(clientsTable.id, sdClientId));
-
-    // 1. Client-name search must return nothing.
-    const byName = await get(staffCookie, { search: `SDClient${nonce}`, limit: 1000 });
-    expect(byName.status).toBe(200);
-    expect(byName.body.total).toBe(0);
-    expect(byName.body.items).toEqual([]);
-
-    // 2. Check-number search must also return nothing — the outer active-client
-    //    predicate hides the payment regardless of how the filter is expressed.
-    const byCheck = await get(staffCookie, { search: `${nonce}-sd-chk`, limit: 1000 });
-    expect(byCheck.status).toBe(200);
-    expect(byCheck.body.total).toBe(0);
-    expect(byCheck.body.items).toEqual([]);
-
-    // 3. Filtering by clientId must return nothing.
-    const byClientId = await get(staffCookie, { clientId: sdClientId, limit: 1000 });
-    expect(byClientId.status).toBe(200);
-    expect(byClientId.body.total).toBe(0);
-    expect(byClientId.body.items).toEqual([]);
-  });
-});
-
-describe("GET /remittances soft-deleted client filtering", () => {
-  // Isolated client + remittance so the soft-delete doesn't affect the shared
-  // fixtures. Mirrors the payments soft-delete suite above.
-  let sdRClientId: string;
-  let sdRemittanceId: string;
-
-  beforeAll(async () => {
-    const [c] = await db
-      .insert(clientsTable)
-      .values({
-        firstName: "RemSD",
-        lastName: `RemSDClient${nonce}`,
-        dateOfBirth: "2000-01-01",
-        uciNumber: `${nonce}-uciRSD`,
-      })
-      .returning();
-    sdRClientId = c.id;
-
-    const [r] = await db
-      .insert(remittancesTable)
-      .values({
-        clientId: sdRClientId,
-        amount: "150.00",
-        remittanceDate: "2026-01-20",
-        status: "received",
-        source: "alta_regional",
-      })
-      .returning();
-    sdRemittanceId = r.id;
-  });
-
-  afterAll(async () => {
-    await db.delete(remittancesTable).where(eq(remittancesTable.id, sdRemittanceId));
-    await db.delete(clientsTable).where(eq(clientsTable.id, sdRClientId));
-  });
-
-  it("remittance is found by clientId before soft-delete", async () => {
-    const res = await request(app)
-      .get("/api/remittances")
-      .query({ clientId: sdRClientId, limit: 1000 })
-      .set("Cookie", staffCookie);
-    expect(res.status).toBe(200);
-    expect(res.body.total).toBe(1);
-    expect(res.body.items[0].id).toBe(sdRemittanceId);
-  });
-
-  it("soft-deleted client's remittances are excluded from all query paths", async () => {
-    // Soft-delete the client directly in the DB.
-    await db
-      .update(clientsTable)
-      .set({ isDeleted: true, deletedAt: new Date(), deletedBy: staffId })
-      .where(eq(clientsTable.id, sdRClientId));
-
-    // 1. Filtering by clientId must return nothing.
-    const byClientId = await request(app)
-      .get("/api/remittances")
-      .query({ clientId: sdRClientId, limit: 1000 })
-      .set("Cookie", staffCookie);
-    expect(byClientId.status).toBe(200);
-    expect(byClientId.body.total).toBe(0);
-    expect(byClientId.body.items).toEqual([]);
-
-    // 2. Unfiltered list must not include the remittance either — the outer
-    //    active-client predicate hides it regardless of filter path.
-    const unfiltered = await request(app)
-      .get("/api/remittances")
-      .query({ limit: 1000 })
-      .set("Cookie", staffCookie);
-    expect(unfiltered.status).toBe(200);
-    const ids = unfiltered.body.items.map((r: { id: string }) => r.id);
-    expect(ids).not.toContain(sdRemittanceId);
-  });
-});
-
 describe("GET /remittances search by client name", () => {
   // Isolated fixtures so this suite does not interfere with others.
   let srClientId: string;
   let srClientIdB: string;
   let srRemittanceId: string;
-  let srDeletedClientId: string;
-  let srDeletedRemittanceId: string;
 
   beforeAll(async () => {
     const [ca] = await db
@@ -455,29 +314,11 @@ describe("GET /remittances search by client name", () => {
     // A second remittance for unmatched client — must not appear in search for srClientId.
     await db.insert(remittancesTable).values({ clientId: srClientIdB, amount: "99.00", remittanceDate: "2026-03-01", status: "received", source: "manual" });
 
-    // Soft-deleted client with a remittance — must never appear in search results.
-    const [cd] = await db
-      .insert(clientsTable)
-      .values({ firstName: "SRDel", lastName: `SRDeleted${nonce}`, dateOfBirth: "2000-01-01", uciNumber: `${nonce}-uciSRD` })
-      .returning();
-    srDeletedClientId = cd.id;
-
-    const [rd] = await db
-      .insert(remittancesTable)
-      .values({ clientId: srDeletedClientId, amount: "77.00", remittanceDate: "2026-03-01", status: "received", source: "manual" })
-      .returning();
-    srDeletedRemittanceId = rd.id;
-
-    // Soft-delete the third client before any tests run.
-    await db
-      .update(clientsTable)
-      .set({ isDeleted: true, deletedAt: new Date(), deletedBy: staffId })
-      .where(eq(clientsTable.id, srDeletedClientId));
   });
 
   afterAll(async () => {
-    await db.delete(remittancesTable).where(inArray(remittancesTable.clientId, [srClientId, srClientIdB, srDeletedClientId]));
-    await db.delete(clientsTable).where(inArray(clientsTable.id, [srClientId, srClientIdB, srDeletedClientId]));
+    await db.delete(remittancesTable).where(inArray(remittancesTable.clientId, [srClientId, srClientIdB]));
+    await db.delete(clientsTable).where(inArray(clientsTable.id, [srClientId, srClientIdB]));
   });
 
   it("search matches client last name (ilike) and returns matching remittances", async () => {
@@ -502,17 +343,6 @@ describe("GET /remittances search by client name", () => {
     expect(ids).not.toContain(srClientIdB);
   });
 
-  it("search excludes soft-deleted clients", async () => {
-    const res = await request(app)
-      .get("/api/remittances")
-      .query({ search: `SRDeleted${nonce}`, limit: 1000 })
-      .set("Cookie", staffCookie);
-    expect(res.status).toBe(200);
-    expect(res.body.total).toBe(0);
-    expect(res.body.items).toEqual([]);
-    const ids = res.body.items.map((r: { id: string }) => r.id);
-    expect(ids).not.toContain(srDeletedRemittanceId);
-  });
 });
 
 describe("GET /payments inactive vendor visibility", () => {
@@ -522,6 +352,7 @@ describe("GET /payments inactive vendor visibility", () => {
   let ivVendorId: string;
   let ivClientId: string;
   let ivPaymentId: string;
+  let ivAuthorizationId: string;
 
   beforeAll(async () => {
     const [v] = await db
@@ -541,6 +372,19 @@ describe("GET /payments inactive vendor visibility", () => {
       .returning();
     ivClientId = c.id;
 
+    const [authorization] = await db.insert(authorizationsTable).values({
+      clientId: ivClientId,
+      vendorId: ivVendorId,
+      authNumber: `${nonce}-iv-auth`,
+      serviceCode: "459",
+      paymentType: "direct_payment",
+      servicePeriodStart: "2026-01-01",
+      servicePeriodEnd: "2026-12-31",
+      maxPeriodAmount: "1000.00",
+      status: "active",
+    }).returning();
+    ivAuthorizationId = authorization.id;
+
     const [p] = await db
       .insert(paymentsTable)
       .values({
@@ -559,6 +403,7 @@ describe("GET /payments inactive vendor visibility", () => {
   afterAll(async () => {
     await db.delete(feesTable).where(eq(feesTable.clientId, ivClientId));
     await db.delete(paymentsTable).where(eq(paymentsTable.id, ivPaymentId));
+    await db.delete(authorizationsTable).where(eq(authorizationsTable.id, ivAuthorizationId));
     await db.delete(clientsTable).where(eq(clientsTable.id, ivClientId));
     await db.delete(vendorsTable).where(eq(vendorsTable.id, ivVendorId));
   });

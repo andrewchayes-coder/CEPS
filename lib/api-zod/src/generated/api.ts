@@ -1908,7 +1908,7 @@ export const CreatePaymentBody = zod.object({
   "qbCheckNumber": zod.string(),
   "checkDate": zod.string(),
   "amount": zod.string(),
-  "paymentMonth": zod.string().optional(),
+  "paymentMonth": zod.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/).nullish(),
   "paymentType": zod.enum(['direct_payment', 'reimbursement', 'fee']),
   "overrideDuplicate": zod.boolean().optional().describe('Set true (with a justification) to bypass the duplicate-payment hard stop'),
   "overrideJustification": zod.string().optional().describe('Required written justification when overrideDuplicate is true')
@@ -1926,7 +1926,7 @@ export const CreatePaymentResponse = zod.object({
   "qbCheckNumber": zod.string(),
   "checkDate": zod.string(),
   "amount": zod.string(),
-  "paymentMonth": zod.string().nullish(),
+  "paymentMonth": zod.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/).nullish(),
   "paymentType": zod.enum(['direct_payment', 'reimbursement', 'fee']),
   "source": zod.enum(['quickbooks', 'manual', 'historical_import']),
   "loggedBy": zod.string().nullish(),
@@ -1981,7 +1981,7 @@ export const UpdatePaymentBody = zod.object({
   "qbCheckNumber": zod.string().optional(),
   "checkDate": zod.string().optional(),
   "amount": zod.string().optional(),
-  "paymentMonth": zod.string().nullish(),
+  "paymentMonth": zod.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/).nullish(),
   "paymentType": zod.enum(['direct_payment', 'reimbursement', 'fee']).optional(),
   "overrideDuplicate": zod.boolean().optional().describe('Set true (with a justification) to bypass the duplicate-payment hard stop when an update would create a duplicate'),
   "overrideJustification": zod.string().optional().describe('Required written justification when overrideDuplicate is true')
@@ -2114,10 +2114,17 @@ export const CommitImportResponse = zod.object({
 /**
  * @summary List fees (scoped by role)
  */
+export const listFeesQueryFeeMonthRegExp = new RegExp('^\\d{4}-(0[1-9]|1[0-2])$');
+
+
 export const ListFeesQueryParams = zod.object({
   "clientId": zod.coerce.string().optional(),
-  "status": zod.coerce.string().optional()
+  "status": zod.coerce.string().optional(),
+  "feeMonth": zod.coerce.string().regex(listFeesQueryFeeMonthRegExp).optional()
 })
+
+export const listFeesResponseFeeMonthRegExp = new RegExp('^\\d{4}-(0[1-9]|1[0-2])$');
+
 
 export const ListFeesResponseItem = zod.object({
   "id": zod.string(),
@@ -2125,6 +2132,7 @@ export const ListFeesResponseItem = zod.object({
   "clientName": zod.string().nullish(),
   "paymentId": zod.string().nullish(),
   "authorizationId": zod.string().nullish(),
+  "feeMonth": zod.string().regex(listFeesResponseFeeMonthRegExp).nullish(),
   "amount": zod.string(),
   "ruleApplied": zod.string().nullish(),
   "status": zod.enum(['pending', 'invoiced', 'collected', 'waived']),
@@ -2138,15 +2146,22 @@ export const ListFeesResponse = zod.array(ListFeesResponseItem)
 /**
  * @summary Manually create/adjust a fee (staff)
  */
+export const createFeeBodyFeeMonthRegExp = new RegExp('^\\d{4}-(0[1-9]|1[0-2])$');
+
+
 export const CreateFeeBody = zod.object({
   "clientId": zod.string(),
   "paymentId": zod.string().nullish(),
   "authorizationId": zod.string().nullish(),
+  "feeMonth": zod.string().regex(createFeeBodyFeeMonthRegExp).nullish(),
   "amount": zod.string(),
   "ruleApplied": zod.string().optional(),
   "status": zod.enum(['pending', 'invoiced', 'collected', 'waived']).optional(),
   "notes": zod.string().optional()
 })
+
+export const createFeeResponseFeeMonthRegExp = new RegExp('^\\d{4}-(0[1-9]|1[0-2])$');
+
 
 export const CreateFeeResponse = zod.object({
   "id": zod.string(),
@@ -2154,6 +2169,7 @@ export const CreateFeeResponse = zod.object({
   "clientName": zod.string().nullish(),
   "paymentId": zod.string().nullish(),
   "authorizationId": zod.string().nullish(),
+  "feeMonth": zod.string().regex(createFeeResponseFeeMonthRegExp).nullish(),
   "amount": zod.string(),
   "ruleApplied": zod.string().nullish(),
   "status": zod.enum(['pending', 'invoiced', 'collected', 'waived']),
@@ -2170,11 +2186,18 @@ export const UpdateFeeParams = zod.object({
   "id": zod.coerce.string()
 })
 
+export const updateFeeBodyFeeMonthRegExp = new RegExp('^\\d{4}-(0[1-9]|1[0-2])$');
+
+
 export const UpdateFeeBody = zod.object({
+  "feeMonth": zod.string().regex(updateFeeBodyFeeMonthRegExp).nullish(),
   "amount": zod.string().optional(),
   "status": zod.enum(['pending', 'invoiced', 'collected', 'waived']).optional(),
   "notes": zod.string().optional()
 })
+
+export const updateFeeResponseFeeMonthRegExp = new RegExp('^\\d{4}-(0[1-9]|1[0-2])$');
+
 
 export const UpdateFeeResponse = zod.object({
   "id": zod.string(),
@@ -2182,6 +2205,7 @@ export const UpdateFeeResponse = zod.object({
   "clientName": zod.string().nullish(),
   "paymentId": zod.string().nullish(),
   "authorizationId": zod.string().nullish(),
+  "feeMonth": zod.string().regex(updateFeeResponseFeeMonthRegExp).nullish(),
   "amount": zod.string(),
   "ruleApplied": zod.string().nullish(),
   "status": zod.enum(['pending', 'invoiced', 'collected', 'waived']),

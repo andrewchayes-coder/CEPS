@@ -9,4 +9,8 @@
 export type ListFeesParams = {
 clientId?: string;
 status?: string;
+/**
+ * @pattern ^\d{4}-(0[1-9]|1[0-2])$
+ */
+feeMonth?: string;
 };

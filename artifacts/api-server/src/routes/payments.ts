@@ -37,33 +37,30 @@ const router: IRouter = Router();
 
 class DuplicateFingerprint extends Error {}
 
-// ⚠️ INTERIM PLACEHOLDER — the exact Fee auto-generation trigger/amount rule and
-// qualifying service codes are pending confirmation from CEPS (docs/CEPS_OPEN_ITEMS.md #4).
-// Until then, every logged payment auto-generates a Fee of 5% of the payment amount,
-// status "pending", ruleApplied "interim_flat_percent_5_pending_confirmation".
-// This helper is intentionally isolated so the rule can be swapped once CEPS confirms.
-const INTERIM_FEE_RULE = "interim_flat_percent_5_pending_confirmation";
-// Kept as a string so it feeds Decimal math exactly (no binary-float 0.05).
-const INTERIM_FEE_RATE = "0.05";
+const MONTHLY_FEE_RULE = "flat_160_per_client_month";
 
 async function autoGenerateFee(
   payment: typeof paymentsTable.$inferSelect,
   userId: string,
   tx: typeof db = db,
 ): Promise<void> {
-  const feeAmount = money(payment.amount).times(INTERIM_FEE_RATE).toFixed(2);
+  if (!payment.paymentMonth) return;
   const [fee] = await tx
     .insert(feesTable)
     .values({
       clientId: payment.clientId,
+      feeMonth: payment.paymentMonth,
       paymentId: payment.id,
       authorizationId: payment.authorizationId ?? null,
-      amount: feeAmount,
-      ruleApplied: INTERIM_FEE_RULE,
+      amount: "160.00",
+      ruleApplied: MONTHLY_FEE_RULE,
       status: "pending",
     })
+    .onConflictDoNothing()
     .returning();
-  await audit(userId, "auto_generate_fee", "fee", fee.id, `Auto-generated $${feeAmount} (${INTERIM_FEE_RULE}) for check ${payment.qbCheckNumber}`);
+  if (fee) {
+    await audit(userId, "auto_generate_fee", "fee", fee.id, `Auto-generated $160.00 (${MONTHLY_FEE_RULE}) for client month ${payment.paymentMonth}, triggered by check ${payment.qbCheckNumber}`, tx);
+  }
 }
 
 async function enrichPayments(payments: (typeof paymentsTable.$inferSelect)[]) {
@@ -249,14 +246,13 @@ router.post("/payments", requireStaff, async (req, res): Promise<void> => {
       .insert(paymentsTable)
       .values(values as typeof paymentsTable.$inferInsert)
       .returning();
-    // INTERIM PLACEHOLDER: auto-generate the corresponding Fee record. The real trigger
-    // conditions/amount rule are pending CEPS confirmation — see docs/CEPS_OPEN_ITEMS.md #4.
     await autoGenerateFee(p, req.user!.id, txDb);
     // Record any accepted duplicate override in the same transaction, keyed to
     // the NEW payment's id, so the audit trail can never diverge from the row.
     if (runDupCheck && overrideDuplicate && justification) {
       await audit(req.user!.id, "override_duplicate_payment", "payment", p.id, justification, txDb);
     }
+    await audit(req.user!.id, "create_payment", "payment", p.id, `Check ${p.qbCheckNumber} — $${p.amount}`, txDb);
     return p;
   });
   if (!payment) {
@@ -271,7 +267,6 @@ router.post("/payments", requireStaff, async (req, res): Promise<void> => {
     });
     return;
   }
-  await audit(req.user!.id, "create_payment", "payment", payment.id, `Check ${payment.qbCheckNumber} — $${payment.amount}`);
   res.status(201).json(CreatePaymentResponse.parse((await enrichPayments([payment]))[0]));
 });
 
@@ -516,16 +511,11 @@ router.patch("/payments/:id", requireStaff, async (req, res): Promise<void> => {
   // and a month (mirrors POST /payments). The payment's own row is excluded.
   const runDupCheck = dupFieldChanged && !!(effAuthorizationId && effPaymentMonth);
   const justification = overrideJustification?.trim();
-  // If the amount changed, keep the auto-generated interim fee consistent by
-  // recalculating it with the same 5% rule as autoGenerateFee. We only touch
-  // fees still on the interim rule and never clobber a waived (manually
-  // adjusted) fee. Payment + fee updates run in one transaction.
-  const amountChanged =
-    "amount" in updateData && String(before.amount) !== String(updates.amount);
+  const paymentMonthChanged = effPaymentMonth !== before.paymentMonth;
   let duplicateBlocked: Awaited<ReturnType<typeof enrichPayments>> | null = null;
   let allocationBlocked = false;
   let relationshipError: string | undefined;
-  const { payment, recalculatedFees } = await db.transaction(async (tx) => {
+  const { payment } = await db.transaction(async (tx) => {
     const txDb = tx as unknown as typeof db;
     await tx.execute(sql`select id from payments where id = ${id} for update`);
     relationshipError = (await validateParticipantLinks(txDb, effClientId, {
@@ -534,16 +524,16 @@ router.patch("/payments/:id", requireStaff, async (req, res): Promise<void> => {
       vendorId: effVendorId,
     })).error;
     if (relationshipError) {
-      return { payment: null as typeof paymentsTable.$inferSelect | null, recalculatedFees: [] as { id: string; before: string; after: string }[] };
+      return { payment: null as typeof paymentsTable.$inferSelect | null };
     }
-    if (amountChanged || dupFieldChanged) {
+    if (("amount" in updateData && String(before.amount) !== String(updates.amount)) || dupFieldChanged) {
       const [allocation] = await tx.select({ id: remittanceAllocationsTable.id })
         .from(remittanceAllocationsTable)
         .where(eq(remittanceAllocationsTable.paymentId, id))
         .limit(1);
       if (allocation) {
         allocationBlocked = true;
-        return { payment: null as typeof paymentsTable.$inferSelect | null, recalculatedFees: [] as { id: string; before: string; after: string }[] };
+        return { payment: null as typeof paymentsTable.$inferSelect | null };
       }
     }
     // Serialize + re-check the duplicate hard stop inside the transaction behind
@@ -563,7 +553,7 @@ router.patch("/payments/:id", requireStaff, async (req, res): Promise<void> => {
       });
       if (isDuplicate && !(overrideDuplicate && justification)) {
         duplicateBlocked = await enrichPayments(existingPayments);
-        return { payment: null as typeof paymentsTable.$inferSelect | null, recalculatedFees: [] as { id: string; before: string; after: string }[] };
+        return { payment: null as typeof paymentsTable.$inferSelect | null };
       }
     }
     const [p] = await tx
@@ -576,22 +566,18 @@ router.patch("/payments/:id", requireStaff, async (req, res): Promise<void> => {
     if (runDupCheck && overrideDuplicate && justification) {
       await audit(req.user!.id, "override_duplicate_payment", "payment", p.id, justification, txDb);
     }
-    const recalculated: { id: string; before: string; after: string }[] = [];
-    if (amountChanged) {
-      const linkedFees = await tx
-        .select()
-        .from(feesTable)
-        .where(and(eq(feesTable.paymentId, p.id), notDeleted(feesTable)));
-      const newFeeAmount = money(p.amount).times(INTERIM_FEE_RATE).toFixed(2);
-      for (const fee of linkedFees) {
-        if (fee.ruleApplied !== INTERIM_FEE_RULE) continue; // don't clobber manually set fees
-        if (fee.status === "waived") continue; // don't clobber a waived fee
-        if (String(fee.amount) === newFeeAmount) continue;
-        await tx.update(feesTable).set({ amount: newFeeAmount }).where(eq(feesTable.id, fee.id));
-        recalculated.push({ id: fee.id, before: String(fee.amount), after: newFeeAmount });
-      }
+    if (paymentMonthChanged && p.paymentMonth) {
+      await autoGenerateFee(p, req.user!.id, txDb);
     }
-    return { payment: p, recalculatedFees: recalculated };
+    await audit(
+      req.user!.id,
+      "update_payment",
+      "payment",
+      p.id,
+      diffDetail(before, updates, Object.keys(updates)),
+      txDb,
+    );
+    return { payment: p };
   });
   if (!payment) {
     if (relationshipError) {
@@ -609,16 +595,6 @@ router.patch("/payments/:id", requireStaff, async (req, res): Promise<void> => {
     });
     return;
   }
-  await audit(
-    req.user!.id,
-    "update_payment",
-    "payment",
-    payment.id,
-    diffDetail(before, updates, Object.keys(updates)),
-  );
-  for (const f of recalculatedFees) {
-    await audit(req.user!.id, "update_fee", "fee", f.id, `Auto-recalculated fee $${f.before} → $${f.after} after payment amount change (${INTERIM_FEE_RULE})`);
-  }
   res.json(UpdatePaymentResponse.parse((await enrichPayments([payment]))[0]));
 });
 
@@ -626,29 +602,23 @@ router.delete("/payments/:id", requireStaff, async (req, res): Promise<void> => 
   const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
   const deletedAt = new Date();
   const deletedBy = req.user!.id;
-  // Soft-delete the payment and any linked auto-generated fee(s) together so a
-  // deleted payment never leaves an orphaned fee behind.
-  const { payment, deletedFees, allocationBlocked } = await db.transaction(async (tx) => {
+  const { payment, allocationBlocked } = await db.transaction(async (tx) => {
     await tx.execute(sql`select id from payments where id = ${id} for update`);
     const [allocation] = await tx.select({ id: remittanceAllocationsTable.id })
       .from(remittanceAllocationsTable)
       .where(eq(remittanceAllocationsTable.paymentId, id))
       .limit(1);
     if (allocation) {
-      return { payment: undefined, deletedFees: [] as (typeof feesTable.$inferSelect)[], allocationBlocked: true };
+      return { payment: undefined, allocationBlocked: true };
     }
     const [p] = await tx
       .update(paymentsTable)
       .set({ isDeleted: true, deletedAt, deletedBy })
       .where(and(eq(paymentsTable.id, id), notDeleted(paymentsTable)))
       .returning();
-    if (!p) return { payment: undefined, deletedFees: [] as (typeof feesTable.$inferSelect)[], allocationBlocked: false };
-    const fees = await tx
-      .update(feesTable)
-      .set({ isDeleted: true, deletedAt, deletedBy })
-      .where(and(eq(feesTable.paymentId, p.id), notDeleted(feesTable)))
-      .returning();
-    return { payment: p, deletedFees: fees, allocationBlocked: false };
+    if (!p) return { payment: undefined, allocationBlocked: false };
+    await audit(req.user!.id, "delete_payment", "payment", p.id, `Check ${p.qbCheckNumber} — $${p.amount}`, tx as unknown as typeof db);
+    return { payment: p, allocationBlocked: false };
   });
   if (!payment) {
     if (allocationBlocked) {
@@ -657,10 +627,6 @@ router.delete("/payments/:id", requireStaff, async (req, res): Promise<void> => 
     }
     res.status(404).json({ error: "Payment not found" });
     return;
-  }
-  await audit(req.user!.id, "delete_payment", "payment", payment.id, `Check ${payment.qbCheckNumber} — $${payment.amount}`);
-  for (const fee of deletedFees) {
-    await audit(req.user!.id, "delete_fee", "fee", fee.id, `Cascade soft-delete with payment ${payment.qbCheckNumber} — $${fee.amount}`);
   }
   res.json({ ok: true });
 });

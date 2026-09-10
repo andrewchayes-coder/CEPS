@@ -1,0 +1,2 @@
+ALTER TABLE "fees" ADD COLUMN "fee_month" text;--> statement-breakpoint
+CREATE UNIQUE INDEX "fees_active_client_fee_month_unique" ON "fees" USING btree ("client_id","fee_month") WHERE "fees"."is_deleted" = false AND "fees"."fee_month" IS NOT NULL;

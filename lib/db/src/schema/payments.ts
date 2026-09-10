@@ -62,6 +62,7 @@ export const paymentsTable = pgTable("payments", {
     "payments_positive_finite_amount",
     sql`${table.amount} > 0 AND ${table.amount} <> 'NaN'::numeric`,
   ),
+  validPaymentMonth: check("payments_valid_payment_month", sql`${table.paymentMonth} IS NULL OR ${table.paymentMonth} ~ '^[0-9]{4}-(0[1-9]|1[0-2])$'`),
 }));
 
 export type Payment = typeof paymentsTable.$inferSelect;

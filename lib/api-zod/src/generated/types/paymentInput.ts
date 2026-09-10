@@ -18,7 +18,7 @@ export interface PaymentInput {
   qbCheckNumber: string;
   checkDate: string;
   amount: string;
-  paymentMonth?: string;
+  paymentMonth?: string | null;
   paymentType: PaymentInputPaymentType;
   /** Set true (with a justification) to bypass the duplicate-payment hard stop */
   overrideDuplicate?: boolean;

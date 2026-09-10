@@ -1,0 +1,2 @@
+ALTER TABLE "payments" ADD CONSTRAINT "payments_valid_payment_month" CHECK ("payments"."payment_month" IS NULL OR "payments"."payment_month" ~ '^[0-9]{4}-(0[1-9]|1[0-2])$');--> statement-breakpoint
+ALTER TABLE "fees" ADD CONSTRAINT "fees_valid_fee_month" CHECK ("fees"."fee_month" IS NULL OR "fees"."fee_month" ~ '^[0-9]{4}-(0[1-9]|1[0-2])$');

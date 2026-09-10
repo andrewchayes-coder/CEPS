@@ -1,0 +1,31 @@
+Restructure the Fee model so a Fee belongs to a (client, service month) pair
+instead of a single Payment. Today's autoGenerateFee (artifacts/api-server/src/
+routes/payments.ts) creates one Fee per Payment 1:1 — that breaks CEPS's
+confirmed rule that only ONE $160 fee is owed per client per month regardless
+of how many qualifying payments land in it that month.
+
+SCHEMA (lib/db/src/schema/fees.ts + a migration):
+1. Add `feeMonth` (text, nullable, format YYYY-MM) — the service month this
+   fee covers. This is the new anchor for "does a fee already exist for this
+   client this month," replacing the old payment_id 1:1 relationship.
+2. Add a partial unique index on (client_id, fee_month) WHERE is_deleted =
+   false AND fee_month IS NOT NULL — enforces "at most one active fee per
+   client per month" at the database level, the same way other hard
+   invariants in this schema are DB-enforced rather than only app-enforced.
+3. Keep `payment_id` as a nullable FK, but its meaning changes: it's now just
+   "the payment that happened to trigger this fee's creation," for
+   traceability only — not an authoritative 1:1 link. Update the column
+   comment to say so.
+4. This repo uses versioned Drizzle migrations, not `drizzle-kit push` — after
+   editing fees.ts, run `pnpm --filter @workspace/db run db:generate` then
+   `db:migrate` in dev. Don't wire a migrate step into the production deploy
+   (Replit's Publish flow applies prod schema).
+5. Update the OpenAPI spec (lib/api-spec/openapi.yaml) for the new field, then
+   `pnpm --filter @workspace/api-spec run codegen` and re-apply the
+   `zod` → `zod/v4` import fix in lib/api-zod/src/generated/api.ts that run
+   always needs. Never hand-edit the generated files directly.
+6. Only dummy/seed data exists in this repo (no real client data is permitted
+   until CEPS confirms compliance per Exhibit B) — no production backfill is
+   needed. But update artifacts/api-server/src/scripts/seed.ts if it seeds
+   Fee rows, so demo data reflects $160 flat fees instead of the old 5% ones;
+   note in the PR that re-running seed regenerates them cleanly.

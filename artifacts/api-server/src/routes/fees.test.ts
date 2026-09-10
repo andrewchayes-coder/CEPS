@@ -98,7 +98,7 @@ describe("fee participant links", () => {
     expect(response.body.error).toContain(`${field} must reference a non-deleted`);
   });
 
-  it("rejects edits when an effective link was deleted without changing fee or audit history", async () => {
+  it("allows edits when the historical payment link was deleted", async () => {
     const [fee] = await db.insert(feesTable).values({
       clientId: clientA, paymentId: paymentA, authorizationId: authA, amount: "5.00", status: "pending", createdBy: staffId,
     }).returning();
@@ -107,11 +107,84 @@ describe("fee participant links", () => {
     const response = await request(app).patch(`/api/fees/${fee.id}`).set("Cookie", cookie).send({
       amount: "20.00", status: "waived",
     });
-    expect(response.status).toBe(400);
-    expect(response.body.error).toContain("paymentId");
+    expect(response.status).toBe(200);
+    expect(response.body.amount).toBe("20.00");
+    expect(response.body.status).toBe("waived");
     const [unchanged] = await db.select().from(feesTable).where(eq(feesTable.id, fee.id));
-    expect(unchanged.amount).toBe("5.00");
-    expect(unchanged.status).toBe("pending");
-    expect((await db.select().from(auditLogTable).where(eq(auditLogTable.userId, staffId))).length).toBe(beforeAudits.length);
+    expect(unchanged.amount).toBe("20.00");
+    expect(unchanged.status).toBe("waived");
+    expect((await db.select().from(auditLogTable).where(eq(auditLogTable.userId, staffId))).length).toBe(beforeAudits.length + 1);
+  });
+});
+
+describe("monthly fee CRUD", () => {
+  it("round-trips feeMonth on POST and list", async () => {
+    const created = await request(app).post("/api/fees").set("Cookie", cookie).send({
+      clientId: clientB, amount: "160.00", feeMonth: "2026-01",
+    });
+    expect(created.status).toBe(201);
+    expect(created.body.feeMonth).toBe("2026-01");
+
+    const listed = await request(app).get("/api/fees").query({ clientId: clientB, feeMonth: "2026-01" }).set("Cookie", cookie);
+    expect(listed.status).toBe(200);
+    expect(listed.body).toHaveLength(1);
+    expect(listed.body[0].feeMonth).toBe("2026-01");
+  });
+
+  it("returns 409 for a duplicate active client/month", async () => {
+    const first = await request(app).post("/api/fees").set("Cookie", cookie).send({
+      clientId: clientA, amount: "160.00", feeMonth: "2026-02",
+    });
+    expect(first.status).toBe(201);
+    const duplicate = await request(app).post("/api/fees").set("Cookie", cookie).send({
+      clientId: clientA, amount: "160.00", feeMonth: "2026-02",
+    });
+    expect(duplicate.status).toBe(409);
+    expect(duplicate.body.error).toContain("active fee already exists");
+  });
+
+  it("allows a different month and recreates a soft-deleted month", async () => {
+    const different = await request(app).post("/api/fees").set("Cookie", cookie).send({
+      clientId: clientA, amount: "160.00", feeMonth: "2026-03",
+    });
+    expect(different.status).toBe(201);
+
+    const deleted = await request(app).post("/api/fees").set("Cookie", cookie).send({
+      clientId: clientB, amount: "160.00", feeMonth: "2026-04",
+    });
+    expect(deleted.status).toBe(201);
+    const removed = await request(app).delete(`/api/fees/${deleted.body.id}`).set("Cookie", cookie);
+    expect(removed.status).toBe(200);
+    const recreated = await request(app).post("/api/fees").set("Cookie", cookie).send({
+      clientId: clientB, amount: "160.00", feeMonth: "2026-04",
+    });
+    expect(recreated.status).toBe(201);
+  });
+
+  it("rejects invalid feeMonth format", async () => {
+    const response = await request(app).post("/api/fees").set("Cookie", cookie).send({
+      clientId: clientA, amount: "160.00", feeMonth: "2026-13",
+    });
+    expect(response.status).toBe(400);
+  });
+
+  it("returns 409 on PATCH month conflict without mutation or audit", async () => {
+    const first = await request(app).post("/api/fees").set("Cookie", cookie).send({
+      clientId: clientB, amount: "160.00", feeMonth: "2026-05",
+    });
+    const second = await request(app).post("/api/fees").set("Cookie", cookie).send({
+      clientId: clientB, amount: "160.00", feeMonth: "2026-06",
+    });
+    expect(first.status).toBe(201);
+    expect(second.status).toBe(201);
+    const beforeAudits = await db.select().from(auditLogTable).where(eq(auditLogTable.userId, staffId));
+    const conflict = await request(app).patch(`/api/fees/${second.body.id}`).set("Cookie", cookie).send({
+      feeMonth: "2026-05",
+    });
+    expect(conflict.status).toBe(409);
+    const [unchanged] = await db.select().from(feesTable).where(eq(feesTable.id, second.body.id));
+    expect(unchanged.feeMonth).toBe("2026-06");
+    const afterAudits = await db.select().from(auditLogTable).where(eq(auditLogTable.userId, staffId));
+    expect(afterAudits).toHaveLength(beforeAudits.length);
   });
 });

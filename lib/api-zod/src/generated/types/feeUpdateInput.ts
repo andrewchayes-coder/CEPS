@@ -8,6 +8,11 @@
 import type { FeeUpdateInputStatus } from './feeUpdateInputStatus';
 
 export interface FeeUpdateInput {
+  /**
+     * @nullable
+     * @pattern ^\d{4}-(0[1-9]|1[0-2])$
+     */
+  feeMonth?: string | null;
   amount?: string;
   status?: FeeUpdateInputStatus;
   notes?: string;

@@ -9,7 +9,7 @@ import app from "../app";
 import { newToken } from "../lib/auth";
 
 const nonce = `pay${Date.now().toString(36)}`;
-const INTERIM_FEE_RULE = "interim_flat_percent_5_pending_confirmation";
+const MONTHLY_FEE_RULE = "flat_160_per_client_month";
 
 let staffId: string;
 let clientId: string;
@@ -43,7 +43,6 @@ beforeAll(async () => {
   });
   cookie = `ceps_session=${token}`;
 });
-
 afterAll(async () => {
   await db.delete(feesTable).where(eq(feesTable.clientId, clientId));
   await db.delete(remittancesTable).where(inArray(remittancesTable.clientId, [clientId, otherClientId]));
@@ -57,66 +56,91 @@ afterAll(async () => {
   await db.delete(usersTable).where(inArray(usersTable.id, [staffId]));
 });
 
-// Create a payment via the API so its interim fee is auto-generated.
-async function createPayment(amount: string) {
+async function createPayment(amount: string, checkDate = "2026-01-15") {
   const qb = `${nonce}-chk-${checkCounter++}`;
   const res = await request(app)
     .post("/api/payments")
     .set("Cookie", cookie)
-    .send({ clientId, qbCheckNumber: qb, checkDate: "2026-01-15", amount, paymentType: "direct_payment" });
+    .send({ clientId, qbCheckNumber: qb, checkDate, amount, paymentType: "direct_payment" });
   expect(res.status).toBe(201);
-  return res.body as { id: string; amount: string };
+  return res.body as { id: string; amount: string; paymentMonth: string };
 }
 
-async function linkedFees(paymentId: string) {
+async function monthlyFees(feeMonth: string, ownerId = clientId) {
   return db
     .select()
     .from(feesTable)
-    .where(and(eq(feesTable.paymentId, paymentId), eq(feesTable.isDeleted, false)));
+    .where(and(
+      eq(feesTable.clientId, ownerId),
+      eq(feesTable.feeMonth, feeMonth),
+      eq(feesTable.isDeleted, false),
+    ));
 }
 
-describe("PATCH /payments/:id fee recalculation", () => {
-  it("recalculates the interim fee when the amount changes", async () => {
-    const p = await createPayment("100.00");
-    const [feeBefore] = await linkedFees(p.id);
-    expect(feeBefore.amount).toBe("5.00");
-    expect(feeBefore.ruleApplied).toBe(INTERIM_FEE_RULE);
-
-    const res = await request(app)
-      .patch(`/api/payments/${p.id}`)
-      .set("Cookie", cookie)
-      .send({ amount: "200.00" });
-    expect(res.status).toBe(200);
-    const [feeAfter] = await linkedFees(p.id);
-    expect(feeAfter.amount).toBe("10.00");
+describe("monthly payment fees", () => {
+  it("creates one flat monthly fee with trigger traceability", async () => {
+    const payment = await createPayment("100.00", "2026-03-15");
+    const fees = await monthlyFees("2026-03");
+    expect(fees).toHaveLength(1);
+    expect(fees[0]).toMatchObject({
+      amount: "160.00",
+      ruleApplied: MONTHLY_FEE_RULE,
+      feeMonth: "2026-03",
+      paymentId: payment.id,
+    });
   });
 
-  it("does NOT recalculate a waived fee", async () => {
-    const p = await createPayment("100.00");
-    const [fee] = await linkedFees(p.id);
-    await db.update(feesTable).set({ status: "waived", amount: "0.00" }).where(eq(feesTable.id, fee.id));
-
-    const res = await request(app)
-      .patch(`/api/payments/${p.id}`)
-      .set("Cookie", cookie)
-      .send({ amount: "400.00" });
-    expect(res.status).toBe(200);
-    const [feeAfter] = await linkedFees(p.id);
-    expect(feeAfter.amount).toBe("0.00");
+  it("keeps one fee and the original trigger for a second same-month payment", async () => {
+    const first = await createPayment("100.00", "2026-04-15");
+    const second = await createPayment("200.00", "2026-04-20");
+    const fees = await monthlyFees("2026-04");
+    expect(fees).toHaveLength(1);
+    expect(fees[0].paymentId).toBe(first.id);
+    expect(second.id).not.toBe(first.id);
   });
 
-  it("does NOT touch a fee on a non-interim rule", async () => {
-    const p = await createPayment("100.00");
-    const [fee] = await linkedFees(p.id);
-    await db.update(feesTable).set({ ruleApplied: "manual_override", amount: "42.00" }).where(eq(feesTable.id, fee.id));
+  it("creates another fee for a different client month", async () => {
+    await createPayment("100.00", "2026-05-15");
+    await createPayment("100.00", "2026-06-15");
+    expect(await monthlyFees("2026-05")).toHaveLength(1);
+    expect(await monthlyFees("2026-06")).toHaveLength(1);
+  });
 
-    const res = await request(app)
-      .patch(`/api/payments/${p.id}`)
-      .set("Cookie", cookie)
-      .send({ amount: "500.00" });
+  it("does not change the monthly fee when payment amount changes", async () => {
+    const payment = await createPayment("100.00", "2026-07-15");
+    const before = await monthlyFees("2026-07");
+    const res = await request(app).patch(`/api/payments/${payment.id}`)
+      .set("Cookie", cookie).send({ amount: "900.00" });
     expect(res.status).toBe(200);
-    const [feeAfter] = await linkedFees(p.id);
-    expect(feeAfter.amount).toBe("42.00");
+    expect(await monthlyFees("2026-07")).toEqual(before);
+  });
+
+  it("ensures a new month fee while retaining the old month fee", async () => {
+    const payment = await createPayment("100.00", "2026-08-15");
+    const res = await request(app).patch(`/api/payments/${payment.id}`)
+      .set("Cookie", cookie).send({ paymentMonth: "2026-09" });
+    expect(res.status).toBe(200);
+    expect(await monthlyFees("2026-08")).toHaveLength(1);
+    expect(await monthlyFees("2026-09")).toHaveLength(1);
+  });
+
+  it("keeps the monthly fee active when its trigger payment is deleted", async () => {
+    const payment = await createPayment("100.00", "2026-10-15");
+    const res = await request(app).delete(`/api/payments/${payment.id}`).set("Cookie", cookie);
+    expect(res.status).toBe(200);
+    const fees = await monthlyFees("2026-10");
+    expect(fees).toHaveLength(1);
+    expect(fees[0].paymentId).toBe(payment.id);
+  });
+
+  it("concurrently creates one fee for same client and month", async () => {
+    const checkDate = "2026-11-15";
+    const [left, right] = await Promise.all([
+      createPayment("100.00", checkDate),
+      createPayment("200.00", checkDate),
+    ]);
+    expect(left.id).not.toBe(right.id);
+    expect(await monthlyFees("2026-11")).toHaveLength(1);
   });
 });
 
@@ -162,13 +186,13 @@ describe("financial PATCH participant links", () => {
       paymentType: "direct_payment", status: "pending_review",
     }).returning();
     const payment = await createPayment("100.00");
-    const [feeBefore] = await linkedFees(payment.id);
+    const [feeBefore] = await monthlyFees(payment.paymentMonth);
     const res = await request(app).patch(`/api/payments/${payment.id}`).set("Cookie", cookie)
       .send({ authorizationId: auth.id, invoiceId: invoice.id, vendorId: vendor.id, amount: "200.00" });
     expect(res.status).toBe(400);
     expect(res.body.error).toContain("belong to clientId");
     const [unchanged] = await db.select().from(paymentsTable).where(eq(paymentsTable.id, payment.id));
-    const [feeAfter] = await linkedFees(payment.id);
+    const [feeAfter] = await monthlyFees(payment.paymentMonth);
     expect(unchanged.amount).toBe("100.00");
     expect(unchanged.authorizationId).toBeNull();
     expect(feeAfter.amount).toBe(feeBefore.amount);
@@ -215,52 +239,5 @@ describe("financial PATCH participant links", () => {
     const [unchanged] = await db.select().from(remittancesTable).where(eq(remittancesTable.id, remittance.id));
     expect(unchanged.authorizationId).toBe(ownAuth.id);
     expect(unchanged.amount).toBe("100.00");
-  });
-});
-
-describe("autoGenerateFee decimal-safe 5% calculation", () => {
-  // Numbers chosen so Number(amount) * 0.05 drifts off the exact cent value.
-  it("computes the fee exactly for a float-drift-prone amount (0.10)", async () => {
-    // 0.10 * 0.05 = 0.005 → rounds to 0.01; naive float gives 0.005000000...
-    const p = await createPayment("0.10");
-    const [fee] = await linkedFees(p.id);
-    expect(fee.amount).toBe("0.01");
-  });
-
-  it("computes the fee exactly for 20.15 (float product = 1.0074999999...)", async () => {
-    // 20.15 * 0.05 = 1.0075 → half-up rounds to 1.01; binary float underflows to 1.007499...
-    const p = await createPayment("20.15");
-    const [fee] = await linkedFees(p.id);
-    expect(fee.amount).toBe("1.01");
-  });
-
-  it("recalculates the fee exactly on a float-drift-prone amount change", async () => {
-    const p = await createPayment("100.00");
-    const [feeBefore] = await linkedFees(p.id);
-    expect(feeBefore.amount).toBe("5.00");
-
-    const res = await request(app)
-      .patch(`/api/payments/${p.id}`)
-      .set("Cookie", cookie)
-      .send({ amount: "20.15" });
-    expect(res.status).toBe(200);
-    const [feeAfter] = await linkedFees(p.id);
-    expect(feeAfter.amount).toBe("1.01");
-  });
-});
-
-describe("DELETE /payments/:id cascade soft-delete", () => {
-  it("soft-deletes the linked fee alongside the payment", async () => {
-    const p = await createPayment("100.00");
-    expect((await linkedFees(p.id)).length).toBe(1);
-
-    const res = await request(app).delete(`/api/payments/${p.id}`).set("Cookie", cookie);
-    expect(res.status).toBe(200);
-    expect(res.body.ok).toBe(true);
-
-    expect((await linkedFees(p.id)).length).toBe(0);
-    const [feeRow] = await db.select().from(feesTable).where(eq(feesTable.paymentId, p.id));
-    expect(feeRow.isDeleted).toBe(true);
-    expect(feeRow.deletedBy).toBe(staffId);
   });
 });

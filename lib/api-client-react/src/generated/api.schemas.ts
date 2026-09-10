@@ -1419,7 +1419,7 @@ export interface PaymentInput {
   qbCheckNumber: string;
   checkDate: string;
   amount: string;
-  paymentMonth?: string;
+  paymentMonth?: string | null;
   paymentType: PaymentInputPaymentType;
   /** Set true (with a justification) to bypass the duplicate-payment hard stop */
   overrideDuplicate?: boolean;
@@ -1655,6 +1655,11 @@ export interface Fee {
   paymentId?: string | null;
   /** @nullable */
   authorizationId?: string | null;
+  /**
+     * @nullable
+     * @pattern ^\d{4}-(0[1-9]|1[0-2])$
+     */
+  feeMonth?: string | null;
   amount: string;
   /** @nullable */
   ruleApplied?: string | null;
@@ -1683,6 +1688,11 @@ export interface FeeInput {
   paymentId?: string | null;
   /** @nullable */
   authorizationId?: string | null;
+  /**
+     * @nullable
+     * @pattern ^\d{4}-(0[1-9]|1[0-2])$
+     */
+  feeMonth?: string | null;
   amount: string;
   ruleApplied?: string;
   status?: FeeInputStatus;
@@ -1700,6 +1710,11 @@ export const FeeUpdateInputStatus = {
 } as const;
 
 export interface FeeUpdateInput {
+  /**
+     * @nullable
+     * @pattern ^\d{4}-(0[1-9]|1[0-2])$
+     */
+  feeMonth?: string | null;
   amount?: string;
   status?: FeeUpdateInputStatus;
   notes?: string;
@@ -2218,6 +2233,10 @@ export type ListPayments200 = {
 export type ListFeesParams = {
 clientId?: string;
 status?: string;
+/**
+ * @pattern ^\d{4}-(0[1-9]|1[0-2])$
+ */
+feeMonth?: string;
 };
 
 export type ListRemittancesParams = {

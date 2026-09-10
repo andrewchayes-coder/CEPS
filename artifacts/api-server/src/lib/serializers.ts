@@ -330,6 +330,7 @@ export function feeJson(f: Fee, opts: { clientName?: string | null } = {}) {
     clientName: opts.clientName ?? null,
     paymentId: f.paymentId,
     authorizationId: f.authorizationId,
+    feeMonth: f.feeMonth,
     amount: f.amount,
     ruleApplied: f.ruleApplied,
     status: f.status,

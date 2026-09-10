@@ -13,6 +13,11 @@ export interface FeeInput {
   paymentId?: string | null;
   /** @nullable */
   authorizationId?: string | null;
+  /**
+     * @nullable
+     * @pattern ^\d{4}-(0[1-9]|1[0-2])$
+     */
+  feeMonth?: string | null;
   amount: string;
   ruleApplied?: string;
   status?: FeeInputStatus;

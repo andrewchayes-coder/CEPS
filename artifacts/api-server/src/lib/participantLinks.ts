@@ -134,7 +134,7 @@ export async function softDeleteClient(
 export async function validateParticipantLinks(
   tx: DbHandle,
   clientId: string,
-  links: { authorizationId?: string | null; invoiceId?: string | null; paymentId?: string | null; vendorId?: string | null },
+  links: { authorizationId?: string | null; invoiceId?: string | null; paymentId?: string | null; vendorId?: string | null; allowDeletedPayment?: boolean },
 ): Promise<ParticipantLinkValidation> {
   const [client] = await tx.select().from(clientsTable)
     .where(and(eq(clientsTable.id, clientId), notDeleted(clientsTable))).for("share");
@@ -159,7 +159,7 @@ export async function validateParticipantLinks(
   let payment: typeof paymentsTable.$inferSelect | undefined;
   if (links.paymentId) {
     [payment] = await tx.select().from(paymentsTable)
-      .where(and(eq(paymentsTable.id, links.paymentId), notDeleted(paymentsTable))).for("share");
+      .where(and(eq(paymentsTable.id, links.paymentId), ...(links.allowDeletedPayment ? [] : [notDeleted(paymentsTable)]))).for("share");
     if (!payment) return { error: "paymentId must reference a non-deleted payment" };
     if (payment.clientId !== clientId) return { error: "paymentId must belong to clientId" };
   }

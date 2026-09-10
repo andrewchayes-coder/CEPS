@@ -220,3 +220,60 @@ test('participant Payments tab has a remittance empty state', async ({ page }) =
   await page.getByRole('tab', { name: /Payments/ }).click();
   await expect(page.getByText('No remittances found for this participant.')).toBeVisible();
 });
+
+test('fee-blocked participant deletion opens the Fees tab and closes the conflict dialog', async ({ page }) => {
+  await mockSession(page, 'staff');
+  const client = {
+    id: participantId,
+    firstName: 'Jordan',
+    lastName: 'Rivera',
+    uciNumber: 'UCI-100',
+    dateOfBirth: '2000-01-01',
+    status: 'active',
+  };
+  const fee = {
+    id: 'fee-1',
+    clientId: participantId,
+    authorizationId: null,
+    paymentId: null,
+    amount: '160.00',
+    feeMonth: '2026-09',
+    ruleApplied: 'confirmed_flat_160_per_participant_service_month',
+    status: 'pending',
+    notes: null,
+    createdAt: '2026-09-01T12:00:00.000Z',
+  };
+
+  await page.route(`**/api/clients/${participantId}/case`, (route) =>
+    route.fulfill({ json: { client, referrals: [], authorizations: [], invoices: [], payments: [], remittances: [], documents: [] } }),
+  );
+  await page.route('**/api/fees?*', (route) => route.fulfill({ json: [fee] }));
+  await page.route(`**/api/clients/${participantId}`, (route) =>
+    route.fulfill({
+      status: 409,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        error: 'Participant cannot be deleted while active financial records reference them',
+        blockers: [{
+          type: 'fee',
+          label: 'Fees',
+          count: 1,
+          records: [{ id: fee.id, label: 'Fee for 2026-09', href: `/clients/${participantId}?tab=fees` }],
+        }],
+      }),
+    }),
+  );
+
+  await page.goto(`/clients/${participantId}`);
+  await expect(page.getByTestId('tab-fees')).toHaveAttribute('data-state', 'inactive');
+  await page.getByTestId('button-delete-client').click();
+  await page.getByTestId('button-confirm-delete').click();
+  await expect(page.getByTestId('delete-conflict-details')).toContainText('1 Fee');
+
+  await page.getByRole('link', { name: 'Fee for 2026-09' }).click();
+
+  await expect(page).toHaveURL(new RegExp(`/clients/${participantId}\\?tab=fees$`));
+  await expect(page.getByTestId('delete-conflict-details')).toHaveCount(0);
+  await expect(page.getByTestId('tab-fees')).toHaveAttribute('data-state', 'active');
+  await expect(page.getByTestId('content-fees')).toContainText('$160.00');
+});

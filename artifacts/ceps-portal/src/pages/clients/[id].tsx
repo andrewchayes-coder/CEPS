@@ -1,5 +1,5 @@
 import React from 'react';
-import { useLocation, useParams } from 'wouter';
+import { useLocation, useParams, useSearch } from 'wouter';
 import { useGetClientCase, useListFees, useDeleteClient, useDeleteFee, type CaseDocument } from '@workspace/api-client-react';
 import { useAuth } from '@/components/auth/auth-provider';
 import { InvitePortalDialog } from '@/components/invite-portal-dialog';
@@ -44,9 +44,14 @@ function ViewDocumentDialog({ document }: { document: CaseDocument }) {
 export default function ClientDetailPage() {
   const { id } = useParams<{ id: string }>();
   const [, navigate] = useLocation();
+  const search = useSearch();
   const { user } = useAuth();
   const isStaff = user?.role === 'staff';
   const isFamily = user?.role === 'parent_guardian' || user?.role === 'self';
+  const requestedTab = new URLSearchParams(search).get('tab');
+  const activeTab = ['overview', 'authorizations', 'invoices', 'payments', 'fees', 'referrals', 'documents'].includes(requestedTab ?? '')
+    ? requestedTab!
+    : 'overview';
   const deleteClient = useDeleteClient();
   const deleteFee = useDeleteFee();
   const { data: caseData, isLoading, refetch } = useGetClientCase(id, {
@@ -190,13 +195,17 @@ export default function ClientDetailPage() {
         </div>
       </div>
 
-      <Tabs defaultValue="overview" className="w-full">
+      <Tabs
+        value={activeTab}
+        onValueChange={(tab) => navigate(`/clients/${id}?tab=${tab}`, { replace: true })}
+        className="w-full"
+      >
         <TabsList className="w-full justify-start overflow-x-auto border-b rounded-none h-12 bg-transparent p-0">
           <TabsTrigger value="overview" className="data-[state=active]:bg-transparent data-[state=active]:shadow-none data-[state=active]:border-b-2 data-[state=active]:border-primary rounded-none h-12 px-6">Overview</TabsTrigger>
           <TabsTrigger value="authorizations" className="data-[state=active]:bg-transparent data-[state=active]:shadow-none data-[state=active]:border-b-2 data-[state=active]:border-primary rounded-none h-12 px-6">Authorizations ({authorizations.length})</TabsTrigger>
           <TabsTrigger value="invoices" className="data-[state=active]:bg-transparent data-[state=active]:shadow-none data-[state=active]:border-b-2 data-[state=active]:border-primary rounded-none h-12 px-6">Invoices ({invoices.length})</TabsTrigger>
           <TabsTrigger value="payments" className="data-[state=active]:bg-transparent data-[state=active]:shadow-none data-[state=active]:border-b-2 data-[state=active]:border-primary rounded-none h-12 px-6">Payments ({payments.length})</TabsTrigger>
-          <TabsTrigger value="fees" className="data-[state=active]:bg-transparent data-[state=active]:shadow-none data-[state=active]:border-b-2 data-[state=active]:border-primary rounded-none h-12 px-6">Fees ({feeList.length})</TabsTrigger>
+          <TabsTrigger value="fees" data-testid="tab-fees" className="data-[state=active]:bg-transparent data-[state=active]:shadow-none data-[state=active]:border-b-2 data-[state=active]:border-primary rounded-none h-12 px-6">Fees ({feeList.length})</TabsTrigger>
           <TabsTrigger value="referrals" className="data-[state=active]:bg-transparent data-[state=active]:shadow-none data-[state=active]:border-b-2 data-[state=active]:border-primary rounded-none h-12 px-6">Referrals ({referrals.length})</TabsTrigger>
           {isStaff && <TabsTrigger value="documents" data-testid="tab-documents" className="data-[state=active]:bg-transparent data-[state=active]:shadow-none data-[state=active]:border-b-2 data-[state=active]:border-primary rounded-none h-12 px-6">Documents ({caseData.documents.length})</TabsTrigger>}
         </TabsList>
@@ -438,7 +447,7 @@ export default function ClientDetailPage() {
           </div>
         </TabsContent>
 
-        <TabsContent value="fees" className="pt-6">
+        <TabsContent value="fees" className="pt-6" data-testid="content-fees">
           <Card>
             <CardHeader>
               <CardTitle className="text-lg">Fees</CardTitle>

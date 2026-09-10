@@ -321,7 +321,7 @@ router.delete("/authorizations/:id", requireStaff, async (req, res): Promise<voi
     return;
   }
   if ("conflict" in result) {
-    res.status(409).json({ error: result.conflict });
+    res.status(409).json({ error: result.conflict, blockers: result.blockers });
     return;
   }
   const auth = result.deleted;

@@ -295,7 +295,7 @@ router.delete("/clients/:id", requireStaff, async (req, res): Promise<void> => {
     return;
   }
   if ("conflict" in result) {
-    res.status(409).json({ error: result.conflict });
+    res.status(409).json({ error: result.conflict, blockers: result.blockers });
     return;
   }
   const client = result.deleted;

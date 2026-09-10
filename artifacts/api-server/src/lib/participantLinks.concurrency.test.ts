@@ -328,6 +328,14 @@ describe("financial edit and participant-link soft-delete races", () => {
     const response = await request(app).delete(`/api/authorizations/${authorization.id}`).set("Cookie", cookie);
     expect(response.status).toBe(409);
     expect(response.body.error).toBe("Authorization cannot be deleted while active financial records reference it");
+    expect(response.body.blockers).toEqual([
+      expect.objectContaining({
+        type: "invoice",
+        label: "Invoices",
+        count: 1,
+        records: [expect.objectContaining({ id: invoice.id, href: `/invoices/${invoice.id}` })],
+      }),
+    ]);
   });
 
   it("rejects invoice deletion after a payment edit commits its link", async () => {
@@ -342,6 +350,14 @@ describe("financial edit and participant-link soft-delete races", () => {
     const response = await request(app).delete(`/api/invoices/${invoice.id}`).set("Cookie", cookie);
     expect(response.status).toBe(409);
     expect(response.body.error).toBe("Invoice cannot be deleted while active payments reference it");
+    expect(response.body.blockers).toEqual([
+      expect.objectContaining({
+        type: "payment",
+        label: "Payments",
+        count: 1,
+        records: [expect.objectContaining({ id: payment.id, href: `/payments/${payment.id}` })],
+      }),
+    ]);
   });
 
   it("rejects client deletion after a remittance edit commits", async () => {
@@ -361,7 +377,15 @@ describe("financial edit and participant-link soft-delete races", () => {
 
     const response = await request(app).delete(`/api/clients/${client.id}`).set("Cookie", cookie);
     expect(response.status).toBe(409);
-    expect(response.body.error).toBe("Client cannot be deleted while active financial records reference them");
+    expect(response.body.error).toBe("Participant cannot be deleted while active financial records reference them");
+    expect(response.body.blockers).toEqual([
+      expect.objectContaining({
+        type: "remittance",
+        label: "Remittances",
+        count: 1,
+        records: [expect.objectContaining({ id: remittance.id, href: `/remittances/${remittance.id}` })],
+      }),
+    ]);
     await db.delete(remittancesTable).where(eq(remittancesTable.id, remittance.id));
     await db.delete(clientsTable).where(eq(clientsTable.id, client.id));
   });
@@ -370,7 +394,7 @@ describe("financial edit and participant-link soft-delete races", () => {
     const client = await makeClient("fee-race");
     const response = await raceFeeCommitBeforeDelete("client", undefined, client.id);
     expect(response.status).toBe(409);
-    expect(response.body.error).toBe("Client cannot be deleted while active financial records reference them");
+    expect(response.body.error).toBe("Participant cannot be deleted while active financial records reference them");
     await db.delete(feesTable).where(eq(feesTable.clientId, client.id));
     await db.delete(clientsTable).where(eq(clientsTable.id, client.id));
   });
@@ -397,7 +421,7 @@ describe("financial edit and participant-link soft-delete races", () => {
 
     const response = await request(app).delete(`/api/clients/${client.id}`).set("Cookie", cookie);
     expect(response.status).toBe(409);
-    expect(response.body.error).toBe("Client cannot be deleted while active financial records reference them");
+    expect(response.body.error).toBe("Participant cannot be deleted while active financial records reference them");
     await db.delete(authorizationsTable).where(eq(authorizationsTable.id, authorization.id));
     await db.delete(clientsTable).where(eq(clientsTable.id, client.id));
   });
@@ -406,7 +430,7 @@ describe("financial edit and participant-link soft-delete races", () => {
     const client = await makeClient("authorization-race");
     const { response, authorization } = await raceAuthorizationCommitBeforeClientDelete(client.id);
     expect(response.status).toBe(409);
-    expect(response.body.error).toBe("Client cannot be deleted while active financial records reference them");
+    expect(response.body.error).toBe("Participant cannot be deleted while active financial records reference them");
     await db.delete(authorizationsTable).where(eq(authorizationsTable.id, authorization.id));
     await db.delete(clientsTable).where(eq(clientsTable.id, client.id));
   });

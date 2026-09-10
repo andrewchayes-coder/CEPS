@@ -1,4 +1,4 @@
-import { and, eq, or } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import {
   authorizationsTable, clientsTable, db, feesTable, invoicesTable, paymentsTable, remittancesTable, vendorsTable,
 } from "@workspace/db";
@@ -15,7 +15,26 @@ export type ParticipantLinkValidation = {
 export type SoftDeleteResult<T> =
   | { deleted: T }
   | { notFound: true }
-  | { conflict: string };
+  | { conflict: string; blockers: DeleteBlocker[] };
+
+export type DeleteBlocker = {
+  type: "authorization" | "fee" | "invoice" | "payment" | "remittance";
+  label: string;
+  count: number;
+  records: Array<{ id: string; label: string; href: string }>;
+};
+
+function blocker(
+  type: DeleteBlocker["type"],
+  label: string,
+  records: DeleteBlocker["records"],
+): DeleteBlocker | null {
+  return records.length ? { type, label, count: records.length, records } : null;
+}
+
+function activeBlockers(values: Array<DeleteBlocker | null>): DeleteBlocker[] {
+  return values.filter((value): value is DeleteBlocker => value !== null);
+}
 
 /**
  * Soft-delete policy for records that anchor financial links:
@@ -35,29 +54,21 @@ export async function softDeleteAuthorization(
     .where(and(eq(authorizationsTable.id, id), notDeleted(authorizationsTable))).for("update");
   if (!authorization) return { notFound: true };
 
-  const [reference] = await tx.select({
-    authorizationId: authorizationsTable.id,
-    feeId: feesTable.id,
-    invoiceId: invoicesTable.id,
-    paymentId: paymentsTable.id,
-    remittanceId: remittancesTable.id,
-  })
-    .from(authorizationsTable)
-    .leftJoin(feesTable, and(eq(feesTable.authorizationId, id), notDeleted(feesTable)))
-    .leftJoin(invoicesTable, and(eq(invoicesTable.authorizationId, id), notDeleted(invoicesTable)))
-    .leftJoin(paymentsTable, and(eq(paymentsTable.authorizationId, id), notDeleted(paymentsTable)))
-    .leftJoin(remittancesTable, and(eq(remittancesTable.authorizationId, id), notDeleted(remittancesTable)))
-    .where(and(
-      eq(authorizationsTable.id, id),
-      or(
-        eq(feesTable.authorizationId, id),
-        eq(invoicesTable.authorizationId, id),
-        eq(paymentsTable.authorizationId, id),
-        eq(remittancesTable.authorizationId, id),
-      ),
-    ))
-    .limit(1);
-  if (reference) return { conflict: "Authorization cannot be deleted while active financial records reference it" };
+  const fees = await tx.select({ id: feesTable.id, feeMonth: feesTable.feeMonth }).from(feesTable)
+    .where(and(eq(feesTable.authorizationId, id), notDeleted(feesTable)));
+  const invoices = await tx.select({ id: invoicesTable.id, serviceMonth: invoicesTable.serviceMonth }).from(invoicesTable)
+    .where(and(eq(invoicesTable.authorizationId, id), notDeleted(invoicesTable)));
+  const payments = await tx.select({ id: paymentsTable.id, checkNumber: paymentsTable.qbCheckNumber }).from(paymentsTable)
+    .where(and(eq(paymentsTable.authorizationId, id), notDeleted(paymentsTable)));
+  const remittances = await tx.select({ id: remittancesTable.id, reference: remittancesTable.altaReference }).from(remittancesTable)
+    .where(and(eq(remittancesTable.authorizationId, id), notDeleted(remittancesTable)));
+  const blockers = activeBlockers([
+    blocker("fee", "Fees", fees.map((row) => ({ id: row.id, label: row.feeMonth ? `Fee for ${row.feeMonth}` : "Fee record", href: `/clients/${authorization.clientId}?tab=fees` }))),
+    blocker("invoice", "Invoices", invoices.map((row) => ({ id: row.id, label: `Invoice for ${row.serviceMonth}`, href: `/invoices/${row.id}` }))),
+    blocker("payment", "Payments", payments.map((row) => ({ id: row.id, label: `Check ${row.checkNumber}`, href: `/payments/${row.id}` }))),
+    blocker("remittance", "Remittances", remittances.map((row) => ({ id: row.id, label: row.reference ? `Remittance ${row.reference}` : "Remittance record", href: `/remittances/${row.id}` }))),
+  ]);
+  if (blockers.length) return { conflict: "Authorization cannot be deleted while active financial records reference it", blockers };
 
   const [deleted] = await tx.update(authorizationsTable)
     .set({ isDeleted: true, deletedAt: new Date(), deletedBy })
@@ -75,9 +86,12 @@ export async function softDeleteInvoice(
     .where(and(eq(invoicesTable.id, id), notDeleted(invoicesTable))).for("update");
   if (!invoice) return { notFound: true };
 
-  const [payment] = await tx.select({ id: paymentsTable.id }).from(paymentsTable)
-    .where(and(eq(paymentsTable.invoiceId, id), notDeleted(paymentsTable))).limit(1);
-  if (payment) return { conflict: "Invoice cannot be deleted while active payments reference it" };
+  const payments = await tx.select({ id: paymentsTable.id, checkNumber: paymentsTable.qbCheckNumber }).from(paymentsTable)
+    .where(and(eq(paymentsTable.invoiceId, id), notDeleted(paymentsTable)));
+  const blockers = activeBlockers([
+    blocker("payment", "Payments", payments.map((row) => ({ id: row.id, label: `Check ${row.checkNumber}`, href: `/payments/${row.id}` }))),
+  ]);
+  if (blockers.length) return { conflict: "Invoice cannot be deleted while active payments reference it", blockers };
 
   const [deleted] = await tx.update(invoicesTable)
     .set({ isDeleted: true, deletedAt: new Date(), deletedBy })
@@ -95,30 +109,24 @@ export async function softDeleteClient(
     .where(and(eq(clientsTable.id, id), notDeleted(clientsTable))).for("update");
   if (!client) return { notFound: true };
 
-  const [reference] = await tx.select({
-    feeId: feesTable.id,
-    invoiceId: invoicesTable.id,
-    paymentId: paymentsTable.id,
-    remittanceId: remittancesTable.id,
-  })
-    .from(clientsTable)
-    .leftJoin(authorizationsTable, and(eq(authorizationsTable.clientId, id), notDeleted(authorizationsTable)))
-    .leftJoin(feesTable, and(eq(feesTable.clientId, id), notDeleted(feesTable)))
-    .leftJoin(invoicesTable, and(eq(invoicesTable.clientId, id), notDeleted(invoicesTable)))
-    .leftJoin(paymentsTable, and(eq(paymentsTable.clientId, id), notDeleted(paymentsTable)))
-    .leftJoin(remittancesTable, and(eq(remittancesTable.clientId, id), notDeleted(remittancesTable)))
-    .where(and(
-      eq(clientsTable.id, id),
-      or(
-        eq(authorizationsTable.clientId, id),
-        eq(feesTable.clientId, id),
-        eq(invoicesTable.clientId, id),
-        eq(paymentsTable.clientId, id),
-        eq(remittancesTable.clientId, id),
-      ),
-    ))
-    .limit(1);
-  if (reference) return { conflict: "Client cannot be deleted while active financial records reference them" };
+  const authorizations = await tx.select({ id: authorizationsTable.id, authNumber: authorizationsTable.authNumber }).from(authorizationsTable)
+    .where(and(eq(authorizationsTable.clientId, id), notDeleted(authorizationsTable)));
+  const fees = await tx.select({ id: feesTable.id, feeMonth: feesTable.feeMonth }).from(feesTable)
+    .where(and(eq(feesTable.clientId, id), notDeleted(feesTable)));
+  const invoices = await tx.select({ id: invoicesTable.id, serviceMonth: invoicesTable.serviceMonth }).from(invoicesTable)
+    .where(and(eq(invoicesTable.clientId, id), notDeleted(invoicesTable)));
+  const payments = await tx.select({ id: paymentsTable.id, checkNumber: paymentsTable.qbCheckNumber }).from(paymentsTable)
+    .where(and(eq(paymentsTable.clientId, id), notDeleted(paymentsTable)));
+  const remittances = await tx.select({ id: remittancesTable.id, reference: remittancesTable.altaReference }).from(remittancesTable)
+    .where(and(eq(remittancesTable.clientId, id), notDeleted(remittancesTable)));
+  const blockers = activeBlockers([
+    blocker("authorization", "Authorizations", authorizations.map((row) => ({ id: row.id, label: `Authorization ${row.authNumber}`, href: `/authorizations/${row.id}` }))),
+    blocker("fee", "Fees", fees.map((row) => ({ id: row.id, label: row.feeMonth ? `Fee for ${row.feeMonth}` : "Fee record", href: `/clients/${id}?tab=fees` }))),
+    blocker("invoice", "Invoices", invoices.map((row) => ({ id: row.id, label: `Invoice for ${row.serviceMonth}`, href: `/invoices/${row.id}` }))),
+    blocker("payment", "Payments", payments.map((row) => ({ id: row.id, label: `Check ${row.checkNumber}`, href: `/payments/${row.id}` }))),
+    blocker("remittance", "Remittances", remittances.map((row) => ({ id: row.id, label: row.reference ? `Remittance ${row.reference}` : "Remittance record", href: `/remittances/${row.id}` }))),
+  ]);
+  if (blockers.length) return { conflict: "Participant cannot be deleted while active financial records reference them", blockers };
 
   const [deleted] = await tx.update(clientsTable)
     .set({ isDeleted: true, deletedAt: new Date(), deletedBy })

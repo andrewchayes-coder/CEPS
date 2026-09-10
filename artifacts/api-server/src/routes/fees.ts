@@ -14,6 +14,8 @@ import { feeJson, clientNameMap, notDeleted, diffDetail } from "../lib/serialize
 import { validateParticipantLinks } from "../lib/participantLinks";
 
 const router: IRouter = Router();
+const MONTHLY_FEE_RULE = "flat_160_per_client_month";
+const MANUALLY_ADJUSTED_MONTHLY_FEE_RULE = "flat_160_per_client_month_manually_adjusted";
 
 async function enrichFees(fees: (typeof feesTable.$inferSelect)[]) {
   const clientNames = await clientNameMap(fees.map((f) => f.clientId));
@@ -112,10 +114,18 @@ router.patch("/fees/:id", requireStaff, async (req, res): Promise<void> => {
       if (conflict) return { kind: "conflict" as const };
     }
     let fee: typeof before;
+    const persistedUpdates = {
+      ...parsed.data,
+      // Once staff edit an automatically generated fee, keep durable provenance
+      // that it is no longer safe for payment reconciliation to reverse.
+      ...(before.ruleApplied === MONTHLY_FEE_RULE && Object.keys(parsed.data).length > 0
+        ? { ruleApplied: MANUALLY_ADJUSTED_MONTHLY_FEE_RULE }
+        : {}),
+    };
     try {
       [fee] = await tx
         .update(feesTable)
-        .set(parsed.data)
+        .set(persistedUpdates)
         .where(and(eq(feesTable.id, id), notDeleted(feesTable)))
         .returning();
     } catch (error) {

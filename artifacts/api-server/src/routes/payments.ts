@@ -1,6 +1,6 @@
 import { Router, type IRouter } from "express";
 import { randomUUID } from "node:crypto";
-import { eq, and, desc, ilike, or, count, sql, inArray, gte, lte, type SQL } from "drizzle-orm";
+import { eq, and, desc, ilike, or, count, sql, inArray, gte, lte, isNull, type SQL } from "drizzle-orm";
 import { db, paymentsTable, clientsTable, remittancesTable, remittanceAllocationsTable, feesTable, authorizationsTable } from "@workspace/db";
 import {
   ListPaymentsQueryParams,
@@ -38,28 +38,98 @@ const router: IRouter = Router();
 class DuplicateFingerprint extends Error {}
 
 const MONTHLY_FEE_RULE = "flat_160_per_client_month";
+const QUALIFYING_FEE_PAYMENT_TYPES = ["direct_payment", "reimbursement"] as const;
 
-async function autoGenerateFee(
-  payment: typeof paymentsTable.$inferSelect,
+function qualifiesForMonthlyFee(paymentType: string): boolean {
+  return (QUALIFYING_FEE_PAYMENT_TYPES as readonly string[]).includes(paymentType);
+}
+
+async function reconcileMonthlyFee(
+  clientId: string,
+  paymentMonth: string | null,
   userId: string,
   tx: typeof db = db,
 ): Promise<void> {
-  if (!payment.paymentMonth) return;
-  const [fee] = await tx
+  if (!paymentMonth) return;
+
+  // Fee reconciliation is keyed by participant + month (not authorization).
+  // Serialize that key so concurrent qualifying payments cannot both decide a
+  // fee is missing. Sort affected months at call sites to avoid lock inversion.
+  const lockKey = `${clientId}:${paymentMonth}`;
+  await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${lockKey}))`);
+
+  const qualifyingPayments = await tx
+    .select()
+    .from(paymentsTable)
+    .where(and(
+      eq(paymentsTable.clientId, clientId),
+      eq(paymentsTable.paymentMonth, paymentMonth),
+      inArray(paymentsTable.paymentType, [...QUALIFYING_FEE_PAYMENT_TYPES]),
+      sql`${paymentsTable.source} <> 'historical_import'`,
+      notDeleted(paymentsTable),
+    ))
+    .orderBy(paymentsTable.createdAt, paymentsTable.id);
+
+  const [activeFee] = await tx
+    .select()
+    .from(feesTable)
+    .where(and(
+      eq(feesTable.clientId, clientId),
+      eq(feesTable.feeMonth, paymentMonth),
+      notDeleted(feesTable),
+    ))
+    .limit(1);
+
+  if (qualifyingPayments.length > 0) {
+    if (activeFee) return;
+    const trigger = qualifyingPayments[0];
+    const [fee] = await tx
     .insert(feesTable)
     .values({
-      clientId: payment.clientId,
-      feeMonth: payment.paymentMonth,
-      paymentId: payment.id,
-      authorizationId: payment.authorizationId ?? null,
+      clientId,
+      feeMonth: paymentMonth,
+      paymentId: trigger.id,
+      authorizationId: trigger.authorizationId ?? null,
       amount: "160.00",
       ruleApplied: MONTHLY_FEE_RULE,
       status: "pending",
     })
     .onConflictDoNothing()
     .returning();
-  if (fee) {
-    await audit(userId, "auto_generate_fee", "fee", fee.id, `Auto-generated $160.00 (${MONTHLY_FEE_RULE}) for client month ${payment.paymentMonth}, triggered by check ${payment.qbCheckNumber}`, tx);
+    if (fee) {
+      await audit(userId, "auto_generate_fee", "fee", fee.id, `Auto-generated $160.00 (${MONTHLY_FEE_RULE}) for client month ${paymentMonth}, triggered by check ${trigger.qbCheckNumber}`, tx);
+    }
+    return;
+  }
+
+  // A fee is reversible only while it remains exactly as this rule created it.
+  // Progressed fees and rows changed through fee management are intentionally
+  // retained even after the final qualifying payment disappears.
+  if (
+    activeFee &&
+    activeFee.status === "pending" &&
+    activeFee.ruleApplied === MONTHLY_FEE_RULE &&
+    activeFee.amount === "160.00" &&
+    activeFee.notes === null &&
+    activeFee.createdBy === null
+  ) {
+    const reversedAt = new Date();
+    const [reversed] = await tx
+      .update(feesTable)
+      .set({ isDeleted: true, deletedAt: reversedAt, deletedBy: userId })
+      .where(and(
+        eq(feesTable.id, activeFee.id),
+        eq(feesTable.status, "pending"),
+        eq(feesTable.ruleApplied, MONTHLY_FEE_RULE),
+        eq(feesTable.amount, "160.00"),
+        isNull(feesTable.notes),
+        isNull(feesTable.createdBy),
+        notDeleted(feesTable),
+      ))
+      .returning();
+    if (reversed) {
+      await audit(userId, "auto_reverse_fee", "fee", reversed.id, `Auto-reversed $160.00 (${MONTHLY_FEE_RULE}) for client month ${paymentMonth}; no qualifying payments remain`, tx);
+    }
   }
 }
 
@@ -246,7 +316,9 @@ router.post("/payments", requireStaff, async (req, res): Promise<void> => {
       .insert(paymentsTable)
       .values(values as typeof paymentsTable.$inferInsert)
       .returning();
-    await autoGenerateFee(p, req.user!.id, txDb);
+    if (qualifiesForMonthlyFee(p.paymentType)) {
+      await reconcileMonthlyFee(p.clientId, p.paymentMonth, req.user!.id, txDb);
+    }
     // Record any accepted duplicate override in the same transaction, keyed to
     // the NEW payment's id, so the audit trail can never diverge from the row.
     if (runDupCheck && overrideDuplicate && justification) {
@@ -512,6 +584,8 @@ router.patch("/payments/:id", requireStaff, async (req, res): Promise<void> => {
   const runDupCheck = dupFieldChanged && !!(effAuthorizationId && effPaymentMonth);
   const justification = overrideJustification?.trim();
   const paymentMonthChanged = effPaymentMonth !== before.paymentMonth;
+  const effPaymentType = ("paymentType" in updates ? updates.paymentType : before.paymentType) as string;
+  const paymentTypeChanged = effPaymentType !== before.paymentType;
   let duplicateBlocked: Awaited<ReturnType<typeof enrichPayments>> | null = null;
   let allocationBlocked = false;
   let relationshipError: string | undefined;
@@ -566,8 +640,11 @@ router.patch("/payments/:id", requireStaff, async (req, res): Promise<void> => {
     if (runDupCheck && overrideDuplicate && justification) {
       await audit(req.user!.id, "override_duplicate_payment", "payment", p.id, justification, txDb);
     }
-    if (paymentMonthChanged && p.paymentMonth) {
-      await autoGenerateFee(p, req.user!.id, txDb);
+    if (paymentMonthChanged || paymentTypeChanged) {
+      const affectedMonths = [...new Set([before.paymentMonth, p.paymentMonth].filter((month): month is string => !!month))].sort();
+      for (const month of affectedMonths) {
+        await reconcileMonthlyFee(p.clientId, month, req.user!.id, txDb);
+      }
     }
     await audit(
       req.user!.id,
@@ -621,6 +698,7 @@ router.delete("/payments/:id", requireStaff, async (req, res): Promise<void> => 
       .where(and(eq(paymentsTable.id, id), notDeleted(paymentsTable)))
       .returning();
     if (!p) return { payment: undefined, financialLinkBlocked: false };
+    await reconcileMonthlyFee(p.clientId, p.paymentMonth, req.user!.id, tx as unknown as typeof db);
     await audit(req.user!.id, "delete_payment", "payment", p.id, `Check ${p.qbCheckNumber} — $${p.amount}`, tx as unknown as typeof db);
     return { payment: p, financialLinkBlocked: false };
   });

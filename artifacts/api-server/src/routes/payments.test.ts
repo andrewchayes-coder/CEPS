@@ -56,12 +56,12 @@ afterAll(async () => {
   await db.delete(usersTable).where(inArray(usersTable.id, [staffId]));
 });
 
-async function createPayment(amount: string, checkDate = "2026-01-15") {
+async function createPayment(amount: string, checkDate = "2026-01-15", paymentType = "direct_payment") {
   const qb = `${nonce}-chk-${checkCounter++}`;
   const res = await request(app)
     .post("/api/payments")
     .set("Cookie", cookie)
-    .send({ clientId, qbCheckNumber: qb, checkDate, amount, paymentType: "direct_payment" });
+    .send({ clientId, qbCheckNumber: qb, checkDate, amount, paymentType });
   expect(res.status).toBe(201);
   return res.body as { id: string; amount: string; paymentMonth: string };
 }
@@ -78,7 +78,7 @@ async function monthlyFees(feeMonth: string, ownerId = clientId) {
 }
 
 describe("monthly payment fees", () => {
-  it("creates one flat monthly fee with trigger traceability", async () => {
+  it("creates one flat monthly fee with trigger traceability and an audit entry", async () => {
     const payment = await createPayment("100.00", "2026-03-15");
     const fees = await monthlyFees("2026-03");
     expect(fees).toHaveLength(1);
@@ -88,6 +88,12 @@ describe("monthly payment fees", () => {
       feeMonth: "2026-03",
       paymentId: payment.id,
     });
+    const feeAudits = await db.select().from(auditLogTable).where(and(
+      eq(auditLogTable.userId, staffId),
+      eq(auditLogTable.action, "auto_generate_fee"),
+      eq(auditLogTable.entityId, fees[0].id),
+    ));
+    expect(feeAudits).toHaveLength(1);
   });
 
   it("keeps one fee and the original trigger for a second same-month payment", async () => {
@@ -99,11 +105,28 @@ describe("monthly payment fees", () => {
     expect(second.id).not.toBe(first.id);
   });
 
-  it("creates another fee for a different client month", async () => {
+  it("qualifies reimbursements but excludes fee-type payments", async () => {
     await createPayment("100.00", "2026-05-15");
-    await createPayment("100.00", "2026-06-15");
+    await createPayment("100.00", "2026-06-15", "reimbursement");
+    await createPayment("160.00", "2026-12-15", "fee");
     expect(await monthlyFees("2026-05")).toHaveLength(1);
     expect(await monthlyFees("2026-06")).toHaveLength(1);
+    expect(await monthlyFees("2026-12")).toHaveLength(0);
+  });
+
+  it("does not reconcile an existing fee when a fee-type payment is created", async () => {
+    const qualifying = await createPayment("100.00", "2027-05-15");
+    const [existingFee] = await monthlyFees("2027-05");
+    await db.update(paymentsTable).set({
+      isDeleted: true,
+      deletedAt: new Date(),
+      deletedBy: staffId,
+    }).where(eq(paymentsTable.id, qualifying.id));
+
+    await createPayment("160.00", "2027-05-20", "fee");
+    const fees = await monthlyFees("2027-05");
+    expect(fees).toHaveLength(1);
+    expect(fees[0].id).toBe(existingFee.id);
   });
 
   it("does not change the monthly fee when payment amount changes", async () => {
@@ -115,22 +138,80 @@ describe("monthly payment fees", () => {
     expect(await monthlyFees("2026-07")).toEqual(before);
   });
 
-  it("ensures a new month fee while retaining the old month fee", async () => {
+  it("moves the fee when the only qualifying payment moves months", async () => {
     const payment = await createPayment("100.00", "2026-08-15");
     const res = await request(app).patch(`/api/payments/${payment.id}`)
       .set("Cookie", cookie).send({ paymentMonth: "2026-09" });
     expect(res.status).toBe(200);
-    expect(await monthlyFees("2026-08")).toHaveLength(1);
+    expect(await monthlyFees("2026-08")).toHaveLength(0);
     expect(await monthlyFees("2026-09")).toHaveLength(1);
   });
 
-  it("keeps the monthly fee active when its trigger payment is deleted", async () => {
+  it("reverses the fee when the only qualifying payment changes to fee type", async () => {
     const payment = await createPayment("100.00", "2026-10-15");
+    const res = await request(app).patch(`/api/payments/${payment.id}`)
+      .set("Cookie", cookie).send({ paymentType: "fee" });
+    expect(res.status).toBe(200);
+    expect(await monthlyFees("2026-10")).toHaveLength(0);
+  });
+
+  it("reverses the fee when the last qualifying payment is deleted", async () => {
+    const payment = await createPayment("100.00", "2027-01-15");
     const res = await request(app).delete(`/api/payments/${payment.id}`).set("Cookie", cookie);
     expect(res.status).toBe(200);
-    const fees = await monthlyFees("2026-10");
+    expect(await monthlyFees("2027-01")).toHaveLength(0);
+    const [reversed] = await db.select().from(feesTable).where(and(
+      eq(feesTable.clientId, clientId),
+      eq(feesTable.feeMonth, "2027-01"),
+      eq(feesTable.isDeleted, true),
+    ));
+    const reversalAudits = await db.select().from(auditLogTable).where(and(
+      eq(auditLogTable.action, "auto_reverse_fee"),
+      eq(auditLogTable.entityId, reversed.id),
+    ));
+    expect(reversalAudits).toHaveLength(1);
+  });
+
+  it("keeps the fee while another qualifying payment remains", async () => {
+    const first = await createPayment("100.00", "2027-02-15");
+    const second = await createPayment("200.00", "2027-02-20");
+    expect((await request(app).delete(`/api/payments/${first.id}`).set("Cookie", cookie)).status).toBe(200);
+    const fees = await monthlyFees("2027-02");
     expect(fees).toHaveLength(1);
-    expect(fees[0].paymentId).toBe(payment.id);
+    expect(fees[0].paymentId).toBe(first.id);
+    expect(second.id).not.toBe(first.id);
+  });
+
+  it("does not reverse progressed or manually adjusted fees", async () => {
+    const progressedPayment = await createPayment("100.00", "2027-03-15");
+    const [progressedFee] = await monthlyFees("2027-03");
+    await db.update(feesTable).set({ status: "invoiced" }).where(eq(feesTable.id, progressedFee.id));
+    expect((await request(app).delete(`/api/payments/${progressedPayment.id}`).set("Cookie", cookie)).status).toBe(200);
+    expect(await monthlyFees("2027-03")).toHaveLength(1);
+
+    const adjustedPayment = await createPayment("100.00", "2027-04-15");
+    const [adjustedFee] = await monthlyFees("2027-04");
+    await db.update(feesTable).set({ amount: "150.00" }).where(eq(feesTable.id, adjustedFee.id));
+    expect((await request(app).delete(`/api/payments/${adjustedPayment.id}`).set("Cookie", cookie)).status).toBe(200);
+    expect((await monthlyFees("2027-04"))[0].amount).toBe("150.00");
+  });
+
+  it("does not reverse an automatic fee after staff move it to another month", async () => {
+    const payment = await createPayment("100.00", "2027-06-15");
+    const [fee] = await monthlyFees("2027-06");
+    const corrected = await request(app).patch(`/api/fees/${fee.id}`)
+      .set("Cookie", cookie).send({ feeMonth: "2027-07" });
+    expect(corrected.status).toBe(200);
+    expect(corrected.body.ruleApplied).toBe("flat_160_per_client_month_manually_adjusted");
+
+    const movedPayment = await request(app).patch(`/api/payments/${payment.id}`)
+      .set("Cookie", cookie).send({ paymentMonth: "2027-07" });
+    expect(movedPayment.status).toBe(200);
+    expect((await request(app).delete(`/api/payments/${payment.id}`).set("Cookie", cookie)).status).toBe(200);
+
+    const fees = await monthlyFees("2027-07");
+    expect(fees).toHaveLength(1);
+    expect(fees[0].id).toBe(fee.id);
   });
 
   it("concurrently creates one fee for same client and month", async () => {

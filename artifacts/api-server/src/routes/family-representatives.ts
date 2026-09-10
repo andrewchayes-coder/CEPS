@@ -1,11 +1,13 @@
 import { Router, type IRouter } from "express";
-import { and, eq, desc, asc, isNull, gt } from "drizzle-orm";
+import { and, eq, desc, asc, isNull, gt, inArray, sql } from "drizzle-orm";
 import {
   db,
   clientsTable,
   familyRepresentativesTable,
   magicLinksTable,
   usersTable,
+  sessionsTable,
+  referralsTable,
 } from "@workspace/db";
 import {
   ListFamilyRepresentativesQueryParams,
@@ -128,13 +130,35 @@ router.patch("/family-representatives/:id", requireAuth, async (req, res) => {
 });
 router.delete("/family-representatives/:id", requireStaff, async (req, res) => {
   const result = await db.transaction(async (tx) => {
+    const representativeId = String(req.params.id);
+    await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${representativeId}))`);
     const [row] = await tx.select().from(familyRepresentativesTable)
-      .where(and(eq(familyRepresentativesTable.id, String(req.params.id)), notDeleted(familyRepresentativesTable))).for("update");
+      .where(and(eq(familyRepresentativesTable.id, representativeId), notDeleted(familyRepresentativesTable))).for("update");
     if (!row) return false;
     await tx.update(familyRepresentativesTable).set({ isDeleted: true, deletedAt: new Date(), deletedBy: req.user!.id }).where(eq(familyRepresentativesTable.id, row.id));
+    // Revoke every outstanding credential that could still provision or reach
+    // this representative.  Do this in the same transaction as the soft
+    // delete so a concurrently accepted invite cannot recreate access.
+    await tx.update(magicLinksTable).set({ usedAt: new Date() }).where(and(
+      eq(magicLinksTable.familyRepresentativeId, row.id),
+      eq(magicLinksTable.purpose, "invite"),
+      isNull(magicLinksTable.usedAt),
+    ));
+    const targetedReferrals = await tx.select({ id: referralsTable.id })
+      .from(referralsTable)
+      .where(eq(referralsTable.intakeSentToFamilyRepId, row.id))
+      .for("share");
+    if (targetedReferrals.length) {
+      await tx.update(magicLinksTable).set({ usedAt: new Date() }).where(and(
+        eq(magicLinksTable.purpose, "signature"),
+        isNull(magicLinksTable.usedAt),
+        inArray(magicLinksTable.referralId, targetedReferrals.map((r) => r.id)),
+      ));
+    }
     await audit(req.user!.id, "delete_family_representative", "family_representative", row.id, `Deleted ${row.name}`, tx as unknown as typeof db);
     if (row.userId) {
       const [user] = await tx.update(usersTable).set({ active: false }).where(eq(usersTable.id, row.userId)).returning();
+      await tx.delete(sessionsTable).where(eq(sessionsTable.userId, row.userId));
       if (user) await audit(req.user!.id, "delete_user", "user", user.id, `Deactivated ${user.email}`, tx as unknown as typeof db);
     }
     return true;

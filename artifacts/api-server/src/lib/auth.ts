@@ -24,10 +24,17 @@ export function newToken(): string {
   return randomBytes(32).toString("hex");
 }
 
-export async function createSession(res: Response, userId: string): Promise<void> {
+export async function createSessionRecord(
+  userId: string,
+  database: typeof db = db,
+): Promise<string> {
   const token = newToken();
   const expiresAt = new Date(Date.now() + SESSION_DAYS * 24 * 60 * 60 * 1000);
-  await db.insert(sessionsTable).values({ userId, token, expiresAt });
+  await database.insert(sessionsTable).values({ userId, token, expiresAt });
+  return token;
+}
+
+export function setSessionCookie(res: Response, token: string): void {
   res.cookie
     ? res.cookie(SESSION_COOKIE, token, {
         httpOnly: true,
@@ -42,6 +49,11 @@ export async function createSession(res: Response, userId: string): Promise<void
         path: "/",
       })
     : undefined;
+}
+
+export async function createSession(res: Response, userId: string): Promise<void> {
+  const token = await createSessionRecord(userId);
+  setSessionCookie(res, token);
 }
 
 export function readSessionToken(req: Request): string | null {

@@ -10,6 +10,7 @@ import {
   sessionsTable,
   usersTable,
   vendorsTable,
+  referralsTable,
 } from "@workspace/db";
 import app from "../app";
 import { newToken } from "../lib/auth";
@@ -205,5 +206,144 @@ describe("family representative invite linkage", () => {
     expect(user).toBeUndefined();
     expect(link).toBeDefined();
     expect(link.usedAt).toBeNull();
+  });
+
+  it("revokes pending invites, targeted signatures, and sessions when a representative is deleted", async () => {
+    const [rep] = await db.insert(familyRepresentativesTable).values({
+      clientId,
+      name: "Revocation Representative",
+      relationship: "guardian",
+      email: `${nonce}-revocation@test.local`,
+    }).returning();
+    const [user] = await db.insert(usersTable).values({
+      name: "Revocation User",
+      email: `${nonce}-revocation-user@test.local`,
+      role: "parent_guardian",
+      linkedRecordType: "client",
+      linkedRecordId: clientId,
+    }).returning();
+    await db.update(familyRepresentativesTable).set({ userId: user.id })
+      .where(eq(familyRepresentativesTable.id, rep.id));
+    const sessionToken = newToken();
+    await db.insert(sessionsTable).values({
+      userId: user.id,
+      token: sessionToken,
+      expiresAt: new Date(Date.now() + 60 * 60 * 1000),
+    });
+    const inviteToken = newToken();
+    await db.insert(magicLinksTable).values({
+      token: inviteToken,
+      email: `${nonce}-pending@test.local`,
+      purpose: "invite",
+      familyRepresentativeId: rep.id,
+      inviteRole: "parent_guardian",
+      linkedRecordType: "client",
+      linkedRecordId: clientId,
+      expiresAt: new Date(Date.now() + 60 * 60 * 1000),
+    });
+    const [referral] = await db.insert(referralsTable).values({
+      clientId,
+      referralDate: "2026-01-01",
+      status: "pending_signature",
+      intakeSentTo: "family_rep",
+      intakeSentToFamilyRepId: rep.id,
+      parentEmail: rep.email,
+    }).returning();
+    const signatureToken = newToken();
+    await db.insert(magicLinksTable).values({
+      token: signatureToken,
+      email: rep.email!,
+      purpose: "signature",
+      referralId: referral.id,
+      expiresAt: new Date(Date.now() + 60 * 60 * 1000),
+    });
+
+    const deleted = await request(app)
+      .delete(`/api/family-representatives/${rep.id}`)
+      .set("Cookie", staffCookie);
+    expect(deleted.status).toBe(200);
+
+    const [invite] = await db.select().from(magicLinksTable).where(eq(magicLinksTable.token, inviteToken));
+    const [signature] = await db.select().from(magicLinksTable).where(eq(magicLinksTable.token, signatureToken));
+    const [remainingSession] = await db.select().from(sessionsTable).where(eq(sessionsTable.token, sessionToken));
+    const [inactiveUser] = await db.select().from(usersTable).where(eq(usersTable.id, user.id));
+    expect(invite.usedAt).toBeInstanceOf(Date);
+    expect(signature.usedAt).toBeInstanceOf(Date);
+    expect(remainingSession).toBeUndefined();
+    expect(inactiveUser.active).toBe(false);
+
+    await db.delete(magicLinksTable).where(inArray(magicLinksTable.token, [inviteToken, signatureToken]));
+    await db.delete(referralsTable).where(eq(referralsTable.id, referral.id));
+    await db.delete(familyRepresentativesTable).where(eq(familyRepresentativesTable.id, rep.id));
+    await db.delete(usersTable).where(eq(usersTable.id, user.id));
+  });
+
+  it("serializes representative deletion against invite acceptance without leaving access active", async () => {
+    const email = `${nonce}-delete-race@test.local`;
+    const [rep] = await db.insert(familyRepresentativesTable).values({
+      clientId,
+      name: "Delete Race Representative",
+      relationship: "guardian",
+      email,
+    }).returning();
+    const { token } = await createInvite({
+      email,
+      role: "parent_guardian",
+      linkedRecordType: "client",
+      linkedRecordId: clientId,
+      familyRepresentativeId: rep.id,
+    });
+
+    const [accepted, deleted] = await Promise.all([
+      request(app).post(`/api/invites/${token}/accept`).send({ password: "valid-password" }),
+      request(app).delete(`/api/family-representatives/${rep.id}`).set("Cookie", staffCookie),
+    ]);
+
+    expect([200, 404]).toContain(accepted.status);
+    expect(deleted.status).toBe(200);
+    const [deletedRep] = await db.select().from(familyRepresentativesTable).where(eq(familyRepresentativesTable.id, rep.id));
+    const [link] = await db.select().from(magicLinksTable).where(eq(magicLinksTable.token, token!));
+    const [createdUser] = await db.select().from(usersTable).where(eq(usersTable.email, email));
+    expect(deletedRep.isDeleted).toBe(true);
+    expect(link.usedAt).toBeInstanceOf(Date);
+    if (createdUser) {
+      expect(createdUser.active).toBe(false);
+      const activeSessions = await db.select().from(sessionsTable).where(eq(sessionsTable.userId, createdUser.id));
+      expect(activeSessions).toHaveLength(0);
+      userIds.push(createdUser.id);
+    }
+
+    await db.delete(magicLinksTable).where(eq(magicLinksTable.token, token!));
+    await db.delete(familyRepresentativesTable).where(eq(familyRepresentativesTable.id, rep.id));
+  });
+
+  it("serializes representative deletion against invite creation without leaving an unused link", async () => {
+    const email = `${nonce}-create-delete-race@test.local`;
+    const [rep] = await db.insert(familyRepresentativesTable).values({
+      clientId,
+      name: "Create Delete Race Representative",
+      relationship: "guardian",
+      email,
+    }).returning();
+
+    const [created, deleted] = await Promise.all([
+      request(app).post("/api/invites").set("Cookie", staffCookie).send({
+        email,
+        role: "parent_guardian",
+        linkedRecordType: "client",
+        linkedRecordId: clientId,
+        familyRepresentativeId: rep.id,
+      }),
+      request(app).delete(`/api/family-representatives/${rep.id}`).set("Cookie", staffCookie),
+    ]);
+
+    expect([201, 400]).toContain(created.status);
+    expect(deleted.status).toBe(200);
+    const links = await db.select().from(magicLinksTable)
+      .where(eq(magicLinksTable.familyRepresentativeId, rep.id));
+    expect(links.every((link) => link.usedAt instanceof Date)).toBe(true);
+
+    await db.delete(magicLinksTable).where(eq(magicLinksTable.familyRepresentativeId, rep.id));
+    await db.delete(familyRepresentativesTable).where(eq(familyRepresentativesTable.id, rep.id));
   });
 });

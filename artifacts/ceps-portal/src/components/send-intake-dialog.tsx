@@ -53,7 +53,7 @@ export function SendIntakeDialog({ referral, onSent }: { referral: Referral, onS
   const previewAgreement = usePreviewIntakeAgreement();
   const { toast } = useToast();
 
-  const canSelectParticipant = referral.clientIsMinor === false;
+  const canSelectParticipant = referral.clientIsMinor === false && !!referral.participantEmail;
   const hasEligibleFamilyReps = familyReps.some(rep => !!rep.email);
   const noEligibleRecipients = !canSelectParticipant && !hasEligibleFamilyReps;
   const agreementInput = recipient && (recipient !== 'family_rep' || familyRepresentativeId) ? {
@@ -202,13 +202,18 @@ export function SendIntakeDialog({ referral, onSent }: { referral: Referral, onS
                     type="button"
                     variant={recipient === 'family_rep' ? 'default' : 'outline'}
                     className="w-full justify-start font-normal h-auto py-3"
+                    disabled={!hasEligibleFamilyReps}
                     onClick={() => setRecipient('family_rep')}
                     data-testid="select-recipient-family"
                   >
                     <div className="text-left">
                       <div className="font-medium">Family Representative</div>
                       <div className="text-xs opacity-80 mt-0.5">
-                        {familyReps.length === 0 ? 'No family representatives found' : `${familyReps.length} representative${familyReps.length === 1 ? '' : 's'} available`}
+                        {familyReps.length === 0
+                          ? 'No family representatives found'
+                          : hasEligibleFamilyReps
+                            ? `${familyReps.length} representative${familyReps.length === 1 ? '' : 's'} available`
+                            : 'No representative has an email address'}
                       </div>
                     </div>
                   </Button>
@@ -240,8 +245,8 @@ export function SendIntakeDialog({ referral, onSent }: { referral: Referral, onS
                 <div>
                   <p className="font-semibold">Missing Contact Information</p>
                   <p className="mt-1">
-                    Neither the participant nor a family representative has an email address on file. 
-                    Please <Link href={`/clients/${referral.clientId}`} className="underline font-medium hover:text-destructive/80">update the participant's profile</Link> before sending the intake.
+                    Neither the participant nor a family representative has an email address on file.
+                    Please <Link href={`/clients/${referral.clientId}?tab=overview`} className="underline font-medium hover:text-destructive/80">update the participant or representative contact information</Link> before sending the intake.
                   </p>
                 </div>
               </div>
@@ -320,7 +325,7 @@ export function SendIntakeDialog({ referral, onSent }: { referral: Referral, onS
                     type="button"
                     variant="secondary"
                     onClick={handlePreview}
-                    disabled={!recipient || previewAgreement.isPending}
+                    disabled={!agreementInput || previewAgreement.isPending}
                     data-testid="button-preview-agreement"
                   >
                     {previewAgreement.isPending ? 'Loading Preview...' : preview ? 'Refresh Full Preview' : 'Load Full Preview'}

@@ -8,6 +8,7 @@ import {
   referralsTable,
   magicLinksTable,
   auditLogTable,
+  familyRepresentativesTable,
 } from "@workspace/db";
 import app from "../app";
 import { newToken } from "../lib/auth";
@@ -431,5 +432,95 @@ describe("POST /signature/:token concurrency", () => {
       .from(magicLinksTable)
       .where(eq(magicLinksTable.token, concurrentToken));
     expect(link.usedAt).toBeInstanceOf(Date);
+  });
+});
+
+describe("POST /signature/:token selected representative safety", () => {
+  it("links account creation to the selected representative and fails closed after deletion", async () => {
+    const suffix = `${nonce}-selected`;
+    const legacyEmail = `${suffix}-legacy@test.local`;
+    const selectedEmail = `${suffix}-selected@test.local`;
+    const [client] = await db.insert(clientsTable).values({
+      firstName: "Selected",
+      lastName: "Representative",
+      dateOfBirth: "2015-01-01",
+      uciNumber: `${suffix}-client`,
+      isMinor: true,
+      familyRepEmail: legacyEmail,
+    }).returning();
+    const [rep] = await db.insert(familyRepresentativesTable).values({
+      clientId: client.id,
+      name: "Current Selected Rep",
+      relationship: "guardian",
+      email: selectedEmail,
+    }).returning();
+    const [referral] = await db.insert(referralsTable).values({
+      clientId: client.id,
+      referralDate: "2026-01-01",
+      status: "pending_signature",
+      parentEmail: selectedEmail,
+      intakeSentTo: "family_rep",
+      intakeSentToFamilyRepId: rep.id,
+      intakeFields: { activityDescription: "Selected representative test" },
+    }).returning();
+    const token = await makeLink("signature", referral.id, selectedEmail);
+
+    const signed = await request(app).post(`/api/signature/${token}`).send({
+      typedName: "Current Selected Rep",
+      agreed: true,
+      signerRelationship: "parent",
+      createAccount: true,
+      password: "selected-pass",
+    });
+    expect(signed.status).toBe(200);
+    expect(signed.body.accountCreated).toBe(true);
+    const [account] = await db.select().from(usersTable).where(eq(usersTable.email, selectedEmail));
+    const [linkedRep] = await db.select().from(familyRepresentativesTable).where(eq(familyRepresentativesTable.id, rep.id));
+    expect(account.linkedRecordId).toBe(client.id);
+    expect(linkedRep.userId).toBe(account.id);
+
+    // A selected representative ID is authoritative even if its old client
+    // contact value would otherwise make the signature appear valid.
+    const [deletedClient] = await db.insert(clientsTable).values({
+      firstName: "Deleted",
+      lastName: "Selected",
+      dateOfBirth: "2015-01-01",
+      uciNumber: `${suffix}-deleted-client`,
+      isMinor: true,
+      familyRepEmail: legacyEmail,
+    }).returning();
+    const [deletedRep] = await db.insert(familyRepresentativesTable).values({
+      clientId: deletedClient.id,
+      name: "Deleted Selected Rep",
+      relationship: "parent",
+      email: selectedEmail,
+    }).returning();
+    const [deletedReferral] = await db.insert(referralsTable).values({
+      clientId: deletedClient.id,
+      referralDate: "2026-01-01",
+      status: "pending_signature",
+      parentEmail: selectedEmail,
+      intakeSentTo: "family_rep",
+      intakeSentToFamilyRepId: deletedRep.id,
+      intakeFields: { activityDescription: "Deleted representative test" },
+    }).returning();
+    const deletedToken = await makeLink("signature", deletedReferral.id, selectedEmail);
+    await db.update(familyRepresentativesTable).set({ isDeleted: true, deletedAt: new Date() })
+      .where(eq(familyRepresentativesTable.id, deletedRep.id));
+    const rejected = await request(app).post(`/api/signature/${deletedToken}`).send({
+      typedName: "Legacy Contact",
+      agreed: true,
+      signerRelationship: "parent",
+    });
+    expect(rejected.status).toBe(404);
+    const [deletedLink] = await db.select().from(magicLinksTable).where(eq(magicLinksTable.token, deletedToken));
+    expect(deletedLink.usedAt).toBeNull();
+
+    await db.delete(auditLogTable).where(inArray(auditLogTable.entityId, [referral.id, deletedReferral.id]));
+    await db.delete(magicLinksTable).where(inArray(magicLinksTable.token, [token, deletedToken]));
+    await db.delete(referralsTable).where(inArray(referralsTable.id, [referral.id, deletedReferral.id]));
+    await db.delete(familyRepresentativesTable).where(inArray(familyRepresentativesTable.id, [rep.id, deletedRep.id]));
+    await db.delete(usersTable).where(eq(usersTable.id, account.id));
+    await db.delete(clientsTable).where(inArray(clientsTable.id, [client.id, deletedClient.id]));
   });
 });

@@ -5,6 +5,7 @@ import {
   boolean,
   timestamp,
   index,
+  uniqueIndex,
   check,
 } from "drizzle-orm/pg-core";
 import { sql } from "drizzle-orm";
@@ -35,6 +36,9 @@ export const familyRepresentativesTable = pgTable(
   },
   (table) => ({
     clientIdIdx: index("family_representatives_client_id_idx").on(table.clientId),
+    userIdUnique: uniqueIndex("family_representatives_user_id_unique")
+      .on(table.userId)
+      .where(sql`${table.userId} is not null`),
     relationshipCheck: check(
       "family_representatives_relationship_check",
       sql`${table.relationship} is null or ${table.relationship} in ('parent', 'guardian', 'conservator', 'other')`,

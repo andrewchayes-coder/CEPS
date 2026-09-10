@@ -1,5 +1,5 @@
 import { Router, type IRouter } from "express";
-import { eq, and, isNull, gt } from "drizzle-orm";
+import { eq, and, isNull, gt, sql } from "drizzle-orm";
 import { notDeleted } from "../lib/serializers";
 import {
   db,
@@ -18,7 +18,8 @@ import {
 } from "@workspace/api-zod";
 import {
   hashPassword,
-  createSession,
+  createSessionRecord,
+  setSessionCookie,
   newToken,
   appBaseUrl,
   sessionUserJson,
@@ -97,16 +98,33 @@ router.post("/invites", requireStaff, async (req, res): Promise<void> => {
   }
 
   const token = newToken();
-  await db.insert(magicLinksTable).values({
-    token,
-    email,
-    purpose: "invite",
-    inviteRole: role,
-    linkedRecordType,
-    linkedRecordId,
-    familyRepresentativeId: parsed.data.familyRepresentativeId,
-    expiresAt: new Date(Date.now() + INVITE_DAYS * 24 * 60 * 60 * 1000),
+  const createResult = await db.transaction(async (tx) => {
+    if (parsed.data.familyRepresentativeId) {
+      await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${parsed.data.familyRepresentativeId}))`);
+      const [rep] = await tx.select().from(familyRepresentativesTable).where(and(
+        eq(familyRepresentativesTable.id, parsed.data.familyRepresentativeId),
+        eq(familyRepresentativesTable.clientId, linkedRecordId),
+        eq(familyRepresentativesTable.isDeleted, false),
+      )).for("share");
+      if (!rep) return { error: "Family representative not found for this client", status: 400 } as const;
+      if (rep.userId) return { error: "This family representative already has a portal account", status: 409 } as const;
+    }
+    await tx.insert(magicLinksTable).values({
+      token,
+      email,
+      purpose: "invite",
+      inviteRole: role,
+      linkedRecordType,
+      linkedRecordId,
+      familyRepresentativeId: parsed.data.familyRepresentativeId,
+      expiresAt: new Date(Date.now() + INVITE_DAYS * 24 * 60 * 60 * 1000),
+    });
+    return { ok: true } as const;
   });
+  if ("error" in createResult) {
+    res.status(createResult.status ?? 500).json({ error: createResult.error });
+    return;
+  }
   await audit(req.user!.id, "create_invite", linkedRecordType, linkedRecordId, email);
 
   // [CONFIRM] No email provider approved yet — invite link returned for staff
@@ -167,6 +185,15 @@ router.post("/invites/:token/accept", async (req, res): Promise<void> => {
     return;
   }
   const outcome = await db.transaction(async (tx) => {
+    const [candidate] = await tx.select({
+      familyRepresentativeId: magicLinksTable.familyRepresentativeId,
+    }).from(magicLinksTable).where(and(
+      eq(magicLinksTable.token, token),
+      eq(magicLinksTable.purpose, "invite"),
+    ));
+    if (candidate?.familyRepresentativeId) {
+      await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${candidate.familyRepresentativeId}))`);
+    }
     const [locked] = await tx.select().from(magicLinksTable).where(and(
       eq(magicLinksTable.token, token), eq(magicLinksTable.purpose, "invite"),
       isNull(magicLinksTable.usedAt), gt(magicLinksTable.expiresAt, new Date()),
@@ -196,7 +223,8 @@ router.post("/invites/:token/accept", async (req, res): Promise<void> => {
     }).returning();
     if (locked.familyRepresentativeId) await tx.update(familyRepresentativesTable).set({ userId: user.id }).where(eq(familyRepresentativesTable.id, locked.familyRepresentativeId));
     await tx.update(magicLinksTable).set({ usedAt: new Date() }).where(eq(magicLinksTable.id, locked.id));
-    return { user };
+    const sessionToken = await createSessionRecord(user.id, tx as unknown as typeof db);
+    return { user, sessionToken };
   });
   if ("error" in outcome) {
     res.status(outcome.error === "existing" || outcome.error === "rep_account" ? 409 : 404).json({
@@ -208,8 +236,8 @@ router.post("/invites/:token/accept", async (req, res): Promise<void> => {
     });
     return;
   }
-  const { user } = outcome;
-  await createSession(res, user.id);
+  const { user, sessionToken } = outcome;
+  setSessionCookie(res, sessionToken);
   await audit(user.id, "accept_invite", "user", user.id);
   res.json(AcceptInviteResponse.parse(sessionUserJson(user)));
 });

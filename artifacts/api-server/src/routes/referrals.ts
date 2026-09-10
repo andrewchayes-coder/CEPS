@@ -741,6 +741,22 @@ router.post("/signature/:token", async (req, res): Promise<void> => {
   try {
     const outcome = await db.transaction(async (tx) => {
       const signedAt = new Date();
+      const [candidateLink] = await tx
+        .select({ referralId: magicLinksTable.referralId })
+        .from(magicLinksTable)
+        .where(and(
+          eq(magicLinksTable.token, token),
+          eq(magicLinksTable.purpose, "signature"),
+        ));
+      if (candidateLink?.referralId) {
+        const [candidateReferral] = await tx
+          .select({ familyRepresentativeId: referralsTable.intakeSentToFamilyRepId })
+          .from(referralsTable)
+          .where(eq(referralsTable.id, candidateLink.referralId));
+        if (candidateReferral?.familyRepresentativeId) {
+          await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${candidateReferral.familyRepresentativeId}))`);
+        }
+      }
       const [link] = await tx
         .update(magicLinksTable)
         .set({ usedAt: signedAt })
@@ -791,7 +807,13 @@ router.post("/signature/:token", async (req, res): Promise<void> => {
         referral.intakeSentTo === "participant"
           ? signingClient?.email
           : referral.intakeSentTo === "family_rep"
-            ? selectedRepresentative?.email ?? signingClient?.familyRepEmail
+            // A referral with an explicit representative is bound to that
+            // record for its entire signing lifecycle.  Falling back to the
+            // deprecated client contact fields here could let a deleted or
+            // cross-client representative's link be replayed by someone else.
+            ? referral.intakeSentToFamilyRepId
+              ? selectedRepresentative?.email
+              : signingClient?.familyRepEmail
             : null;
       if (
         (referral.intakeSentTo === "participant" && signingClient?.isMinor !== false) ||
@@ -842,6 +864,41 @@ router.post("/signature/:token", async (req, res): Promise<void> => {
         if (!accountCreated) {
           accountCreationError =
             "An account with this email already exists. Use Forgot password to sign in, or contact CEPS for help.";
+        }
+        // Only an account belonging to this client and an appropriate portal
+        // role may be attached to the selected representative.  This guards
+        // against linking an email that already belongs to another client
+        // (including when two signature requests race to create an account).
+        const [account] = await tx
+          .select()
+          .from(usersTable)
+          .where(eq(usersTable.email, link.email))
+          .for("update");
+        const [existingRepresentativeLink] = account
+          ? await tx
+              .select({ id: familyRepresentativesTable.id })
+              .from(familyRepresentativesTable)
+              .where(eq(familyRepresentativesTable.userId, account.id))
+              .limit(1)
+          : [];
+        if (
+          account &&
+          account.active &&
+          selectedRepresentative &&
+          (account.role === "parent_guardian" || account.role === "self") &&
+          account.linkedRecordType === "client" &&
+          account.linkedRecordId === referral.clientId &&
+          (!existingRepresentativeLink || existingRepresentativeLink.id === selectedRepresentative.id) &&
+          (!selectedRepresentative.userId || selectedRepresentative.userId === account.id)
+        ) {
+          await tx.update(familyRepresentativesTable)
+            .set({ userId: account.id })
+            .where(and(
+              eq(familyRepresentativesTable.id, selectedRepresentative.id),
+              eq(familyRepresentativesTable.clientId, referral.clientId),
+              eq(familyRepresentativesTable.isDeleted, false),
+              isNull(familyRepresentativesTable.userId),
+            ));
         }
       }
 

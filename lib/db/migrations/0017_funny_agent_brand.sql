@@ -1,0 +1,1 @@
+CREATE UNIQUE INDEX "family_representatives_user_id_unique" ON "family_representatives" USING btree ("user_id") WHERE "family_representatives"."user_id" is not null;

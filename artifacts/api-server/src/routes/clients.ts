@@ -37,6 +37,7 @@ import {
   diffDetail,
 } from "../lib/serializers";
 import { sortedOrder } from "../lib/sorting";
+import { softDeleteClient } from "../lib/participantLinks";
 
 const router: IRouter = Router();
 
@@ -288,15 +289,16 @@ router.patch("/clients/:id", requireAuth, async (req, res): Promise<void> => {
 
 router.delete("/clients/:id", requireStaff, async (req, res): Promise<void> => {
   const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
-  const [client] = await db
-    .update(clientsTable)
-    .set({ isDeleted: true, deletedAt: new Date(), deletedBy: req.user!.id })
-    .where(and(eq(clientsTable.id, id), notDeleted(clientsTable)))
-    .returning();
-  if (!client) {
+  const result = await db.transaction((tx) => softDeleteClient(tx as unknown as typeof db, id, req.user!.id));
+  if ("notFound" in result) {
     res.status(404).json({ error: "Client not found" });
     return;
   }
+  if ("conflict" in result) {
+    res.status(409).json({ error: result.conflict });
+    return;
+  }
+  const client = result.deleted;
   await audit(req.user!.id, "delete_client", "client", client.id, `${client.firstName} ${client.lastName}`);
   res.json({ ok: true });
 });

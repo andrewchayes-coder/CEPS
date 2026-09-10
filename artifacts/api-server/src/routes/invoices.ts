@@ -17,7 +17,7 @@ import { requireAuth, requireStaff, audit } from "../lib/auth";
 import { invoiceJson, clientNameMap, vendorNameMap, authNumberMap, userNameMap, notDeleted, diffDetail } from "../lib/serializers";
 import { checkDuplicatePayment } from "../lib/paymentDuplicateCheck";
 import { sortedOrder } from "../lib/sorting";
-import { validateParticipantLinks } from "../lib/participantLinks";
+import { softDeleteInvoice, validateParticipantLinks } from "../lib/participantLinks";
 
 const router: IRouter = Router();
 
@@ -382,15 +382,16 @@ router.post("/invoices/:id/validate", requireStaff, async (req, res): Promise<vo
 
 router.delete("/invoices/:id", requireStaff, async (req, res): Promise<void> => {
   const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
-  const [invoice] = await db
-    .update(invoicesTable)
-    .set({ isDeleted: true, deletedAt: new Date(), deletedBy: req.user!.id })
-    .where(and(eq(invoicesTable.id, id), notDeleted(invoicesTable)))
-    .returning();
-  if (!invoice) {
+  const result = await db.transaction((tx) => softDeleteInvoice(tx as unknown as typeof db, id, req.user!.id));
+  if ("notFound" in result) {
     res.status(404).json({ error: "Invoice not found" });
     return;
   }
+  if ("conflict" in result) {
+    res.status(409).json({ error: result.conflict });
+    return;
+  }
+  const invoice = result.deleted;
   await audit(req.user!.id, "delete_invoice", "invoice", invoice.id, `${invoice.serviceMonth} — $${invoice.amountRequested}`);
   res.json({ ok: true });
 });

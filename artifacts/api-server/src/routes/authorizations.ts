@@ -23,6 +23,7 @@ import {
   diffDetail,
 } from "../lib/serializers";
 import { sortedOrder } from "../lib/sorting";
+import { softDeleteAuthorization, validateParticipantLinks } from "../lib/participantLinks";
 
 const router: IRouter = Router();
 
@@ -172,14 +173,25 @@ router.post("/authorizations", requireStaff, async (req, res): Promise<void> => 
     return;
   }
   const { acceptMaxAmountWarning: _accept, ...values } = d;
-  const [auth] = await db
-    .insert(authorizationsTable)
-    .values({
-      ...cleanAuthFields(values),
-      paymentType: d.paymentType ?? derivePaymentType(d.serviceCode),
-      status: d.status ?? "active",
-    })
-    .returning();
+  let relationshipError: string | undefined;
+  const auth = await db.transaction(async (tx) => {
+    const txDb = tx as unknown as typeof db;
+    relationshipError = (await validateParticipantLinks(txDb, d.clientId, {})).error;
+    if (relationshipError) return undefined;
+    const [created] = await tx
+      .insert(authorizationsTable)
+      .values({
+        ...cleanAuthFields(values),
+        paymentType: d.paymentType ?? derivePaymentType(d.serviceCode),
+        status: d.status ?? "active",
+      })
+      .returning();
+    return created;
+  });
+  if (!auth) {
+    res.status(400).json({ error: relationshipError ?? "Invalid participant link" });
+    return;
+  }
 
   // Advance the client's referral: pending_auth -> pending_w9 (or pending_invoice if W-9 on file)
   const referrals = await db.select().from(referralsTable).where(eq(referralsTable.clientId, auth.clientId));
@@ -303,15 +315,16 @@ router.patch("/authorizations/:id", requireStaff, async (req, res): Promise<void
 
 router.delete("/authorizations/:id", requireStaff, async (req, res): Promise<void> => {
   const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
-  const [auth] = await db
-    .update(authorizationsTable)
-    .set({ isDeleted: true, deletedAt: new Date(), deletedBy: req.user!.id })
-    .where(and(eq(authorizationsTable.id, id), notDeleted(authorizationsTable)))
-    .returning();
-  if (!auth) {
+  const result = await db.transaction((tx) => softDeleteAuthorization(tx as unknown as typeof db, id, req.user!.id));
+  if ("notFound" in result) {
     res.status(404).json({ error: "Authorization not found" });
     return;
   }
+  if ("conflict" in result) {
+    res.status(409).json({ error: result.conflict });
+    return;
+  }
+  const auth = result.deleted;
   await audit(req.user!.id, "delete_authorization", "authorization", auth.id, `Auth ${auth.authNumber}`);
   res.json({ ok: true });
 });

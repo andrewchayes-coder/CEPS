@@ -1,6 +1,6 @@
-import { and, eq } from "drizzle-orm";
+import { and, eq, or } from "drizzle-orm";
 import {
-  authorizationsTable, clientsTable, db, invoicesTable, paymentsTable, vendorsTable,
+  authorizationsTable, clientsTable, db, feesTable, invoicesTable, paymentsTable, remittancesTable, vendorsTable,
 } from "@workspace/db";
 import { notDeleted } from "./serializers";
 
@@ -11,6 +11,121 @@ export type ParticipantLinkValidation = {
   invoice?: typeof invoicesTable.$inferSelect;
   payment?: typeof paymentsTable.$inferSelect;
 };
+
+export type SoftDeleteResult<T> =
+  | { deleted: T }
+  | { notFound: true }
+  | { conflict: string };
+
+/**
+ * Soft-delete policy for records that anchor financial links:
+ * - clients are retained while any active authorization, fee, invoice, payment, or remittance exists;
+ * - authorizations are retained while any active financial row links to them;
+ * - invoices are retained while any active payment links to them.
+ *
+ * The target row is locked before checking references so validation and deletion
+ * use the same lock protocol as financial edits.
+ */
+export async function softDeleteAuthorization(
+  tx: DbHandle,
+  id: string,
+  deletedBy: string,
+): Promise<SoftDeleteResult<typeof authorizationsTable.$inferSelect>> {
+  const [authorization] = await tx.select().from(authorizationsTable)
+    .where(and(eq(authorizationsTable.id, id), notDeleted(authorizationsTable))).for("update");
+  if (!authorization) return { notFound: true };
+
+  const [reference] = await tx.select({
+    authorizationId: authorizationsTable.id,
+    feeId: feesTable.id,
+    invoiceId: invoicesTable.id,
+    paymentId: paymentsTable.id,
+    remittanceId: remittancesTable.id,
+  })
+    .from(authorizationsTable)
+    .leftJoin(feesTable, and(eq(feesTable.authorizationId, id), notDeleted(feesTable)))
+    .leftJoin(invoicesTable, and(eq(invoicesTable.authorizationId, id), notDeleted(invoicesTable)))
+    .leftJoin(paymentsTable, and(eq(paymentsTable.authorizationId, id), notDeleted(paymentsTable)))
+    .leftJoin(remittancesTable, and(eq(remittancesTable.authorizationId, id), notDeleted(remittancesTable)))
+    .where(and(
+      eq(authorizationsTable.id, id),
+      or(
+        eq(feesTable.authorizationId, id),
+        eq(invoicesTable.authorizationId, id),
+        eq(paymentsTable.authorizationId, id),
+        eq(remittancesTable.authorizationId, id),
+      ),
+    ))
+    .limit(1);
+  if (reference) return { conflict: "Authorization cannot be deleted while active financial records reference it" };
+
+  const [deleted] = await tx.update(authorizationsTable)
+    .set({ isDeleted: true, deletedAt: new Date(), deletedBy })
+    .where(and(eq(authorizationsTable.id, id), notDeleted(authorizationsTable)))
+    .returning();
+  return { deleted };
+}
+
+export async function softDeleteInvoice(
+  tx: DbHandle,
+  id: string,
+  deletedBy: string,
+): Promise<SoftDeleteResult<typeof invoicesTable.$inferSelect>> {
+  const [invoice] = await tx.select().from(invoicesTable)
+    .where(and(eq(invoicesTable.id, id), notDeleted(invoicesTable))).for("update");
+  if (!invoice) return { notFound: true };
+
+  const [payment] = await tx.select({ id: paymentsTable.id }).from(paymentsTable)
+    .where(and(eq(paymentsTable.invoiceId, id), notDeleted(paymentsTable))).limit(1);
+  if (payment) return { conflict: "Invoice cannot be deleted while active payments reference it" };
+
+  const [deleted] = await tx.update(invoicesTable)
+    .set({ isDeleted: true, deletedAt: new Date(), deletedBy })
+    .where(and(eq(invoicesTable.id, id), notDeleted(invoicesTable)))
+    .returning();
+  return { deleted };
+}
+
+export async function softDeleteClient(
+  tx: DbHandle,
+  id: string,
+  deletedBy: string,
+): Promise<SoftDeleteResult<typeof clientsTable.$inferSelect>> {
+  const [client] = await tx.select().from(clientsTable)
+    .where(and(eq(clientsTable.id, id), notDeleted(clientsTable))).for("update");
+  if (!client) return { notFound: true };
+
+  const [reference] = await tx.select({
+    feeId: feesTable.id,
+    invoiceId: invoicesTable.id,
+    paymentId: paymentsTable.id,
+    remittanceId: remittancesTable.id,
+  })
+    .from(clientsTable)
+    .leftJoin(authorizationsTable, and(eq(authorizationsTable.clientId, id), notDeleted(authorizationsTable)))
+    .leftJoin(feesTable, and(eq(feesTable.clientId, id), notDeleted(feesTable)))
+    .leftJoin(invoicesTable, and(eq(invoicesTable.clientId, id), notDeleted(invoicesTable)))
+    .leftJoin(paymentsTable, and(eq(paymentsTable.clientId, id), notDeleted(paymentsTable)))
+    .leftJoin(remittancesTable, and(eq(remittancesTable.clientId, id), notDeleted(remittancesTable)))
+    .where(and(
+      eq(clientsTable.id, id),
+      or(
+        eq(authorizationsTable.clientId, id),
+        eq(feesTable.clientId, id),
+        eq(invoicesTable.clientId, id),
+        eq(paymentsTable.clientId, id),
+        eq(remittancesTable.clientId, id),
+      ),
+    ))
+    .limit(1);
+  if (reference) return { conflict: "Client cannot be deleted while active financial records reference them" };
+
+  const [deleted] = await tx.update(clientsTable)
+    .set({ isDeleted: true, deletedAt: new Date(), deletedBy })
+    .where(and(eq(clientsTable.id, id), notDeleted(clientsTable)))
+    .returning();
+  return { deleted };
+}
 
 /**
  * Validates create-time participant links while holding share locks on every

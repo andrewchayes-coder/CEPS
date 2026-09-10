@@ -18,9 +18,12 @@ BEGIN
     FROM fees f JOIN authorizations a ON a.id = f.authorization_id
     WHERE f.is_deleted = false AND (a.is_deleted = true OR a.client_id <> f.client_id)
     UNION ALL
+    -- A fee may retain a soft-deleted trigger payment for traceability.
+    -- Only a client mismatch is an invalid historical link; the trigger below
+    -- still rejects newly linking to an already-deleted payment.
     SELECT 'fees', f.id, 'payments', f.payment_id
     FROM fees f JOIN payments p ON p.id = f.payment_id
-    WHERE f.is_deleted = false AND (p.is_deleted = true OR p.client_id <> f.client_id)
+    WHERE f.is_deleted = false AND p.client_id <> f.client_id
     UNION ALL
     SELECT 'invoices', i.id, 'clients', i.client_id
     FROM invoices i JOIN clients c ON c.id = i.client_id

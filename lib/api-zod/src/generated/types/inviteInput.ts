@@ -13,4 +13,5 @@ export interface InviteInput {
   role: InviteInputRole;
   linkedRecordType: InviteInputLinkedRecordType;
   linkedRecordId: string;
+  familyRepresentativeId?: string | null;
 }

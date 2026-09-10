@@ -1,0 +1,61 @@
+Add a family_representatives table so a client can have multiple authorized
+family reps instead of the current 4 flat columns on `clients`.
+
+SCHEMA (new file lib/db/src/schema/familyRepresentatives.ts + a migration):
+1. New table `family_representatives`:
+   - id (uuid, pk)
+   - clientId (uuid, FK -> clients, not null)
+   - name (text, not null)
+   - relationship (text, nullable) — 'parent' | 'guardian' | 'conservator' |
+     'other'. Reuse the same vocabulary as referrals.signerRelationship where
+     it overlaps, plus 'other' since not every family rep fits those three.
+   - phone (text, nullable)
+   - email (text, nullable) — required in practice before this person can be
+     invited to a portal account, but not enforced at the DB level.
+   - address (text, nullable)
+   - isPrimary (boolean, not null, default false) — display/default-selection
+     convenience only (e.g. which rep is pre-selected when staff sends an
+     intake agreement). NOT DB-uniqueness-enforced — staff can mark more than
+     one and it's harmless, just picks the first when defaulting.
+   - userId (uuid, nullable, FK -> users) — set once this person accepts a
+     portal invite; null until then.
+   - createdBy (uuid, nullable, FK -> users)
+   - isDeleted / deletedAt / deletedBy (soft delete — match every other
+     entity in this schema, e.g. clients.ts)
+   - createdAt (timestamptz, not null, default now)
+   Add an index on clientId (list-by-client is the primary access pattern,
+   same reasoning as clients.ts's existing indexes).
+
+2. On `magic_links` (lib/db/src/schema/users.ts): add a nullable
+   `familyRepresentativeId` (uuid, FK -> family_representatives) — carries
+   which family-rep row a `purpose: "invite"` link is for, so accepting the
+   invite can backfill that row's `userId` (Prompt 2).
+
+3. On `referrals` (lib/db/src/schema/referrals.ts): add a nullable
+   `intakeSentToFamilyRepId` (uuid, FK -> family_representatives) — set
+   alongside the existing `intakeSentTo` field when a specific family rep
+   (not the participant) is the intake recipient, so the signing page can
+   resolve the actual person rather than a generic single field (Prompt 2).
+
+4. Data migration: for every client with a non-null `familyRepName`, insert
+   one family_representatives row (clientId, name: familyRepName, phone:
+   familyRepPhone, email: familyRepEmail, address: familyRepAddress,
+   isPrimary: true, relationship: null — CEPS never captured that
+   historically, staff can fill it in later). Leave the 4 existing columns on
+   `clients` in place afterward (mark them deprecated with a code comment,
+   don't drop them yet) — nothing new reads them after this build, but
+   dropping columns is a separate, lower-risk follow-up once the new table is
+   confirmed working in practice. Only dummy/seed data exists in this repo
+   (no real client data is permitted until CEPS confirms compliance), so this
+   migration has no real-data correctness stakes — still write it as a real
+   migration, not a one-off script, since it needs to run wherever this repo
+   is next deployed.
+
+5. Versioned Drizzle migrations, not `drizzle-kit push` — after schema edits,
+   `pnpm --filter @workspace/db run db:generate` then `db:migrate` in dev.
+   Don't wire a migrate step into the production deploy.
+6. Update the OpenAPI spec (lib/api-spec/openapi.yaml) for the new table's
+   CRUD shape and the two new FK fields, then
+   `pnpm --filter @workspace/api-spec run codegen`, then re-apply the
+   `zod` → `zod/v4` import fix in lib/api-zod/src/generated/api.ts that run
+   always needs. Never hand-edit the generated files directly.

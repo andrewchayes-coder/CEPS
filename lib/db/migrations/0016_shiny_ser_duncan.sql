@@ -1,0 +1,1 @@
+ALTER TABLE "family_representatives" ADD CONSTRAINT "family_representatives_relationship_check" CHECK ("family_representatives"."relationship" is null or "family_representatives"."relationship" in ('parent', 'guardian', 'conservator', 'other'));

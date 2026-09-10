@@ -18,6 +18,10 @@ export interface PaymentInput {
   qbCheckNumber: string;
   checkDate: string;
   amount: string;
+  /**
+     * @nullable
+     * @pattern ^\d{4}-(0[1-9]|1[0-2])$
+     */
   paymentMonth?: string | null;
   paymentType: PaymentInputPaymentType;
   /** Set true (with a justification) to bypass the duplicate-payment hard stop */

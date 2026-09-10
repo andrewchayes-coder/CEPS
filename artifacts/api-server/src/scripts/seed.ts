@@ -8,6 +8,7 @@ import {
   db,
   usersTable,
   clientsTable,
+  familyRepresentativesTable,
   vendorsTable,
   referralsTable,
   authorizationsTable,
@@ -109,6 +110,15 @@ async function main() {
       assignedCoordinatorId: coordinator.id,
     })
     .returning();
+
+  await db.insert(familyRepresentativesTable).values({
+    clientId: clientA.id,
+    name: "Grace Kim",
+    phone: "(916) 555-0101",
+    email: "parent@family.example",
+    address: "2210 Maple Ave, Sacramento, CA 95820",
+    isPrimary: true,
+  });
 
   await db.insert(usersTable).values([
     {

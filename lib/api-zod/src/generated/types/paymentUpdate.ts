@@ -17,7 +17,10 @@ export interface PaymentUpdate {
   qbCheckNumber?: string;
   checkDate?: string;
   amount?: string;
-  /** @nullable */
+  /**
+     * @nullable
+     * @pattern ^\d{4}-(0[1-9]|1[0-2])$
+     */
   paymentMonth?: string | null;
   paymentType?: PaymentUpdatePaymentType;
   /** Set true (with a justification) to bypass the duplicate-payment hard stop when an update would create a duplicate */

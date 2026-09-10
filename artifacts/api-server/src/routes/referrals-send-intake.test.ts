@@ -9,6 +9,7 @@ import {
   referralsTable,
   sessionsTable,
   usersTable,
+  familyRepresentativesTable,
 } from "@workspace/db";
 import app from "../app";
 import { newToken } from "../lib/auth";
@@ -24,6 +25,9 @@ let minorReferralId: string;
 let adultReferralId: string;
 let missingEmailReferralId: string;
 let unknownMinorStatusReferralId: string;
+let minorRepId: string;
+let adultRepId: string;
+let missingEmailRepId: string;
 
 async function session(userId: string) {
   const token = newToken();
@@ -90,6 +94,12 @@ beforeAll(async () => {
   [minorClientId, adultClientId, missingEmailClientId, unknownMinorStatusClientId] = clients.map(
     (client) => client.id,
   );
+  const reps = await db.insert(familyRepresentativesTable).values([
+    { clientId: minorClientId, name: "Minor Selected Rep", relationship: "parent", email: `${nonce}-family@test.local` },
+    { clientId: adultClientId, name: "Adult Selected Rep", relationship: "guardian", email: `${nonce}-adult-family@test.local`, phone: "555-0101" },
+    { clientId: missingEmailClientId, name: "Missing Email Rep", relationship: "parent", email: null },
+  ]).returning();
+  [minorRepId, adultRepId, missingEmailRepId] = reps.map((rep) => rep.id);
 
   const referrals = await db
     .insert(referralsTable)
@@ -128,6 +138,8 @@ beforeAll(async () => {
 afterAll(async () => {
   const referralIds = [minorReferralId, adultReferralId, missingEmailReferralId, unknownMinorStatusReferralId];
   const clientIds = [minorClientId, adultClientId, missingEmailClientId, unknownMinorStatusClientId];
+  await db.update(referralsTable).set({ intakeSentToFamilyRepId: null }).where(inArray(referralsTable.id, referralIds));
+  await db.delete(familyRepresentativesTable).where(inArray(familyRepresentativesTable.id, [minorRepId, adultRepId, missingEmailRepId]));
   await db.delete(auditLogTable).where(inArray(auditLogTable.entityId, referralIds));
   await db.delete(magicLinksTable).where(inArray(magicLinksTable.referralId, referralIds));
   await db.delete(referralsTable).where(inArray(referralsTable.id, referralIds));
@@ -151,7 +163,7 @@ describe("POST /referrals/:id/send-intake", () => {
     const response = await request(app)
       .post(`/api/referrals/${minorReferralId}/send-intake`)
       .set("Cookie", staffCookie)
-      .send({ recipient: "family_rep" });
+      .send({ recipient: "family_rep", familyRepresentativeId: minorRepId });
 
     expect(response.status).toBe(200);
     const [referral] = await db
@@ -174,10 +186,26 @@ describe("POST /referrals/:id/send-intake", () => {
     const response = await request(app)
       .post(`/api/referrals/${missingEmailReferralId}/send-intake`)
       .set("Cookie", staffCookie)
-      .send({ recipient: "family_rep" });
+      .send({ recipient: "family_rep", familyRepresentativeId: missingEmailRepId });
 
     expect(response.status).toBe(400);
     expect(response.body.error).toContain("family rep record");
+  });
+
+  it("requires an explicit representative and rejects a representative from another client", async () => {
+    const missing = await request(app)
+      .post(`/api/referrals/${minorReferralId}/send-intake`)
+      .set("Cookie", staffCookie)
+      .send({ recipient: "family_rep" });
+    expect(missing.status).toBe(400);
+    expect(missing.body.error).toContain("familyRepresentativeId is required");
+
+    const crossClient = await request(app)
+      .post(`/api/referrals/${minorReferralId}/send-intake`)
+      .set("Cookie", staffCookie)
+      .send({ recipient: "family_rep", familyRepresentativeId: adultRepId });
+    expect(crossClient.status).toBe(400);
+    expect(crossClient.body.error).toContain("not found for this client");
   });
 
   it("fails closed when participant minor status has not been confirmed", async () => {
@@ -235,6 +263,21 @@ describe("POST /referrals/:id/send-intake", () => {
     expect(referral.paymentTypeRequested).toBe("service_payment");
   });
 
+  it("clears a stale representative selection when sending to the participant", async () => {
+    await db.update(referralsTable).set({
+      intakeSentTo: "family_rep",
+      intakeSentToFamilyRepId: adultRepId,
+    }).where(eq(referralsTable.id, adultReferralId));
+    const response = await request(app)
+      .post(`/api/referrals/${adultReferralId}/send-intake`)
+      .set("Cookie", staffCookie)
+      .send({ recipient: "participant" });
+    expect(response.status).toBe(200);
+    const [referral] = await db.select().from(referralsTable).where(eq(referralsTable.id, adultReferralId));
+    expect(referral.intakeSentTo).toBe("participant");
+    expect(referral.intakeSentToFamilyRepId).toBeNull();
+  });
+
   it("previews the same canonical current-record agreement that the recipient receives", async () => {
     await db
       .update(referralsTable)
@@ -265,6 +308,7 @@ describe("POST /referrals/:id/send-intake", () => {
       cost: "325.00",
       paymentSchedule: "One payment after service",
       paymentTypeRequested: "reimbursement" as const,
+      familyRepresentativeId: adultRepId,
     };
     const preview = await request(app)
       .post(`/api/referrals/${adultReferralId}/agreement-preview`)
@@ -273,9 +317,9 @@ describe("POST /referrals/:id/send-intake", () => {
     expect(preview.status).toBe(200);
     expect(preview.body).toMatchObject({
       clientName: `Adult Signer`,
-      representativeName: "Current Family Representative",
+      representativeName: "Adult Selected Rep",
       contactEmail: `${nonce}-adult-family@test.local`,
-      mailingAddress: "99 Current Record Way",
+      mailingAddress: "1 Old Intake Road",
       regionalCenter: "Current Regional Center",
       cost: "325.00",
       serviceFrequency: "one_time",
@@ -310,7 +354,7 @@ describe("POST /referrals/:id/send-intake", () => {
     const resend = await request(app)
       .post(`/api/referrals/${adultReferralId}/send-intake`)
       .set("Cookie", staffCookie)
-      .send({ recipient: "family_rep" });
+      .send({ recipient: "family_rep", familyRepresentativeId: adultRepId });
     expect(resend.status).toBe(200);
 
     const oldPage = await request(app).get(`/api/signature/${oldLink.token}`);
@@ -340,7 +384,7 @@ describe("POST /referrals/:id/send-intake", () => {
     const resend = await request(app)
       .post(`/api/referrals/${adultReferralId}/send-intake`)
       .set("Cookie", staffCookie)
-      .send({ recipient: "family_rep" });
+      .send({ recipient: "family_rep", familyRepresentativeId: adultRepId });
     expect(resend.status).toBe(200);
 
     const oldPage = await request(app).get(`/api/signature/${previousLink!.token}`);
@@ -357,7 +401,7 @@ describe("POST /referrals/:id/send-intake", () => {
       request(app)
         .post(`/api/referrals/${adultReferralId}/send-intake`)
         .set("Cookie", staffCookie)
-        .send({ recipient: "family_rep" }),
+        .send({ recipient: "family_rep", familyRepresentativeId: adultRepId }),
     ]);
     expect(participantSend.status).toBe(200);
     expect(familySend.status).toBe(200);

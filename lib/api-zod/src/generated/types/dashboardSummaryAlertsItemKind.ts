@@ -16,4 +16,5 @@ export const DashboardSummaryAlertsItemKind = {
   unmatched_remittance: 'unmatched_remittance',
   pending_signature: 'pending_signature',
   recently_completed: 'recently_completed',
+  family_updated_participant: 'family_updated_participant',
 } as const;

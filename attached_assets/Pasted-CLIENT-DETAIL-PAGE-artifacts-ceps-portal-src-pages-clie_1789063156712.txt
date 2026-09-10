@@ -1,0 +1,42 @@
+CLIENT DETAIL PAGE (artifacts/ceps-portal/src/pages/clients/[id].tsx):
+1. Replace the current `{client.isMinor && (...)}`-gated read-only "Family
+   Representative" block with a "Family Representatives" section that always
+   renders (for every client, not just minors), listing every non-deleted
+   rep: name, relationship, phone, email, and a small status badge for
+   portalAccountStatus ('No portal access' / 'Invite sent' / 'Active').
+2. Staff-only: an "Add Family Representative" button opening a new dialog
+   (name, relationship select, phone, email, address, "Set as primary
+   contact" checkbox) that POSTs to /family-representatives. Each row gets
+   staff-only Edit and Remove (soft-delete, with a confirmation — this also
+   revokes portal access per Prompt 2 step 4, say so in the confirmation
+   copy) actions.
+3. Staff-only, per row without portal access yet: an "Invite to Portal"
+   action. Extend the existing InvitePortalDialog component
+   (artifacts/ceps-portal/src/components/invite-portal-dialog.tsx) with an
+   optional `familyRepresentativeId` + pre-filled `email`/`name` prop set,
+   rather than building a new dialog — it already does everything else
+   needed (role selection is moot here, always parent_guardian; pass that
+   through). Reuse it as-is for the page's existing top-level "Invite Portal
+   Access" button (unchanged behavior when no familyRepresentativeId is
+   passed).
+4. Self-service: when the logged-in user is parent_guardian/self AND has a
+   family_representatives row with userId matching their own id, show an
+   "Edit My Info" action on just that one row (reuse the pattern of the
+   existing EditContactInfoDialog component as a reference for styling/
+   structure, but it PATCHes /family-representatives/:id, not /clients/:id).
+
+INTAKE SEND DIALOG (wherever Prompt 2's send-intake UI from the Intake
+Process build lives — the "Send Intake"/"Resend Intake" dialog on
+referrals/[id].tsx):
+5. When staff picks "Family Rep" as the recipient, replace the current
+   implicit single-target behavior with a dropdown listing that referral's
+   client's family reps (name + relationship + email, disabled if no email
+   on file — same "disabled with a link to add contact info" pattern the
+   original Intake Process prompt used for a missing email). Pre-select the
+   isPrimary rep if one exists. Submit the chosen familyRepresentativeId
+   alongside recipient: 'family_rep'.
+
+TESTS (portal component tests, follow this repo's existing *.spec.ts
+pattern under artifacts/ceps-portal/tests/): adding a family rep shows it in
+the list; a family user sees an edit affordance only on their own row, not
+others'; the intake recipient dropdown is disabled for a rep with no email.

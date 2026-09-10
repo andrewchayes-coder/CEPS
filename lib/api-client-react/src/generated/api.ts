@@ -35,6 +35,9 @@ import type {
   DashboardSummary,
   DuplicatePaymentError,
   ErrorEnvelope,
+  FamilyRepresentative,
+  FamilyRepresentativeInput,
+  FamilyRepresentativeUpdate,
   Fee,
   FeeInput,
   FeeUpdateInput,
@@ -67,6 +70,7 @@ import type {
   ListAuthorizationsParams,
   ListClients200,
   ListClientsParams,
+  ListFamilyRepresentativesParams,
   ListFeesParams,
   ListInvoices200,
   ListInvoicesParams,
@@ -2085,6 +2089,363 @@ export const useCreateReferral = <TError = ErrorType<unknown>,
         TContext
       > => {
       return useMutation(getCreateReferralMutationOptions(options));
+    }
+
+export const getListFamilyRepresentativesUrl = (params: ListFamilyRepresentativesParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/family-representatives?${stringifiedParams}` : `/api/family-representatives`
+}
+
+/**
+ * @summary List family representatives for a client
+ */
+export const listFamilyRepresentatives = async (params: ListFamilyRepresentativesParams, options?: Parameters<typeof customFetch>[1]): Promise<FamilyRepresentative[]> => {
+
+  return customFetch<FamilyRepresentative[]>(getListFamilyRepresentativesUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListFamilyRepresentativesQueryKey = (params?: ListFamilyRepresentativesParams,) => {
+    return [
+    `/api/family-representatives`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getListFamilyRepresentativesQueryOptions = <TData = Awaited<ReturnType<typeof listFamilyRepresentatives>>, TError = ErrorType<unknown>>(params: ListFamilyRepresentativesParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listFamilyRepresentatives>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListFamilyRepresentativesQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listFamilyRepresentatives>>> = ({ signal }) => listFamilyRepresentatives(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listFamilyRepresentatives>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListFamilyRepresentativesQueryResult = NonNullable<Awaited<ReturnType<typeof listFamilyRepresentatives>>>
+export type ListFamilyRepresentativesQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary List family representatives for a client
+ */
+
+export function useListFamilyRepresentatives<TData = Awaited<ReturnType<typeof listFamilyRepresentatives>>, TError = ErrorType<unknown>>(
+ params: ListFamilyRepresentativesParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listFamilyRepresentatives>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListFamilyRepresentativesQueryOptions(params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getCreateFamilyRepresentativeUrl = () => {
+
+
+
+
+  return `/api/family-representatives`
+}
+
+/**
+ * @summary Create a family representative
+ */
+export const createFamilyRepresentative = async (familyRepresentativeInput: FamilyRepresentativeInput, options?: Parameters<typeof customFetch>[1]): Promise<FamilyRepresentative> => {
+
+  return customFetch<FamilyRepresentative>(getCreateFamilyRepresentativeUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(familyRepresentativeInput)
+  }
+);}
+
+
+
+
+
+export const getCreateFamilyRepresentativeMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createFamilyRepresentative>>, TError,{data: BodyType<FamilyRepresentativeInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof createFamilyRepresentative>>, TError,{data: BodyType<FamilyRepresentativeInput>}, TContext> => {
+
+const mutationKey = ['createFamilyRepresentative'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof createFamilyRepresentative>>, {data: BodyType<FamilyRepresentativeInput>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  createFamilyRepresentative(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type CreateFamilyRepresentativeMutationResult = NonNullable<Awaited<ReturnType<typeof createFamilyRepresentative>>>
+    export type CreateFamilyRepresentativeMutationBody = BodyType<FamilyRepresentativeInput>
+    export type CreateFamilyRepresentativeMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Create a family representative
+ */
+export const useCreateFamilyRepresentative = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createFamilyRepresentative>>, TError,{data: BodyType<FamilyRepresentativeInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof createFamilyRepresentative>>,
+        TError,
+        {data: BodyType<FamilyRepresentativeInput>},
+        TContext
+      > => {
+      return useMutation(getCreateFamilyRepresentativeMutationOptions(options));
+    }
+
+export const getGetFamilyRepresentativeUrl = (id: string,) => {
+
+
+
+
+  return `/api/family-representatives/${id}`
+}
+
+export const getFamilyRepresentative = async (id: string, options?: Parameters<typeof customFetch>[1]): Promise<FamilyRepresentative> => {
+
+  return customFetch<FamilyRepresentative>(getGetFamilyRepresentativeUrl(id),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetFamilyRepresentativeQueryKey = (id: string,) => {
+    return [
+    `/api/family-representatives/${id}`
+    ] as const;
+    }
+
+
+export const getGetFamilyRepresentativeQueryOptions = <TData = Awaited<ReturnType<typeof getFamilyRepresentative>>, TError = ErrorType<void>>(id: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getFamilyRepresentative>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetFamilyRepresentativeQueryKey(id);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getFamilyRepresentative>>> = ({ signal }) => getFamilyRepresentative(id, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: id !== null && id !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getFamilyRepresentative>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetFamilyRepresentativeQueryResult = NonNullable<Awaited<ReturnType<typeof getFamilyRepresentative>>>
+export type GetFamilyRepresentativeQueryError = ErrorType<void>
+
+
+
+export function useGetFamilyRepresentative<TData = Awaited<ReturnType<typeof getFamilyRepresentative>>, TError = ErrorType<void>>(
+ id: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getFamilyRepresentative>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetFamilyRepresentativeQueryOptions(id,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getUpdateFamilyRepresentativeUrl = (id: string,) => {
+
+
+
+
+  return `/api/family-representatives/${id}`
+}
+
+export const updateFamilyRepresentative = async (id: string,
+    familyRepresentativeUpdate: FamilyRepresentativeUpdate, options?: Parameters<typeof customFetch>[1]): Promise<FamilyRepresentative> => {
+
+  return customFetch<FamilyRepresentative>(getUpdateFamilyRepresentativeUrl(id),
+  {
+    ...options,
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(familyRepresentativeUpdate)
+  }
+);}
+
+
+
+
+
+export const getUpdateFamilyRepresentativeMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateFamilyRepresentative>>, TError,{id: string;data: BodyType<FamilyRepresentativeUpdate>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof updateFamilyRepresentative>>, TError,{id: string;data: BodyType<FamilyRepresentativeUpdate>}, TContext> => {
+
+const mutationKey = ['updateFamilyRepresentative'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof updateFamilyRepresentative>>, {id: string;data: BodyType<FamilyRepresentativeUpdate>}> = (props) => {
+          const {id,data} = props ?? {};
+
+          return  updateFamilyRepresentative(id,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type UpdateFamilyRepresentativeMutationResult = NonNullable<Awaited<ReturnType<typeof updateFamilyRepresentative>>>
+    export type UpdateFamilyRepresentativeMutationBody = BodyType<FamilyRepresentativeUpdate>
+    export type UpdateFamilyRepresentativeMutationError = ErrorType<unknown>
+
+    export const useUpdateFamilyRepresentative = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateFamilyRepresentative>>, TError,{id: string;data: BodyType<FamilyRepresentativeUpdate>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof updateFamilyRepresentative>>,
+        TError,
+        {id: string;data: BodyType<FamilyRepresentativeUpdate>},
+        TContext
+      > => {
+      return useMutation(getUpdateFamilyRepresentativeMutationOptions(options));
+    }
+
+export const getDeleteFamilyRepresentativeUrl = (id: string,) => {
+
+
+
+
+  return `/api/family-representatives/${id}`
+}
+
+export const deleteFamilyRepresentative = async (id: string, options?: Parameters<typeof customFetch>[1]): Promise<OkResult> => {
+
+  return customFetch<OkResult>(getDeleteFamilyRepresentativeUrl(id),
+  {
+    ...options,
+    method: 'DELETE'
+
+
+  }
+);}
+
+
+
+
+
+export const getDeleteFamilyRepresentativeMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteFamilyRepresentative>>, TError,{id: string}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof deleteFamilyRepresentative>>, TError,{id: string}, TContext> => {
+
+const mutationKey = ['deleteFamilyRepresentative'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof deleteFamilyRepresentative>>, {id: string}> = (props) => {
+          const {id} = props ?? {};
+
+          return  deleteFamilyRepresentative(id,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type DeleteFamilyRepresentativeMutationResult = NonNullable<Awaited<ReturnType<typeof deleteFamilyRepresentative>>>
+
+    export type DeleteFamilyRepresentativeMutationError = ErrorType<unknown>
+
+    export const useDeleteFamilyRepresentative = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteFamilyRepresentative>>, TError,{id: string}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof deleteFamilyRepresentative>>,
+        TError,
+        {id: string},
+        TContext
+      > => {
+      return useMutation(getDeleteFamilyRepresentativeMutationOptions(options));
     }
 
 export const getGetReferralUrl = (id: string,) => {

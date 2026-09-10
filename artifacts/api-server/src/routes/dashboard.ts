@@ -10,6 +10,7 @@ import {
   remittancesTable,
   vendorsTable,
   auditLogTable,
+  usersTable,
 } from "@workspace/db";
 import {
   GetDashboardSummaryResponse,
@@ -113,7 +114,8 @@ router.get("/dashboard/summary", requireAuth, async (req, res): Promise<void> =>
       });
     }
   }
-  if (u.role === "staff") {
+  if (u.role === "staff" || u.role === "service_coordinator") {
+    if (u.role === "staff") {
     const recentSignedReferrals = referrals
       .filter((r) => r.parentSignedAt && r.parentSignedAt.getTime() >= Date.now() - 7 * 86400000)
       .sort((a, b) => (b.parentSignedAt?.getTime() ?? 0) - (a.parentSignedAt?.getTime() ?? 0));
@@ -128,13 +130,36 @@ router.get("/dashboard/summary", requireAuth, async (req, res): Promise<void> =>
         entityId: r.id,
       })),
     );
-    for (const v of missingW9) {
+    }
+    const familyUpdates = await db
+      .select({
+        actorName: sql<string>`${usersTable.name}`,
+        participantName: sql<string>`${clientsTable.firstName} || ' ' || ${clientsTable.lastName}`,
+        detail: auditLogTable.detail,
+        entityId: auditLogTable.entityId,
+      })
+      .from(auditLogTable)
+      .innerJoin(usersTable, eq(auditLogTable.userId, usersTable.id))
+      .innerJoin(clientsTable, sql`${auditLogTable.entityId}::uuid = ${clientsTable.id}`)
+      .where(and(
+        eq(auditLogTable.action, "update_client"),
+        sql`${usersTable.role} in ('parent_guardian', 'self')`,
+        gte(auditLogTable.createdAt, new Date(Date.now() - 7 * 86400000)),
+      ))
+      .orderBy(desc(auditLogTable.createdAt));
+    alerts.unshift(...familyUpdates.map((entry) => ({
+      kind: "family_updated_participant",
+      message: `${entry.actorName} updated ${entry.participantName}: ${entry.detail ?? ""}`,
+      entityType: "client",
+      entityId: entry.entityId,
+    })));
+    if (u.role === "staff") for (const v of missingW9) {
       alerts.push({ kind: "pending_w9", message: `${v.name} does not have a W-9 on file — payments are blocked.`, entityType: "vendor", entityId: v.id });
     }
-    for (const r of referrals.filter((r) => r.status === "pending_signature")) {
+    if (u.role === "staff") for (const r of referrals.filter((r) => r.status === "pending_signature")) {
       alerts.push({ kind: "pending_signature", message: "A referral is waiting on a parent/guardian signature.", entityType: "referral", entityId: r.id });
     }
-    for (const r of unmatchedRemits) {
+    if (u.role === "staff") for (const r of unmatchedRemits) {
       alerts.push({ kind: "unmatched_remittance", message: `An Alta remittance of $${r.amount} has no matching payment.`, entityType: "remittance", entityId: r.id });
     }
   }

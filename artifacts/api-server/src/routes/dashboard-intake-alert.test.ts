@@ -1,12 +1,13 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import request from "supertest";
-import { inArray } from "drizzle-orm";
+import { inArray, eq } from "drizzle-orm";
 import {
   clientsTable,
   db,
   referralsTable,
   sessionsTable,
   usersTable,
+  auditLogTable,
 } from "@workspace/db";
 import app from "../app";
 import { newToken } from "../lib/auth";
@@ -19,6 +20,10 @@ let oldClientId: string;
 let recentReferralId: string;
 let oldReferralId: string;
 let staffCookie: string;
+let familyId: string;
+let coordinatorId: string;
+let familyCookie: string;
+let coordinatorCookie: string;
 
 beforeAll(async () => {
   const [staff] = await db
@@ -30,6 +35,12 @@ beforeAll(async () => {
     })
     .returning();
   staffId = staff.id;
+  const [family, coordinator] = await db.insert(usersTable).values([
+    { name: "Family Actor", email: `${nonce}-family@test.local`, role: "parent_guardian" },
+    { name: "Dashboard Coordinator", email: `${nonce}-coord@test.local`, role: "service_coordinator" },
+  ]).returning();
+  familyId = family.id;
+  coordinatorId = coordinator.id;
 
   const [recentClient, oldClient] = await db
     .insert(clientsTable)
@@ -52,6 +63,15 @@ beforeAll(async () => {
     .returning();
   recentClientId = recentClient.id;
   oldClientId = oldClient.id;
+  await db.update(usersTable).set({ linkedRecordType: "client", linkedRecordId: recentClientId }).where(eq(usersTable.id, familyId));
+  const familyToken = newToken();
+  const coordinatorToken = newToken();
+  await db.insert(sessionsTable).values([
+    { userId: familyId, token: familyToken, expiresAt: new Date(Date.now() + 3600000) },
+    { userId: coordinatorId, token: coordinatorToken, expiresAt: new Date(Date.now() + 3600000) },
+  ]);
+  familyCookie = `ceps_session=${familyToken}`;
+  coordinatorCookie = `ceps_session=${coordinatorToken}`;
 
   const [recentReferral, oldReferral] = await db
     .insert(referralsTable)
@@ -87,14 +107,15 @@ beforeAll(async () => {
 });
 
 afterAll(async () => {
-  await db.delete(sessionsTable).where(inArray(sessionsTable.userId, [staffId]));
+  await db.delete(auditLogTable).where(inArray(auditLogTable.userId, [staffId, familyId, coordinatorId]));
+  await db.delete(sessionsTable).where(inArray(sessionsTable.userId, [staffId, familyId, coordinatorId]));
   await db
     .delete(referralsTable)
     .where(inArray(referralsTable.id, [recentReferralId, oldReferralId]));
   await db
     .delete(clientsTable)
     .where(inArray(clientsTable.id, [recentClientId, oldClientId]));
-  await db.delete(usersTable).where(inArray(usersTable.id, [staffId]));
+  await db.delete(usersTable).where(inArray(usersTable.id, [staffId, familyId, coordinatorId]));
 });
 
 describe("GET /dashboard/summary recently completed intake alerts", () => {
@@ -116,5 +137,24 @@ describe("GET /dashboard/summary recently completed intake alerts", () => {
     expect(completed.some((alert: { entityId: string }) => alert.entityId === oldReferralId)).toBe(
       false,
     );
+  });
+
+  it("shows exactly one family update alert to staff and coordinator, excluding staff/old edits and family dashboards", async () => {
+    const detail = JSON.stringify({ phone: ["old", "new"] });
+    await db.insert(auditLogTable).values([
+      { userId: familyId, action: "update_client", entityType: "client", entityId: recentClientId, detail },
+      { userId: staffId, action: "update_client", entityType: "client", entityId: recentClientId, detail: "staff edit" },
+      { userId: familyId, action: "update_client", entityType: "client", entityId: oldClientId, detail, createdAt: new Date(Date.now() - 8 * 86400000) },
+    ]);
+    for (const cookie of [staffCookie, coordinatorCookie]) {
+      const response = await request(app).get("/api/dashboard/summary").set("Cookie", cookie);
+      expect(response.status).toBe(200);
+      const alerts = response.body.alerts.filter((a: { kind: string; entityId: string }) =>
+        a.kind === "family_updated_participant" && a.entityId === recentClientId);
+      expect(alerts).toHaveLength(1);
+      expect(alerts[0].message).toBe(`Family Actor updated Recent ${nonce}: ${detail}`);
+    }
+    const familyResponse = await request(app).get("/api/dashboard/summary").set("Cookie", familyCookie);
+    expect(familyResponse.body.alerts.some((a: { kind: string }) => a.kind === "family_updated_participant")).toBe(false);
   });
 });

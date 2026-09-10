@@ -5,6 +5,82 @@
  * CEPS Portal API — referral intake, authorizations, invoices, payments, remittances, vendors, reporting
  * OpenAPI spec version: 0.1.0
  */
+export type FamilyRepresentativeRelationship = typeof FamilyRepresentativeRelationship[keyof typeof FamilyRepresentativeRelationship] | null;
+
+
+export const FamilyRepresentativeRelationship = {
+  parent: 'parent',
+  guardian: 'guardian',
+  conservator: 'conservator',
+  other: 'other',
+} as const;
+
+export type FamilyRepresentativePortalAccountStatus = typeof FamilyRepresentativePortalAccountStatus[keyof typeof FamilyRepresentativePortalAccountStatus];
+
+
+export const FamilyRepresentativePortalAccountStatus = {
+  none: 'none',
+  invited: 'invited',
+  active: 'active',
+} as const;
+
+export interface FamilyRepresentative {
+  id: string;
+  clientId: string;
+  /** @minLength 1 */
+  name: string;
+  relationship: FamilyRepresentativeRelationship;
+  phone: string | null;
+  email: string | null;
+  address: string | null;
+  isPrimary: boolean;
+  userId: string | null;
+  createdBy: string | null;
+  createdAt: string;
+  hasPortalAccount: boolean;
+  portalAccountStatus: FamilyRepresentativePortalAccountStatus;
+}
+
+export type FamilyRepresentativeInputRelationship = typeof FamilyRepresentativeInputRelationship[keyof typeof FamilyRepresentativeInputRelationship] | null;
+
+
+export const FamilyRepresentativeInputRelationship = {
+  parent: 'parent',
+  guardian: 'guardian',
+  conservator: 'conservator',
+  other: 'other',
+} as const;
+
+export interface FamilyRepresentativeInput {
+  clientId: string;
+  /** @minLength 1 */
+  name: string;
+  relationship?: FamilyRepresentativeInputRelationship;
+  phone?: string | null;
+  email?: string | null;
+  address?: string | null;
+  isPrimary?: boolean;
+}
+
+export type FamilyRepresentativeUpdateRelationship = typeof FamilyRepresentativeUpdateRelationship[keyof typeof FamilyRepresentativeUpdateRelationship] | null;
+
+
+export const FamilyRepresentativeUpdateRelationship = {
+  parent: 'parent',
+  guardian: 'guardian',
+  conservator: 'conservator',
+  other: 'other',
+} as const;
+
+export interface FamilyRepresentativeUpdate {
+  name?: string;
+  relationship?: FamilyRepresentativeUpdateRelationship;
+  phone?: string | null;
+  email?: string | null;
+  address?: string | null;
+  isPrimary?: boolean;
+}
+
 export interface UploadUrlRequest {
   /**
      * Original file name.
@@ -149,6 +225,8 @@ export interface SendIntakeInput {
   paymentSchedule?: string | null;
   /** @nullable */
   paymentTypeRequested?: SendIntakeInputPaymentTypeRequested;
+  /** @nullable */
+  familyRepresentativeId?: string | null;
 }
 
 export type InviteInputRole = typeof InviteInputRole[keyof typeof InviteInputRole];
@@ -173,6 +251,7 @@ export interface InviteInput {
   role: InviteInputRole;
   linkedRecordType: InviteInputLinkedRecordType;
   linkedRecordId: string;
+  familyRepresentativeId?: string | null;
 }
 
 export interface InviteResult {
@@ -681,6 +760,8 @@ export interface Referral {
   parentEmail?: string | null;
   /** @nullable */
   intakeSentTo?: ReferralIntakeSentTo;
+  /** @nullable */
+  intakeSentToFamilyRepId?: string | null;
   /** @nullable */
   intakeSentAt?: string | null;
   /** @nullable */
@@ -1419,6 +1500,10 @@ export interface PaymentInput {
   qbCheckNumber: string;
   checkDate: string;
   amount: string;
+  /**
+     * @nullable
+     * @pattern ^\d{4}-(0[1-9]|1[0-2])$
+     */
   paymentMonth?: string | null;
   paymentType: PaymentInputPaymentType;
   /** Set true (with a justification) to bypass the duplicate-payment hard stop */
@@ -1739,7 +1824,10 @@ export interface PaymentUpdate {
   qbCheckNumber?: string;
   checkDate?: string;
   amount?: string;
-  /** @nullable */
+  /**
+     * @nullable
+     * @pattern ^\d{4}-(0[1-9]|1[0-2])$
+     */
   paymentMonth?: string | null;
   paymentType?: PaymentUpdatePaymentType;
   /** Set true (with a justification) to bypass the duplicate-payment hard stop when an update would create a duplicate */
@@ -1878,6 +1966,7 @@ export const DashboardSummaryAlertsItemKind = {
   unmatched_remittance: 'unmatched_remittance',
   pending_signature: 'pending_signature',
   recently_completed: 'recently_completed',
+  family_updated_participant: 'family_updated_participant',
 } as const;
 
 export type DashboardSummaryAlertsItem = {
@@ -2104,6 +2193,10 @@ export const ListReferralsSortDirection = {
 export type ListReferrals200 = {
   items: Referral[];
   total: number;
+};
+
+export type ListFamilyRepresentativesParams = {
+clientId: string;
 };
 
 export type ListAuthorizationsParams = {

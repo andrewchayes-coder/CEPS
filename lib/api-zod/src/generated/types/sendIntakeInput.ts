@@ -22,4 +22,6 @@ export interface SendIntakeInput {
   paymentSchedule?: string | null;
   /** @nullable */
   paymentTypeRequested?: SendIntakeInputPaymentTypeRequested;
+  /** @nullable */
+  familyRepresentativeId?: string | null;
 }

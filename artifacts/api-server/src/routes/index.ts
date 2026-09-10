@@ -13,6 +13,7 @@ import vendorsRouter from "./vendors";
 import dashboardRouter from "./dashboard";
 import storageRouter from "./storage";
 import importsRouter from "./imports";
+import familyRepresentativesRouter from "./family-representatives";
 
 const router: IRouter = Router();
 
@@ -21,6 +22,7 @@ router.use(authRouter);
 router.use(invitesRouter);
 router.use(usersRouter);
 router.use(clientsRouter);
+router.use(familyRepresentativesRouter);
 router.use(referralsRouter);
 router.use(authorizationsRouter);
 router.use(invoicesRouter);

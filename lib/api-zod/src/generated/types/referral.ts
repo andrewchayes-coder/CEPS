@@ -39,6 +39,8 @@ export interface Referral {
   /** @nullable */
   intakeSentTo?: ReferralIntakeSentTo;
   /** @nullable */
+  intakeSentToFamilyRepId?: string | null;
+  /** @nullable */
   intakeSentAt?: string | null;
   /** @nullable */
   parentSignedAt?: string | null;

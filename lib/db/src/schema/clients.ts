@@ -26,9 +26,13 @@ export const clientsTable = pgTable("clients", {
     () => usersTable.id,
   ),
   isMinor: boolean("is_minor"),
+  /** @deprecated Use familyRepresentativesTable. */
   familyRepName: text("family_rep_name"),
+  /** @deprecated Use familyRepresentativesTable. */
   familyRepPhone: text("family_rep_phone"),
+  /** @deprecated Use familyRepresentativesTable. */
   familyRepEmail: text("family_rep_email"),
+  /** @deprecated Use familyRepresentativesTable. */
   familyRepAddress: text("family_rep_address"),
   isDeleted: boolean("is_deleted").notNull().default(false),
   deletedAt: timestamp("deleted_at", { withTimezone: true }),

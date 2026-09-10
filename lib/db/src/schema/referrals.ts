@@ -10,6 +10,7 @@ import {
 } from "drizzle-orm/pg-core";
 import { clientsTable } from "./clients";
 import { usersTable } from "./users";
+import { familyRepresentativesTable } from "./familyRepresentatives";
 
 export const referralsTable = pgTable("referrals", {
   id: uuid("id").primaryKey().defaultRandom(),
@@ -26,6 +27,9 @@ export const referralsTable = pgTable("referrals", {
   intakeFields: jsonb("intake_fields"),
   parentEmail: text("parent_email"),
   intakeSentTo: text("intake_sent_to"), // participant | family_rep
+  intakeSentToFamilyRepId: uuid("intake_sent_to_family_rep_id").references(
+    () => familyRepresentativesTable.id,
+  ),
   intakeSentAt: timestamp("intake_sent_at", { withTimezone: true }),
   parentSignedAt: timestamp("parent_signed_at", { withTimezone: true }),
   signedByName: text("signed_by_name"),

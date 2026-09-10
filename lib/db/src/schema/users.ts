@@ -5,6 +5,7 @@ import {
   boolean,
   timestamp,
 } from "drizzle-orm/pg-core";
+import { familyRepresentativesTable } from "./familyRepresentatives";
 
 export const usersTable = pgTable("users", {
   id: uuid("id").primaryKey().defaultRandom(),
@@ -47,6 +48,9 @@ export const magicLinksTable = pgTable("magic_links", {
   email: text("email").notNull(),
   purpose: text("purpose").notNull(), // login | signature | invite
   referralId: uuid("referral_id"),
+  familyRepresentativeId: uuid("family_representative_id").references(
+    () => familyRepresentativesTable.id,
+  ),
   // Invite-only fields: the role and linked record the accepted account gets.
   inviteRole: text("invite_role"), // vendor | parent_guardian | self
   linkedRecordType: text("linked_record_type"), // client | vendor

@@ -165,7 +165,8 @@ export const CreateInviteBody = zod.object({
   "email": zod.string(),
   "role": zod.enum(['vendor', 'parent_guardian', 'self']),
   "linkedRecordType": zod.enum(['client', 'vendor']),
-  "linkedRecordId": zod.string()
+  "linkedRecordId": zod.string(),
+  "familyRepresentativeId": zod.uuid().nullish()
 })
 
 export const CreateInviteResponse = zod.object({
@@ -609,6 +610,7 @@ export const GetClientCaseResponse = zod.object({
 }).optional().describe('Structured referral form data (Section 9 field list)'),
   "parentEmail": zod.string().nullish(),
   "intakeSentTo": zod.union([zod.literal('participant'),zod.literal('family_rep'),zod.literal(null)]).nullish(),
+  "intakeSentToFamilyRepId": zod.uuid().nullish(),
   "intakeSentAt": zod.string().nullish(),
   "parentSignedAt": zod.string().nullish(),
   "signedByName": zod.string().nullish(),
@@ -837,6 +839,7 @@ export const ListReferralsResponse = zod.object({
 }).optional().describe('Structured referral form data (Section 9 field list)'),
   "parentEmail": zod.string().nullish(),
   "intakeSentTo": zod.union([zod.literal('participant'),zod.literal('family_rep'),zod.literal(null)]).nullish(),
+  "intakeSentToFamilyRepId": zod.uuid().nullish(),
   "intakeSentAt": zod.string().nullish(),
   "parentSignedAt": zod.string().nullish(),
   "signedByName": zod.string().nullish(),
@@ -1002,6 +1005,7 @@ export const CreateReferralResponse = zod.object({
 }).optional().describe('Structured referral form data (Section 9 field list)'),
   "parentEmail": zod.string().nullish(),
   "intakeSentTo": zod.union([zod.literal('participant'),zod.literal('family_rep'),zod.literal(null)]).nullish(),
+  "intakeSentToFamilyRepId": zod.uuid().nullish(),
   "intakeSentAt": zod.string().nullish(),
   "parentSignedAt": zod.string().nullish(),
   "signedByName": zod.string().nullish(),
@@ -1050,6 +1054,136 @@ export const CreateReferralResponse = zod.object({
   "supportingDocumentUrl": zod.string().nullish(),
   "notes": zod.string().nullish(),
   "createdAt": zod.string().nullish()
+})
+
+
+/**
+ * @summary List family representatives for a client
+ */
+export const ListFamilyRepresentativesQueryParams = zod.object({
+  "clientId": zod.uuid()
+})
+
+
+
+
+export const ListFamilyRepresentativesResponseItem = zod.object({
+  "id": zod.uuid(),
+  "clientId": zod.uuid(),
+  "name": zod.string().min(1),
+  "relationship": zod.enum(['parent', 'guardian', 'conservator', 'other']).nullable(),
+  "phone": zod.string().nullable(),
+  "email": zod.string().nullable(),
+  "address": zod.string().nullable(),
+  "isPrimary": zod.boolean(),
+  "userId": zod.uuid().nullable(),
+  "createdBy": zod.uuid().nullable(),
+  "createdAt": zod.coerce.date(),
+  "hasPortalAccount": zod.boolean(),
+  "portalAccountStatus": zod.enum(['none', 'invited', 'active'])
+})
+export const ListFamilyRepresentativesResponse = zod.array(ListFamilyRepresentativesResponseItem)
+
+
+/**
+ * @summary Create a family representative
+ */
+
+
+
+export const CreateFamilyRepresentativeBody = zod.object({
+  "clientId": zod.uuid(),
+  "name": zod.string().min(1),
+  "relationship": zod.enum(['parent', 'guardian', 'conservator', 'other']).nullish(),
+  "phone": zod.string().nullish(),
+  "email": zod.string().nullish(),
+  "address": zod.string().nullish(),
+  "isPrimary": zod.boolean().optional()
+})
+
+
+
+
+export const CreateFamilyRepresentativeResponse = zod.object({
+  "id": zod.uuid(),
+  "clientId": zod.uuid(),
+  "name": zod.string().min(1),
+  "relationship": zod.enum(['parent', 'guardian', 'conservator', 'other']).nullable(),
+  "phone": zod.string().nullable(),
+  "email": zod.string().nullable(),
+  "address": zod.string().nullable(),
+  "isPrimary": zod.boolean(),
+  "userId": zod.uuid().nullable(),
+  "createdBy": zod.uuid().nullable(),
+  "createdAt": zod.coerce.date(),
+  "hasPortalAccount": zod.boolean(),
+  "portalAccountStatus": zod.enum(['none', 'invited', 'active'])
+})
+
+
+export const GetFamilyRepresentativeParams = zod.object({
+  "id": zod.uuid()
+})
+
+
+
+
+export const GetFamilyRepresentativeResponse = zod.object({
+  "id": zod.uuid(),
+  "clientId": zod.uuid(),
+  "name": zod.string().min(1),
+  "relationship": zod.enum(['parent', 'guardian', 'conservator', 'other']).nullable(),
+  "phone": zod.string().nullable(),
+  "email": zod.string().nullable(),
+  "address": zod.string().nullable(),
+  "isPrimary": zod.boolean(),
+  "userId": zod.uuid().nullable(),
+  "createdBy": zod.uuid().nullable(),
+  "createdAt": zod.coerce.date(),
+  "hasPortalAccount": zod.boolean(),
+  "portalAccountStatus": zod.enum(['none', 'invited', 'active'])
+})
+
+
+export const UpdateFamilyRepresentativeParams = zod.object({
+  "id": zod.uuid()
+})
+
+export const UpdateFamilyRepresentativeBody = zod.object({
+  "name": zod.string().optional(),
+  "relationship": zod.enum(['parent', 'guardian', 'conservator', 'other']).nullish(),
+  "phone": zod.string().nullish(),
+  "email": zod.string().nullish(),
+  "address": zod.string().nullish(),
+  "isPrimary": zod.boolean().optional()
+})
+
+
+
+
+export const UpdateFamilyRepresentativeResponse = zod.object({
+  "id": zod.uuid(),
+  "clientId": zod.uuid(),
+  "name": zod.string().min(1),
+  "relationship": zod.enum(['parent', 'guardian', 'conservator', 'other']).nullable(),
+  "phone": zod.string().nullable(),
+  "email": zod.string().nullable(),
+  "address": zod.string().nullable(),
+  "isPrimary": zod.boolean(),
+  "userId": zod.uuid().nullable(),
+  "createdBy": zod.uuid().nullable(),
+  "createdAt": zod.coerce.date(),
+  "hasPortalAccount": zod.boolean(),
+  "portalAccountStatus": zod.enum(['none', 'invited', 'active'])
+})
+
+
+export const DeleteFamilyRepresentativeParams = zod.object({
+  "id": zod.uuid()
+})
+
+export const DeleteFamilyRepresentativeResponse = zod.object({
+  "ok": zod.boolean()
 })
 
 
@@ -1114,6 +1248,7 @@ export const GetReferralResponse = zod.object({
 }).optional().describe('Structured referral form data (Section 9 field list)'),
   "parentEmail": zod.string().nullish(),
   "intakeSentTo": zod.union([zod.literal('participant'),zod.literal('family_rep'),zod.literal(null)]).nullish(),
+  "intakeSentToFamilyRepId": zod.uuid().nullish(),
   "intakeSentAt": zod.string().nullish(),
   "parentSignedAt": zod.string().nullish(),
   "signedByName": zod.string().nullish(),
@@ -1244,6 +1379,7 @@ export const UpdateReferralResponse = zod.object({
 }).optional().describe('Structured referral form data (Section 9 field list)'),
   "parentEmail": zod.string().nullish(),
   "intakeSentTo": zod.union([zod.literal('participant'),zod.literal('family_rep'),zod.literal(null)]).nullish(),
+  "intakeSentToFamilyRepId": zod.uuid().nullish(),
   "intakeSentAt": zod.string().nullish(),
   "parentSignedAt": zod.string().nullish(),
   "signedByName": zod.string().nullish(),
@@ -1322,7 +1458,8 @@ export const SendIntakeBody = zod.object({
   "serviceFrequency": zod.union([zod.literal('one_time'),zod.literal('monthly'),zod.literal(''),zod.literal(null)]).nullish(),
   "cost": zod.string().regex(sendIntakeBodyCostRegExp).nullish(),
   "paymentSchedule": zod.string().nullish(),
-  "paymentTypeRequested": zod.union([zod.literal('service_payment'),zod.literal('reimbursement'),zod.literal(''),zod.literal(null)]).nullish()
+  "paymentTypeRequested": zod.union([zod.literal('service_payment'),zod.literal('reimbursement'),zod.literal(''),zod.literal(null)]).nullish(),
+  "familyRepresentativeId": zod.uuid().nullish()
 })
 
 export const SendIntakeResponse = zod.object({
@@ -1346,7 +1483,8 @@ export const PreviewIntakeAgreementBody = zod.object({
   "serviceFrequency": zod.union([zod.literal('one_time'),zod.literal('monthly'),zod.literal(''),zod.literal(null)]).nullish(),
   "cost": zod.string().regex(previewIntakeAgreementBodyCostRegExp).nullish(),
   "paymentSchedule": zod.string().nullish(),
-  "paymentTypeRequested": zod.union([zod.literal('service_payment'),zod.literal('reimbursement'),zod.literal(''),zod.literal(null)]).nullish()
+  "paymentTypeRequested": zod.union([zod.literal('service_payment'),zod.literal('reimbursement'),zod.literal(''),zod.literal(null)]).nullish(),
+  "familyRepresentativeId": zod.uuid().nullish()
 })
 
 export const PreviewIntakeAgreementResponse = zod.object({
@@ -1900,6 +2038,9 @@ export const ListPaymentsResponse = zod.object({
 /**
  * @summary Manually log a payment/check (staff)
  */
+export const createPaymentBodyPaymentMonthRegExp = new RegExp('^\\d{4}-(0[1-9]|1[0-2])$');
+
+
 export const CreatePaymentBody = zod.object({
   "clientId": zod.string(),
   "authorizationId": zod.string().nullish(),
@@ -1908,7 +2049,7 @@ export const CreatePaymentBody = zod.object({
   "qbCheckNumber": zod.string(),
   "checkDate": zod.string(),
   "amount": zod.string(),
-  "paymentMonth": zod.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/).nullish(),
+  "paymentMonth": zod.string().regex(createPaymentBodyPaymentMonthRegExp).nullish(),
   "paymentType": zod.enum(['direct_payment', 'reimbursement', 'fee']),
   "overrideDuplicate": zod.boolean().optional().describe('Set true (with a justification) to bypass the duplicate-payment hard stop'),
   "overrideJustification": zod.string().optional().describe('Required written justification when overrideDuplicate is true')
@@ -1926,7 +2067,7 @@ export const CreatePaymentResponse = zod.object({
   "qbCheckNumber": zod.string(),
   "checkDate": zod.string(),
   "amount": zod.string(),
-  "paymentMonth": zod.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/).nullish(),
+  "paymentMonth": zod.string().nullish(),
   "paymentType": zod.enum(['direct_payment', 'reimbursement', 'fee']),
   "source": zod.enum(['quickbooks', 'manual', 'historical_import']),
   "loggedBy": zod.string().nullish(),
@@ -1974,6 +2115,9 @@ export const UpdatePaymentParams = zod.object({
   "id": zod.coerce.string()
 })
 
+export const updatePaymentBodyPaymentMonthRegExp = new RegExp('^\\d{4}-(0[1-9]|1[0-2])$');
+
+
 export const UpdatePaymentBody = zod.object({
   "authorizationId": zod.string().nullish(),
   "vendorId": zod.string().nullish(),
@@ -1981,7 +2125,7 @@ export const UpdatePaymentBody = zod.object({
   "qbCheckNumber": zod.string().optional(),
   "checkDate": zod.string().optional(),
   "amount": zod.string().optional(),
-  "paymentMonth": zod.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/).nullish(),
+  "paymentMonth": zod.string().regex(updatePaymentBodyPaymentMonthRegExp).nullish(),
   "paymentType": zod.enum(['direct_payment', 'reimbursement', 'fee']).optional(),
   "overrideDuplicate": zod.boolean().optional().describe('Set true (with a justification) to bypass the duplicate-payment hard stop when an update would create a duplicate'),
   "overrideJustification": zod.string().optional().describe('Required written justification when overrideDuplicate is true')
@@ -2702,7 +2846,7 @@ export const GetDashboardSummaryResponse = zod.object({
   "unmatchedRemittances": zod.int().optional()
 }),
   "alerts": zod.array(zod.object({
-  "kind": zod.enum(['expiring_authorization', 'missing_document', 'pending_w9', 'unmatched_remittance', 'pending_signature', 'recently_completed']),
+  "kind": zod.enum(['expiring_authorization', 'missing_document', 'pending_w9', 'unmatched_remittance', 'pending_signature', 'recently_completed', 'family_updated_participant']),
   "message": zod.string(),
   "entityType": zod.string().nullish(),
   "entityId": zod.string().nullish()

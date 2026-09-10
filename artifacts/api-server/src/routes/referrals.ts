@@ -8,6 +8,7 @@ import {
   magicLinksTable,
   usersTable,
   auditLogTable,
+  familyRepresentativesTable,
 } from "@workspace/db";
 import {
   ListReferralsQueryParams,
@@ -103,6 +104,7 @@ async function buildAgreementPage(
     paymentSchedule: string | null;
     paymentTypeRequested: string | null;
   }> = {},
+  familyRepresentativeId?: string | null,
 ) {
   const f = (referral.intakeFields ?? {}) as Record<string, string | undefined>;
   const [clientNames, coordinatorContacts, clients] = await Promise.all([
@@ -121,7 +123,20 @@ async function buildAgreementPage(
     } as const;
   }
   const sentToFamily = recipient === "family_rep";
-  const selectedEmail = clean(sentToFamily ? client.familyRepEmail : client.email);
+  const selectedRepId = familyRepresentativeId ?? referral.intakeSentToFamilyRepId;
+  const [selectedRep] = sentToFamily && selectedRepId
+    ? await db.select().from(familyRepresentativesTable).where(and(
+      eq(familyRepresentativesTable.id, selectedRepId),
+      eq(familyRepresentativesTable.clientId, referral.clientId),
+      eq(familyRepresentativesTable.isDeleted, false),
+    ))
+    : [];
+   if (sentToFamily && selectedRepId && !selectedRep) return { error: "The selected family representative no longer exists", status: 400 } as const;
+   const selectedEmail = clean(
+     sentToFamily
+       ? (selectedRep ? selectedRep.email : client.familyRepEmail)
+       : client.email,
+   );
   if (!selectedEmail) {
     return {
       error: `Add an email to the ${sentToFamily ? "family rep" : "participant"} record before sending the intake agreement`,
@@ -132,7 +147,9 @@ async function buildAgreementPage(
     ? coordinatorContacts.get(referral.serviceCoordinatorId)
     : undefined;
   const participantName = clientNames.get(referral.clientId) ?? "Participant";
-  const contactAddress = sentToFamily ? client.familyRepAddress : client.address;
+   const contactAddress = sentToFamily
+     ? (selectedRep ? selectedRep.address : client.familyRepAddress)
+     : client.address;
   const fallbackContactAddress = [
     f.contactStreet,
     f.contactCity,
@@ -162,8 +179,13 @@ async function buildAgreementPage(
       serviceCoordinatorName: coordinator?.name ?? f.coordinatorName ?? null,
       serviceCoordinatorPhone: coordinator?.phone ?? f.coordinatorPhone ?? null,
       regionalCenter: client.regionalCenter ?? f.regionalCenterName ?? null,
-      representativeName: sentToFamily ? client.familyRepName : participantName,
-      contactPhone: (sentToFamily ? client.familyRepPhone : client.phone) ?? f.contactPhone ?? null,
+        representativeName: sentToFamily
+          ? (selectedRep?.name ?? client.familyRepName ?? null)
+          : participantName,
+        signerRelationship: sentToFamily ? (selectedRep?.relationship ?? null) : null,
+       contactPhone: sentToFamily
+         ? (selectedRep ? selectedRep.phone : (client.familyRepPhone ?? f.contactPhone))
+         : (client.phone ?? f.contactPhone ?? null),
       contactEmail: selectedEmail,
       mailingAddress: contactAddress ?? (fallbackContactAddress || null),
       activityDescription: f.activityDescription ?? null,
@@ -549,11 +571,17 @@ router.post("/referrals/:id/send-intake", requireStaffOrCoordinator, async (req,
         status: 400,
       } as const;
     }
-    const recipientEmail = clean(
-      parsed.data.recipient === "participant"
-        ? currentClient.email
-        : currentClient.familyRepEmail,
-    );
+    let selectedRep: typeof familyRepresentativesTable.$inferSelect | undefined;
+    if (parsed.data.recipient === "family_rep") {
+      if (!parsed.data.familyRepresentativeId) return { error: "familyRepresentativeId is required", status: 400 } as const;
+      [selectedRep] = await tx.select().from(familyRepresentativesTable).where(and(
+        eq(familyRepresentativesTable.id, parsed.data.familyRepresentativeId),
+        eq(familyRepresentativesTable.clientId, referral.clientId),
+        eq(familyRepresentativesTable.isDeleted, false),
+      )).for("update");
+      if (!selectedRep) return { error: "Family representative not found for this client", status: 400 } as const;
+    }
+    const recipientEmail = clean(parsed.data.recipient === "participant" ? currentClient.email : selectedRep?.email);
     if (!recipientEmail) {
       const recipientLabel = parsed.data.recipient === "participant" ? "participant" : "family rep";
       return {
@@ -591,6 +619,7 @@ router.post("/referrals/:id/send-intake", requireStaffOrCoordinator, async (req,
         ...agreementUpdates,
         parentEmail: recipientEmail.toLowerCase(),
         intakeSentTo: parsed.data.recipient,
+        intakeSentToFamilyRepId: parsed.data.recipient === "family_rep" ? selectedRep!.id : null,
         intakeSentAt: new Date(),
         status: currentReferral?.status === "intake" ? "pending_signature" : currentReferral?.status,
       })
@@ -633,7 +662,7 @@ router.post("/referrals/:id/agreement-preview", requireStaffOrCoordinator, async
     cost: parsed.data.cost,
     paymentSchedule: parsed.data.paymentSchedule,
     paymentTypeRequested: parsed.data.paymentTypeRequested,
-  });
+  }, parsed.data.familyRepresentativeId);
   if ("error" in preview) {
     res.status(preview.status ?? 500).json({ error: preview.error });
     return;
@@ -746,11 +775,23 @@ router.post("/signature/:token", async (req, res): Promise<void> => {
         .from(clientsTable)
         .where(eq(clientsTable.id, referral.clientId))
         .for("update");
+      let selectedRepresentative: typeof familyRepresentativesTable.$inferSelect | undefined;
+      if (referral.intakeSentTo === "family_rep" && referral.intakeSentToFamilyRepId) {
+        [selectedRepresentative] = await tx
+          .select()
+          .from(familyRepresentativesTable)
+          .where(and(
+            eq(familyRepresentativesTable.id, referral.intakeSentToFamilyRepId),
+            eq(familyRepresentativesTable.clientId, referral.clientId),
+            eq(familyRepresentativesTable.isDeleted, false),
+          ))
+          .for("update");
+      }
       const selectedEmail =
         referral.intakeSentTo === "participant"
           ? signingClient?.email
           : referral.intakeSentTo === "family_rep"
-            ? signingClient?.familyRepEmail
+            ? selectedRepresentative?.email ?? signingClient?.familyRepEmail
             : null;
       if (
         (referral.intakeSentTo === "participant" && signingClient?.isMinor !== false) ||

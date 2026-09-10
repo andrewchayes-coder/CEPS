@@ -5,6 +5,7 @@ import { useAuth } from '@/components/auth/auth-provider';
 import { InvitePortalDialog } from '@/components/invite-portal-dialog';
 import { EditClientDialog } from '@/components/edit-client-dialog';
 import { EditContactInfoDialog } from '@/components/edit-contact-info-dialog';
+import { FamilyRepresentativesSection } from '@/components/family-representatives';
 import { EditFeeDialog } from '@/components/edit-fee-dialog';
 import { CreateRemittanceDialog } from '@/components/create-remittance-dialog';
 import { DeleteEntityButton } from '@/components/delete-entity-button';
@@ -215,21 +216,9 @@ export default function ClientDetailPage() {
                   <span className="text-muted-foreground">Address:</span>
                   <span className="col-span-2">{client.address || '-'}</span>
                 </div>
-                {client.isMinor && (
-                  <div className="pt-4 border-t mt-4">
-                    <p className="font-medium text-primary mb-2 flex items-center gap-2">
-                      <User className="w-4 h-4" /> Family Representative
-                    </p>
-                    <div className="grid grid-cols-3 gap-1">
-                      <span className="text-muted-foreground">Name:</span>
-                      <span className="col-span-2">{client.familyRepName}</span>
-                      <span className="text-muted-foreground">Email:</span>
-                      <span className="col-span-2">{client.familyRepEmail || '-'}</span>
-                      <span className="text-muted-foreground">Phone:</span>
-                      <span className="col-span-2">{client.familyRepPhone || '-'}</span>
-                    </div>
-                  </div>
-                )}
+                <div className="pt-4 border-t mt-4">
+                  <FamilyRepresentativesSection clientId={client.id} />
+                </div>
               </CardContent>
             </Card>
 

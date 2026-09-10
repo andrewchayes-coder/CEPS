@@ -1,11 +1,11 @@
 import type { FormEvent } from 'react';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { usePreviewIntakeAgreement, useSendIntake, type Referral, type SignaturePage } from '@workspace/api-client-react';
+import { usePreviewIntakeAgreement, useSendIntake, useListFamilyRepresentatives, getListFamilyRepresentativesQueryKey, type Referral, type SignaturePage } from '@workspace/api-client-react';
 import { useToast } from '@/hooks/use-toast';
 import { Mail, AlertCircle } from 'lucide-react';
 import { Link } from 'wouter';
@@ -33,8 +33,14 @@ function getSendErrorMessage(error: unknown) {
 export function SendIntakeDialog({ referral, onSent }: { referral: Referral, onSent: () => void }) {
   const [open, setOpen] = useState(false);
   const [recipient, setRecipient] = useState<'participant' | 'family_rep' | ''>('');
+  const [familyRepresentativeId, setFamilyRepresentativeId] = useState<string>('');
 
   const isFirstSend = !referral.intakeSentAt;
+
+  const { data: familyReps = [] } = useListFamilyRepresentatives(
+    { clientId: referral.clientId },
+    { query: { enabled: open, queryKey: getListFamilyRepresentativesQueryKey({ clientId: referral.clientId }) } }
+  );
 
   const [cost, setCost] = useState(referral.cost || '');
   const [serviceFrequency, setServiceFrequency] = useState<'' | 'one_time' | 'monthly'>(referral.serviceFrequency || '');
@@ -48,13 +54,15 @@ export function SendIntakeDialog({ referral, onSent }: { referral: Referral, onS
   const { toast } = useToast();
 
   const canSelectParticipant = referral.clientIsMinor === false;
-  const noEligibleRecipients = !canSelectParticipant && !referral.familyRepEmail;
-  const agreementInput = recipient ? {
+  const hasEligibleFamilyReps = familyReps.some(rep => !!rep.email);
+  const noEligibleRecipients = !canSelectParticipant && !hasEligibleFamilyReps;
+  const agreementInput = recipient && (recipient !== 'family_rep' || familyRepresentativeId) ? {
     recipient,
     cost: cost || null,
     serviceFrequency: serviceFrequency || null,
     paymentSchedule: paymentSchedule || null,
     paymentTypeRequested: paymentTypeRequested || null,
+    ...(recipient === 'family_rep' ? { familyRepresentativeId } : {}),
   } : null;
   const currentFingerprint = agreementInput ? JSON.stringify(agreementInput) : '';
   const previewIsCurrent = !!preview && previewFingerprint === currentFingerprint;
@@ -78,6 +86,10 @@ export function SendIntakeDialog({ referral, onSent }: { referral: Referral, onS
     setOpen(nextOpen);
     if (nextOpen) {
       setRecipient('');
+
+      const primaryRep = familyReps.find(r => r.isPrimary && r.email) || familyReps.find(r => r.email);
+      setFamilyRepresentativeId(primaryRep ? primaryRep.id : '');
+
       setCost(referral.cost || '');
       setServiceFrequency(referral.serviceFrequency || '');
       setPaymentSchedule(referral.paymentSchedule || '');
@@ -86,6 +98,13 @@ export function SendIntakeDialog({ referral, onSent }: { referral: Referral, onS
       setPreviewFingerprint('');
     }
   };
+
+  useEffect(() => {
+    if (open && !familyRepresentativeId && familyReps.length > 0) {
+      const primaryRep = familyReps.find(r => r.isPrimary && r.email) || familyReps.find(r => r.email);
+      if (primaryRep) setFamilyRepresentativeId(primaryRep.id);
+    }
+  }, [open, familyReps, familyRepresentativeId]);
 
   const handlePreview = () => {
     if (!agreementInput) return;
@@ -178,20 +197,40 @@ export function SendIntakeDialog({ referral, onSent }: { referral: Referral, onS
                     </div>
                   </div>
                 </Button>
-                <Button
-                  type="button"
-                  variant={recipient === 'family_rep' ? 'default' : 'outline'}
-                  className="w-full justify-start font-normal h-auto py-3"
-                  onClick={() => setRecipient('family_rep')}
-                  data-testid="select-recipient-family"
-                >
-                  <div className="text-left">
-                    <div className="font-medium">Family Representative</div>
-                    <div className="text-xs opacity-80 mt-0.5">
-                      {referral.familyRepEmail || 'No email address'}
+                <div className="space-y-2">
+                  <Button
+                    type="button"
+                    variant={recipient === 'family_rep' ? 'default' : 'outline'}
+                    className="w-full justify-start font-normal h-auto py-3"
+                    onClick={() => setRecipient('family_rep')}
+                    data-testid="select-recipient-family"
+                  >
+                    <div className="text-left">
+                      <div className="font-medium">Family Representative</div>
+                      <div className="text-xs opacity-80 mt-0.5">
+                        {familyReps.length === 0 ? 'No family representatives found' : `${familyReps.length} representative${familyReps.length === 1 ? '' : 's'} available`}
+                      </div>
                     </div>
-                  </div>
-                </Button>
+                  </Button>
+
+                  {recipient === 'family_rep' && familyReps.length > 0 && (
+                    <div className="pl-4 pt-2 pb-2 space-y-2">
+                      <Label className="text-xs text-muted-foreground">Select Representative</Label>
+                      <Select value={familyRepresentativeId} onValueChange={setFamilyRepresentativeId}>
+                        <SelectTrigger data-testid="select-family-rep">
+                          <SelectValue placeholder="Select a family representative..." />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {familyReps.map(rep => (
+                            <SelectItem key={rep.id} value={rep.id} disabled={!rep.email}>
+                              {rep.name} ({rep.relationship || 'unknown'}) {rep.email ? `— ${rep.email}` : '— No email address'}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
 

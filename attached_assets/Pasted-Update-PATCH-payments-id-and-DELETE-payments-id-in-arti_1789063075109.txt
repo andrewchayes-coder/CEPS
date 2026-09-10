@@ -1,0 +1,38 @@
+Update PATCH /payments/:id and DELETE /payments/:id in
+artifacts/api-server/src/routes/payments.ts to keep monthly fees correct as
+payments change, instead of the old 1:1 recalculate/cascade logic.
+
+PATCH /payments/:id:
+1. Delete the "amountChanged → recalculate linked fee at 5%" block entirely.
+   The fee is flat — a payment's amount no longer has anything to do with the
+   fee amount.
+2. Whenever the patch changes paymentType and/or paymentMonth (i.e. the
+   before/after values differ), after the payment update commits, call
+   reconcileMonthlyFee for the payment's clientId against BOTH the OLD
+   (before) paymentMonth and the NEW (after) paymentMonth, if they differ, so:
+   - moving a payment out of a month reconciles that old month (reverses its
+     fee if this was the only qualifying payment there and it's still
+     pending);
+   - moving a payment into a new month, or changing its paymentType onto/off
+     459/024, reconciles the relevant month(s) the same way POST /payments
+     does.
+   Run both reconciliation calls inside the same transaction as the payment
+   update.
+
+DELETE /payments/:id:
+3. Replace the "cascade soft-delete the linked fee" block with a call to
+   reconcileMonthlyFee for the deleted payment's (clientId, paymentMonth)
+   after the soft-delete commits, inside the same transaction. This naturally
+   reverses the month's fee only if no other qualifying payment remains for
+   it and it's still pending — a shared fee with other qualifying payments
+   still on the books is left untouched.
+
+TESTS:
+4. Add coverage in payments.test.ts: editing a payment's amount never changes
+   an existing fee's amount; editing a payment's month reverses the old
+   month's fee (when it was the only qualifying payment there) and creates/
+   confirms the new month's fee; deleting the only qualifying payment in a
+   month reverses its pending fee; deleting one of two qualifying payments in
+   a month leaves the shared fee untouched; a fee already invoiced/collected/
+   waived is never auto-reversed even when its triggering payment is later
+   edited off-month or deleted.

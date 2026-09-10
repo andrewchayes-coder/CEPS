@@ -1,5 +1,6 @@
 export * from "./users";
 export * from "./clients";
+export * from "./familyRepresentatives";
 export * from "./vendors";
 export * from "./referrals";
 export * from "./authorizations";

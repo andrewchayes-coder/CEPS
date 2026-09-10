@@ -26,21 +26,25 @@ type Props = {
   linkedRecordType: 'vendor' | 'client';
   linkedRecordId: string;
   recordName: string;
+  familyRepresentativeId?: string;
+  defaultEmail?: string;
+  defaultName?: string;
+  onSuccess?: () => void;
 };
 
-export function InvitePortalDialog({ linkedRecordType, linkedRecordId, recordName }: Props) {
+export function InvitePortalDialog({ linkedRecordType, linkedRecordId, recordName, familyRepresentativeId, defaultEmail, defaultName, onSuccess }: Props) {
   const { toast } = useToast();
   const createInvite = useCreateInvite();
   const [open, setOpen] = useState(false);
-  const [email, setEmail] = useState('');
+  const [email, setEmail] = useState(defaultEmail || '');
   const [role, setRole] = useState<'parent_guardian' | 'self'>('parent_guardian');
   const [inviteUrl, setInviteUrl] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
 
-  const resolvedRole = linkedRecordType === 'vendor' ? 'vendor' : role;
+  const resolvedRole = linkedRecordType === 'vendor' ? 'vendor' : (familyRepresentativeId ? 'parent_guardian' : role);
 
   const reset = () => {
-    setEmail('');
+    setEmail(defaultEmail || '');
     setRole('parent_guardian');
     setInviteUrl(null);
     setCopied(false);
@@ -54,6 +58,7 @@ export function InvitePortalDialog({ linkedRecordType, linkedRecordId, recordNam
           role: resolvedRole,
           linkedRecordType,
           linkedRecordId,
+          familyRepresentativeId: familyRepresentativeId || undefined,
         },
       },
       {
@@ -64,6 +69,7 @@ export function InvitePortalDialog({ linkedRecordType, linkedRecordId, recordNam
           });
           setInviteUrl(data.inviteUrl);
           toast({ title: 'Invite created', description: 'Share the link below with the invitee.' });
+          if (onSuccess) onSuccess();
         },
         onError: (err: any) => {
           toast({
@@ -119,7 +125,7 @@ export function InvitePortalDialog({ linkedRecordType, linkedRecordId, recordNam
               />
             </div>
 
-            {linkedRecordType === 'client' && (
+            {linkedRecordType === 'client' && !familyRepresentativeId && (
               <div className="space-y-2">
                 <Label>Role</Label>
                 <Select value={role} onValueChange={(v) => setRole(v as 'parent_guardian' | 'self')}>

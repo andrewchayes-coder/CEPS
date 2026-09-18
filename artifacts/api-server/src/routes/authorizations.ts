@@ -1,7 +1,7 @@
 import { Router, type IRouter } from "express";
 import { eq, desc, and, count, sql, ilike, or, lte, gte, inArray, type SQL } from "drizzle-orm";
 import { anthropic } from "@workspace/integrations-anthropic-ai";
-import { db, authorizationsTable, authorizationVersionsTable, paymentsTable, usersTable } from "@workspace/db";
+import { db, authorizationsTable, authorizationVersionsTable, paymentsTable, usersTable, unmatchedPosDocumentsTable, clientsTable } from "@workspace/db";
 import {
   ListAuthorizationsQueryParams,
   ListAuthorizationsResponse,
@@ -13,6 +13,17 @@ import {
   ListAuthorizationVersionsResponse,
   ParseAuthorizationPdfBody,
   ParseAuthorizationPdfResponse,
+  ListUnmatchedPosQueryParams,
+  ListUnmatchedPosResponse,
+  SaveUnmatchedPosBody,
+  SaveUnmatchedPosResponse,
+  MatchPosClientBody,
+  MatchPosClientResponse,
+  GetUnmatchedPosParams,
+  GetUnmatchedPosResponse,
+  CompleteUnmatchedPosParams,
+  CompleteUnmatchedPosBody,
+  CompleteUnmatchedPosResponse,
 } from "@workspace/api-zod";
 import { requireAuth, requireStaff, audit } from "../lib/auth";
 import {
@@ -59,6 +70,38 @@ function maxAmountWarning(data: {
     return `Possible data-quality issue: the monthly amount ($${data.monthlyAmount}) equals the maximum for the entire ${months}-month period. Verify the POS — the period maximum may be understated.`;
   }
   return null;
+}
+
+function normalizeMatchValue(value: string | null | undefined): string {
+  return (value ?? "").trim().replace(/\s+/g, " ").toLocaleLowerCase();
+}
+
+async function findPosClient(fields: { uciNumber?: string | null; clientName?: string | null }) {
+  const uci = normalizeMatchValue(fields.uciNumber);
+  if (uci) {
+    const [match] = await db.select().from(clientsTable).where(and(
+      sql`lower(trim(${clientsTable.uciNumber})) = ${uci}`,
+      eq(clientsTable.isDeleted, false),
+    )).limit(1);
+    if (match) return { method: "uci" as const, client: match };
+  }
+  const name = normalizeMatchValue(fields.clientName);
+  if (name) {
+    const [match] = await db.select().from(clientsTable).where(and(
+      sql`lower(trim(${clientsTable.firstName} || ' ' || ${clientsTable.lastName})) = ${name}`,
+      eq(clientsTable.isDeleted, false),
+    )).limit(1);
+    if (match) return { method: "name" as const, client: match };
+  }
+  return { method: "none" as const, client: null };
+}
+
+function unmatchedPosJson(row: typeof unmatchedPosDocumentsTable.$inferSelect) {
+  return {
+    ...row,
+    createdAt: row.createdAt.toISOString(),
+    updatedAt: row.updatedAt.toISOString(),
+  };
 }
 
 router.get("/authorizations", requireAuth, async (req, res): Promise<void> => {
@@ -413,6 +456,176 @@ router.delete("/authorizations/:id", requireStaff, async (req, res): Promise<voi
   const auth = result.deleted;
   await audit(req.user!.id, "delete_authorization", "authorization", auth.id, `Auth ${auth.authNumber}`);
   res.json({ ok: true });
+});
+
+router.get("/unmatched-pos", requireStaff, async (req, res): Promise<void> => {
+  const parsed = ListUnmatchedPosQueryParams.safeParse(req.query);
+  if (!parsed.success) {
+    res.status(400).json({ error: parsed.error.message });
+    return;
+  }
+  const { search, limit: rawLimit, offset: rawOffset } = parsed.data;
+  const limit = Math.min(Math.max(rawLimit ?? 50, 1), 1000);
+  const offset = Math.max(rawOffset ?? 0, 0);
+  const conditions: SQL[] = [];
+  if (search?.trim()) {
+    const like = `%${search.trim().replace(/[\\%_]/g, (c) => `\\${c}`)}%`;
+    conditions.push(or(
+      ilike(unmatchedPosDocumentsTable.sourceFileName, like),
+      ilike(unmatchedPosDocumentsTable.clientName, like),
+      ilike(unmatchedPosDocumentsTable.uciNumber, like),
+      ilike(unmatchedPosDocumentsTable.authNumber, like),
+    )!);
+  }
+  const where = conditions.length ? and(...conditions) : undefined;
+  const [[{ total }], rows] = await Promise.all([
+    db.select({ total: count() }).from(unmatchedPosDocumentsTable).where(where),
+    db.select().from(unmatchedPosDocumentsTable).where(where)
+      .orderBy(desc(unmatchedPosDocumentsTable.createdAt), desc(unmatchedPosDocumentsTable.id))
+      .limit(limit).offset(offset),
+  ]);
+  res.json(ListUnmatchedPosResponse.parse({ items: rows.map(unmatchedPosJson), total }));
+});
+
+router.post("/unmatched-pos/match", requireStaff, async (req, res): Promise<void> => {
+  const parsed = MatchPosClientBody.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: parsed.error.message });
+    return;
+  }
+  const match = await findPosClient(parsed.data);
+  res.json(MatchPosClientResponse.parse({
+    method: match.method,
+    client: match.client ? {
+      id: match.client.id,
+      firstName: match.client.firstName,
+      lastName: match.client.lastName,
+      uciNumber: match.client.uciNumber,
+    } : null,
+  }));
+});
+
+router.post("/unmatched-pos", requireStaff, async (req, res): Promise<void> => {
+  const parsed = SaveUnmatchedPosBody.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: parsed.error.message });
+    return;
+  }
+  const match = await findPosClient(parsed.data);
+  if (match.client) {
+    res.status(409).json({ error: `POS matches participant ${match.client.firstName} ${match.client.lastName}; save it after selecting that participant.` });
+    return;
+  }
+  const [created] = await db.insert(unmatchedPosDocumentsTable).values({
+    ...parsed.data,
+    createdBy: req.user!.id,
+  }).returning();
+  res.status(201).json(SaveUnmatchedPosResponse.parse(unmatchedPosJson(created)));
+});
+
+router.get("/unmatched-pos/:id", requireStaff, async (req, res): Promise<void> => {
+  const parsed = GetUnmatchedPosParams.safeParse(req.params);
+  if (!parsed.success) {
+    res.status(400).json({ error: parsed.error.message });
+    return;
+  }
+  const [row] = await db.select().from(unmatchedPosDocumentsTable)
+    .where(eq(unmatchedPosDocumentsTable.id, parsed.data.id));
+  if (!row) {
+    res.status(404).json({ error: "Unmatched POS not found" });
+    return;
+  }
+  res.json(GetUnmatchedPosResponse.parse(unmatchedPosJson(row)));
+});
+
+router.post("/unmatched-pos/:id/complete", requireStaff, async (req, res): Promise<void> => {
+  const params = CompleteUnmatchedPosParams.safeParse(req.params);
+  const body = CompleteUnmatchedPosBody.safeParse(req.body);
+  if (!params.success) {
+    res.status(400).json({ error: params.error.message });
+    return;
+  }
+  if (!body.success) {
+    res.status(400).json({ error: body.error.message });
+    return;
+  }
+  let relationshipError: string | undefined;
+  let warning: string | null = null;
+  const result = await db.transaction(async (tx) => {
+    const txDb = tx as unknown as typeof db;
+    const [row] = await tx.select().from(unmatchedPosDocumentsTable)
+      .where(eq(unmatchedPosDocumentsTable.id, params.data.id)).for("update");
+    if (!row) return { kind: "missing" as const };
+    const [client] = await tx.select().from(clientsTable)
+      .where(and(eq(clientsTable.id, body.data.clientId), eq(clientsTable.isDeleted, false)));
+    if (!client) return { kind: "client-missing" as const };
+    if (!row.authNumber || !row.serviceCode || !row.servicePeriodStart || !row.servicePeriodEnd || !row.maxPeriodAmount) {
+      return { kind: "incomplete" as const };
+    }
+    relationshipError = (await validateParticipantLinks(txDb, body.data.clientId, {})).error;
+    if (relationshipError) return { kind: "relationship" as const };
+    warning = maxAmountWarning({
+      monthlyAmount: row.monthlyAmount,
+      maxPeriodAmount: row.maxPeriodAmount,
+      servicePeriodStart: row.servicePeriodStart,
+      servicePeriodEnd: row.servicePeriodEnd,
+    });
+    if (warning && !body.data.acceptMaxAmountWarning) return { kind: "warning" as const };
+    const serviceCode = row.serviceCode as "459" | "024" | "490";
+    const [auth] = await tx.insert(authorizationsTable).values({
+      clientId: body.data.clientId,
+      vendorId: body.data.vendorId ?? null,
+      authNumber: row.authNumber,
+      serviceCode,
+      paymentType: body.data.paymentType ?? derivePaymentType(serviceCode),
+      activityDescription: row.activityDescription,
+      servicePeriodStart: row.servicePeriodStart,
+      servicePeriodEnd: row.servicePeriodEnd,
+      monthlyAmount: row.monthlyAmount,
+      oneTimeAmount: null,
+      maxPeriodAmount: row.maxPeriodAmount,
+      units: row.units,
+      posPdfUrl: row.posPdfUrl,
+      status: "active",
+    }).returning();
+    await advanceReferralForAuthorization(txDb, auth, req.user!.id);
+    await tx.delete(unmatchedPosDocumentsTable).where(eq(unmatchedPosDocumentsTable.id, row.id));
+    return { kind: "created" as const, auth };
+  });
+  if (result.kind === "missing") {
+    res.status(404).json({ error: "Unmatched POS not found" });
+    return;
+  }
+  if (result.kind === "client-missing") {
+    res.status(404).json({ error: "Participant not found" });
+    return;
+  }
+  if (result.kind === "incomplete") {
+    res.status(400).json({ error: "The queued POS is missing required authorization fields." });
+    return;
+  }
+  if (result.kind === "relationship") {
+    res.status(400).json({ error: relationshipError ?? "Invalid participant link" });
+    return;
+  }
+  if (result.kind === "warning") {
+    res.status(200).json(CompleteUnmatchedPosResponse.parse({ saved: false, warnings: [warning] }));
+    return;
+  }
+  await audit(req.user!.id, "create_authorization", "authorization", result.auth.id, `Auth ${result.auth.authNumber} from unmatched POS`);
+  const [clientNames, vendorNames] = await Promise.all([
+    clientNameMap([result.auth.clientId]),
+    vendorNameMap([result.auth.vendorId]),
+  ]);
+  res.status(201).json(CompleteUnmatchedPosResponse.parse({
+    saved: true,
+    warnings: warning ? [warning] : [],
+    authorization: authorizationJson(result.auth, {
+      clientName: clientNames.get(result.auth.clientId),
+      vendorName: result.auth.vendorId ? vendorNames.get(result.auth.vendorId) : null,
+      totalPaid: 0,
+    }),
+  }));
 });
 
 const PARSE_PROMPT = `You are extracting fields from a California Regional Center Purchase of Service (POS) authorization PDF. Return ONLY a JSON object (no markdown fences, no commentary) with these keys (use null when a value is not present):

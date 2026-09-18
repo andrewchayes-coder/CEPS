@@ -1827,6 +1827,181 @@ export const ParseAuthorizationPdfResponse = zod.object({
 
 
 /**
+ * @summary List POS documents awaiting participant matching (staff only)
+ */
+export const ListUnmatchedPosQueryParams = zod.object({
+  "search": zod.coerce.string().optional(),
+  "limit": zod.coerce.number().int().optional(),
+  "offset": zod.coerce.number().int().optional()
+})
+
+export const ListUnmatchedPosResponse = zod.object({
+  "items": zod.array(zod.object({
+  "id": zod.string(),
+  "posPdfUrl": zod.string(),
+  "sourceFileName": zod.string(),
+  "clientName": zod.string().nullish(),
+  "clientAddress": zod.string().nullish(),
+  "clientPhone": zod.string().nullish(),
+  "uciNumber": zod.string().nullish(),
+  "authNumber": zod.string().nullish(),
+  "serviceCode": zod.string().nullish(),
+  "activityDescription": zod.string().nullish(),
+  "servicePeriodStart": zod.string().nullish(),
+  "servicePeriodEnd": zod.string().nullish(),
+  "units": zod.int().nullish(),
+  "monthlyAmount": zod.string().nullish(),
+  "maxPeriodAmount": zod.string().nullish(),
+  "caseworkerName": zod.string().nullish(),
+  "createdBy": zod.string(),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
+})),
+  "total": zod.int()
+})
+
+
+/**
+ * @summary Save a POS whose participant could not be matched (staff only)
+ */
+
+
+
+
+export const SaveUnmatchedPosBody = zod.object({
+  "posPdfUrl": zod.string().min(1),
+  "sourceFileName": zod.string().min(1),
+  "clientName": zod.string().nullish(),
+  "clientAddress": zod.string().nullish(),
+  "clientPhone": zod.string().nullish(),
+  "uciNumber": zod.string().nullish(),
+  "authNumber": zod.string().nullish(),
+  "serviceCode": zod.string().nullish(),
+  "activityDescription": zod.string().nullish(),
+  "servicePeriodStart": zod.string().nullish(),
+  "servicePeriodEnd": zod.string().nullish(),
+  "units": zod.int().nullish(),
+  "monthlyAmount": zod.string().nullish(),
+  "maxPeriodAmount": zod.string().nullish(),
+  "caseworkerName": zod.string().nullish()
+})
+
+export const SaveUnmatchedPosResponse = zod.object({
+  "id": zod.string(),
+  "posPdfUrl": zod.string(),
+  "sourceFileName": zod.string(),
+  "clientName": zod.string().nullish(),
+  "clientAddress": zod.string().nullish(),
+  "clientPhone": zod.string().nullish(),
+  "uciNumber": zod.string().nullish(),
+  "authNumber": zod.string().nullish(),
+  "serviceCode": zod.string().nullish(),
+  "activityDescription": zod.string().nullish(),
+  "servicePeriodStart": zod.string().nullish(),
+  "servicePeriodEnd": zod.string().nullish(),
+  "units": zod.int().nullish(),
+  "monthlyAmount": zod.string().nullish(),
+  "maxPeriodAmount": zod.string().nullish(),
+  "caseworkerName": zod.string().nullish(),
+  "createdBy": zod.string(),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
+})
+
+
+/**
+ * @summary Match parsed POS fields to a participant (staff only)
+ */
+export const MatchPosClientBody = zod.object({
+  "clientName": zod.string().nullish(),
+  "uciNumber": zod.string().nullish()
+})
+
+export const MatchPosClientResponse = zod.object({
+  "method": zod.enum(['uci', 'name', 'none']),
+  "client": zod.object({
+  "id": zod.string().optional(),
+  "firstName": zod.string().optional(),
+  "lastName": zod.string().optional(),
+  "uciNumber": zod.string().optional()
+}).nullable()
+})
+
+
+/**
+ * @summary Get an unmatched POS document (staff only)
+ */
+export const GetUnmatchedPosParams = zod.object({
+  "id": zod.coerce.string()
+})
+
+export const GetUnmatchedPosResponse = zod.object({
+  "id": zod.string(),
+  "posPdfUrl": zod.string(),
+  "sourceFileName": zod.string(),
+  "clientName": zod.string().nullish(),
+  "clientAddress": zod.string().nullish(),
+  "clientPhone": zod.string().nullish(),
+  "uciNumber": zod.string().nullish(),
+  "authNumber": zod.string().nullish(),
+  "serviceCode": zod.string().nullish(),
+  "activityDescription": zod.string().nullish(),
+  "servicePeriodStart": zod.string().nullish(),
+  "servicePeriodEnd": zod.string().nullish(),
+  "units": zod.int().nullish(),
+  "monthlyAmount": zod.string().nullish(),
+  "maxPeriodAmount": zod.string().nullish(),
+  "caseworkerName": zod.string().nullish(),
+  "createdBy": zod.string(),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
+})
+
+
+/**
+ * @summary Match an unmatched POS and create its authorization (staff only)
+ */
+export const CompleteUnmatchedPosParams = zod.object({
+  "id": zod.coerce.string()
+})
+
+export const CompleteUnmatchedPosBody = zod.object({
+  "clientId": zod.string(),
+  "vendorId": zod.string().nullish(),
+  "paymentType": zod.union([zod.literal('direct_payment'),zod.literal('reimbursement'),zod.literal('fee'),zod.literal(null)]).nullish(),
+  "acceptMaxAmountWarning": zod.boolean().optional()
+})
+
+export const CompleteUnmatchedPosResponse = zod.object({
+  "saved": zod.boolean(),
+  "authorization": zod.object({
+  "id": zod.string(),
+  "clientId": zod.string(),
+  "clientName": zod.string().nullish(),
+  "vendorId": zod.string().nullish(),
+  "vendorName": zod.string().nullish(),
+  "authNumber": zod.string(),
+  "serviceCode": zod.enum(['459', '024', '490']),
+  "paymentType": zod.enum(['direct_payment', 'reimbursement', 'fee']),
+  "activityDescription": zod.string().nullish(),
+  "servicePeriodStart": zod.string(),
+  "servicePeriodEnd": zod.string(),
+  "monthlyAmount": zod.string().nullish(),
+  "oneTimeAmount": zod.string().nullish(),
+  "maxPeriodAmount": zod.string(),
+  "units": zod.int().nullish(),
+  "status": zod.enum(['active', 'expired', 'pending', 'exhausted']),
+  "posPdfUrl": zod.string().nullish(),
+  "receivedDate": zod.string().nullish(),
+  "totalPaid": zod.string().nullish(),
+  "remainingAmount": zod.string().nullish(),
+  "daysUntilExpiry": zod.int().nullish()
+}).optional(),
+  "warnings": zod.array(zod.string()).optional()
+})
+
+
+/**
  * @summary List invoices (filterable, scoped by role)
  */
 export const ListInvoicesQueryParams = zod.object({

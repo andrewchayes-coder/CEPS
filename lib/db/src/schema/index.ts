@@ -10,3 +10,4 @@ export * from "./payments";
 export * from "./remittances";
 export * from "./fees";
 export * from "./audit";
+export * from "./unmatchedPosDocuments";

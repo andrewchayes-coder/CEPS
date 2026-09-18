@@ -1037,6 +1037,107 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/PosParseResult"
+  /unmatched-pos:
+    get:
+      operationId: listUnmatchedPos
+      tags: [authorizations]
+      summary: List POS documents awaiting participant matching (staff only)
+      parameters:
+        - name: search
+          in: query
+          schema: { type: string }
+        - name: limit
+          in: query
+          schema: { type: integer }
+        - name: offset
+          in: query
+          schema: { type: integer }
+      responses:
+        "200":
+          description: Unmatched POS queue
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UnmatchedPosList"
+    post:
+      operationId: saveUnmatchedPos
+      tags: [authorizations]
+      summary: Save a POS whose participant could not be matched (staff only)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UnmatchedPosInput"
+      responses:
+        "201":
+          description: Saved unmatched POS
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UnmatchedPosDocument"
+        "409": { description: A participant now matches the parsed POS }
+  /unmatched-pos/match:
+    post:
+      operationId: matchPosClient
+      tags: [authorizations]
+      summary: Match parsed POS fields to a participant (staff only)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PosMatchInput"
+      responses:
+        "200":
+          description: Match result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PosMatchResult"
+  /unmatched-pos/{id}:
+    get:
+      operationId: getUnmatchedPos
+      tags: [authorizations]
+      summary: Get an unmatched POS document (staff only)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: Unmatched POS document
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UnmatchedPosDocument"
+        "404": { description: Not found }
+  /unmatched-pos/{id}/complete:
+    post:
+      operationId: completeUnmatchedPos
+      tags: [authorizations]
+      summary: Match an unmatched POS and create its authorization (staff only)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CompleteUnmatchedPosInput"
+      responses:
+        "201":
+          description: Authorization created and queue item removed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthorizationResult"
+        "404": { description: Queue item or participant not found }
+        "409": { description: The authorization already exists or a match is no longer valid }
   /invoices:
     get:
       operationId: listInvoices
@@ -2816,6 +2917,81 @@ components:
             monthlyAmount: { type: ["string", "null"] }
             maxPeriodAmount: { type: ["string", "null"] }
             caseworkerName: { type: ["string", "null"] }
+    UnmatchedPosDocument:
+      type: object
+      required: [id, posPdfUrl, sourceFileName, createdBy, createdAt, updatedAt]
+      properties:
+        id: { type: string }
+        posPdfUrl: { type: string }
+        sourceFileName: { type: string }
+        clientName: { type: ["string", "null"] }
+        clientAddress: { type: ["string", "null"] }
+        clientPhone: { type: ["string", "null"] }
+        uciNumber: { type: ["string", "null"] }
+        authNumber: { type: ["string", "null"] }
+        serviceCode: { type: ["string", "null"] }
+        activityDescription: { type: ["string", "null"] }
+        servicePeriodStart: { type: ["string", "null"] }
+        servicePeriodEnd: { type: ["string", "null"] }
+        units: { type: ["integer", "null"] }
+        monthlyAmount: { type: ["string", "null"] }
+        maxPeriodAmount: { type: ["string", "null"] }
+        caseworkerName: { type: ["string", "null"] }
+        createdBy: { type: string }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+    UnmatchedPosInput:
+      type: object
+      required: [posPdfUrl, sourceFileName]
+      properties:
+        posPdfUrl: { type: string, minLength: 1 }
+        sourceFileName: { type: string, minLength: 1 }
+        clientName: { type: ["string", "null"] }
+        clientAddress: { type: ["string", "null"] }
+        clientPhone: { type: ["string", "null"] }
+        uciNumber: { type: ["string", "null"] }
+        authNumber: { type: ["string", "null"] }
+        serviceCode: { type: ["string", "null"] }
+        activityDescription: { type: ["string", "null"] }
+        servicePeriodStart: { type: ["string", "null"] }
+        servicePeriodEnd: { type: ["string", "null"] }
+        units: { type: ["integer", "null"] }
+        monthlyAmount: { type: ["string", "null"] }
+        maxPeriodAmount: { type: ["string", "null"] }
+        caseworkerName: { type: ["string", "null"] }
+    UnmatchedPosList:
+      type: object
+      required: [items, total]
+      properties:
+        items:
+          type: array
+          items: { $ref: "#/components/schemas/UnmatchedPosDocument" }
+        total: { type: integer }
+    PosMatchInput:
+      type: object
+      properties:
+        clientName: { type: ["string", "null"] }
+        uciNumber: { type: ["string", "null"] }
+    PosMatchResult:
+      type: object
+      required: [method, client]
+      properties:
+        method: { type: string, enum: [uci, name, none] }
+        client:
+          type: ["object", "null"]
+          properties:
+            id: { type: string }
+            firstName: { type: string }
+            lastName: { type: string }
+            uciNumber: { type: string }
+    CompleteUnmatchedPosInput:
+      type: object
+      required: [clientId]
+      properties:
+        clientId: { type: string }
+        vendorId: { type: ["string", "null"] }
+        paymentType: { type: ["string", "null"], enum: [direct_payment, reimbursement, fee, null] }
+        acceptMaxAmountWarning: { type: boolean }
     Invoice:
       type: object
       required: [id, clientId, submittedByRole, submittedDate, serviceMonth, amountRequested, paymentType, status]

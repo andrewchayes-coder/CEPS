@@ -1,0 +1,38 @@
+In the CEPS app's Enter POS (Create Authorization) flow, improve how a parsed
+POS PDF gets matched to an existing client.
+
+Today, after the Claude-powered PDF parser extracts fields from an uploaded
+POS, the app tries to auto-select the Participant field by matching the
+parsed client name against the currently-loaded client list using an exact,
+case-insensitive full-name string comparison. There's no UCI number in the
+parsed output at all, so name mismatches (nicknames, middle names, OCR noise)
+fall back to a fully manual dropdown selection, and if the client can't be
+found at all (e.g. the POS physically arrived before its referral was
+entered into the system), there's no way to hold onto the parsed data — the
+form just sits with an empty Participant field.
+
+1. Extend the POS PDF-parsing schema/prompt to also extract the UCI /
+   regional-center case number when it appears on the document, alongside
+   the fields already extracted (auth number, service code, dates, amounts,
+   client name).
+
+2. When matching a parsed POS to a client, try the UCI number first (exact
+   match against `clients.uciNumber`) before falling back to the existing
+   name-similarity match. UCI match should be treated as high-confidence and
+   auto-select the client outright; name-only matches should keep behaving
+   as they do today (auto-fill but clearly flagged for staff to verify).
+
+3. Add an "Unmatched POS" holding area: when a parsed POS matches no client
+   by either UCI or name, save the parsed fields and the original PDF to a
+   new table (e.g. `unmatched_pos_documents`) instead of leaving the data
+   only in the browser form. Add a simple staff-facing list/queue screen for
+   unmatched POS records where staff can search for the now-onboarded client
+   and complete the match, which should then create the authorization using
+   the originally-parsed data. Make sure nothing is silently lost if the
+   staff member closes the tab before manually finishing the match today —
+   that's the core problem this queue solves.
+
+Write tests covering: UCI-based matching selects the correct client even when
+names differ slightly; a POS with no UCI and no name match lands in the
+unmatched queue with its parsed fields intact; and completing a match from
+the queue creates the authorization correctly and removes it from the queue.

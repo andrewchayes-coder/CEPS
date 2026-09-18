@@ -3,12 +3,12 @@ import React from 'react';
 import { useAuth } from '@/components/auth/auth-provider';
 import { Link, useLocation } from 'wouter';
 import { useLogout } from '@workspace/api-client-react';
-import { 
-  LayoutDashboard, 
-  Users, 
-  FileText, 
-  FileCheck, 
-  Receipt, 
+import {
+  LayoutDashboard,
+  Users,
+  FileText,
+  FileCheck,
+  Receipt,
   CreditCard,
   Building2,
   Settings,
@@ -18,7 +18,8 @@ import {
   BookOpen,
   ScrollText,
   Upload,
-  UserCog
+  UserCog,
+  ClipboardList
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
@@ -35,6 +36,7 @@ const navItems: NavItem[] = [
   { title: 'Referrals', href: '/referrals', icon: FileText, roles: ['staff', 'service_coordinator'] },
   { title: 'Participants', href: '/clients', icon: Users, roles: ['staff', 'service_coordinator'] },
   { title: 'Authorizations', href: '/authorizations', icon: FileCheck, roles: ['staff', 'service_coordinator', 'vendor'] },
+  { title: 'Unmatched POS', href: '/authorizations/unmatched', icon: ClipboardList, roles: ['staff'] },
   { title: 'Invoices', href: '/invoices', icon: Receipt, roles: ['staff', 'service_coordinator', 'vendor', 'parent_guardian', 'self'] },
   { title: 'Payments', href: '/payments', icon: CreditCard, roles: ['staff', 'vendor', 'parent_guardian', 'self'] },
   { title: 'Remittances', href: '/remittances', icon: FolderSync, roles: ['staff'] },
@@ -59,7 +61,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     });
   };
 
-  const filteredNavItems = navItems.filter(item => 
+  const filteredNavItems = navItems.filter(item =>
     user && item.roles.includes(user.role)
   );
 
@@ -86,18 +88,18 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         <div className="flex items-center px-4 py-5 border-b shrink-0">
           <BrandLogo className="h-auto w-full" />
         </div>
-        
+
         <div className="flex-1 overflow-y-auto py-4 px-3 flex flex-col gap-1">
           {filteredNavItems.map((item) => {
             const isActive = location === item.href || (item.href !== '/' && location.startsWith(item.href));
             return (
-              <Link 
-                key={item.href} 
+              <Link
+                key={item.href}
                 href={item.href}
                 className={cn(
                   "flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium transition-colors",
-                  isActive 
-                    ? "bg-primary text-primary-foreground" 
+                  isActive
+                    ? "bg-primary text-primary-foreground"
                     : "text-muted-foreground hover:bg-secondary hover:text-foreground"
                 )}
               >

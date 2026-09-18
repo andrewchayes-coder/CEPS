@@ -1,17 +1,28 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
-import { useCreateAuthorization, useListClients, useListVendors, useParseAuthorizationPdf, AuthorizationInputServiceCode, AuthorizationInputPaymentType } from '@workspace/api-client-react';
+import {
+    useCreateAuthorization,
+    useListClients,
+    useListVendors,
+    useParseAuthorizationPdf,
+    AuthorizationInputServiceCode,
+    AuthorizationInputPaymentType,
+    useMatchPosClient,
+    useSaveUnmatchedPos,
+    PosParseResultFields,
+    PosMatchResultClient,
+    PosMatchResult
+} from '@workspace/api-client-react';
 import { useLocation } from 'wouter';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useToast } from '@/hooks/use-toast';
-import { ArrowLeft, Save, AlertTriangle, Sparkles, Loader2 } from 'lucide-react';
+import { ArrowLeft, Save, AlertTriangle, Sparkles, Loader2, ArrowRight, CheckCircle } from 'lucide-react';
 import { Link } from 'wouter';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
@@ -19,6 +30,8 @@ import { FileUpload } from '@/components/file-upload';
 import { trackAnalyticsEvent } from '@/lib/analytics';
 import { SearchableSelect } from '@/components/searchable-select';
 import { useDebounce } from '@/hooks/use-debounce';
+
+type ApiErrorResponse = { data?: { error?: string; message?: string } };
 
 const formSchema = z.object({
   clientId: z.string().min(1, 'Participant is required'),
@@ -39,6 +52,9 @@ export default function AuthorizationNewPage() {
   const [, setLocation] = useLocation();
   const { toast } = useToast();
   const createAuth = useCreateAuthorization();
+  const matchClient = useMatchPosClient();
+  const saveUnmatched = useSaveUnmatchedPos();
+  const parsePdf = useParseAuthorizationPdf();
 
   const [clientSearch, setClientSearch] = useState('');
   const debouncedClientSearch = useDebounce(clientSearch, 300);
@@ -47,16 +63,24 @@ export default function AuthorizationNewPage() {
 
   const [vendorSearch, setVendorSearch] = useState('');
   const debouncedVendorSearch = useDebounce(vendorSearch, 300);
-  // Do not filter vendor by participant here because this form establishes the initial participant-vendor association
   const { data: vendorsData, isLoading: vendorsLoading } = useListVendors({ search: debouncedVendorSearch, limit: 50 });
   const vendors = vendorsData?.items ?? [];
-  
+
   const [warnings, setWarnings] = useState<string[]>([]);
-  const parsePdf = useParseAuthorizationPdf();
   const [posPdfUrl, setPosPdfUrl] = useState<string | undefined>(undefined);
   const [autoFilled, setAutoFilled] = useState<Set<string>>(new Set());
   const [parseNote, setParseNote] = useState<string | null>(null);
-  const [pendingParsedClientName, setPendingParsedClientName] = useState<string | null>(null);
+
+  const [parsedFields, setParsedFields] = useState<PosParseResultFields | null>(null);
+  const [matchResult, setMatchResult] = useState<PosMatchResult | null>(null);
+  const [fileName, setFileName] = useState<string | undefined>(undefined);
+  const [matchedClient, setMatchedClient] = useState<PosMatchResultClient | null>(null);
+
+  // Track unique file ID to prevent cross-contamination or duplicate autosaves
+  const [isQueued, setIsQueued] = useState(false);
+  const [queueSaveFailed, setQueueSaveFailed] = useState(false);
+  const activeFileIdRef = useRef<string | null>(null);
+  const queueingFileIdRef = useRef<string | null>(null);
 
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
@@ -79,18 +103,13 @@ export default function AuthorizationNewPage() {
   const { watch, setValue } = form;
   const serviceCode = watch('serviceCode');
 
-  React.useEffect(() => {
-    if (!pendingParsedClientName) return;
-    const target = pendingParsedClientName.trim().toLowerCase();
-    const match = clients.find(
-      (client) => `${client.firstName} ${client.lastName}`.trim().toLowerCase() === target,
-    );
-    if (!match) return;
-    setValue('clientId', match.id, { shouldValidate: true });
-    setAutoFilled((fields) => new Set(fields).add('clientId'));
-    setPendingParsedClientName(null);
-    setParseNote('PDF parsed. Review every auto-filled field before saving.');
-  }, [clients, pendingParsedClientName, setValue]);
+  const allClientOptions = React.useMemo(() => {
+    const opts = clients.map(c => ({ value: c.id, label: `${c.firstName} ${c.lastName} (${c.uciNumber})` }));
+    if (matchedClient && matchedClient.id && !opts.find(o => o.value === matchedClient.id)) {
+        opts.push({ value: matchedClient.id, label: `${matchedClient.firstName} ${matchedClient.lastName} (${matchedClient.uciNumber})` });
+    }
+    return opts;
+  }, [clients, matchedClient]);
 
   // Auto-set payment type based on service code
   React.useEffect(() => {
@@ -100,8 +119,34 @@ export default function AuthorizationNewPage() {
   }, [serviceCode, setValue]);
 
   const handlePosFile = (file: File) => {
+    const fileId = `${file.name}-${Date.now()}`;
+    activeFileIdRef.current = fileId;
+    queueingFileIdRef.current = null;
+    setFileName(file.name);
+    setPosPdfUrl(undefined);
+    setParsedFields(null);
+    setMatchResult(null);
+    setMatchedClient(null);
+    setIsQueued(false);
+    setQueueSaveFailed(false);
     setParseNote(null);
-    setPendingParsedClientName(null);
+    setAutoFilled(new Set());
+    setWarnings([]);
+    form.reset({
+      clientId: '',
+      vendorId: '',
+      authNumber: '',
+      serviceCode: '459',
+      paymentType: 'direct_payment',
+      activityDescription: '',
+      servicePeriodStart: '',
+      servicePeriodEnd: '',
+      monthlyAmount: '',
+      oneTimeAmount: '',
+      maxPeriodAmount: '',
+      acceptMaxAmountWarning: false
+    });
+
     const reader = new FileReader();
     reader.onload = () => {
       const base64 = String(reader.result).split(',')[1] ?? '';
@@ -109,10 +154,13 @@ export default function AuthorizationNewPage() {
         { data: { pdfBase64: base64, fileName: file.name } },
         {
           onSuccess: async (res) => {
+            if (activeFileIdRef.current !== fileId) return;
             if (!res.success || !res.fields) {
               setParseNote(res.error || 'Could not extract fields from this PDF. Enter the details manually.');
               return;
             }
+            setParsedFields(res.fields);
+
             const f = res.fields;
             const filled = new Set<string>();
             const setIf = (name: keyof z.infer<typeof formSchema>, value: string | null | undefined) => {
@@ -131,37 +179,38 @@ export default function AuthorizationNewPage() {
             setIf('servicePeriodEnd', f.servicePeriodEnd);
             setIf('monthlyAmount', f.monthlyAmount);
             setIf('maxPeriodAmount', f.maxPeriodAmount);
-
-            // For exact name matching during PDF parsing without bulk loading, we rely on the
-            // search-based fetch already triggered if clientSearch is updated.
-            // In this specific flow, since we don't bulk load anymore, we'll try to find the client
-            // by setting the search text, and letting the user pick it if there are multiple or it's not exact.
-            // If the name happens to be in the current limited client array, select it.
-            if (f.clientName) {
-                const target = f.clientName.trim().toLowerCase();
-                const match = clients.find(
-                  (c) => `${c.firstName} ${c.lastName}`.trim().toLowerCase() === target,
-                );
-
-                if (match) {
-                  setValue('clientId', match.id, { shouldValidate: true });
-                  filled.add('clientId');
-                } else {
-                  // Prime the search input so the backend can find it
-                  setPendingParsedClientName(f.clientName.trim());
-                  setClientSearch(f.clientName.trim());
-                }
-            }
-
             setAutoFilled(filled);
-            setParseNote(
-              f.clientName && !filled.has('clientId')
-                ? `PDF parsed. Participant "${f.clientName}" was extracted — please verify and select from the dropdown.`
-                : 'PDF parsed. Review every auto-filled field before saving.',
-            );
-            toast({ title: 'POS PDF Parsed', description: 'Fields were pre-filled from the PDF. Please review them.' });
+
+            matchClient.mutate({ data: { clientName: f.clientName, uciNumber: f.uciNumber } }, {
+                onSuccess: (match) => {
+                    if (activeFileIdRef.current !== fileId) return;
+                    setMatchResult(match);
+                    if (match.method === 'uci' || match.method === 'name') {
+                        setMatchedClient(match.client);
+                        if (match.client && match.client.id) {
+                          setValue('clientId', match.client.id, { shouldValidate: true });
+                          setAutoFilled(prev => new Set(prev).add('clientId'));
+                        }
+
+                        if (match.method === 'uci') {
+                            setParseNote(`High confidence match by UCI: Participant "${match.client?.firstName} ${match.client?.lastName}". Please review fields.`);
+                            toast({ title: 'Matched by UCI', description: 'Participant auto-selected based on UCI number.' });
+                        } else {
+                            setParseNote(`Matched by name: Participant "${match.client?.firstName} ${match.client?.lastName}". Please verify this is the correct person.`);
+                            toast({ title: 'Matched by Name', description: 'Please verify the participant selection.' });
+                        }
+                    } else {
+                        setParseNote('Participant not found. Matching will complete after PDF upload finishes.');
+                    }
+                },
+                onError: () => {
+                    if (activeFileIdRef.current !== fileId) return;
+                    setParseNote('Participant matching failed. You can still enter the authorization manually.');
+                }
+            });
           },
           onError: () => {
+            if (activeFileIdRef.current !== fileId) return;
             setParseNote('PDF parsing failed. You can still enter the authorization manually.');
           },
         },
@@ -169,6 +218,62 @@ export default function AuthorizationNewPage() {
     };
     reader.readAsDataURL(file);
   };
+
+  React.useEffect(() => {
+    // Only proceed to auto-save if all async dependencies are resolved for the CURRENT file,
+    // it was not matched, and it hasn't been queued yet.
+    if (
+        matchResult &&
+        matchResult.method === 'none' &&
+        posPdfUrl &&
+        parsedFields &&
+        fileName &&
+        activeFileIdRef.current &&
+        !isQueued &&
+        !queueSaveFailed &&
+        queueingFileIdRef.current !== activeFileIdRef.current &&
+        !saveUnmatched.isPending
+    ) {
+        const fileId = activeFileIdRef.current;
+        queueingFileIdRef.current = fileId;
+        setParseNote('Participant not found. Saving to Unmatched queue...');
+
+        saveUnmatched.mutate({
+            data: {
+                posPdfUrl,
+                sourceFileName: fileName,
+                clientName: parsedFields.clientName,
+                clientAddress: parsedFields.clientAddress,
+                clientPhone: parsedFields.clientPhone,
+                uciNumber: parsedFields.uciNumber,
+                authNumber: parsedFields.authNumber,
+                serviceCode: parsedFields.serviceCode,
+                activityDescription: parsedFields.activityDescription,
+                servicePeriodStart: parsedFields.servicePeriodStart,
+                servicePeriodEnd: parsedFields.servicePeriodEnd,
+                units: parsedFields.units,
+                monthlyAmount: parsedFields.monthlyAmount,
+                maxPeriodAmount: parsedFields.maxPeriodAmount,
+                caseworkerName: parsedFields.caseworkerName,
+            }
+        }, {
+            onSuccess: () => {
+                if (activeFileIdRef.current !== fileId) return;
+                setIsQueued(true);
+                setParseNote('Participant could not be found. This POS has been safely queued for Unmatched processing.');
+                toast({ title: 'Saved to Unmatched Queue', description: 'Participant not found. The POS document was safely queued.' });
+            },
+            onError: (err: unknown) => {
+                if (activeFileIdRef.current !== fileId) return;
+                queueingFileIdRef.current = null;
+                setQueueSaveFailed(true);
+                const apiErr = err as ApiErrorResponse;
+                setParseNote('Failed to save to the unmatched queue. Retry before leaving this page so the POS is not lost.');
+                toast({ variant: 'destructive', title: 'Queue Error', description: apiErr?.data?.error || apiErr?.data?.message || 'Could not save to unmatched queue.' });
+            }
+        });
+    }
+  }, [matchResult, posPdfUrl, parsedFields, fileName, saveUnmatched.isPending, saveUnmatched.mutate, isQueued, queueSaveFailed, toast]);
 
   const AutoBadge = ({ name }: { name: string }) =>
     autoFilled.has(name) ? (
@@ -189,7 +294,6 @@ export default function AuthorizationNewPage() {
     }, {
       onSuccess: (res) => {
         if (!res.saved && res.warnings && res.warnings.length > 0) {
-          // Validation warning returned from server, require explicit acceptance
           setWarnings(res.warnings);
           toast({
             variant: "destructive",
@@ -208,11 +312,12 @@ export default function AuthorizationNewPage() {
           setLocation('/authorizations');
         }
       },
-      onError: (err: any) => {
+      onError: (err: unknown) => {
+        const apiErr = err as ApiErrorResponse;
         toast({
           variant: "destructive",
           title: "Error",
-          description: err?.data?.message || "Failed to create authorization.",
+          description: apiErr?.data?.error || apiErr?.data?.message || "Failed to create authorization.",
         });
       }
     });
@@ -238,7 +343,7 @@ export default function AuthorizationNewPage() {
               {warnings.map((w, i) => <li key={i}>{w}</li>)}
             </ul>
             <div className="flex items-center gap-2 pt-2">
-              <Button size="sm" variant="outline" className="border-destructive/30 hover:bg-destructive/20" 
+              <Button size="sm" variant="outline" className="border-destructive/30 hover:bg-destructive/20"
                 onClick={() => {
                   form.setValue('acceptMaxAmountWarning', true);
                   form.handleSubmit(onSubmit)();
@@ -247,6 +352,21 @@ export default function AuthorizationNewPage() {
               </Button>
               <Button size="sm" variant="ghost" onClick={() => setWarnings([])}>Cancel</Button>
             </div>
+          </AlertDescription>
+        </Alert>
+      )}
+
+      {isQueued && (
+        <Alert className="bg-muted border-primary/20">
+          <CheckCircle className="h-4 w-4 text-primary" />
+          <AlertTitle className="text-primary font-medium">Document safely queued</AlertTitle>
+          <AlertDescription className="space-y-2 mt-2">
+            <p>This POS document was added to the Unmatched Queue because a participant could not be reliably found. Please continue processing it from the queue rather than submitting it here to avoid creating duplicates.</p>
+            <Button asChild size="sm" className="mt-2">
+              <Link href="/authorizations/unmatched">
+                Go to Unmatched Queue <ArrowRight className="w-4 h-4 ml-2" />
+              </Link>
+            </Button>
           </AlertDescription>
         </Alert>
       )}
@@ -264,39 +384,56 @@ export default function AuthorizationNewPage() {
             accept=".pdf"
             label="Drag & drop the POS PDF here, or click to browse"
             onFileSelected={handlePosFile}
-            onUploaded={(r) => setPosPdfUrl(r.objectPath)}
+            onUploaded={(r) => {
+              if (activeFileIdRef.current) {
+                setPosPdfUrl(r.objectPath);
+              }
+            }}
           />
-          {parsePdf.isPending && (
+          {(parsePdf.isPending || matchClient.isPending || saveUnmatched.isPending) && (
             <p className="flex items-center gap-2 text-sm text-muted-foreground" data-testid="text-parsing">
-              <Loader2 className="h-4 w-4 animate-spin" /> Extracting fields from the PDF…
+              <Loader2 className="h-4 w-4 animate-spin" />
+              {parsePdf.isPending ? 'Extracting fields from the PDF…' :
+               matchClient.isPending ? 'Matching participant…' :
+               'Saving to unmatched queue...'}
             </p>
           )}
-          {parseNote && !parsePdf.isPending && (
+          {parseNote && !parsePdf.isPending && !matchClient.isPending && !saveUnmatched.isPending && (
             <p className="text-sm text-muted-foreground" data-testid="text-parse-note">{parseNote}</p>
+          )}
+          {queueSaveFailed && (
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setQueueSaveFailed(false)}
+              data-testid="button-retry-queue-save"
+            >
+              Retry saving to Unmatched Queue
+            </Button>
           )}
         </CardContent>
       </Card>
 
-      <Card>
+      <Card className={isQueued ? 'opacity-60 pointer-events-none' : ''}>
         <CardHeader>
           <CardTitle>Authorization Details</CardTitle>
         </CardHeader>
         <CardContent>
           <Form {...form}>
             <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
-              
+
               <div className="grid grid-cols-2 gap-4">
                 <FormField control={form.control} name="authNumber" render={({ field }) => (
                   <FormItem>
                     <FormLabel>POS Number<AutoBadge name="authNumber" /></FormLabel>
-                    <FormControl><Input placeholder="e.g. 12345678" {...field} /></FormControl>
+                    <FormControl><Input placeholder="e.g. 12345678" {...field} disabled={isQueued} /></FormControl>
                     <FormMessage />
                   </FormItem>
                 )} />
                 <FormField control={form.control} name="serviceCode" render={({ field }) => (
                   <FormItem>
                     <FormLabel>Service Code<AutoBadge name="serviceCode" /></FormLabel>
-                    <Select onValueChange={field.onChange} defaultValue={field.value}>
+                    <Select onValueChange={field.onChange} defaultValue={field.value} value={field.value} disabled={isQueued}>
                       <FormControl>
                         <SelectTrigger><SelectValue placeholder="Select code" /></SelectTrigger>
                       </FormControl>
@@ -319,11 +456,12 @@ export default function AuthorizationNewPage() {
                       <SearchableSelect
                         value={field.value}
                         onValueChange={field.onChange}
-                        options={clients.map(c => ({ value: c.id, label: `${c.firstName} ${c.lastName} (${c.uciNumber})` }))}
+                        options={allClientOptions}
                         onSearchChange={setClientSearch}
                         loading={clientsLoading}
                         placeholder="Select participant"
                         data-testid="select-auth-client"
+                        disabled={isQueued}
                       />
                     </FormControl>
                     <FormMessage />
@@ -343,6 +481,7 @@ export default function AuthorizationNewPage() {
                         allowClear
                         clearLabel="None"
                         data-testid="select-auth-vendor"
+                        disabled={isQueued}
                       />
                     </FormControl>
                     <FormMessage />
@@ -354,14 +493,14 @@ export default function AuthorizationNewPage() {
                 <FormField control={form.control} name="servicePeriodStart" render={({ field }) => (
                   <FormItem>
                     <FormLabel>Period Start Date<AutoBadge name="servicePeriodStart" /></FormLabel>
-                    <FormControl><Input type="date" {...field} /></FormControl>
+                    <FormControl><Input type="date" {...field} disabled={isQueued} /></FormControl>
                     <FormMessage />
                   </FormItem>
                 )} />
                 <FormField control={form.control} name="servicePeriodEnd" render={({ field }) => (
                   <FormItem>
                     <FormLabel>Period End Date<AutoBadge name="servicePeriodEnd" /></FormLabel>
-                    <FormControl><Input type="date" {...field} /></FormControl>
+                    <FormControl><Input type="date" {...field} disabled={isQueued} /></FormControl>
                     <FormMessage />
                   </FormItem>
                 )} />
@@ -376,7 +515,7 @@ export default function AuthorizationNewPage() {
                       <FormControl>
                         <div className="relative">
                           <span className="absolute left-3 top-2.5 text-muted-foreground">$</span>
-                          <Input className="pl-7" placeholder="0.00" {...field} />
+                          <Input className="pl-7" placeholder="0.00" {...field} disabled={isQueued} />
                         </div>
                       </FormControl>
                       <FormMessage />
@@ -388,7 +527,7 @@ export default function AuthorizationNewPage() {
                       <FormControl>
                         <div className="relative">
                           <span className="absolute left-3 top-2.5 text-muted-foreground">$</span>
-                          <Input className="pl-7" placeholder="0.00" {...field} />
+                          <Input className="pl-7" placeholder="0.00" {...field} disabled={isQueued} />
                         </div>
                       </FormControl>
                       <FormMessage />
@@ -397,7 +536,7 @@ export default function AuthorizationNewPage() {
                 </div>
               </div>
 
-              <Button type="submit" className="w-full" disabled={createAuth.isPending}>
+              <Button type="submit" className="w-full" disabled={createAuth.isPending || isQueued}>
                 <Save className="w-4 h-4 mr-2" />
                 {createAuth.isPending ? 'Saving...' : 'Save Authorization'}
               </Button>

@@ -34,6 +34,7 @@ import type {
   ClientCase,
   ClientInput,
   ClientUpdate,
+  CompleteUnmatchedPosInput,
   DashboardSummary,
   DuplicatePaymentError,
   ErrorEnvelope,
@@ -83,6 +84,7 @@ import type {
   ListReferralsParams,
   ListRemittances200,
   ListRemittancesParams,
+  ListUnmatchedPosParams,
   ListUsersParams,
   ListVendors200,
   ListVendorsParams,
@@ -97,6 +99,8 @@ import type {
   Payment,
   PaymentInput,
   PaymentUpdate,
+  PosMatchInput,
+  PosMatchResult,
   PosParseResult,
   PosPdfInput,
   Referral,
@@ -111,6 +115,9 @@ import type {
   SignatureInput,
   SignaturePage,
   SignatureResult,
+  UnmatchedPosDocument,
+  UnmatchedPosInput,
+  UnmatchedPosList,
   UpdateMeInput,
   UploadUrlRequest,
   UploadUrlResponse,
@@ -3488,6 +3495,381 @@ export const useParseAuthorizationPdf = <TError = ErrorType<unknown>,
         TContext
       > => {
       return useMutation(getParseAuthorizationPdfMutationOptions(options));
+    }
+
+export const getListUnmatchedPosUrl = (params?: ListUnmatchedPosParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/unmatched-pos?${stringifiedParams}` : `/api/unmatched-pos`
+}
+
+/**
+ * @summary List POS documents awaiting participant matching (staff only)
+ */
+export const listUnmatchedPos = async (params?: ListUnmatchedPosParams, options?: Parameters<typeof customFetch>[1]): Promise<UnmatchedPosList> => {
+
+  return customFetch<UnmatchedPosList>(getListUnmatchedPosUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListUnmatchedPosQueryKey = (params?: ListUnmatchedPosParams,) => {
+    return [
+    `/api/unmatched-pos`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getListUnmatchedPosQueryOptions = <TData = Awaited<ReturnType<typeof listUnmatchedPos>>, TError = ErrorType<unknown>>(params?: ListUnmatchedPosParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listUnmatchedPos>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListUnmatchedPosQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listUnmatchedPos>>> = ({ signal }) => listUnmatchedPos(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listUnmatchedPos>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListUnmatchedPosQueryResult = NonNullable<Awaited<ReturnType<typeof listUnmatchedPos>>>
+export type ListUnmatchedPosQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary List POS documents awaiting participant matching (staff only)
+ */
+
+export function useListUnmatchedPos<TData = Awaited<ReturnType<typeof listUnmatchedPos>>, TError = ErrorType<unknown>>(
+ params?: ListUnmatchedPosParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listUnmatchedPos>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListUnmatchedPosQueryOptions(params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getSaveUnmatchedPosUrl = () => {
+
+
+
+
+  return `/api/unmatched-pos`
+}
+
+/**
+ * @summary Save a POS whose participant could not be matched (staff only)
+ */
+export const saveUnmatchedPos = async (unmatchedPosInput: UnmatchedPosInput, options?: Parameters<typeof customFetch>[1]): Promise<UnmatchedPosDocument> => {
+
+  return customFetch<UnmatchedPosDocument>(getSaveUnmatchedPosUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(unmatchedPosInput)
+  }
+);}
+
+
+
+
+
+export const getSaveUnmatchedPosMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof saveUnmatchedPos>>, TError,{data: BodyType<UnmatchedPosInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof saveUnmatchedPos>>, TError,{data: BodyType<UnmatchedPosInput>}, TContext> => {
+
+const mutationKey = ['saveUnmatchedPos'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof saveUnmatchedPos>>, {data: BodyType<UnmatchedPosInput>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  saveUnmatchedPos(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type SaveUnmatchedPosMutationResult = NonNullable<Awaited<ReturnType<typeof saveUnmatchedPos>>>
+    export type SaveUnmatchedPosMutationBody = BodyType<UnmatchedPosInput>
+    export type SaveUnmatchedPosMutationError = ErrorType<void>
+
+    /**
+ * @summary Save a POS whose participant could not be matched (staff only)
+ */
+export const useSaveUnmatchedPos = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof saveUnmatchedPos>>, TError,{data: BodyType<UnmatchedPosInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof saveUnmatchedPos>>,
+        TError,
+        {data: BodyType<UnmatchedPosInput>},
+        TContext
+      > => {
+      return useMutation(getSaveUnmatchedPosMutationOptions(options));
+    }
+
+export const getMatchPosClientUrl = () => {
+
+
+
+
+  return `/api/unmatched-pos/match`
+}
+
+/**
+ * @summary Match parsed POS fields to a participant (staff only)
+ */
+export const matchPosClient = async (posMatchInput: PosMatchInput, options?: Parameters<typeof customFetch>[1]): Promise<PosMatchResult> => {
+
+  return customFetch<PosMatchResult>(getMatchPosClientUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(posMatchInput)
+  }
+);}
+
+
+
+
+
+export const getMatchPosClientMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof matchPosClient>>, TError,{data: BodyType<PosMatchInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof matchPosClient>>, TError,{data: BodyType<PosMatchInput>}, TContext> => {
+
+const mutationKey = ['matchPosClient'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof matchPosClient>>, {data: BodyType<PosMatchInput>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  matchPosClient(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type MatchPosClientMutationResult = NonNullable<Awaited<ReturnType<typeof matchPosClient>>>
+    export type MatchPosClientMutationBody = BodyType<PosMatchInput>
+    export type MatchPosClientMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Match parsed POS fields to a participant (staff only)
+ */
+export const useMatchPosClient = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof matchPosClient>>, TError,{data: BodyType<PosMatchInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof matchPosClient>>,
+        TError,
+        {data: BodyType<PosMatchInput>},
+        TContext
+      > => {
+      return useMutation(getMatchPosClientMutationOptions(options));
+    }
+
+export const getGetUnmatchedPosUrl = (id: string,) => {
+
+
+
+
+  return `/api/unmatched-pos/${id}`
+}
+
+/**
+ * @summary Get an unmatched POS document (staff only)
+ */
+export const getUnmatchedPos = async (id: string, options?: Parameters<typeof customFetch>[1]): Promise<UnmatchedPosDocument> => {
+
+  return customFetch<UnmatchedPosDocument>(getGetUnmatchedPosUrl(id),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetUnmatchedPosQueryKey = (id: string,) => {
+    return [
+    `/api/unmatched-pos/${id}`
+    ] as const;
+    }
+
+
+export const getGetUnmatchedPosQueryOptions = <TData = Awaited<ReturnType<typeof getUnmatchedPos>>, TError = ErrorType<void>>(id: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getUnmatchedPos>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetUnmatchedPosQueryKey(id);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getUnmatchedPos>>> = ({ signal }) => getUnmatchedPos(id, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: id !== null && id !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getUnmatchedPos>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetUnmatchedPosQueryResult = NonNullable<Awaited<ReturnType<typeof getUnmatchedPos>>>
+export type GetUnmatchedPosQueryError = ErrorType<void>
+
+
+/**
+ * @summary Get an unmatched POS document (staff only)
+ */
+
+export function useGetUnmatchedPos<TData = Awaited<ReturnType<typeof getUnmatchedPos>>, TError = ErrorType<void>>(
+ id: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getUnmatchedPos>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetUnmatchedPosQueryOptions(id,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getCompleteUnmatchedPosUrl = (id: string,) => {
+
+
+
+
+  return `/api/unmatched-pos/${id}/complete`
+}
+
+/**
+ * @summary Match an unmatched POS and create its authorization (staff only)
+ */
+export const completeUnmatchedPos = async (id: string,
+    completeUnmatchedPosInput: CompleteUnmatchedPosInput, options?: Parameters<typeof customFetch>[1]): Promise<AuthorizationResult> => {
+
+  return customFetch<AuthorizationResult>(getCompleteUnmatchedPosUrl(id),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(completeUnmatchedPosInput)
+  }
+);}
+
+
+
+
+
+export const getCompleteUnmatchedPosMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof completeUnmatchedPos>>, TError,{id: string;data: BodyType<CompleteUnmatchedPosInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof completeUnmatchedPos>>, TError,{id: string;data: BodyType<CompleteUnmatchedPosInput>}, TContext> => {
+
+const mutationKey = ['completeUnmatchedPos'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof completeUnmatchedPos>>, {id: string;data: BodyType<CompleteUnmatchedPosInput>}> = (props) => {
+          const {id,data} = props ?? {};
+
+          return  completeUnmatchedPos(id,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type CompleteUnmatchedPosMutationResult = NonNullable<Awaited<ReturnType<typeof completeUnmatchedPos>>>
+    export type CompleteUnmatchedPosMutationBody = BodyType<CompleteUnmatchedPosInput>
+    export type CompleteUnmatchedPosMutationError = ErrorType<void>
+
+    /**
+ * @summary Match an unmatched POS and create its authorization (staff only)
+ */
+export const useCompleteUnmatchedPos = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof completeUnmatchedPos>>, TError,{id: string;data: BodyType<CompleteUnmatchedPosInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof completeUnmatchedPos>>,
+        TError,
+        {id: string;data: BodyType<CompleteUnmatchedPosInput>},
+        TContext
+      > => {
+      return useMutation(getCompleteUnmatchedPosMutationOptions(options));
     }
 
 export const getListInvoicesUrl = (params?: ListInvoicesParams,) => {

@@ -1422,6 +1422,132 @@ export interface PosParseResult {
   fields?: PosParseResultFields;
 }
 
+export interface UnmatchedPosDocument {
+  id: string;
+  posPdfUrl: string;
+  sourceFileName: string;
+  /** @nullable */
+  clientName?: string | null;
+  /** @nullable */
+  clientAddress?: string | null;
+  /** @nullable */
+  clientPhone?: string | null;
+  /** @nullable */
+  uciNumber?: string | null;
+  /** @nullable */
+  authNumber?: string | null;
+  /** @nullable */
+  serviceCode?: string | null;
+  /** @nullable */
+  activityDescription?: string | null;
+  /** @nullable */
+  servicePeriodStart?: string | null;
+  /** @nullable */
+  servicePeriodEnd?: string | null;
+  /** @nullable */
+  units?: number | null;
+  /** @nullable */
+  monthlyAmount?: string | null;
+  /** @nullable */
+  maxPeriodAmount?: string | null;
+  /** @nullable */
+  caseworkerName?: string | null;
+  createdBy: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface UnmatchedPosInput {
+  /** @minLength 1 */
+  posPdfUrl: string;
+  /** @minLength 1 */
+  sourceFileName: string;
+  /** @nullable */
+  clientName?: string | null;
+  /** @nullable */
+  clientAddress?: string | null;
+  /** @nullable */
+  clientPhone?: string | null;
+  /** @nullable */
+  uciNumber?: string | null;
+  /** @nullable */
+  authNumber?: string | null;
+  /** @nullable */
+  serviceCode?: string | null;
+  /** @nullable */
+  activityDescription?: string | null;
+  /** @nullable */
+  servicePeriodStart?: string | null;
+  /** @nullable */
+  servicePeriodEnd?: string | null;
+  /** @nullable */
+  units?: number | null;
+  /** @nullable */
+  monthlyAmount?: string | null;
+  /** @nullable */
+  maxPeriodAmount?: string | null;
+  /** @nullable */
+  caseworkerName?: string | null;
+}
+
+export interface UnmatchedPosList {
+  items: UnmatchedPosDocument[];
+  total: number;
+}
+
+export interface PosMatchInput {
+  /** @nullable */
+  clientName?: string | null;
+  /** @nullable */
+  uciNumber?: string | null;
+}
+
+export type PosMatchResultMethod = typeof PosMatchResultMethod[keyof typeof PosMatchResultMethod];
+
+
+export const PosMatchResultMethod = {
+  uci: 'uci',
+  name: 'name',
+  none: 'none',
+} as const;
+
+/**
+ * @nullable
+ */
+export type PosMatchResultClient = {
+  id?: string;
+  firstName?: string;
+  lastName?: string;
+  uciNumber?: string;
+} | null;
+
+export interface PosMatchResult {
+  method: PosMatchResultMethod;
+  /** @nullable */
+  client: PosMatchResultClient;
+}
+
+/**
+ * @nullable
+ */
+export type CompleteUnmatchedPosInputPaymentType = typeof CompleteUnmatchedPosInputPaymentType[keyof typeof CompleteUnmatchedPosInputPaymentType] | null;
+
+
+export const CompleteUnmatchedPosInputPaymentType = {
+  direct_payment: 'direct_payment',
+  reimbursement: 'reimbursement',
+  fee: 'fee',
+} as const;
+
+export interface CompleteUnmatchedPosInput {
+  clientId: string;
+  /** @nullable */
+  vendorId?: string | null;
+  /** @nullable */
+  paymentType?: CompleteUnmatchedPosInputPaymentType;
+  acceptMaxAmountWarning?: boolean;
+}
+
 export type InvoiceInputPaymentType = typeof InvoiceInputPaymentType[keyof typeof InvoiceInputPaymentType];
 
 
@@ -2320,6 +2446,12 @@ export const ListAuthorizationsSortDirection = {
 export type ListAuthorizations200 = {
   items: Authorization[];
   total: number;
+};
+
+export type ListUnmatchedPosParams = {
+search?: string;
+limit?: number;
+offset?: number;
 };
 
 export type ListInvoicesParams = {

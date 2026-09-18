@@ -27,6 +27,7 @@ import ClientsPage from '@/pages/clients';
 import ClientDetailPage from '@/pages/clients/[id]';
 import AuthorizationsPage from '@/pages/authorizations';
 import AuthorizationNewPage from '@/pages/authorizations/new';
+import AuthorizationsUnmatchedPage from '@/pages/authorizations/unmatched';
 import AuthorizationDetailPage from '@/pages/authorizations/[id]';
 import InvoicesPage from '@/pages/invoices';
 import InvoiceNewPage from '@/pages/invoices/new';
@@ -76,6 +77,7 @@ function ProtectedRoutes() {
         <Route path="/clients/:id" component={ClientDetailPage} />
         <Route path="/authorizations" component={AuthorizationsPage} />
         <Route path="/authorizations/new" component={AuthorizationNewPage} />
+        <Route path="/authorizations/unmatched" component={AuthorizationsUnmatchedPage} />
         <Route path="/authorizations/:id" component={AuthorizationDetailPage} />
         <Route path="/invoices" component={InvoicesPage} />
         <Route path="/invoices/new" component={InvoiceNewPage} />

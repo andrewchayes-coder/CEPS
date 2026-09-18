@@ -12,6 +12,7 @@ import { Progress } from '@/components/ui/progress';
 import { ArrowLeft, AlertCircle, ExternalLink } from 'lucide-react';
 import { format } from 'date-fns';
 import { DocumentPreview } from '@/components/document-preview';
+import { MetricHelp } from '@/components/metric-help';
 
 const changedFieldLabels: Record<string, string> = {
   authNumber: 'Auth #',
@@ -136,7 +137,7 @@ export default function AuthorizationDetailPage() {
               <dl className="grid grid-cols-3 gap-2">
                 <dt className="text-muted-foreground">Max (Period):</dt><dd className="col-span-2 font-bold text-lg">${max.toFixed(2)}</dd>
                 <dt className="text-muted-foreground">Total Paid:</dt><dd className="col-span-2">${paid.toFixed(2)}</dd>
-                <dt className="text-muted-foreground">Remaining:</dt><dd className="col-span-2">${parseFloat(auth.remainingAmount ?? '0').toFixed(2)}</dd>
+                <dt className="text-muted-foreground"><MetricHelp label="Remaining" explanation="Unused budget remaining against the maximum period amount." /></dt><dd className="col-span-2">${parseFloat(auth.remainingAmount ?? '0').toFixed(2)}</dd>
               </dl>
               <div className="space-y-2 pt-2">
                 <div className="flex justify-between text-xs text-muted-foreground">

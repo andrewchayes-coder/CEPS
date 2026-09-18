@@ -320,6 +320,53 @@ describe("monthly payment fees", () => {
   });
 });
 
+describe("payment month validation", () => {
+  it("rejects malformed months on create and update while accepting YYYY-MM", async () => {
+    for (const paymentMonth of ["2026-13", "2026-2", "not-a-month"]) {
+      const response = await request(app)
+        .post("/api/payments")
+        .set("Cookie", cookie)
+        .send({
+          clientId,
+          qbCheckNumber: `${nonce}-invalid-${paymentMonth}`,
+          checkDate: "2026-01-15",
+          amount: "25.00",
+          paymentMonth,
+          paymentType: "direct_payment",
+        });
+      expect(response.status).toBe(400);
+    }
+
+    const created = await request(app)
+      .post("/api/payments")
+      .set("Cookie", cookie)
+      .send({
+        clientId,
+        qbCheckNumber: `${nonce}-valid-month`,
+        checkDate: "2026-01-15",
+        amount: "25.00",
+        paymentMonth: "2026-02",
+        paymentType: "direct_payment",
+      });
+    expect(created.status).toBe(201);
+    expect(created.body.paymentMonth).toBe("2026-02");
+
+    for (const paymentMonth of ["2026-13", "2026-2", "not-a-month"]) {
+      const response = await request(app)
+        .patch(`/api/payments/${created.body.id}`)
+        .set("Cookie", cookie)
+        .send({ paymentMonth });
+      expect(response.status).toBe(400);
+    }
+    const updated = await request(app)
+      .patch(`/api/payments/${created.body.id}`)
+      .set("Cookie", cookie)
+      .send({ paymentMonth: "2026-03" });
+    expect(updated.status).toBe(200);
+    expect(updated.body.paymentMonth).toBe("2026-03");
+  });
+});
+
 describe("financial PATCH participant links", () => {
   async function makeAuthorization(ownerId: string, vendorId?: string) {
     const [auth] = await db.insert(authorizationsTable).values({

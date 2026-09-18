@@ -10,6 +10,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { ArrowLeft, AlertTriangle } from 'lucide-react';
 import { format } from 'date-fns';
+import { MetricHelp } from '@/components/metric-help';
 
 export default function RemittanceDetailPage() {
   const { id } = useParams<{ id: string }>();
@@ -106,9 +107,9 @@ export default function RemittanceDetailPage() {
             <dd className="col-span-2">{remittance.paymentMonth || '-'}</dd>
             <dt className="text-muted-foreground">Amount:</dt>
             <dd className="col-span-2 font-bold text-lg">${parseFloat(remittance.amount).toFixed(2)}</dd>
-            <dt className="text-muted-foreground">Allocated:</dt>
+            <dt className="text-muted-foreground"><MetricHelp label="Allocated" explanation="Amount matched to payments." /></dt>
             <dd className="col-span-2">${parseFloat(remittance.allocatedAmount ?? '0').toFixed(2)}</dd>
-            <dt className="text-muted-foreground">Remaining:</dt>
+            <dt className="text-muted-foreground"><MetricHelp label="Remaining" explanation="Amount not yet matched to a payment." /></dt>
             <dd className="col-span-2">${parseFloat(remittance.remainingAmount ?? remittance.amount).toFixed(2)}</dd>
             {(remittance.allocations ?? []).map((allocation) => <React.Fragment key={allocation.id}>
               <dt className="text-muted-foreground">Allocated Payment:</dt>

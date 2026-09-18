@@ -3,6 +3,7 @@ import { useUpdatePayment, useListVendors, useListInvoices, useListAuthorization
 import type { PaymentUpdate } from '@workspace/api-client-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { MonthYearInput, isValidPaymentMonth } from '@/components/month-year-input';
 import { Label } from '@/components/ui/label';
 import {
   Dialog,
@@ -90,6 +91,10 @@ export function EditPaymentDialog({ id, payment, onSaved }: Props) {
   const set = (k: string, v: string) => setForm((p) => ({ ...p, [k]: v }));
 
   const handleSave = () => {
+    if (!isValidPaymentMonth(form.paymentMonth)) {
+      toast({ variant: 'destructive', title: 'Invalid payment month', description: 'Enter a valid month in YYYY-MM format.' });
+      return;
+    }
     const data: PaymentUpdate = {
       qbCheckNumber: form.qbCheckNumber,
       checkDate: form.checkDate || undefined,
@@ -139,8 +144,7 @@ export function EditPaymentDialog({ id, payment, onSaved }: Props) {
             <Input id="edit-payment-amount" value={form.amount} onChange={(e) => set('amount', e.target.value)} data-testid="input-payment-amount" />
           </div>
           <div className="space-y-2">
-            <Label htmlFor="edit-payment-month">Payment Month</Label>
-            <Input id="edit-payment-month" placeholder="YYYY-MM" value={form.paymentMonth} onChange={(e) => set('paymentMonth', e.target.value)} data-testid="input-payment-month" />
+            <MonthYearInput id="edit-payment-month" value={form.paymentMonth} onChange={(value) => set('paymentMonth', value)} />
           </div>
           <div className="space-y-2">
             <Label htmlFor="edit-payment-type">Payment Type</Label>
@@ -210,7 +214,7 @@ export function EditPaymentDialog({ id, payment, onSaved }: Props) {
         </div>
         <DialogFooter>
           <Button variant="outline" onClick={() => setOpen(false)}>Cancel</Button>
-          <Button onClick={handleSave} disabled={updatePayment.isPending} data-testid="button-save-payment">
+          <Button onClick={handleSave} disabled={updatePayment.isPending || !isValidPaymentMonth(form.paymentMonth)} data-testid="button-save-payment">
             {updatePayment.isPending ? 'Saving…' : 'Save Changes'}
           </Button>
         </DialogFooter>

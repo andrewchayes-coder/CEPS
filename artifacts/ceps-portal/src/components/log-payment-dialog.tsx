@@ -11,6 +11,7 @@ import {
 } from '@workspace/api-client-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { MonthYearInput, isValidPaymentMonth } from '@/components/month-year-input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import {
@@ -91,11 +92,19 @@ export function LogPaymentDialog({ onSaved, defaultClientId }: Props) {
 
   const [invoiceSearch, setInvoiceSearch] = useState('');
   const debouncedInvoiceSearch = useDebounce(invoiceSearch, 300);
-  const { data: invoicesData, isLoading: invoicesLoading } = useListInvoices(
-    { clientId: form.clientId, search: debouncedInvoiceSearch, limit: 50 },
-    { query: { enabled: open && !!form.clientId, queryKey: ['invoices', { clientId: form.clientId, search: debouncedInvoiceSearch, limit: 50 }] } }
+  const invoiceQuery = { clientId: form.clientId, search: debouncedInvoiceSearch, limit: 50 };
+  const { data: validatedInvoicesData, isLoading: validatedInvoicesLoading } = useListInvoices(
+    { ...invoiceQuery, status: 'validated' },
+    { query: { enabled: open && !!form.clientId, queryKey: ['invoices', { ...invoiceQuery, status: 'validated' }] } },
   );
-  const invoices = invoicesData?.items;
+  const { data: approvedInvoicesData, isLoading: approvedInvoicesLoading } = useListInvoices(
+    { ...invoiceQuery, status: 'approved' },
+    { query: { enabled: open && !!form.clientId, queryKey: ['invoices', { ...invoiceQuery, status: 'approved' }] } },
+  );
+  const invoices = Array.from(new Map(
+    [...(validatedInvoicesData?.items ?? []), ...(approvedInvoicesData?.items ?? [])].map((invoice) => [invoice.id, invoice]),
+  ).values()).sort((a, b) => a.serviceMonth.localeCompare(b.serviceMonth));
+  const invoicesLoading = validatedInvoicesLoading || approvedInvoicesLoading;
 
   const [authSearch, setAuthSearch] = useState('');
   const debouncedAuthSearch = useDebounce(authSearch, 300);
@@ -130,6 +139,10 @@ export function LogPaymentDialog({ onSaved, defaultClientId }: Props) {
     }
     if (override && justification.trim() === '') {
       toast({ variant: 'destructive', title: 'Justification required', description: 'Enter a written justification to override the duplicate-payment stop.' });
+      return;
+    }
+    if (!isValidPaymentMonth(form.paymentMonth)) {
+      toast({ variant: 'destructive', title: 'Invalid payment month', description: 'Enter a valid month in YYYY-MM format.' });
       return;
     }
     const data: PaymentInput = {
@@ -214,8 +227,7 @@ export function LogPaymentDialog({ onSaved, defaultClientId }: Props) {
             <Input id="payment-amount" value={form.amount} onChange={(e) => set('amount', e.target.value)} data-testid="input-payment-amount" />
           </div>
           <div className="space-y-2">
-            <Label htmlFor="payment-month">Payment Month</Label>
-            <Input id="payment-month" placeholder="YYYY-MM" value={form.paymentMonth} onChange={(e) => set('paymentMonth', e.target.value)} data-testid="input-payment-month" />
+            <MonthYearInput id="payment-month" value={form.paymentMonth} onChange={(value) => set('paymentMonth', value)} />
           </div>
           <div className="space-y-2">
             <Label htmlFor="payment-type">Payment Type</Label>
@@ -334,7 +346,7 @@ export function LogPaymentDialog({ onSaved, defaultClientId }: Props) {
           ) : (
             <Button
               onClick={() => submit(false)}
-              disabled={createPayment.isPending}
+              disabled={createPayment.isPending || !isValidPaymentMonth(form.paymentMonth)}
               data-testid="button-save-payment"
             >
               {createPayment.isPending ? 'Saving…' : 'Log Payment'}

@@ -10,6 +10,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { ArrowLeft, CheckCircle2 } from 'lucide-react';
 import { format } from 'date-fns';
+import { MetricHelp } from '@/components/metric-help';
 
 export default function PaymentDetailPage() {
   const { id } = useParams<{ id: string }>();
@@ -98,9 +99,9 @@ export default function PaymentDetailPage() {
             <dd className="col-span-2">
               {payment.remitted ? <CheckCircle2 className="w-4 h-4 text-chart-5" /> : <span className="text-muted-foreground">Not yet remitted</span>}
             </dd>
-            <dt className="text-muted-foreground">Allocated:</dt>
+            <dt className="text-muted-foreground"><MetricHelp label="Allocated" explanation="Amount matched to remittances." /></dt>
             <dd className="col-span-2">${parseFloat(payment.allocatedAmount ?? '0').toFixed(2)}</dd>
-            <dt className="text-muted-foreground">Remaining:</dt>
+            <dt className="text-muted-foreground"><MetricHelp label="Remaining" explanation="Amount not yet matched to a remittance." /></dt>
             <dd className="col-span-2">${parseFloat(payment.remainingAmount ?? payment.amount).toFixed(2)}</dd>
           </dl>
         </CardContent>

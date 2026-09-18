@@ -55,7 +55,7 @@ export default function VendorDetailPage() {
   const { user } = useAuth();
 
   // Vendor users can only edit their own contact details; staff-only fields
-  // (name, altaVendorNumber, w9Status) are hidden and never sent.
+  // (name, w9Status) are hidden and never sent.
   const isVendorUser = user?.role === 'vendor';
   const isStaff = user?.role === 'staff';
 
@@ -64,7 +64,7 @@ export default function VendorDetailPage() {
   const initialized = useRef(false);
 
   const vendorForm = (value: any) => ({
-    name: value.name, altaVendorNumber: value.altaVendorNumber || '', ein: value.ein || '',
+    name: value.name, ein: value.ein || '',
     w9Status: value.w9Status, contactPerson: value.contactPerson || '', email: value.email || '',
     phone: value.phone || '', billingAddress: value.billingAddress || '', serviceAddress: value.serviceAddress || '',
     preferred: value.preferred, active: value.active,
@@ -228,22 +228,16 @@ export default function VendorDetailPage() {
                     <Input value={formData.name || ''} onChange={e => handleChange('name', e.target.value)} />
                   </div>
 
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="space-y-2">
-                      <label className="text-sm font-medium">Alta Vendor Number</label>
-                      <Input value={formData.altaVendorNumber || ''} onChange={e => handleChange('altaVendorNumber', e.target.value)} />
-                    </div>
-                    <div className="space-y-2">
-                      <label className="text-sm font-medium">W-9 Status</label>
-                      <Select value={formData.w9Status || ''} onValueChange={val => handleChange('w9Status', val)}>
-                        <SelectTrigger><SelectValue /></SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="pending">Pending</SelectItem>
-                          <SelectItem value="on_file">On File</SelectItem>
-                          <SelectItem value="expired">Expired</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </div>
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium">W-9 Status</label>
+                    <Select value={formData.w9Status || ''} onValueChange={val => handleChange('w9Status', val)}>
+                      <SelectTrigger><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="pending">Pending</SelectItem>
+                        <SelectItem value="on_file">On File</SelectItem>
+                        <SelectItem value="expired">Expired</SelectItem>
+                      </SelectContent>
+                    </Select>
                   </div>
                   <div className="flex items-center justify-between rounded-md border p-3">
                     <div>

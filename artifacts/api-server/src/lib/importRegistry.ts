@@ -272,7 +272,6 @@ export const IMPORT_REGISTRY: Record<ImportEntity, EntityDef> = {
     naturalKey: "Vendor name (vendors.name)",
     fields: [
       { key: "name", header: "Name", required: true, type: "string", example: "Bright Futures Therapy", help: "Natural key — duplicates are skipped" },
-      { key: "altaVendorNumber", header: "Alta Vendor Number", required: false, type: "string", example: "V-12345" },
       { key: "ein", header: "EIN", required: false, type: "string", example: "12-3456789" },
       { key: "billingAddress", header: "Billing Address", required: false, type: "string", example: "200 Oak Ave" },
       { key: "serviceAddress", header: "Service Address", required: false, type: "string", example: "200 Oak Ave" },

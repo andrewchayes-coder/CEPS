@@ -13,12 +13,12 @@ import { useToast } from '@/hooks/use-toast';
 import { trackAnalyticsEvent } from '@/lib/analytics';
 
 type VendorForm = {
-  name: string; altaVendorNumber: string; ein: string; contactPerson: string;
+  name: string; ein: string; contactPerson: string;
   email: string; phone: string; billingAddress: string; serviceAddress: string;
   w9Status: 'pending' | 'on_file' | 'expired'; preferred: boolean;
 };
 const initialForm: VendorForm = {
-  name: '', altaVendorNumber: '', ein: '', contactPerson: '', email: '', phone: '',
+  name: '', ein: '', contactPerson: '', email: '', phone: '',
   billingAddress: '', serviceAddress: '', w9Status: 'pending', preferred: false,
 };
 function errorMessage(error: unknown): string {
@@ -72,10 +72,7 @@ export default function VendorNewPage() {
         <form onSubmit={submit} className="space-y-4" data-testid="form-create-vendor">
           {error && <p role="alert" className="text-sm text-destructive" data-testid="error-create-vendor">{error}</p>}
           <Field label="Business Name" required value={form.name} onChange={(v) => set('name', v)} testId="input-vendor-name" />
-          <div className="grid grid-cols-2 gap-4">
-            <Field label="Alta Vendor Number" value={form.altaVendorNumber} onChange={(v) => set('altaVendorNumber', v)} />
-            <Field label="EIN" value={form.ein} onChange={(v) => set('ein', v)} />
-          </div>
+          <Field label="EIN" value={form.ein} onChange={(v) => set('ein', v)} />
           <Field label="Contact Person" value={form.contactPerson} onChange={(v) => set('contactPerson', v)} />
           <div className="grid grid-cols-2 gap-4">
             <Field label="Email" type="email" value={form.email} onChange={(v) => set('email', v)} />

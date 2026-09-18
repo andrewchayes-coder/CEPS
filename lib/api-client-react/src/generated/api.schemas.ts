@@ -782,10 +782,6 @@ export interface Referral {
   /** @nullable */
   paymentTypeRequested?: ReferralPaymentTypeRequested;
   /** @nullable */
-  diagnosis?: string | null;
-  /** @nullable */
-  eligibilityCategory?: string | null;
-  /** @nullable */
   supportingDocumentUrl?: string | null;
   /** @nullable */
   notes?: string | null;
@@ -1140,8 +1136,6 @@ export interface ReferralInput {
   cost?: string;
   paymentSchedule?: string;
   paymentTypeRequested?: ReferralInputPaymentTypeRequested;
-  diagnosis?: string;
-  eligibilityCategory?: string;
   supportingDocumentUrl?: string;
   notes?: string;
 }
@@ -1200,10 +1194,6 @@ export interface ReferralUpdate {
   paymentSchedule?: string | null;
   /** @nullable */
   paymentTypeRequested?: ReferralUpdatePaymentTypeRequested;
-  /** @nullable */
-  diagnosis?: string | null;
-  /** @nullable */
-  eligibilityCategory?: string | null;
   /** @nullable */
   supportingDocumentUrl?: string | null;
   notes?: string;

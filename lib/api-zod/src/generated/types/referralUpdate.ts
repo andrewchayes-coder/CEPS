@@ -27,10 +27,6 @@ export interface ReferralUpdate {
   /** @nullable */
   paymentTypeRequested?: ReferralUpdatePaymentTypeRequested;
   /** @nullable */
-  diagnosis?: string | null;
-  /** @nullable */
-  eligibilityCategory?: string | null;
-  /** @nullable */
   supportingDocumentUrl?: string | null;
   notes?: string;
   /** @nullable */

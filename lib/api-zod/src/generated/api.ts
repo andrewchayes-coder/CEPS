@@ -655,8 +655,6 @@ export const GetClientCaseResponse = zod.object({
   "cost": zod.string().nullish(),
   "paymentSchedule": zod.string().nullish(),
   "paymentTypeRequested": zod.union([zod.literal('service_payment'),zod.literal('reimbursement'),zod.literal(null)]).nullish(),
-  "diagnosis": zod.string().nullish(),
-  "eligibilityCategory": zod.string().nullish(),
   "supportingDocumentUrl": zod.string().nullish(),
   "notes": zod.string().nullish(),
   "createdAt": zod.string().nullish()
@@ -884,8 +882,6 @@ export const ListReferralsResponse = zod.object({
   "cost": zod.string().nullish(),
   "paymentSchedule": zod.string().nullish(),
   "paymentTypeRequested": zod.union([zod.literal('service_payment'),zod.literal('reimbursement'),zod.literal(null)]).nullish(),
-  "diagnosis": zod.string().nullish(),
-  "eligibilityCategory": zod.string().nullish(),
   "supportingDocumentUrl": zod.string().nullish(),
   "notes": zod.string().nullish(),
   "createdAt": zod.string().nullish()
@@ -946,8 +942,6 @@ export const CreateReferralBody = zod.object({
   "cost": zod.string().regex(createReferralBodyCostRegExp).optional(),
   "paymentSchedule": zod.string().optional(),
   "paymentTypeRequested": zod.enum(['service_payment', 'reimbursement']).optional(),
-  "diagnosis": zod.string().optional(),
-  "eligibilityCategory": zod.string().optional(),
   "supportingDocumentUrl": zod.string().optional(),
   "notes": zod.string().optional()
 })
@@ -1050,8 +1044,6 @@ export const CreateReferralResponse = zod.object({
   "cost": zod.string().nullish(),
   "paymentSchedule": zod.string().nullish(),
   "paymentTypeRequested": zod.union([zod.literal('service_payment'),zod.literal('reimbursement'),zod.literal(null)]).nullish(),
-  "diagnosis": zod.string().nullish(),
-  "eligibilityCategory": zod.string().nullish(),
   "supportingDocumentUrl": zod.string().nullish(),
   "notes": zod.string().nullish(),
   "createdAt": zod.string().nullish()
@@ -1293,8 +1285,6 @@ export const GetReferralResponse = zod.object({
   "cost": zod.string().nullish(),
   "paymentSchedule": zod.string().nullish(),
   "paymentTypeRequested": zod.union([zod.literal('service_payment'),zod.literal('reimbursement'),zod.literal(null)]).nullish(),
-  "diagnosis": zod.string().nullish(),
-  "eligibilityCategory": zod.string().nullish(),
   "supportingDocumentUrl": zod.string().nullish(),
   "notes": zod.string().nullish(),
   "createdAt": zod.string().nullish()
@@ -1319,8 +1309,6 @@ export const UpdateReferralBody = zod.object({
   "cost": zod.string().regex(updateReferralBodyCostRegExp).nullish(),
   "paymentSchedule": zod.string().nullish(),
   "paymentTypeRequested": zod.union([zod.literal('service_payment'),zod.literal('reimbursement'),zod.literal(''),zod.literal(null)]).nullish(),
-  "diagnosis": zod.string().nullish(),
-  "eligibilityCategory": zod.string().nullish(),
   "supportingDocumentUrl": zod.string().nullish(),
   "notes": zod.string().optional(),
   "altaAuthReceivedAt": zod.string().nullish()
@@ -1424,8 +1412,6 @@ export const UpdateReferralResponse = zod.object({
   "cost": zod.string().nullish(),
   "paymentSchedule": zod.string().nullish(),
   "paymentTypeRequested": zod.union([zod.literal('service_payment'),zod.literal('reimbursement'),zod.literal(null)]).nullish(),
-  "diagnosis": zod.string().nullish(),
-  "eligibilityCategory": zod.string().nullish(),
   "supportingDocumentUrl": zod.string().nullish(),
   "notes": zod.string().nullish(),
   "createdAt": zod.string().nullish()

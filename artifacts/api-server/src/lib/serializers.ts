@@ -161,8 +161,6 @@ export function referralJson(
     cost: r.cost,
     paymentSchedule: r.paymentSchedule,
     paymentTypeRequested: r.paymentTypeRequested,
-    diagnosis: r.diagnosis,
-    eligibilityCategory: r.eligibilityCategory,
     supportingDocumentUrl: r.supportingDocumentUrl,
     notes: r.notes,
     createdAt: iso(r.createdAt),

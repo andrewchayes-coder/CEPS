@@ -7,6 +7,7 @@ import {
   clientsTable,
   vendorsTable,
   authorizationsTable,
+  referralsTable,
   paymentsTable,
   remittancesTable,
   feesTable,
@@ -81,6 +82,7 @@ beforeAll(async () => {
 });
 
 afterAll(async () => {
+  await db.delete(referralsTable).where(eq(referralsTable.clientId, clientAId));
   await db.delete(feesTable).where(inArray(feesTable.clientId, [clientAId]));
   await db.delete(remittancesTable).where(inArray(remittancesTable.clientId, [clientAId]));
   await db.delete(paymentsTable).where(inArray(paymentsTable.clientId, [clientAId]));
@@ -315,6 +317,87 @@ describe("POST /payments/import", () => {
 });
 
 describe("POST /import/authorizations/commit", () => {
+  it("advances a matching pending-auth referral through the normal authorization POST", async () => {
+    const [referral] = await db.insert(referralsTable).values({
+      clientId: clientAId,
+      referralDate: "2026-01-02",
+      status: "pending_auth",
+      submittedVia: "staff_manual_entry",
+    }).returning();
+    const authNumber = `${nonce}-AUTH-POST-TRANSITION`;
+    const res = await request(app).post("/api/authorizations").set("Cookie", cookie).send({
+      clientId: clientAId,
+      vendorId: vendorAId,
+      authNumber,
+      serviceCode: "459",
+      servicePeriodStart: "2026-01-01",
+      servicePeriodEnd: "2026-06-30",
+      maxPeriodAmount: "3000.00",
+    });
+    expect(res.status).toBe(201);
+    const [updated] = await db.select().from(referralsTable).where(eq(referralsTable.id, referral.id));
+    expect(updated.status).toBe("pending_w9");
+    expect(updated.altaAuthReceivedAt).toBeInstanceOf(Date);
+  });
+
+  it("uses pending_invoice for W-9 on file and ignores intake and other-client referrals", async () => {
+    const [vendor] = await db.insert(vendorsTable).values({
+      name: `${nonce} W9 Vendor`,
+      w9Status: "on_file",
+    }).returning();
+    const [otherClient] = await db.insert(clientsTable).values({
+      firstName: "Other",
+      lastName: "Client",
+      dateOfBirth: "2010-01-01",
+      uciNumber: `${nonce}-OTHER`,
+    }).returning();
+    const createdReferrals = await db.insert(referralsTable).values([
+      { clientId: clientAId, referralDate: "2026-01-03", status: "pending_auth", submittedVia: "staff_manual_entry" },
+      { clientId: clientAId, referralDate: "2026-01-04", status: "intake", submittedVia: "staff_manual_entry" },
+      { clientId: otherClient.id, referralDate: "2026-01-01", status: "pending_auth", submittedVia: "staff_manual_entry" },
+    ]).returning();
+    const res = await request(app).post("/api/authorizations").set("Cookie", cookie).send({
+      clientId: clientAId,
+      vendorId: vendor.id,
+      authNumber: `${nonce}-AUTH-W9-TRANSITION`,
+      serviceCode: "024",
+      servicePeriodStart: "2026-01-01",
+      servicePeriodEnd: "2026-06-30",
+      maxPeriodAmount: "3000.00",
+    });
+    expect(res.status).toBe(201);
+    const rows = await db.select().from(referralsTable).where(inArray(referralsTable.clientId, [clientAId, otherClient.id]));
+    expect(rows.find((row) => row.id === createdReferrals[0].id)?.status).toBe("pending_invoice");
+    expect(rows.find((row) => row.id === createdReferrals[0].id)?.altaAuthReceivedAt).toBeInstanceOf(Date);
+    expect(rows.find((row) => row.id === createdReferrals[1].id)?.status).toBe("intake");
+    expect(rows.find((row) => row.id === createdReferrals[1].id)?.altaAuthReceivedAt).toBeNull();
+    await db.delete(authorizationsTable).where(eq(authorizationsTable.authNumber, `${nonce}-AUTH-W9-TRANSITION`));
+    expect(rows.filter((row) => row.clientId === otherClient.id)[0].status).toBe("pending_auth");
+    expect(rows.filter((row) => row.clientId === otherClient.id)[0].altaAuthReceivedAt).toBeNull();
+    await db.delete(referralsTable).where(inArray(referralsTable.clientId, [otherClient.id]));
+    await db.delete(clientsTable).where(eq(clientsTable.id, otherClient.id));
+    await db.delete(vendorsTable).where(eq(vendorsTable.id, vendor.id));
+  });
+
+  it("advances only the matching pending-auth referral when an authorization is imported", async () => {
+    const [referral] = await db.insert(referralsTable).values({
+      clientId: clientAId,
+      referralDate: "2026-01-01",
+      status: "pending_auth",
+      submittedVia: "staff_manual_entry",
+    }).returning();
+    const authNumber = `${nonce}-AUTH-TRANSITION`;
+    const csv = [
+      "Client UCI *,Auth Number *,Service Code *,Service Period Start *,Service Period End *,Max Period Amount *",
+      `${uciA},${authNumber},459,2026-01-01,2026-06-30,3000.00`,
+    ].join("\n");
+    const res = await request(app).post("/api/import/authorizations/commit").set("Cookie", cookie).send({ csvText: csv });
+    expect(res.status).toBe(200);
+    const [updated] = await db.select().from(referralsTable).where(eq(referralsTable.id, referral.id));
+    expect(updated.status).toBe("pending_w9");
+    expect(updated.altaAuthReceivedAt).toBeInstanceOf(Date);
+  });
+
   it("imports an authorization, deriving payment type from service code", async () => {
     const csv = [
       "Client UCI *,Auth Number *,Service Code *,Service Period Start *,Service Period End *,Max Period Amount *",

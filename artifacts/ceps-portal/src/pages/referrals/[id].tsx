@@ -1,6 +1,6 @@
 import React from 'react';
 import { useLocation, useParams } from 'wouter';
-import { useGetReferral, useUpdateReferral, useDeleteReferral } from '@workspace/api-client-react';
+import { useGetReferral, useDeleteReferral } from '@workspace/api-client-react';
 import { useAuth } from '@/components/auth/auth-provider';
 import { EditReferralDialog } from '@/components/edit-referral-dialog';
 import { DeleteEntityButton } from '@/components/delete-entity-button';
@@ -10,7 +10,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
 import { useToast } from '@/hooks/use-toast';
-import { CheckCircle2, AlertTriangle, FileText, ArrowLeft, RefreshCw } from 'lucide-react';
+import { CheckCircle2, AlertTriangle, FileText, ArrowLeft } from 'lucide-react';
 import { format } from 'date-fns';
 import { Link } from 'wouter';
 import { ClientLink } from '@/components/entity-links';
@@ -31,7 +31,6 @@ export default function ReferralDetailPage() {
       queryKey: ['referrals', id]
     }
   });
-  const updateReferral = useUpdateReferral();
 
   if (isLoading) return <div className="p-8 text-center">Loading referral...</div>;
   if (!referral) return <div className="p-8 text-center">Referral not found.</div>;
@@ -209,22 +208,9 @@ export default function ReferralDetailPage() {
                     <CheckCircle2 className="w-4 h-4 text-chart-5" />
                     Received {format(new Date(referral.altaAuthReceivedAt), 'MMM d, yyyy')}
                   </div>
-               ) : (
-                 <div className="space-y-3">
-                    <p className="text-sm text-muted-foreground">Waiting for official POS authorization from Regional Center.</p>
-                    <Button 
-                      variant="outline" 
-                      className="w-full"
-                      onClick={() => {
-                        updateReferral.mutate({ id, data: { altaAuthReceivedAt: new Date().toISOString() } }, {
-                          onSuccess: () => refetch()
-                        });
-                      }}
-                    >
-                      <RefreshCw className="w-4 h-4 mr-2" /> Mark Received
-                    </Button>
-                 </div>
-               )}
+                ) : (
+                  <p className="text-sm text-muted-foreground">Waiting for official POS authorization from Regional Center.</p>
+                )}
             </CardContent>
           </Card>
         </div>

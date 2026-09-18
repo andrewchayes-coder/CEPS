@@ -18,8 +18,6 @@ export interface ReferralInput {
   cost?: string;
   paymentSchedule?: string;
   paymentTypeRequested?: ReferralInputPaymentTypeRequested;
-  diagnosis?: string;
-  eligibilityCategory?: string;
   supportingDocumentUrl?: string;
   notes?: string;
 }

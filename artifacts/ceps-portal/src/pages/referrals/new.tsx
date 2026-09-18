@@ -81,9 +81,6 @@ const clientSchemaBase = {
   contactCity: z.string().min(1, 'City is required'),
   contactZip: z.string().min(5, 'ZIP is required'),
   contactState: z.string().length(2, 'State must be 2 letters'),
-  // Diagnosis / eligibility (optional)
-  diagnosis: z.string().optional(),
-  eligibilityCategory: z.string().optional(),
 };
 
 const clientSchema = z.object(clientSchemaBase).refine(data => {
@@ -170,8 +167,6 @@ export default function ReferralNewPage() {
       contactCity: '',
       contactZip: '',
       contactState: 'CA',
-      diagnosis: '',
-      eligibilityCategory: '',
     },
     mode: 'onChange'
   });
@@ -208,19 +203,10 @@ export default function ReferralNewPage() {
     // Remove fields that go at the top level
     const serviceFrequency = intakeFields.serviceFrequency;
     delete (intakeFields as any).serviceFrequency;
-    // Diagnosis / eligibility / document map to dedicated top-level columns.
-    const diagnosis = intakeFields.diagnosis;
-    const eligibilityCategory = intakeFields.eligibilityCategory;
-    delete (intakeFields as any).diagnosis;
-    delete (intakeFields as any).eligibilityCategory;
-
     createReferral.mutate({
       data: {
         submittedVia: 'portal',
         serviceFrequency: serviceFrequency as 'one_time' | 'monthly',
-        // Portal sends '' for untouched optional fields — API normalizes '' -> null.
-        diagnosis: diagnosis ?? '',
-        eligibilityCategory: eligibilityCategory ?? '',
         supportingDocumentUrl: supportingDocumentUrl ?? '',
         intakeFields: intakeFields as any
       }
@@ -585,29 +571,6 @@ export default function ReferralNewPage() {
                   </div>
                 </div>
 
-                <Separator />
-
-                <div className="space-y-4">
-                  <h3 className="text-sm font-medium">Diagnosis & Eligibility <span className="text-muted-foreground font-normal">(Optional)</span></h3>
-                  <p className="text-xs text-muted-foreground">
-                    If known, record the participant's diagnosis and regional-center eligibility category. Both fields are optional.
-                  </p>
-                  <FormField control={form.control} name="diagnosis" render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Diagnosis</FormLabel>
-                      <FormControl><Textarea placeholder="e.g. Autism Spectrum Disorder" {...field} /></FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )} />
-                  <FormField control={form.control} name="eligibilityCategory" render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Eligibility Category</FormLabel>
-                      <FormControl><Input placeholder="e.g. Developmental Disability" {...field} /></FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )} />
-                </div>
-
               </CardContent>
             </Card>
           )}
@@ -617,7 +580,7 @@ export default function ReferralNewPage() {
             <Card>
               <CardHeader>
                 <CardTitle>Supporting Documents</CardTitle>
-                <CardDescription>Optionally attach a supporting document (e.g. diagnosis report, POS letter, or eligibility record).</CardDescription>
+                  <CardDescription>Optionally upload any invoices, receipts, or other supporting documents if available.</CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
                 <div className="space-y-2">
@@ -680,8 +643,6 @@ export default function ReferralNewPage() {
                         <dt className="text-muted-foreground">Name:</dt><dd className="col-span-2">{watch('clientFirstName')} {watch('clientLastName')}</dd>
                         <dt className="text-muted-foreground">UCI:</dt><dd className="col-span-2">{watch('clientUci')}</dd>
                         <dt className="text-muted-foreground">Contact Email:</dt><dd className="col-span-2 font-medium">{watch('contactEmail')}</dd>
-                        {watch('diagnosis') && (<><dt className="text-muted-foreground">Diagnosis:</dt><dd className="col-span-2">{watch('diagnosis')}</dd></>)}
-                        {watch('eligibilityCategory') && (<><dt className="text-muted-foreground">Eligibility:</dt><dd className="col-span-2">{watch('eligibilityCategory')}</dd></>)}
                         {supportingDocumentUrl && (<><dt className="text-muted-foreground">Document:</dt><dd className="col-span-2">Attached</dd></>)}
                       </dl>
                     </div>

@@ -60,10 +60,6 @@ export interface Referral {
   /** @nullable */
   paymentTypeRequested?: ReferralPaymentTypeRequested;
   /** @nullable */
-  diagnosis?: string | null;
-  /** @nullable */
-  eligibilityCategory?: string | null;
-  /** @nullable */
   supportingDocumentUrl?: string | null;
   /** @nullable */
   notes?: string | null;

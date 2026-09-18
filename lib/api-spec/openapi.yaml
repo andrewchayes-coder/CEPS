@@ -2584,8 +2584,6 @@ components:
         cost: { type: ["string", "null"] }
         paymentSchedule: { type: ["string", "null"] }
         paymentTypeRequested: { type: ["string", "null"], enum: [service_payment, reimbursement, null] }
-        diagnosis: { type: ["string", "null"] }
-        eligibilityCategory: { type: ["string", "null"] }
         supportingDocumentUrl: { type: ["string", "null"] }
         notes: { type: ["string", "null"] }
         createdAt: { type: ["string", "null"] }
@@ -2599,8 +2597,6 @@ components:
         cost: { type: string, pattern: '^\d+(\.\d{1,2})?$' }
         paymentSchedule: { type: string }
         paymentTypeRequested: { type: string, enum: [service_payment, reimbursement] }
-        diagnosis: { type: string }
-        eligibilityCategory: { type: string }
         supportingDocumentUrl: { type: string }
         notes: { type: string }
     ReferralUpdate:
@@ -2615,8 +2611,6 @@ components:
         cost: { type: ["string", "null"], pattern: '^\d+(\.\d{1,2})?$|^$' }
         paymentSchedule: { type: ["string", "null"] }
         paymentTypeRequested: { type: ["string", "null"], enum: [service_payment, reimbursement, "", null] }
-        diagnosis: { type: ["string", "null"] }
-        eligibilityCategory: { type: ["string", "null"] }
         supportingDocumentUrl: { type: ["string", "null"] }
         notes: { type: string }
         altaAuthReceivedAt: { type: ["string", "null"] }

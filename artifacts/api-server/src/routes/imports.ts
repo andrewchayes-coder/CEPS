@@ -41,6 +41,7 @@ import {
 } from "../lib/importRegistry";
 import { validateRows, collectFieldValues } from "../lib/importValidation";
 import { altaRowFingerprint } from "../lib/altaRemittanceParser";
+import { advanceReferralForAuthorization } from "../lib/advanceReferralForAuthorization";
 
 const router: IRouter = Router();
 
@@ -236,6 +237,7 @@ async function insertRow(entity: ImportEntity, values: Record<string, unknown>, 
         const v = { ...values };
         if (v.paymentType == null && typeof v.serviceCode === "string") v.paymentType = derivePaymentType(v.serviceCode);
         const [row] = await tx.insert(authorizationsTable).values(v as typeof authorizationsTable.$inferInsert).returning();
+        await advanceReferralForAuthorization(txDb, row, userId);
         await audit(userId, "import_authorization", "authorization", row.id, `Bulk import — auth ${row.authNumber}`, txDb);
         return row.id;
       }

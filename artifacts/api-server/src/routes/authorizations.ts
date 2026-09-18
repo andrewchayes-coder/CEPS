@@ -1,7 +1,7 @@
 import { Router, type IRouter } from "express";
 import { eq, desc, and, count, sql, ilike, or, lte, gte, inArray, type SQL } from "drizzle-orm";
 import { anthropic } from "@workspace/integrations-anthropic-ai";
-import { db, authorizationsTable, authorizationVersionsTable, referralsTable, vendorsTable, paymentsTable, usersTable } from "@workspace/db";
+import { db, authorizationsTable, authorizationVersionsTable, paymentsTable, usersTable } from "@workspace/db";
 import {
   ListAuthorizationsQueryParams,
   ListAuthorizationsResponse,
@@ -25,6 +25,7 @@ import {
 } from "../lib/serializers";
 import { sortedOrder } from "../lib/sorting";
 import { softDeleteAuthorization, validateParticipantLinks } from "../lib/participantLinks";
+import { advanceReferralForAuthorization } from "../lib/advanceReferralForAuthorization";
 
 const router: IRouter = Router();
 
@@ -210,26 +211,14 @@ router.post("/authorizations", requireStaff, async (req, res): Promise<void> => 
         status: d.status ?? "active",
       })
       .returning();
+    if (created) {
+      await advanceReferralForAuthorization(txDb, created, req.user!.id);
+    }
     return created;
   });
   if (!auth) {
     res.status(400).json({ error: relationshipError ?? "Invalid participant link" });
     return;
-  }
-
-  // Advance the client's referral: pending_auth -> pending_w9 (or pending_invoice if W-9 on file)
-  const referrals = await db.select().from(referralsTable).where(eq(referralsTable.clientId, auth.clientId));
-  const pending = referrals.find((r) => r.status === "pending_auth" || r.status === "intake");
-  if (pending) {
-    let next = "pending_w9";
-    if (auth.vendorId) {
-      const [vendor] = await db.select().from(vendorsTable).where(eq(vendorsTable.id, auth.vendorId));
-      if (vendor?.w9Status === "on_file") next = "pending_invoice";
-    }
-    await db
-      .update(referralsTable)
-      .set({ status: next, altaAuthReceivedAt: new Date() })
-      .where(eq(referralsTable.id, pending.id));
   }
 
   await audit(req.user!.id, "create_authorization", "authorization", auth.id, `Auth ${auth.authNumber}`);

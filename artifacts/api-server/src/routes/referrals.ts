@@ -257,8 +257,6 @@ router.get("/referrals", requireAuth, async (req, res): Promise<void> => {
         sql`replace(lower(${referralsTable.serviceFrequency}), '_', ' ') ilike ${like}`,
         sql`replace(lower(${referralsTable.paymentTypeRequested}), '_', ' ') ilike ${like}`,
         sql`replace(lower(${referralsTable.paymentSchedule}), '_', ' ') ilike ${like}`,
-        ilike(referralsTable.diagnosis, like),
-        sql`replace(lower(${referralsTable.eligibilityCategory}), '_', ' ') ilike ${like}`,
         ilike(referralsTable.notes, like),
         sql`to_char(${referralsTable.referralDate}, 'Mon FMDD, YYYY') ilike ${like}`,
         normalizedSearch ? sql`cast(${referralsTable.cost} as text) ilike ${numericLike}` : sql`false`,
@@ -319,6 +317,11 @@ router.get("/referrals", requireAuth, async (req, res): Promise<void> => {
 });
 
 router.post("/referrals", requireStaffOrCoordinator, async (req, res): Promise<void> => {
+  if (Object.prototype.hasOwnProperty.call(req.body ?? {}, "diagnosis") ||
+      Object.prototype.hasOwnProperty.call(req.body ?? {}, "eligibilityCategory")) {
+    res.status(400).json({ error: "Diagnosis and eligibility are no longer collected at referral intake" });
+    return;
+  }
   const parsed = CreateReferralBody.safeParse(req.body);
   if (!parsed.success) {
     res.status(400).json({ error: parsed.error.message });
@@ -477,8 +480,6 @@ router.post("/referrals", requireStaffOrCoordinator, async (req, res): Promise<v
         cost: clean(parsed.data.cost),
         paymentSchedule: clean(parsed.data.paymentSchedule),
         paymentTypeRequested: clean(parsed.data.paymentTypeRequested),
-        diagnosis: clean(parsed.data.diagnosis),
-        eligibilityCategory: clean(parsed.data.eligibilityCategory),
         supportingDocumentUrl: clean(parsed.data.supportingDocumentUrl),
         notes: parsed.data.notes,
       })
@@ -547,6 +548,11 @@ router.get("/referrals/:id", requireAuth, async (req, res): Promise<void> => {
 
 router.patch("/referrals/:id", requireStaffOrCoordinator, async (req, res): Promise<void> => {
   const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+  if (Object.prototype.hasOwnProperty.call(req.body ?? {}, "diagnosis") ||
+      Object.prototype.hasOwnProperty.call(req.body ?? {}, "eligibilityCategory")) {
+    res.status(400).json({ error: "Diagnosis and eligibility are no longer collected at referral intake" });
+    return;
+  }
   const parsed = UpdateReferralBody.safeParse(req.body);
   if (!parsed.success) {
     res.status(400).json({ error: parsed.error.message });
@@ -558,7 +564,7 @@ router.patch("/referrals/:id", requireStaffOrCoordinator, async (req, res): Prom
     updates.altaAuthReceivedAt = altaAuthReceivedAt ? new Date(altaAuthReceivedAt) : null;
   }
   // Portal sends '' for untouched optional fields — normalize to null.
-  for (const k of ["parentEmail", "cost", "paymentSchedule", "paymentTypeRequested", "diagnosis", "eligibilityCategory", "supportingDocumentUrl"] as const) {
+  for (const k of ["parentEmail", "cost", "paymentSchedule", "paymentTypeRequested", "supportingDocumentUrl"] as const) {
     if (updates[k] === "") updates[k] = null;
   }
   if (updates.parentEmail) updates.parentEmail = String(updates.parentEmail).trim().toLowerCase();

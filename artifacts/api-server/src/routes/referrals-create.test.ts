@@ -14,8 +14,7 @@ import {
 import app from "../app";
 import { newToken } from "../lib/auth";
 
-// POST /referrals — diagnosis / eligibilityCategory / supportingDocumentUrl
-// round-trip through create + get, plus '' -> null normalization.
+// POST /referrals — supportingDocumentUrl round-trip.
 const nonce = `refcr${Date.now().toString(36)}`;
 
 let staffId: string;
@@ -105,8 +104,8 @@ afterAll(async () => {
   await db.delete(usersTable).where(eq(usersTable.id, staffId));
 });
 
-describe("POST /referrals diagnosis/eligibility/document fields", () => {
-  it("round-trips diagnosis, eligibilityCategory and supportingDocumentUrl", async () => {
+describe("POST /referrals supporting documents", () => {
+  it("round-trips supportingDocumentUrl and does not expose deprecated fields", async () => {
     const uci = `${nonce}-uci1`;
     const vendorName = `${nonce} Vendor1`;
     createdClientUcis.push(uci);
@@ -119,17 +118,15 @@ describe("POST /referrals diagnosis/eligibility/document fields", () => {
         submittedVia: "portal",
         serviceFrequency: "monthly",
         parentEmail: "must-not-send@test.local",
-        diagnosis: "Autism Spectrum Disorder",
-        eligibilityCategory: "Developmental Disability",
         supportingDocumentUrl: "/objects/uploads/doc-123",
         intakeFields: baseIntake(uci, vendorName),
       });
 
     expect(res.status).toBe(201);
     createdReferralIds.push(res.body.id);
-    expect(res.body.diagnosis).toBe("Autism Spectrum Disorder");
-    expect(res.body.eligibilityCategory).toBe("Developmental Disability");
     expect(res.body.supportingDocumentUrl).toBe("/objects/uploads/doc-123");
+    expect(res.body).not.toHaveProperty("diagnosis");
+    expect(res.body).not.toHaveProperty("eligibilityCategory");
     expect(res.body.status).toBe("intake");
     expect(res.body.parentEmail).toBeNull();
     expect(res.body.intakeSentAt).toBeNull();
@@ -137,12 +134,12 @@ describe("POST /referrals diagnosis/eligibility/document fields", () => {
     // Fetch it back to confirm persistence.
     const get = await request(app).get(`/api/referrals/${res.body.id}`).set("Cookie", staffCookie);
     expect(get.status).toBe(200);
-    expect(get.body.diagnosis).toBe("Autism Spectrum Disorder");
-    expect(get.body.eligibilityCategory).toBe("Developmental Disability");
     expect(get.body.supportingDocumentUrl).toBe("/objects/uploads/doc-123");
+    expect(get.body).not.toHaveProperty("diagnosis");
+    expect(get.body).not.toHaveProperty("eligibilityCategory");
   });
 
-  it("normalizes '' to null for the optional diagnosis/eligibility/document fields", async () => {
+  it("normalizes '' to null for the optional document field", async () => {
     const uci = `${nonce}-uci2`;
     const vendorName = `${nonce} Vendor2`;
     createdClientUcis.push(uci);
@@ -154,26 +151,20 @@ describe("POST /referrals diagnosis/eligibility/document fields", () => {
       .send({
         submittedVia: "portal",
         serviceFrequency: "one_time",
-        diagnosis: "",
-        eligibilityCategory: "",
         supportingDocumentUrl: "",
         intakeFields: baseIntake(uci, vendorName),
       });
 
     expect(res.status).toBe(201);
     createdReferralIds.push(res.body.id);
-    expect(res.body.diagnosis).toBeNull();
-    expect(res.body.eligibilityCategory).toBeNull();
     expect(res.body.supportingDocumentUrl).toBeNull();
 
     // Confirm the DB row actually stored NULL (not the empty string).
     const [row] = await db.select().from(referralsTable).where(eq(referralsTable.id, res.body.id));
-    expect(row.diagnosis).toBeNull();
-    expect(row.eligibilityCategory).toBeNull();
     expect(row.supportingDocumentUrl).toBeNull();
   });
 
-  it("omitting the fields entirely stores null", async () => {
+  it("omitting the document field stores null", async () => {
     const uci = `${nonce}-uci3`;
     const vendorName = `${nonce} Vendor3`;
     createdClientUcis.push(uci);
@@ -190,8 +181,6 @@ describe("POST /referrals diagnosis/eligibility/document fields", () => {
 
     expect(res.status).toBe(201);
     createdReferralIds.push(res.body.id);
-    expect(res.body.diagnosis).toBeNull();
-    expect(res.body.eligibilityCategory).toBeNull();
     expect(res.body.supportingDocumentUrl).toBeNull();
   });
 });

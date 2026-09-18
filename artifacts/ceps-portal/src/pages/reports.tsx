@@ -137,6 +137,7 @@ export default function ReportsPage() {
               startDate={globalDateRange.startDate}
               endDate={globalDateRange.endDate}
               onChange={setGlobalDateRange}
+              presentation="single-level"
             />
           </div>
         </CardContent>

@@ -14,6 +14,7 @@ export interface DateRangeFilterProps {
   onChange: (range: { startDate?: string; endDate?: string }) => void;
   label?: string;
   className?: string;
+  presentation?: 'nested' | 'single-level';
 }
 
 const PRESETS = [
@@ -24,7 +25,14 @@ const PRESETS = [
   { label: 'Custom Range', value: 'custom' },
 ];
 
-export function DateRangeFilter({ startDate, endDate, onChange, label = 'Date range', className }: DateRangeFilterProps) {
+export function DateRangeFilter({
+  startDate,
+  endDate,
+  onChange,
+  label = 'Date range',
+  className,
+  presentation = 'nested',
+}: DateRangeFilterProps) {
   const [preset, setPreset] = useState<string>(
     startDate || endDate ? 'custom' : ''
   );
@@ -107,26 +115,42 @@ export function DateRangeFilter({ startDate, endDate, onChange, label = 'Date ra
             )}
           >
             <CalendarIcon className="mr-2 h-4 w-4 shrink-0" />
-            <span className="truncate">{displayValue}</span>
+            <span className="truncate" data-testid="date-range-display">{displayValue}</span>
           </Button>
         </PopoverTrigger>
         <PopoverContent className="w-[320px] p-4" align="start">
           <div className="space-y-4">
-            <div className="space-y-2">
-              <Label>Date Range Preset</Label>
-              <Select value={preset} onValueChange={handlePresetChange}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Select range..." />
-                </SelectTrigger>
-                <SelectContent>
-                  {PRESETS.map((p) => (
-                    <SelectItem key={p.value} value={p.value}>
-                      {p.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
+            {presentation === 'single-level' ? (
+              <div className="space-y-1" data-testid="date-range-presets">
+                {PRESETS.map((p) => (
+                  <Button
+                    key={p.value}
+                    type="button"
+                    variant={preset === p.value ? 'secondary' : 'ghost'}
+                    className="w-full justify-start"
+                    onClick={() => handlePresetChange(p.value)}
+                  >
+                    {p.label}
+                  </Button>
+                ))}
+              </div>
+            ) : (
+              <div className="space-y-2">
+                <Label>Date Range Preset</Label>
+                <Select value={preset} onValueChange={handlePresetChange}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select range..." />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {PRESETS.map((p) => (
+                      <SelectItem key={p.value} value={p.value}>
+                        {p.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
             
             {preset === 'custom' && (
               <div className="grid grid-cols-2 gap-2 pt-2 border-t">

@@ -19,3 +19,4 @@
 - [Family representative workflow boundary](family-representative-boundary.md) — account links are invite-managed, intake links are send-managed, and legacy signature links retain an explicit fallback.
 - [Literal wildcard search](literal-wildcard-search.md) — normalize enum separators before ILIKE and avoid raw JSON text, or escaped "_" searches still match stored keys/values.
 - [Unmatched POS lifecycle](unmatched-pos-lifecycle.md) — UCI-first matching and durable PDF-backed queue completion must remain server-validated and transactional.
+- [Invoice and payment child rows](invoice-payment-child-rows.md) — financial truth lives in invoice line items and payment allocations; validation and remittance capacity must honor every child.

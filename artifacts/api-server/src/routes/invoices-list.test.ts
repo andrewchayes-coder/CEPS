@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
-import { inArray } from "drizzle-orm";
+import { inArray, eq } from "drizzle-orm";
 import {
   db,
   usersTable,
@@ -8,6 +8,7 @@ import {
   vendorsTable,
   authorizationsTable,
   invoicesTable,
+  invoiceLineItemsTable,
 } from "@workspace/db";
 import app from "../app";
 import request from "supertest";
@@ -50,6 +51,7 @@ async function insertInvoice(opts: {
   status?: string;
   serviceMonth?: string;
 }) {
+  const serviceMonth = opts.serviceMonth ?? nextMonth();
   const [i] = await db
     .insert(invoicesTable)
     .values({
@@ -57,12 +59,14 @@ async function insertInvoice(opts: {
       vendorId: opts.vendorId ?? null,
       submittedByRole: "staff",
       submittedDate: "2026-01-15",
-      serviceMonth: opts.serviceMonth ?? nextMonth(),
+       serviceMonth,
       amountRequested: "100.00",
       paymentType: "direct_payment",
       status: opts.status ?? "pending_review",
     })
     .returning();
+  const [auth] = await db.select().from(authorizationsTable).where(eq(authorizationsTable.clientId, opts.clientId)).limit(1);
+  if (auth) await db.insert(invoiceLineItemsTable).values({ invoiceId: i.id, authorizationId: auth.id, serviceMonth, amount: "100.00" });
   return i;
 }
 

@@ -7,6 +7,7 @@ import {
   clientsTable,
   authorizationsTable,
   paymentsTable,
+  paymentAllocationsTable,
   feesTable,
   auditLogTable,
 } from "@workspace/db";
@@ -90,6 +91,9 @@ async function seedPayment(paymentMonth: string, authorizationId: string | null)
       loggedBy: staffId,
     })
     .returning();
+  if (authorizationId) {
+    await db.insert(paymentAllocationsTable).values({ paymentId: p.id, authorizationId, amount: "100.00" });
+  }
   return p;
 }
 
@@ -154,6 +158,7 @@ describe("POST /payments duplicate hard stop", () => {
         qbCheckNumber: nextCheck(),
         checkDate: "2026-08-15",
         amount: "100.00",
+        allocations: [{ authorizationId: authId, amount: "100.00" }],
         paymentMonth: "2026-08",
         paymentType: "direct_payment",
       });
@@ -168,6 +173,7 @@ describe("POST /payments duplicate hard stop", () => {
         qbCheckNumber: nextCheck(),
         checkDate: "2026-08-20",
         amount: "200.00",
+        allocations: [{ authorizationId: authId, amount: "200.00" }],
         paymentMonth: "2026-08",
         paymentType: "direct_payment",
       });
@@ -193,6 +199,7 @@ describe("POST /payments duplicate hard stop", () => {
         qbCheckNumber: nextCheck(),
         checkDate: "2026-09-15",
         amount: "100.00",
+        allocations: [{ authorizationId: authId, amount: "100.00" }],
         paymentMonth: "2026-09",
         paymentType: "direct_payment",
       });
@@ -207,6 +214,7 @@ describe("POST /payments duplicate hard stop", () => {
         qbCheckNumber: overrideCheck,
         checkDate: "2026-09-20",
         amount: "250.00",
+        allocations: [{ authorizationId: authId, amount: "250.00" }],
         paymentMonth: "2026-09",
         paymentType: "direct_payment",
         overrideDuplicate: true,
@@ -234,6 +242,7 @@ describe("POST /payments duplicate hard stop", () => {
         qbCheckNumber: nextCheck(),
         checkDate: "2026-10-15",
         amount: "100.00",
+        allocations: [{ authorizationId: authId, amount: "100.00" }],
         paymentMonth: "2026-10",
         paymentType: "direct_payment",
       });
@@ -247,6 +256,7 @@ describe("POST /payments duplicate hard stop", () => {
         qbCheckNumber: nextCheck(),
         checkDate: "2026-10-20",
         amount: "100.00",
+        allocations: [{ authorizationId: authId, amount: "100.00" }],
         paymentMonth: "2026-10",
         paymentType: "direct_payment",
         overrideDuplicate: true,
@@ -265,6 +275,7 @@ describe("POST /payments duplicate hard stop", () => {
         qbCheckNumber: nextCheck(),
         checkDate: "2026-11-15",
         amount: "100.00",
+        allocations: [{ authorizationId: authId, amount: "100.00" }],
         paymentMonth: "2026-11",
         paymentType: "direct_payment",
       });
@@ -282,6 +293,7 @@ describe("POST /payments duplicate hard stop", () => {
         qbCheckNumber: nextCheck(),
         checkDate: "2026-12-15",
         amount: "100.00",
+        allocations: [{ authorizationId: authId, amount: "100.00" }],
         paymentMonth: "2026-12",
         paymentType: "direct_payment",
       });
@@ -299,6 +311,7 @@ describe("POST /payments duplicate hard stop", () => {
         qbCheckNumber: nextCheck(),
         checkDate: "2026-12-20",
         amount: "200.00",
+        allocations: [{ authorizationId: authId, amount: "200.00" }],
         paymentType: "direct_payment",
       });
     expect(dup.status).toBe(409);
@@ -330,6 +343,7 @@ describe("POST /payments duplicate hard stop", () => {
         qbCheckNumber: nextCheck(),
         checkDate: "2028-01-15",
         amount: "100.00",
+        allocations: [{ authorizationId: auth2.id, amount: "100.00" }],
         paymentMonth: "2028-01",
         paymentType: "direct_payment",
       });
@@ -342,6 +356,7 @@ describe("POST /payments duplicate hard stop", () => {
         qbCheckNumber: nextCheck(),
         checkDate: "2028-01-20",
         amount: "250.00",
+        allocations: [{ authorizationId: auth2.id, amount: "250.00" }],
         paymentMonth: "2028-01",
         paymentType: "direct_payment",
         overrideDuplicate: true,
@@ -374,6 +389,7 @@ describe("PATCH /payments/:id duplicate hard stop", () => {
         qbCheckNumber: nextCheck(),
         checkDate: "2029-01-15",
         amount: "100.00",
+        allocations: [{ authorizationId: authId, amount: "100.00" }],
         paymentMonth: "2029-01",
         paymentType: "direct_payment",
       });
@@ -387,6 +403,7 @@ describe("PATCH /payments/:id duplicate hard stop", () => {
         qbCheckNumber: nextCheck(),
         checkDate: "2029-02-15",
         amount: "100.00",
+        allocations: [{ authorizationId: authId, amount: "100.00" }],
         paymentMonth: "2029-02",
         paymentType: "direct_payment",
       });
@@ -419,6 +436,7 @@ describe("PATCH /payments/:id duplicate hard stop", () => {
         qbCheckNumber: nextCheck(),
         checkDate: "2029-05-15",
         amount: "100.00",
+        allocations: [{ authorizationId: authId, amount: "100.00" }],
         paymentMonth: "2029-05",
         paymentType: "direct_payment",
       });
@@ -431,6 +449,7 @@ describe("PATCH /payments/:id duplicate hard stop", () => {
         qbCheckNumber: nextCheck(),
         checkDate: "2029-06-15",
         amount: "100.00",
+        allocations: [{ authorizationId: authId, amount: "100.00" }],
         paymentMonth: "2029-06",
         paymentType: "direct_payment",
       });
@@ -453,6 +472,7 @@ describe("PATCH /payments/:id duplicate hard stop", () => {
         qbCheckNumber: nextCheck(),
         checkDate: "2029-09-15",
         amount: "100.00",
+        allocations: [{ authorizationId: authId, amount: "100.00" }],
         paymentMonth: "2029-09",
         paymentType: "direct_payment",
       });
@@ -465,6 +485,7 @@ describe("PATCH /payments/:id duplicate hard stop", () => {
         qbCheckNumber: nextCheck(),
         checkDate: "2029-10-15",
         amount: "100.00",
+        allocations: [{ authorizationId: authId, amount: "100.00" }],
         paymentMonth: "2029-10",
         paymentType: "direct_payment",
       });

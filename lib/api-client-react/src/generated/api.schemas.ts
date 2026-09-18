@@ -881,6 +881,17 @@ export const InvoiceStatus = {
   duplicate: 'duplicate',
 } as const;
 
+export interface InvoiceLineItem {
+  id: string;
+  authorizationId: string;
+  /** @nullable */
+  authNumber?: string | null;
+  /** @pattern ^\d{4}-(0[1-9]|1[0-2])$ */
+  serviceMonth: string;
+  /** @pattern ^\d+(\.\d{1,2})?$ */
+  amount: string;
+}
+
 export interface Invoice {
   id: string;
   clientId: string;
@@ -896,8 +907,11 @@ export interface Invoice {
   vendorName?: string | null;
   submittedByRole: InvoiceSubmittedByRole;
   submittedDate: string;
-  /** YYYY-MM */
-  serviceMonth: string;
+  /**
+     * Deprecated compatibility value; line item months are authoritative.
+     * @nullable
+     */
+  serviceMonth: string | null;
   amountRequested: string;
   paymentType: InvoicePaymentType;
   /** @nullable */
@@ -913,6 +927,7 @@ export interface Invoice {
   notes?: string | null;
   /** @nullable */
   createdAt?: string | null;
+  lineItems: InvoiceLineItem[];
 }
 
 export type PaymentPaymentType = typeof PaymentPaymentType[keyof typeof PaymentPaymentType];
@@ -932,6 +947,15 @@ export const PaymentSource = {
   manual: 'manual',
   historical_import: 'historical_import',
 } as const;
+
+export interface PaymentAllocation {
+  id: string;
+  authorizationId: string;
+  /** @nullable */
+  authNumber?: string | null;
+  /** @pattern ^\d+(\.\d{1,2})?$ */
+  amount: string;
+}
 
 export interface Payment {
   id: string;
@@ -963,6 +987,7 @@ export interface Payment {
   remainingAmount: string;
   /** @nullable */
   createdAt?: string | null;
+  allocations: PaymentAllocation[];
 }
 
 export type RemittanceStatus = typeof RemittanceStatus[keyof typeof RemittanceStatus];
@@ -1556,17 +1581,27 @@ export const InvoiceInputPaymentType = {
   reimbursement: 'reimbursement',
 } as const;
 
+export interface InvoiceLineItemInput {
+  authorizationId: string;
+  /** @pattern ^\d{4}-(0[1-9]|1[0-2])$ */
+  serviceMonth: string;
+  /** @pattern ^\d+(\.\d{1,2})?$ */
+  amount: string;
+}
+
 export interface InvoiceInput {
   clientId: string;
   /** @nullable */
   authorizationId?: string | null;
   /** @nullable */
   vendorId?: string | null;
-  serviceMonth: string;
-  amountRequested: string;
+  serviceMonth?: string;
+  amountRequested?: string;
   paymentType: InvoiceInputPaymentType;
   documentUrl?: string;
   notes?: string;
+  /** @minItems 1 */
+  lineItems: InvoiceLineItemInput[];
 }
 
 export type InvoiceUpdatePaymentType = typeof InvoiceUpdatePaymentType[keyof typeof InvoiceUpdatePaymentType];
@@ -1600,6 +1635,8 @@ export interface InvoiceUpdate {
   notes?: string;
   /** @nullable */
   documentUrl?: string | null;
+  /** @minItems 1 */
+  lineItems?: InvoiceLineItemInput[];
 }
 
 export interface InvoiceValidationInput {
@@ -1629,6 +1666,12 @@ export const PaymentInputPaymentType = {
   fee: 'fee',
 } as const;
 
+export interface PaymentAllocationInput {
+  authorizationId: string;
+  /** @pattern ^\d+(\.\d{1,2})?$ */
+  amount: string;
+}
+
 export interface PaymentInput {
   clientId: string;
   /** @nullable */
@@ -1650,6 +1693,8 @@ export interface PaymentInput {
   overrideDuplicate?: boolean;
   /** Required written justification when overrideDuplicate is true */
   overrideJustification?: string;
+  /** @minItems 1 */
+  allocations: PaymentAllocationInput[];
 }
 
 export type DuplicatePaymentErrorCode = typeof DuplicatePaymentErrorCode[keyof typeof DuplicatePaymentErrorCode];
@@ -1970,6 +2015,8 @@ export interface PaymentUpdate {
   overrideDuplicate?: boolean;
   /** Required written justification when overrideDuplicate is true */
   overrideJustification?: string;
+  /** @minItems 1 */
+  allocations?: PaymentAllocationInput[];
 }
 
 export type MonthlyFeeAuditItemIssue = typeof MonthlyFeeAuditItemIssue[keyof typeof MonthlyFeeAuditItemIssue];

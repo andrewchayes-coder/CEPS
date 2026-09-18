@@ -5,6 +5,7 @@
  * CEPS Portal API — referral intake, authorizations, invoices, payments, remittances, vendors, reporting
  * OpenAPI spec version: 0.1.0
  */
+import type { PaymentAllocationInput } from './paymentAllocationInput';
 import type { PaymentUpdatePaymentType } from './paymentUpdatePaymentType';
 
 export interface PaymentUpdate {
@@ -27,4 +28,6 @@ export interface PaymentUpdate {
   overrideDuplicate?: boolean;
   /** Required written justification when overrideDuplicate is true */
   overrideJustification?: string;
+  /** @minItems 1 */
+  allocations?: PaymentAllocationInput[];
 }

@@ -24,7 +24,7 @@ export const invoicesTable = pgTable("invoices", {
   vendorId: uuid("vendor_id").references(() => vendorsTable.id),
   submittedByRole: text("submitted_by_role").notNull(), // vendor | parent | staff
   submittedDate: date("submitted_date", { mode: "string" }).notNull(),
-  serviceMonth: text("service_month").notNull(), // YYYY-MM
+  serviceMonth: text("service_month"), // Deprecated compatibility column; use invoice_line_items.service_month.
   amountRequested: numeric("amount_requested", {
     precision: 12,
     scale: 2,

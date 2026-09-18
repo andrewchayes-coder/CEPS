@@ -5,6 +5,7 @@
  * CEPS Portal API — referral intake, authorizations, invoices, payments, remittances, vendors, reporting
  * OpenAPI spec version: 0.1.0
  */
+import type { PaymentAllocation } from './paymentAllocation';
 import type { PaymentPaymentType } from './paymentPaymentType';
 import type { PaymentSource } from './paymentSource';
 
@@ -38,4 +39,5 @@ export interface Payment {
   remainingAmount: string;
   /** @nullable */
   createdAt?: string | null;
+  allocations: PaymentAllocation[];
 }

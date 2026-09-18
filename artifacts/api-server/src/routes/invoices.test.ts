@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { inArray, eq } from "drizzle-orm";
-import { db, usersTable, sessionsTable, clientsTable, invoicesTable, authorizationsTable, paymentsTable, auditLogTable, vendorsTable } from "@workspace/db";
+import { db, usersTable, sessionsTable, clientsTable, invoicesTable, invoiceLineItemsTable, authorizationsTable, paymentsTable, paymentAllocationsTable, auditLogTable, vendorsTable } from "@workspace/db";
 import request from "supertest";
 import app from "../app";
 import { newToken } from "../lib/auth";
@@ -77,12 +77,14 @@ async function makeInvoiceForVendor(authId: string, vendorId: string, amountRequ
       status: "pending_review",
     })
     .returning();
+  await db.insert(invoiceLineItemsTable).values({ invoiceId: inv.id, authorizationId: authId, serviceMonth, amount: amountRequested });
   return inv;
 }
 
 let authCounter = 0;
 
 async function makeInvoice(status: string) {
+  const auth = await makeAuth({ maxPeriodAmount: "10000.00" });
   const [inv] = await db
     .insert(invoicesTable)
     .values({
@@ -95,7 +97,8 @@ async function makeInvoice(status: string) {
       status,
     })
     .returning();
-  return inv;
+  await db.insert(invoiceLineItemsTable).values({ invoiceId: inv.id, authorizationId: auth.id, serviceMonth: "2026-01", amount: "100.00" });
+  return { ...inv, testAuthorizationId: auth.id };
 }
 
 async function makeAuth(opts: { monthlyAmount?: string | null; oneTimeAmount?: string | null; maxPeriodAmount: string; vendorId?: string | null }) {
@@ -132,6 +135,7 @@ async function makeInvoiceFor(authId: string, amountRequested: string, serviceMo
       status: "pending_review",
     })
     .returning();
+  await db.insert(invoiceLineItemsTable).values({ invoiceId: inv.id, authorizationId: authId, serviceMonth, amount: amountRequested });
   return inv;
 }
 
@@ -146,7 +150,7 @@ describe("PATCH /invoices/:id status reset on material edit", () => {
     const res = await request(app)
       .patch(`/api/invoices/${inv.id}`)
       .set("Cookie", cookie)
-      .send({ amountRequested: "200.00" });
+      .send({ amountRequested: "200.00", lineItems: [{ authorizationId: inv.testAuthorizationId, serviceMonth: "2026-01", amount: "200.00" }] });
     expect(res.status).toBe(200);
     expect(res.body.status).toBe("pending_review");
     expect(res.body.amountRequested).toBe("200.00");
@@ -187,7 +191,7 @@ describe("PATCH /invoices/:id status reset on material edit", () => {
     const res = await request(app)
       .patch(`/api/invoices/${inv.id}`)
       .set("Cookie", cookie)
-      .send({ amountRequested: "300.00", status: "approved" });
+      .send({ amountRequested: "300.00", status: "approved", lineItems: [{ authorizationId: inv.testAuthorizationId, serviceMonth: "2026-01", amount: "300.00" }] });
     expect(res.status).toBe(200);
     expect(res.body.status).toBe("approved");
     expect(res.body.reviewedBy).toBe(staffId);
@@ -258,7 +262,7 @@ describe("POST /invoices/:id/validate decimal-safe money math", () => {
     // 30 payments of 0.10 = exactly 3.00; a naive Number() reduce drifts.
     const auth = await makeAuth({ maxPeriodAmount: "3.10" });
     for (let i = 0; i < 30; i++) {
-      await db.insert(paymentsTable).values({
+      const [payment] = await db.insert(paymentsTable).values({
         clientId,
         authorizationId: auth.id,
         qbCheckNumber: `${nonce}-inv-pay-${authCounter}-${i}`,
@@ -267,7 +271,8 @@ describe("POST /invoices/:id/validate decimal-safe money math", () => {
         paymentType: "direct_payment",
         source: "manual",
         loggedBy: staffId,
-      });
+      }).returning();
+      await db.insert(paymentAllocationsTable).values({ paymentId: payment.id, authorizationId: auth.id, amount: "0.10" });
     }
     // 3.00 already paid + 0.10 invoice = 3.10 == max exactly → within.
     const within = await makeInvoiceFor(auth.id, "0.10", "2026-02");
@@ -280,7 +285,7 @@ describe("POST /invoices/:id/validate decimal-safe money math", () => {
   it("fails within_max_period_amount when the cumulative sum exceeds the max by a cent", async () => {
     const auth = await makeAuth({ maxPeriodAmount: "3.09" });
     for (let i = 0; i < 30; i++) {
-      await db.insert(paymentsTable).values({
+      const [payment] = await db.insert(paymentsTable).values({
         clientId,
         authorizationId: auth.id,
         qbCheckNumber: `${nonce}-inv-pay2-${authCounter}-${i}`,
@@ -289,7 +294,8 @@ describe("POST /invoices/:id/validate decimal-safe money math", () => {
         paymentType: "direct_payment",
         source: "manual",
         loggedBy: staffId,
-      });
+      }).returning();
+      await db.insert(paymentAllocationsTable).values({ paymentId: payment.id, authorizationId: auth.id, amount: "0.10" });
     }
     // 3.00 paid + 0.10 = 3.10 > 3.09 → exceeds.
     const over = await makeInvoiceFor(auth.id, "0.10", "2026-02");

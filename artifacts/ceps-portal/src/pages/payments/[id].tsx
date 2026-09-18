@@ -65,16 +65,6 @@ export default function PaymentDetailPage() {
             <dd className="col-span-2"><ClientLink id={payment.clientId} name={payment.clientName} testId="link-payment-client" /></dd>
             <dt className="text-muted-foreground">Payee (Vendor):</dt>
             <dd className="col-span-2"><VendorLink id={payment.vendorId} name={payment.vendorName} testId="link-payment-vendor" /></dd>
-            <dt className="text-muted-foreground">Authorization:</dt>
-            <dd className="col-span-2 font-mono">
-              {payment.authorizationId && payment.authNumber ? (
-                <Link href={`/authorizations/${payment.authorizationId}`} className="text-primary hover:underline" data-testid="link-payment-authorization">
-                  {payment.authNumber}
-                </Link>
-              ) : (
-                <span className="text-muted-foreground">-</span>
-              )}
-            </dd>
             {payment.invoiceId && (
               <>
                 <dt className="text-muted-foreground">Invoice:</dt>
@@ -87,8 +77,6 @@ export default function PaymentDetailPage() {
             )}
             <dt className="text-muted-foreground">Check Date:</dt>
             <dd className="col-span-2">{format(new Date(payment.checkDate), 'MMM d, yyyy')}</dd>
-            <dt className="text-muted-foreground">Service Month:</dt>
-            <dd className="col-span-2">{payment.paymentMonth || '-'}</dd>
             <dt className="text-muted-foreground">Amount:</dt>
             <dd className="col-span-2 font-bold text-lg">${parseFloat(payment.amount).toFixed(2)}</dd>
             <dt className="text-muted-foreground">Payment Type:</dt>
@@ -104,6 +92,30 @@ export default function PaymentDetailPage() {
             <dt className="text-muted-foreground"><MetricHelp label="Remaining" explanation="Amount not yet matched to a remittance." /></dt>
             <dd className="col-span-2">${parseFloat(payment.remainingAmount ?? payment.amount).toFixed(2)}</dd>
           </dl>
+
+          <div className="pt-4 border-t space-y-3 mt-4">
+            <p className="font-semibold">Allocations</p>
+            <div className="space-y-2">
+              {payment.allocations && payment.allocations.length > 0 ? payment.allocations.map((alloc, index) => (
+                <div key={alloc.id || index} className="p-3 bg-muted/30 rounded-md border text-sm flex flex-col gap-1" data-testid={`text-payment-alloc-${index}`}>
+                  <div className="flex justify-between font-medium">
+                    <span>
+                      {alloc.authorizationId ? (
+                        <Link href={`/authorizations/${alloc.authorizationId}`} className="text-primary hover:underline">{alloc.authNumber}</Link>
+                      ) : (
+                        <span className="italic">Manual / No Auth</span>
+                      )}
+                    </span>
+                    <span>${parseFloat(alloc.amount).toFixed(2)}</span>
+                  </div>
+                </div>
+              )) : (
+                <div className="p-3 bg-muted/30 rounded-md border text-sm text-muted-foreground">
+                  No explicit allocations.
+                </div>
+              )}
+            </div>
+          </div>
         </CardContent>
       </Card>
     </div>

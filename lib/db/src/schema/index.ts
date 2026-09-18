@@ -8,6 +8,8 @@ export * from "./authorizationVersions";
 export * from "./invoices";
 export * from "./payments";
 export * from "./remittances";
+export * from "./invoiceLineItems";
+export * from "./paymentAllocations";
 export * from "./fees";
 export * from "./audit";
 export * from "./unmatchedPosDocuments";

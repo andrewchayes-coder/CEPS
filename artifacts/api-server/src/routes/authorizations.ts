@@ -1,7 +1,7 @@
 import { Router, type IRouter } from "express";
 import { eq, desc, and, count, sql, ilike, or, lte, gte, inArray, type SQL } from "drizzle-orm";
 import { anthropic } from "@workspace/integrations-anthropic-ai";
-import { db, authorizationsTable, authorizationVersionsTable, paymentsTable, usersTable, unmatchedPosDocumentsTable, clientsTable } from "@workspace/db";
+import { db, authorizationsTable, authorizationVersionsTable, paymentsTable, paymentAllocationsTable, usersTable, unmatchedPosDocumentsTable, clientsTable } from "@workspace/db";
 import {
   ListAuthorizationsQueryParams,
   ListAuthorizationsResponse,
@@ -134,6 +134,7 @@ router.get("/authorizations", requireAuth, async (req, res): Promise<void> => {
   if (query.data.endDate) conditions.push(lte(authorizationsTable.servicePeriodStart, query.data.endDate));
   if (query.data.search) {
     const like = `%${escapeLike(query.data.search)}%`;
+    const normalizedSearch = query.data.search.trim().toLowerCase().replace(/\s+/g, "_");
     conditions.push(
       or(
         ilike(authorizationsTable.authNumber, like),
@@ -164,6 +165,14 @@ router.get("/authorizations", requireAuth, async (req, res): Promise<void> => {
         sql`${authorizationsTable.vendorId} in (select id from vendors where coalesce(alta_vendor_number, '') ilike ${like} or coalesce(contact_person, '') ilike ${like} or coalesce(email, '') ilike ${like})`,
       )!,
     );
+    if (normalizedSearch === "direct_payment") {
+      conditions.push(eq(authorizationsTable.paymentType, "direct_payment"));
+      // Legacy rows with an invalid service code must not make the otherwise
+      // valid operational display search fail response-schema validation.
+      conditions.push(inArray(authorizationsTable.serviceCode, ["459", "490", "024"]));
+    }
+    if (normalizedSearch === "reimbursement") conditions.push(eq(authorizationsTable.paymentType, "reimbursement"));
+    if (normalizedSearch === "fee") conditions.push(eq(authorizationsTable.paymentType, "fee"));
   }
 
   // The `status` and `expiringWithinDays` filters operate on the *derived*
@@ -173,7 +182,7 @@ router.get("/authorizations", requireAuth, async (req, res): Promise<void> => {
   //   totalPaid  = coalesce(sum(non-deleted payments for this auth), 0)
   //   effective  = pending | expired (period end past) | exhausted (paid ≥ max) | status
   //   days       = ceil((servicePeriodEnd@00:00Z − now) / 1 day)
-  const totalPaidSql = sql`coalesce((select sum(${paymentsTable.amount}) from ${paymentsTable} where ${paymentsTable.authorizationId} = ${authorizationsTable.id} and ${paymentsTable.isDeleted} = false), 0)`;
+  const totalPaidSql = sql`coalesce((select sum(${paymentAllocationsTable.amount}) from ${paymentAllocationsTable} inner join ${paymentsTable} on ${paymentsTable.id} = ${paymentAllocationsTable.paymentId} where ${paymentAllocationsTable.authorizationId} = ${authorizationsTable.id} and ${paymentsTable.isDeleted} = false), 0)`;
   const effectiveStatusSql = sql`case when ${authorizationsTable.servicePeriodStart} > (now() at time zone 'utc')::date then 'pending' when ${authorizationsTable.status} = 'pending' then 'pending' when ${authorizationsTable.servicePeriodEnd} < (now() at time zone 'utc')::date then 'expired' when ${totalPaidSql} >= ${authorizationsTable.maxPeriodAmount} then 'exhausted' else ${authorizationsTable.status} end`;
   const daysUntilExpirySql = sql`ceil(extract(epoch from ((${authorizationsTable.servicePeriodEnd} || 'T00:00:00Z')::timestamptz - now())) / 86400)`;
   if (query.data.status) {

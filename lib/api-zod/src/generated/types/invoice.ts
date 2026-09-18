@@ -5,6 +5,7 @@
  * CEPS Portal API — referral intake, authorizations, invoices, payments, remittances, vendors, reporting
  * OpenAPI spec version: 0.1.0
  */
+import type { InvoiceLineItem } from './invoiceLineItem';
 import type { InvoicePaymentType } from './invoicePaymentType';
 import type { InvoiceStatus } from './invoiceStatus';
 import type { InvoiceSubmittedByRole } from './invoiceSubmittedByRole';
@@ -24,8 +25,11 @@ export interface Invoice {
   vendorName?: string | null;
   submittedByRole: InvoiceSubmittedByRole;
   submittedDate: string;
-  /** YYYY-MM */
-  serviceMonth: string;
+  /**
+     * Deprecated compatibility value; line item months are authoritative.
+     * @nullable
+     */
+  serviceMonth: string | null;
   amountRequested: string;
   paymentType: InvoicePaymentType;
   /** @nullable */
@@ -41,4 +45,5 @@ export interface Invoice {
   notes?: string | null;
   /** @nullable */
   createdAt?: string | null;
+  lineItems: InvoiceLineItem[];
 }

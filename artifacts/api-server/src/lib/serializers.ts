@@ -8,6 +8,7 @@ import {
   usersTable,
   authorizationsTable,
   paymentsTable,
+  paymentAllocationsTable,
   type Client,
   type Vendor,
   type Referral,
@@ -174,12 +175,13 @@ export async function authorizationTotalsPaid(ids: string[]): Promise<Map<string
   if (ids.length === 0) return new Map();
   const rows = await db
     .select({
-      authorizationId: paymentsTable.authorizationId,
-      total: sql<string>`coalesce(sum(${paymentsTable.amount}), 0)`,
+      authorizationId: paymentAllocationsTable.authorizationId,
+        total: sql<string>`coalesce(sum(${paymentAllocationsTable.amount}), 0)`,
     })
-    .from(paymentsTable)
-    .where(and(inArray(paymentsTable.authorizationId, ids), notDeleted(paymentsTable)))
-    .groupBy(paymentsTable.authorizationId);
+    .from(paymentAllocationsTable)
+    .innerJoin(paymentsTable, eq(paymentsTable.id, paymentAllocationsTable.paymentId))
+    .where(and(inArray(paymentAllocationsTable.authorizationId, ids), notDeleted(paymentsTable)))
+    .groupBy(paymentAllocationsTable.authorizationId);
   const map = new Map<string, Decimal>();
   for (const row of rows) {
     if (!row.authorizationId) continue;
@@ -237,6 +239,7 @@ export function invoiceJson(
     vendorName?: string | null;
     authNumber?: string | null;
     reviewedByName?: string | null;
+    lineItems?: { id: string; authorizationId: string; authNumber?: string | null; serviceMonth: string; amount: string }[];
   } = {},
 ) {
   return {
@@ -259,12 +262,13 @@ export function invoiceJson(
     reviewedAt: iso(i.reviewedAt),
     notes: i.notes,
     createdAt: iso(i.createdAt),
+    lineItems: opts.lineItems ?? [],
   };
 }
 
 export function paymentJson(
   p: Payment,
-  opts: { clientName?: string | null; vendorName?: string | null; authNumber?: string | null; allocatedAmount?: string; remainingAmount?: string } = {},
+  opts: { clientName?: string | null; vendorName?: string | null; authNumber?: string | null; allocatedAmount?: string; remainingAmount?: string; allocations?: { id: string; authorizationId: string; authNumber?: string | null; amount: string }[] } = {},
 ) {
   return {
     id: p.id,
@@ -286,6 +290,7 @@ export function paymentJson(
     allocatedAmount: opts.allocatedAmount ?? (p.remitted ? p.amount : "0.00"),
     remainingAmount: opts.remainingAmount ?? (p.remitted ? "0.00" : p.amount),
     createdAt: iso(p.createdAt),
+    allocations: opts.allocations ?? [],
   };
 }
 

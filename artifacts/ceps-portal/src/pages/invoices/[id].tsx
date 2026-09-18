@@ -14,6 +14,7 @@ import { Link } from 'wouter';
 import { Textarea } from '@/components/ui/textarea';
 import { FileUpload } from '@/components/file-upload';
 import { DocumentPreview } from '@/components/document-preview';
+import { getInvoiceDisplayMonth } from '@/lib/invoice-utils';
 
 export default function InvoiceDetailPage() {
   const { id } = useParams<{ id: string }>();
@@ -92,7 +93,7 @@ export default function InvoiceDetailPage() {
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
         <div>
           <h1 className="text-3xl font-bold tracking-tight">Invoice Review</h1>
-          <p className="text-muted-foreground mt-1">Service Month: {invoice.serviceMonth}</p>
+          <p className="text-muted-foreground mt-1">Service Month: {getInvoiceDisplayMonth(invoice)}</p>
         </div>
         <div className="flex items-center gap-2">
           <Badge className="text-base px-3 py-1 uppercase">{invoice.status.replace('_', ' ')}</Badge>
@@ -119,15 +120,33 @@ export default function InvoiceDetailPage() {
             <dl className="grid grid-cols-3 gap-2">
               <dt className="text-muted-foreground">Participant:</dt><dd className="col-span-2 font-medium"><ClientLink id={invoice.clientId} name={invoice.clientName} /></dd>
               <dt className="text-muted-foreground">Vendor:</dt><dd className="col-span-2"><VendorLink id={invoice.vendorId} name={invoice.vendorName} /></dd>
-              <dt className="text-muted-foreground">Auth Number:</dt><dd className="col-span-2 font-mono">
-                {invoice.authorizationId && invoice.authNumber ? (
-                  <Link href={`/authorizations/${invoice.authorizationId}`} className="text-primary hover:underline">{invoice.authNumber}</Link>
-                ) : invoice.authNumber}
-              </dd>
-              <dt className="text-muted-foreground">Amount:</dt><dd className="col-span-2 font-bold text-lg">${parseFloat(invoice.amountRequested).toFixed(2)}</dd>
+              <dt className="text-muted-foreground">Amount Requested:</dt><dd className="col-span-2 font-bold text-lg">${parseFloat(invoice.amountRequested).toFixed(2)}</dd>
               <dt className="text-muted-foreground mt-2">Submitted By:</dt><dd className="col-span-2 mt-2 capitalize">{invoice.submittedByRole}</dd>
             </dl>
-            <div className="pt-4 border-t space-y-3">
+
+            <div className="pt-4 border-t space-y-3 mt-4">
+              <p className="font-semibold">Line Items</p>
+              <div className="space-y-2">
+                {invoice.lineItems.map((line, index) => (
+                  <div key={line.id || index} className="p-3 bg-muted/30 rounded-md border text-sm flex flex-col gap-1" data-testid={`text-line-item-${index}`}>
+                    <div className="flex justify-between font-medium">
+                      <span>{line.serviceMonth}</span>
+                      <span>${parseFloat(line.amount).toFixed(2)}</span>
+                    </div>
+                    <div className="text-muted-foreground">
+                      Authorization:{' '}
+                      {line.authorizationId ? (
+                        <Link href={`/authorizations/${line.authorizationId}`} className="text-primary hover:underline">{line.authNumber}</Link>
+                      ) : (
+                        <span className="italic">None</span>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div className="pt-4 border-t space-y-3 mt-4">
               <div className="flex items-center justify-between">
                 <p className="text-muted-foreground font-medium">Attachment</p>
                 {invoice.documentUrl && isStaff && (
@@ -145,7 +164,7 @@ export default function InvoiceDetailPage() {
               </div>
 
               {invoice.documentUrl ? (
-                <DocumentPreview objectPath={invoice.documentUrl} filename={`Invoice-${invoice.serviceMonth}.pdf`} className="max-h-[600px]" />
+                <DocumentPreview objectPath={invoice.documentUrl} filename={`Invoice-${getInvoiceDisplayMonth(invoice)}.pdf`} className="max-h-[600px]" />
               ) : (
                 !isStaff && <p className="text-muted-foreground">No document attached.</p>
               )}
@@ -172,8 +191,8 @@ export default function InvoiceDetailPage() {
               <ul className="space-y-3">
                 {validation?.checks.map((check, i) => (
                   <li key={i} className="flex items-start gap-3 text-sm">
-                    {check.passed ? 
-                      <CheckCircle2 className="w-5 h-5 text-chart-5 shrink-0" /> : 
+                    {check.passed ?
+                      <CheckCircle2 className="w-5 h-5 text-chart-5 shrink-0" /> :
                       <XCircle className="w-5 h-5 text-destructive shrink-0" />
                     }
                     <div>
@@ -192,7 +211,7 @@ export default function InvoiceDetailPage() {
                     <div className="flex gap-2 text-destructive font-medium text-sm">
                       <AlertTriangle className="w-4 h-4 shrink-0" /> Duplicate Payment Detected
                     </div>
-                    <Textarea 
+                    <Textarea
                       placeholder="Required: Provide justification to override duplicate payment stop..."
                       value={justification}
                       onChange={(e: any) => setJustification(e.target.value)}
@@ -200,17 +219,17 @@ export default function InvoiceDetailPage() {
                     />
                   </div>
                 )}
-                
+
                 <div className="flex gap-2">
-                  <Button 
-                    className="w-full bg-chart-5 hover:bg-chart-5/90 text-white" 
+                  <Button
+                    className="w-full bg-chart-5 hover:bg-chart-5/90 text-white"
                     disabled={updateInvoice.isPending || (needsOverride && !justification) || (!validation?.valid && !needsOverride)}
                     onClick={() => handleAction('approved', needsOverride)}
                   >
                     Approve
                   </Button>
-                  <Button 
-                    className="w-full" 
+                  <Button
+                    className="w-full"
                     variant="destructive"
                     disabled={updateInvoice.isPending}
                     onClick={() => handleAction('rejected')}

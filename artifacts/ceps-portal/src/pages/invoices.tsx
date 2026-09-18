@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { useListInvoices } from '@workspace/api-client-react';
 import { Link } from 'wouter';
 import { ClientLink, VendorLink } from '@/components/entity-links';
-import { 
+import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow, SortableTableHead, useTableSort
 } from '@/components/ui/table';
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
@@ -13,6 +13,7 @@ import { Plus, Search, Receipt, ChevronLeft, ChevronRight } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useAuth } from '@/components/auth/auth-provider';
 import { DateRangeFilter } from '@/components/date-range-filter';
+import { getInvoiceDisplayMonth } from '@/lib/invoice-utils';
 
 const PAGE_SIZE = 50;
 
@@ -110,13 +111,23 @@ export default function InvoicesPage() {
               ) : (
                 invoices?.map((invoice) => (
                   <TableRow key={invoice.id}>
-                    <TableCell className="font-medium whitespace-nowrap">{invoice.serviceMonth}</TableCell>
+                    <TableCell className="font-medium whitespace-nowrap">{getInvoiceDisplayMonth(invoice)}</TableCell>
                     <TableCell><VendorLink id={invoice.vendorId} name={invoice.vendorName} /></TableCell>
                     <TableCell><ClientLink id={invoice.clientId} name={invoice.clientName} /></TableCell>
-                    <TableCell className="text-muted-foreground">
-                      {invoice.authorizationId ? (
-                        <Link href={`/authorizations/${invoice.authorizationId}`} className="text-primary hover:underline">{invoice.authNumber}</Link>
-                      ) : invoice.authNumber}
+                    <TableCell className="text-muted-foreground text-xs space-y-1">
+                      {invoice.lineItems && invoice.lineItems.length > 0 ? (
+                        Array.from(new Set(invoice.lineItems.filter(l => l.authorizationId).map(l =>
+                          JSON.stringify({ id: l.authorizationId, num: l.authNumber })
+                        ))).map(str => JSON.parse(str)).map((auth, idx) => (
+                          <div key={`${auth.id}-${idx}`}>
+                            <Link href={`/authorizations/${auth.id}`} className="text-primary hover:underline">{auth.num}</Link>
+                          </div>
+                        ))
+                      ) : (
+                        invoice.authorizationId ? (
+                          <Link href={`/authorizations/${invoice.authorizationId}`} className="text-primary hover:underline">{invoice.authNumber}</Link>
+                        ) : invoice.authNumber || '-'
+                      )}
                     </TableCell>
                     <TableCell className="text-right font-medium">${parseFloat(invoice.amountRequested).toFixed(2)}</TableCell>
                     <TableCell>

@@ -2,7 +2,7 @@ import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { inArray, eq, and } from "drizzle-orm";
 import {
   db, usersTable, sessionsTable, clientsTable, paymentsTable, feesTable, auditLogTable,
-  authorizationsTable, invoicesTable, vendorsTable, remittancesTable,
+  authorizationsTable, paymentAllocationsTable, invoicesTable, vendorsTable, remittancesTable,
 } from "@workspace/db";
 import request from "supertest";
 import app from "../app";
@@ -14,6 +14,8 @@ const MONTHLY_FEE_RULE = "flat_160_per_client_month";
 let staffId: string;
 let clientId: string;
 let otherClientId: string;
+let authId: string;
+let otherAuthId: string;
 let cookie: string;
 let checkCounter = 0;
 
@@ -34,6 +36,16 @@ beforeAll(async () => {
     .values({ firstName: "Other", lastName: "Participant", dateOfBirth: "2000-01-01", uciNumber: `${nonce}-other-uci` })
     .returning();
   otherClientId = otherClient.id;
+  const [auth] = await db.insert(authorizationsTable).values({
+    clientId, authNumber: `${nonce}-auth`, serviceCode: "TEST", paymentType: "direct_payment",
+    servicePeriodStart: "2026-01-01", servicePeriodEnd: "2029-12-31", maxPeriodAmount: "100000.00", status: "active",
+  }).returning();
+  authId = auth.id;
+  const [otherAuth] = await db.insert(authorizationsTable).values({
+    clientId: otherClientId, authNumber: `${nonce}-other-auth`, serviceCode: "TEST", paymentType: "direct_payment",
+    servicePeriodStart: "2026-01-01", servicePeriodEnd: "2029-12-31", maxPeriodAmount: "100000.00", status: "active",
+  }).returning();
+  otherAuthId = otherAuth.id;
 
   const token = newToken();
   await db.insert(sessionsTable).values({
@@ -58,10 +70,16 @@ afterAll(async () => {
 
 async function createPayment(amount: string, checkDate = "2026-01-15", paymentType = "direct_payment", ownerId = clientId) {
   const qb = `${nonce}-chk-${checkCounter++}`;
+  const [testAuth] = await db.insert(authorizationsTable).values({
+    clientId: ownerId, authNumber: `${nonce}-payment-${checkCounter}`, serviceCode: "TEST",
+    paymentType: "direct_payment", servicePeriodStart: "2026-01-01", servicePeriodEnd: "2029-12-31",
+    maxPeriodAmount: "100000.00", status: "active",
+  }).returning();
   const res = await request(app)
     .post("/api/payments")
     .set("Cookie", cookie)
-    .send({ clientId: ownerId, qbCheckNumber: qb, checkDate, amount, paymentType });
+    .send({ clientId: ownerId, qbCheckNumber: qb, checkDate, amount, paymentType,
+      allocations: [{ authorizationId: testAuth.id, amount }] });
   expect(res.status).toBe(201);
   return res.body as { id: string; amount: string; paymentMonth: string };
 }
@@ -132,8 +150,9 @@ describe("monthly payment fees", () => {
   it("does not change the monthly fee when payment amount changes", async () => {
     const payment = await createPayment("100.00", "2026-07-15");
     const before = await monthlyFees("2026-07");
+    const [allocation] = await db.select().from(paymentAllocationsTable).where(eq(paymentAllocationsTable.paymentId, payment.id));
     const res = await request(app).patch(`/api/payments/${payment.id}`)
-      .set("Cookie", cookie).send({ amount: "900.00" });
+      .set("Cookie", cookie).send({ amount: "900.00", allocations: [{ authorizationId: allocation.authorizationId, amount: "900.00" }] });
     expect(res.status).toBe(200);
     expect(await monthlyFees("2026-07")).toEqual(before);
   });
@@ -345,6 +364,7 @@ describe("payment month validation", () => {
         qbCheckNumber: `${nonce}-valid-month`,
         checkDate: "2026-01-15",
         amount: "25.00",
+         allocations: [{ authorizationId: authId, amount: "25.00" }],
         paymentMonth: "2026-02",
         paymentType: "direct_payment",
       });

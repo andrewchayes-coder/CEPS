@@ -586,9 +586,14 @@ describe("database financial-link soft-delete guards", () => {
         const parentUpdate = parent === "remittance"
           ? parentConnection.query("update remittances set is_deleted = true where id = $1", [remittance.id])
           : parentConnection.query("update payments set client_id = $1 where id = $2", [otherClient.id, payment.id]);
+        const parentHandled = parentUpdate.then(
+          () => ({ error: null }),
+          (error: { code?: string; constraint?: string }) => ({ error }),
+        );
         await waitUntilBackendIsLockBlocked(parentPid);
         await childConnection.query("commit");
-        await expect(parentUpdate).rejects.toMatchObject({
+        const parentResult = await parentHandled;
+        expect(parentResult.error).toMatchObject({
           code: "23503",
           constraint: parent === "remittance"
             ? "remittances_active_allocation_links"
@@ -664,9 +669,14 @@ describe("database financial-link soft-delete guards", () => {
         "update clients set is_deleted = true where id = $1",
         [client.id],
       );
+      const deleteHandled = deletePromise.then(
+        () => ({ error: null }),
+        (error: { code?: string; constraint?: string }) => ({ error }),
+      );
       await waitUntilBackendIsLockBlocked(deletePid);
       await childConnection.query("commit");
-      await expect(deletePromise).rejects.toMatchObject({
+      const deleteResult = await deleteHandled;
+      expect(deleteResult.error).toMatchObject({
         code: "23503",
         constraint: "clients_active_financial_links",
       });
@@ -692,9 +702,14 @@ describe("database financial-link soft-delete guards", () => {
          values ($1, $2, '459', 'direct_payment', '2026-01-01', '2099-12-31', 1000, 'active')`,
         [client.id, `${nonce}-parent-first`],
       );
+      const childHandled = childPromise.then(
+        () => ({ error: null }),
+        (error: { code?: string; constraint?: string }) => ({ error }),
+      );
       await waitUntilBackendIsLockBlocked(childPid);
       await deleteConnection.query("commit");
-      await expect(childPromise).rejects.toMatchObject({
+      const childResult = await childHandled;
+      expect(childResult.error).toMatchObject({
         code: "23503",
         constraint: "authorizations_active_client_link",
       });

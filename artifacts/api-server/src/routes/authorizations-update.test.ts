@@ -8,6 +8,7 @@ import {
   auditLogTable,
   clientsTable,
   paymentsTable,
+  paymentAllocationsTable,
   sessionsTable,
   usersTable,
 } from "@workspace/db";
@@ -78,7 +79,7 @@ afterAll(async () => {
 
 describe("authorization update and version history", () => {
   it("persists max amount, recalculates remaining, and snapshots the predecessor", async () => {
-    await db.insert(paymentsTable).values({
+    const [payment] = await db.insert(paymentsTable).values({
       clientId,
       authorizationId,
       qbCheckNumber: `${nonce}-check`,
@@ -86,7 +87,8 @@ describe("authorization update and version history", () => {
       amount: "25.00",
       paymentType: "direct_payment",
       source: "manual",
-    });
+    }).returning();
+    await db.insert(paymentAllocationsTable).values({ paymentId: payment.id, authorizationId, amount: "25.00" });
     const patch = await request(app).patch(`/api/authorizations/${authorizationId}`).set("Cookie", staffCookie).send({
       maxPeriodAmount: "200.00",
       activityDescription: "Updated activity",

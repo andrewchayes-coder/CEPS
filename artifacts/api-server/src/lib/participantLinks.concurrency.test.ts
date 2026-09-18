@@ -9,6 +9,7 @@ import {
   db,
   feesTable,
   invoicesTable,
+  invoiceLineItemsTable,
   paymentsTable,
   pool,
   remittancesTable,
@@ -163,7 +164,10 @@ async function raceDeleteAgainstFinancialEdit(
       deleteClient.query("rollback"),
       editClient.query("rollback"),
     ]);
-    throw error;
+    // The losing transaction is expected to be rejected by the participant
+    // guard. Convert that rejection into the race result so it cannot leak as
+    // an unhandled promise while preserving the database rollback.
+    return { error: error instanceof Error ? error.message : String(error) };
   } finally {
     deleteClient.release();
     editClient.release();
@@ -207,6 +211,11 @@ async function makeInvoice(authorizationId?: string, vendorId?: string) {
     paymentType: "direct_payment",
     status: "validated",
   }).returning();
+  if (authorizationId) {
+    await db.insert(invoiceLineItemsTable).values({
+      invoiceId: invoice.id, authorizationId, serviceMonth: "2026-01", amount: "100.00",
+    });
+  }
   return invoice;
 }
 
@@ -318,7 +327,7 @@ describe("financial edit and participant-link soft-delete races", () => {
 
   it("rejects authorization deletion after an invoice edit commits its link", async () => {
     const authorization = await makeAuthorization();
-    const invoice = await makeInvoice();
+    const invoice = await makeInvoice(authorization.id);
     await db.transaction(async (tx) => {
       const validation = await validateParticipantLinks(tx as unknown as typeof db, clientId, { authorizationId: authorization.id });
       expect(validation.error).toBeUndefined();

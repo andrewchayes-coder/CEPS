@@ -1,9 +1,8 @@
 import React, { useState } from 'react';
-import { useUpdatePayment, useListVendors, useListInvoices, useListAuthorizations } from '@workspace/api-client-react';
+import { useUpdatePayment, useListVendors, useListInvoices, useListAuthorizations, type PaymentAllocation } from '@workspace/api-client-react';
 import type { PaymentUpdate } from '@workspace/api-client-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { MonthYearInput, isValidPaymentMonth } from '@/components/month-year-input';
 import { Label } from '@/components/ui/label';
 import {
   Dialog,
@@ -22,9 +21,10 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { useToast } from '@/hooks/use-toast';
-import { Pencil } from 'lucide-react';
+import { Pencil, Plus, Trash2 } from 'lucide-react';
 import { SearchableSelect } from '@/components/searchable-select';
 import { useDebounce } from '@/hooks/use-debounce';
+import { getInvoiceDisplayMonth } from '@/lib/invoice-utils';
 
 const PAYMENT_TYPES = ['direct_payment', 'reimbursement', 'fee'];
 
@@ -33,13 +33,13 @@ type PaymentLike = {
   qbCheckNumber: string;
   checkDate: string;
   amount: string;
-  paymentMonth?: string | null;
   paymentType: string;
   vendorId?: string | null;
   vendorName?: string | null;
   invoiceId?: string | null;
   authorizationId?: string | null;
   authNumber?: string | null;
+  allocations?: PaymentAllocation[];
 };
 
 type Props = {
@@ -56,13 +56,33 @@ export function EditPaymentDialog({ id, payment, onSaved }: Props) {
   const [form, setForm] = useState({
     qbCheckNumber: payment.qbCheckNumber,
     checkDate: payment.checkDate?.slice(0, 10) ?? '',
-    amount: payment.amount,
-    paymentMonth: payment.paymentMonth ?? '',
     paymentType: payment.paymentType,
     vendorId: payment.vendorId ?? 'none',
     invoiceId: payment.invoiceId ?? 'none',
-    authorizationId: payment.authorizationId ?? 'none',
+    allocations: payment.allocations && payment.allocations.length > 0
+      ? payment.allocations.map(a => ({ authorizationId: a.authorizationId, amount: a.amount }))
+      : payment.authorizationId
+        ? [{ authorizationId: payment.authorizationId, amount: payment.amount }]
+        : [{ authorizationId: 'none', amount: '' }]
   });
+
+  // Re-sync on open
+  React.useEffect(() => {
+    if (open) {
+      setForm({
+        qbCheckNumber: payment.qbCheckNumber,
+        checkDate: payment.checkDate?.slice(0, 10) ?? '',
+        paymentType: payment.paymentType,
+        vendorId: payment.vendorId ?? 'none',
+        invoiceId: payment.invoiceId ?? 'none',
+        allocations: payment.allocations && payment.allocations.length > 0
+          ? payment.allocations.map(a => ({ authorizationId: a.authorizationId, amount: a.amount }))
+          : payment.authorizationId
+            ? [{ authorizationId: payment.authorizationId, amount: payment.amount }]
+            : [{ authorizationId: 'none', amount: '' }]
+      });
+    }
+  }, [open, payment]);
 
   const [vendorSearch, setVendorSearch] = useState('');
   const debouncedVendorSearch = useDebounce(vendorSearch, 300);
@@ -88,22 +108,49 @@ export function EditPaymentDialog({ id, payment, onSaved }: Props) {
   );
   const authorizations = authorizationsData?.items ?? [];
 
-  const set = (k: string, v: string) => setForm((p) => ({ ...p, [k]: v }));
+  const set = (k: string, v: any) => setForm((p) => ({ ...p, [k]: v }));
 
-  const handleSave = () => {
-    if (!isValidPaymentMonth(form.paymentMonth)) {
-      toast({ variant: 'destructive', title: 'Invalid payment month', description: 'Enter a valid month in YYYY-MM format.' });
+  const handleInvoiceChange = (invId: string) => {
+    const inv = invoices.find(i => i.id === invId);
+    if (!inv || !inv.lineItems) {
+      setForm(p => ({ ...p, invoiceId: invId }));
       return;
     }
+
+    const grouped = inv.lineItems.reduce((acc, line) => {
+      const authId = line.authorizationId || 'none';
+      if (!acc[authId]) acc[authId] = 0;
+      acc[authId] += parseFloat(line.amount) || 0;
+      return acc;
+    }, {} as Record<string, number>);
+
+    const newAllocations = Object.entries(grouped).map(([authId, sum]) => ({
+      authorizationId: authId,
+      amount: sum.toFixed(2),
+    }));
+
+    setForm(p => ({
+      ...p,
+      invoiceId: invId,
+      vendorId: inv.vendorId || 'none',
+      allocations: newAllocations.length > 0 ? newAllocations : [{ authorizationId: 'none', amount: '' }]
+    }));
+  };
+
+  const computedTotal = form.allocations.reduce((sum, a) => sum + (parseFloat(a.amount) || 0), 0);
+
+  const handleSave = () => {
     const data: PaymentUpdate = {
       qbCheckNumber: form.qbCheckNumber,
       checkDate: form.checkDate || undefined,
-      amount: form.amount,
-      paymentMonth: form.paymentMonth === '' ? null : form.paymentMonth,
+      amount: computedTotal.toFixed(2),
       paymentType: form.paymentType as PaymentUpdate['paymentType'],
       vendorId: form.vendorId === 'none' ? null : form.vendorId,
       invoiceId: form.invoiceId === 'none' ? null : form.invoiceId,
-      authorizationId: form.authorizationId === 'none' ? null : form.authorizationId,
+      allocations: form.allocations.map(a => ({
+        authorizationId: a.authorizationId === 'none' ? '' : a.authorizationId,
+        amount: a.amount
+      }))
     };
     updatePayment.mutate(
       { id, data },
@@ -125,7 +172,7 @@ export function EditPaymentDialog({ id, payment, onSaved }: Props) {
           <Pencil className="w-4 h-4" />
         </Button>
       </DialogTrigger>
-      <DialogContent className="max-w-lg">
+      <DialogContent className="max-w-lg max-h-[85vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Edit Payment</DialogTitle>
           <DialogDescription>Update the payment details.</DialogDescription>
@@ -138,13 +185,6 @@ export function EditPaymentDialog({ id, payment, onSaved }: Props) {
           <div className="space-y-2">
             <Label htmlFor="edit-payment-date">Payment Date</Label>
             <Input id="edit-payment-date" type="date" value={form.checkDate} onChange={(e) => set('checkDate', e.target.value)} data-testid="input-payment-date" />
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="edit-payment-amount">Amount</Label>
-            <Input id="edit-payment-amount" value={form.amount} onChange={(e) => set('amount', e.target.value)} data-testid="input-payment-amount" />
-          </div>
-          <div className="space-y-2">
-            <MonthYearInput id="edit-payment-month" value={form.paymentMonth} onChange={(value) => set('paymentMonth', value)} />
           </div>
           <div className="space-y-2">
             <Label htmlFor="edit-payment-type">Payment Type</Label>
@@ -178,10 +218,10 @@ export function EditPaymentDialog({ id, payment, onSaved }: Props) {
             <SearchableSelect
               id="edit-payment-invoice"
               value={form.invoiceId}
-              onValueChange={(v) => set('invoiceId', v)}
+              onValueChange={handleInvoiceChange}
               options={invoices.map((i) => ({
                 value: i.id,
-                label: `${i.serviceMonth} – $${parseFloat(i.amountRequested).toFixed(2)}`
+                label: `${getInvoiceDisplayMonth(i)} – $${parseFloat(i.amountRequested).toFixed(2)}`
               }))}
               onSearchChange={setInvoiceSearch}
               loading={invoicesLoading}
@@ -191,30 +231,79 @@ export function EditPaymentDialog({ id, payment, onSaved }: Props) {
               data-testid="select-payment-invoice-id"
             />
           </div>
-          <div className="space-y-2">
-            <Label htmlFor="edit-payment-authorization">Authorization</Label>
-            <SearchableSelect
-              id="edit-payment-authorization"
-              value={form.authorizationId}
-              onValueChange={(v) => set('authorizationId', v)}
-              options={authorizations.map((a) => ({
-                value: a.id,
-                label: a.authNumber,
-                subtitle: a.activityDescription ?? undefined
-              }))}
-              onSearchChange={setAuthSearch}
-              loading={authorizationsLoading}
-              placeholder="Select authorization"
-              selectedLabelFallback={payment.authNumber ?? undefined}
-              allowClear
-              clearLabel="None"
-              data-testid="select-payment-authorization-id"
-            />
-          </div>
         </div>
+
+        <div className="space-y-4 border rounded-md p-4">
+          <div className="flex items-center justify-between">
+            <h3 className="font-semibold text-sm">Allocations</h3>
+            <div className="font-medium text-sm">Total: ${computedTotal.toFixed(2)}</div>
+          </div>
+
+          {form.allocations.map((alloc, index) => (
+            <div key={index} className="flex gap-3 items-start" data-testid={`row-payment-allocation-${index}`}>
+              <div className="flex-1 space-y-1">
+                <SearchableSelect
+                  value={alloc.authorizationId}
+                  onValueChange={(v) => {
+                    const newAlloc = [...form.allocations];
+                    newAlloc[index].authorizationId = v;
+                    set('allocations', newAlloc);
+                  }}
+                  options={authorizations.map((a) => ({
+                    value: a.id,
+                    label: a.authNumber,
+                    subtitle: a.activityDescription ?? undefined
+                  }))}
+                  onSearchChange={setAuthSearch}
+                  loading={authorizationsLoading}
+                  placeholder="Select authorization"
+                  allowClear
+                  clearLabel="None"
+                  data-testid={`select-payment-alloc-${index}-auth`}
+                />
+              </div>
+              <div className="w-28 space-y-1">
+                <Input
+                  placeholder="0.00"
+                  value={alloc.amount}
+                  onChange={(e) => {
+                    const newAlloc = [...form.allocations];
+                    newAlloc[index].amount = e.target.value;
+                    set('allocations', newAlloc);
+                  }}
+                  data-testid={`input-payment-alloc-${index}-amount`}
+                />
+              </div>
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                onClick={() => {
+                  set('allocations', form.allocations.filter((_, i) => i !== index));
+                }}
+                disabled={form.allocations.length === 1}
+                className="text-destructive mt-0.5"
+                data-testid={`button-remove-payment-alloc-${index}`}
+              >
+                <Trash2 className="w-4 h-4" />
+              </Button>
+            </div>
+          ))}
+
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={() => set('allocations', [...form.allocations, { authorizationId: 'none', amount: '' }])}
+            data-testid="button-add-payment-allocation"
+          >
+            <Plus className="w-4 h-4 mr-2" /> Add Allocation
+          </Button>
+        </div>
+
         <DialogFooter>
           <Button variant="outline" onClick={() => setOpen(false)}>Cancel</Button>
-          <Button onClick={handleSave} disabled={updatePayment.isPending || !isValidPaymentMonth(form.paymentMonth)} data-testid="button-save-payment">
+          <Button onClick={handleSave} disabled={updatePayment.isPending} data-testid="button-save-payment">
             {updatePayment.isPending ? 'Saving…' : 'Save Changes'}
           </Button>
         </DialogFooter>

@@ -13,7 +13,9 @@ import {
   referralsTable,
   authorizationsTable,
   invoicesTable,
+  invoiceLineItemsTable,
   paymentsTable,
+  paymentAllocationsTable,
   remittancesTable,
 } from "@workspace/db";
 import { hashPassword } from "../lib/auth";
@@ -239,11 +241,9 @@ async function main() {
     .insert(invoicesTable)
     .values({
       clientId: clientA.id,
-      authorizationId: authA.id,
       vendorId: vendorA.id,
       submittedByRole: "vendor",
       submittedDate: "2026-07-03",
-      serviceMonth: "2026-06",
       amountRequested: "480.00",
       paymentType: "direct_payment",
       status: "approved",
@@ -251,24 +251,23 @@ async function main() {
       reviewedAt: new Date("2026-07-06T19:00:00Z"),
     })
     .returning();
+  await db.insert(invoiceLineItemsTable).values({ invoiceId: invoice.id, authorizationId: authA.id, serviceMonth: "2026-06", amount: "480.00" });
 
-  await db.insert(invoicesTable).values({
+  const [secondInvoice] = await db.insert(invoicesTable).values({
     clientId: clientA.id,
-    authorizationId: authA.id,
     vendorId: vendorA.id,
     submittedByRole: "vendor",
     submittedDate: "2026-08-04",
-    serviceMonth: "2026-07",
     amountRequested: "480.00",
     paymentType: "direct_payment",
     status: "pending_review",
-  });
+  }).returning();
+  await db.insert(invoiceLineItemsTable).values({ invoiceId: secondInvoice.id, authorizationId: authA.id, serviceMonth: "2026-07", amount: "480.00" });
 
   const [payment] = await db
     .insert(paymentsTable)
     .values({
       clientId: clientA.id,
-      authorizationId: authA.id,
       vendorId: vendorA.id,
       invoiceId: invoice.id,
       qbCheckNumber: "10241",
@@ -281,6 +280,7 @@ async function main() {
       remitted: true,
     })
     .returning();
+  await db.insert(paymentAllocationsTable).values({ paymentId: payment.id, authorizationId: authA.id, amount: "480.00" });
 
   await db.insert(remittancesTable).values([
     {

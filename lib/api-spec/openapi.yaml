@@ -2994,7 +2994,7 @@ components:
         acceptMaxAmountWarning: { type: boolean }
     Invoice:
       type: object
-      required: [id, clientId, submittedByRole, submittedDate, serviceMonth, amountRequested, paymentType, status]
+      required: [id, clientId, submittedByRole, submittedDate, serviceMonth, amountRequested, paymentType, status, lineItems]
       properties:
         id: { type: string }
         clientId: { type: string }
@@ -3005,7 +3005,7 @@ components:
         vendorName: { type: ["string", "null"] }
         submittedByRole: { type: string, enum: [vendor, parent, staff] }
         submittedDate: { type: string }
-        serviceMonth: { type: string, description: "YYYY-MM" }
+        serviceMonth: { type: ["string", "null"], description: "Deprecated compatibility value; line item months are authoritative." }
         amountRequested: { type: string }
         paymentType: { type: string, enum: [direct_payment, reimbursement] }
         documentUrl: { type: ["string", "null"] }
@@ -3015,9 +3015,21 @@ components:
         reviewedAt: { type: ["string", "null"] }
         notes: { type: ["string", "null"] }
         createdAt: { type: ["string", "null"] }
+        lineItems:
+          type: array
+          items: { $ref: "#/components/schemas/InvoiceLineItem" }
+    InvoiceLineItem:
+      type: object
+      required: [id, authorizationId, serviceMonth, amount]
+      properties:
+        id: { type: string }
+        authorizationId: { type: string }
+        authNumber: { type: ["string", "null"] }
+        serviceMonth: { type: string, pattern: '^\d{4}-(0[1-9]|1[0-2])$' }
+        amount: { type: string, pattern: '^\d+(\.\d{1,2})?$' }
     InvoiceInput:
       type: object
-      required: [clientId, serviceMonth, amountRequested, paymentType]
+      required: [clientId, lineItems, paymentType]
       properties:
         clientId: { type: string }
         authorizationId: { type: ["string", "null"] }
@@ -3027,6 +3039,17 @@ components:
         paymentType: { type: string, enum: [direct_payment, reimbursement] }
         documentUrl: { type: string }
         notes: { type: string }
+        lineItems:
+          type: array
+          minItems: 1
+          items: { $ref: "#/components/schemas/InvoiceLineItemInput" }
+    InvoiceLineItemInput:
+      type: object
+      required: [authorizationId, serviceMonth, amount]
+      properties:
+        authorizationId: { type: string }
+        serviceMonth: { type: string, pattern: '^\d{4}-(0[1-9]|1[0-2])$' }
+        amount: { type: string, pattern: '^\d+(\.\d{1,2})?$' }
     InvoiceUpdate:
       type: object
       properties:
@@ -3038,6 +3061,10 @@ components:
         status: { type: string, enum: [pending_review, validated, approved, rejected, duplicate] }
         notes: { type: string }
         documentUrl: { type: ["string", "null"] }
+        lineItems:
+          type: array
+          minItems: 1
+          items: { $ref: "#/components/schemas/InvoiceLineItemInput" }
     InvoiceValidationInput:
       type: object
       properties:
@@ -3061,7 +3088,7 @@ components:
           items: { $ref: "#/components/schemas/InvoiceValidationCheck" }
     Payment:
       type: object
-      required: [id, clientId, qbCheckNumber, checkDate, amount, paymentType, source, allocatedAmount, remainingAmount]
+      required: [id, clientId, qbCheckNumber, checkDate, amount, paymentType, source, allocatedAmount, remainingAmount, allocations]
       properties:
         id: { type: string }
         clientId: { type: string }
@@ -3082,9 +3109,20 @@ components:
         allocatedAmount: { type: string }
         remainingAmount: { type: string }
         createdAt: { type: ["string", "null"] }
+        allocations:
+          type: array
+          items: { $ref: "#/components/schemas/PaymentAllocation" }
+    PaymentAllocation:
+      type: object
+      required: [id, authorizationId, amount]
+      properties:
+        id: { type: string }
+        authorizationId: { type: string }
+        authNumber: { type: ["string", "null"] }
+        amount: { type: string, pattern: '^\d+(\.\d{1,2})?$' }
     PaymentInput:
       type: object
-      required: [clientId, qbCheckNumber, checkDate, amount, paymentType]
+      required: [clientId, qbCheckNumber, checkDate, amount, paymentType, allocations]
       properties:
         clientId: { type: string }
         authorizationId: { type: ["string", "null"] }
@@ -3097,6 +3135,16 @@ components:
         paymentType: { type: string, enum: [direct_payment, reimbursement, fee] }
         overrideDuplicate: { type: boolean, description: "Set true (with a justification) to bypass the duplicate-payment hard stop" }
         overrideJustification: { type: string, description: "Required written justification when overrideDuplicate is true" }
+        allocations:
+          type: array
+          minItems: 1
+          items: { $ref: "#/components/schemas/PaymentAllocationInput" }
+    PaymentAllocationInput:
+      type: object
+      required: [authorizationId, amount]
+      properties:
+        authorizationId: { type: string }
+        amount: { type: string, pattern: '^\d+(\.\d{1,2})?$' }
     DuplicatePaymentError:
       type: object
       required: [error, code, existingPayments]
@@ -3363,6 +3411,10 @@ components:
         paymentType: { type: string, enum: [direct_payment, reimbursement, fee] }
         overrideDuplicate: { type: boolean, description: "Set true (with a justification) to bypass the duplicate-payment hard stop when an update would create a duplicate" }
         overrideJustification: { type: string, description: "Required written justification when overrideDuplicate is true" }
+        allocations:
+          type: array
+          minItems: 1
+          items: { $ref: "#/components/schemas/PaymentAllocationInput" }
     MonthlyFeeAuditItem:
       type: object
       required: [clientId, clientName, feeMonth, issue, qualifyingPaymentCount, protected, repairAction]

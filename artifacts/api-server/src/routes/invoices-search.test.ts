@@ -9,6 +9,7 @@ import {
   vendorsTable,
   authorizationsTable,
   invoicesTable,
+  invoiceLineItemsTable,
 } from "@workspace/db";
 import app from "../app";
 import { newToken } from "../lib/auth";
@@ -48,6 +49,7 @@ async function insertInvoice(opts: {
   vendorId?: string | null;
   authorizationId?: string | null;
 }) {
+  const serviceMonth = nextMonth();
   const [i] = await db
     .insert(invoicesTable)
     .values({
@@ -56,12 +58,13 @@ async function insertInvoice(opts: {
       authorizationId: opts.authorizationId ?? null,
       submittedByRole: "staff",
       submittedDate: "2025-01-15",
-      serviceMonth: nextMonth(),
+      serviceMonth,
       amountRequested: "100.00",
       paymentType: "direct_payment",
       status: "pending_review",
     })
     .returning();
+  if (opts.authorizationId) await db.insert(invoiceLineItemsTable).values({ invoiceId: i.id, authorizationId: opts.authorizationId, serviceMonth, amount: "100.00" });
   createdInvoiceIds.push(i.id);
   return i;
 }
@@ -237,20 +240,20 @@ describe("GET /invoices ?search — offset interaction (page reset)", () => {
 
 describe("GET /invoices ?search — operational display values", () => {
   it("matches the displayed currency value", async () => {
-    const res = await get({ search: "$100.00", limit: 1000 });
+    const res = await get({ search: "$100.00", clientId: clientAlpha, limit: 1000 });
     expect(res.status).toBe(200);
-    expect(res.body.total).toBe(3);
+    expect(res.body.total).toBe(2);
   });
 
   it("matches a human status label when storage uses underscores", async () => {
-    const res = await get({ search: "pending review", limit: 1000 });
+    const res = await get({ search: "pending review", clientId: clientAlpha, limit: 1000 });
     expect(res.status).toBe(200);
-    expect(res.body.total).toBe(3);
+    expect(res.body.total).toBe(2);
   });
 
   it("matches the short displayed submission date", async () => {
-    const res = await get({ search: "01/15/25", limit: 1000 });
+    const res = await get({ search: "01/15/25", clientId: clientAlpha, limit: 1000 });
     expect(res.status).toBe(200);
-    expect(res.body.total).toBe(3);
+    expect(res.body.total).toBe(2);
   });
 });

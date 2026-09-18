@@ -282,7 +282,9 @@ describe("GET /authorizations service-period range", () => {
     const startsAtEnd = await insertAuth({ clientId: clientA, vendorId, servicePeriodStart: "2026-05-31", servicePeriodEnd: "2026-06-15" });
     const endsAtStart = await insertAuth({ clientId: clientA, vendorId, servicePeriodStart: "2026-04-15", servicePeriodEnd: "2026-05-01" });
     const outside = await insertAuth({ clientId: clientA, vendorId, servicePeriodStart: "2026-06-01", servicePeriodEnd: "2026-06-30" });
-    const res = await get(staffCookie, { startDate: "2026-05-01", endDate: "2026-05-31", limit: 100 });
+    const res = await get(staffCookie, { clientId: clientA, startDate: "2026-05-01", endDate: "2026-05-31", limit: 100 });
+    expect(res.status).toBe(200);
+    expect(res.body).toHaveProperty("items");
     const ids = res.body.items.map((a: any) => a.id);
     expect(ids).toEqual(expect.arrayContaining([startsAtEnd.id, endsAtStart.id]));
     expect(ids).not.toContain(outside.id);

@@ -3,7 +3,7 @@ import { and, eq, inArray } from "drizzle-orm";
 import request from "supertest";
 import {
   auditLogTable, authorizationsTable, clientsTable, db, feesTable, invoicesTable,
-  paymentsTable, remittanceAllocationsTable, remittancesTable, sessionsTable, usersTable, vendorsTable,
+  paymentsTable, paymentAllocationsTable, invoiceLineItemsTable, remittanceAllocationsTable, remittancesTable, sessionsTable, usersTable, vendorsTable,
 } from "@workspace/db";
 import app from "../app";
 import { newToken } from "../lib/auth";
@@ -13,7 +13,8 @@ let staffId: string, clientA: string, clientB: string, deletedClientId: string, 
 let check = 0;
 const paymentBody = (extra: Record<string, unknown> = {}) => ({
   clientId: clientA, qbCheckNumber: `${nonce}-check-${check++}`, checkDate: "2026-03-15",
-  amount: "100.00", paymentMonth: "2026-03", paymentType: "direct_payment", ...extra,
+  amount: "100.00", paymentMonth: "2026-03", paymentType: "direct_payment",
+  allocations: [{ authorizationId: (extra.authorizationId as string | undefined) ?? authA, amount: "100.00" }], ...extra,
 });
 
 beforeAll(async () => {
@@ -35,6 +36,10 @@ beforeAll(async () => {
     { clientId: clientA, authorizationId: authA, vendorId: vendorA, submittedByRole: "staff", submittedDate: "2026-03-01", serviceMonth: "2026-03", amountRequested: "100.00", paymentType: "direct_payment" },
     { clientId: clientB, authorizationId: authB, vendorId: vendorB, submittedByRole: "staff", submittedDate: "2026-03-01", serviceMonth: "2026-03", amountRequested: "100.00", paymentType: "direct_payment" },
   ]).returning();
+  await db.insert(invoiceLineItemsTable).values([
+    { invoiceId: invoices[0].id, authorizationId: authA, serviceMonth: "2026-03", amount: "100.00" },
+    { invoiceId: invoices[1].id, authorizationId: authB, serviceMonth: "2026-03", amount: "100.00" },
+  ]);
   invoiceA = invoices[0].id; invoiceB = invoices[1].id;
   const token = newToken();
   await db.insert(sessionsTable).values({ userId: staffId, token, expiresAt: new Date(Date.now() + 3_600_000) });
@@ -59,12 +64,12 @@ afterAll(async () => {
 
 describe("cross-participant create validation", () => {
   it("rejects mismatched invoice links and accepts established same-client links", async () => {
-    const base = { clientId: clientA, serviceMonth: "2026-04", amountRequested: "100.00", paymentType: "direct_payment" };
-    const wrongAuth = await request(app).post("/api/invoices").set("Cookie", cookie).send({ ...base, authorizationId: authB, vendorId: vendorA });
+    const base = { clientId: clientA, serviceMonth: "2026-04", amountRequested: "100.00", paymentType: "direct_payment", lineItems: [{ authorizationId: authA, serviceMonth: "2026-04", amount: "100.00" }] };
+    const wrongAuth = await request(app).post("/api/invoices").set("Cookie", cookie).send({ ...base, authorizationId: authB, vendorId: vendorA, lineItems: [{ authorizationId: authB, serviceMonth: "2026-04", amount: "100.00" }] });
     expect(wrongAuth.status).toBe(400); expect(wrongAuth.body.error).toContain("authorizationId");
     const wrongVendor = await request(app).post("/api/invoices").set("Cookie", cookie).send({ ...base, vendorId: vendorB });
     expect(wrongVendor.status).toBe(400); expect(wrongVendor.body.error).toContain("vendorId");
-    const unknownAuth = await request(app).post("/api/invoices").set("Cookie", cookie).send({ ...base, authorizationId: "00000000-0000-0000-0000-000000000000" });
+    const unknownAuth = await request(app).post("/api/invoices").set("Cookie", cookie).send({ ...base, authorizationId: "00000000-0000-0000-0000-000000000000", lineItems: [{ authorizationId: "00000000-0000-0000-0000-000000000000", serviceMonth: "2026-04", amount: "100.00" }] });
     expect(unknownAuth.status).toBe(400); expect(unknownAuth.body.error).toContain("authorizationId");
     expect((await request(app).post("/api/invoices").set("Cookie", cookie).send({ ...base, authorizationId: authA, vendorId: vendorA })).status).toBe(201);
   });
@@ -81,7 +86,8 @@ describe("cross-participant create validation", () => {
   });
 
   it("rejects a mismatched remittance before a payment claim, then accepts a same-client authorization", async () => {
-    const [payment] = await db.select().from(paymentsTable).where(and(eq(paymentsTable.clientId, clientA), eq(paymentsTable.authorizationId, authA)));
+    const [paymentLink] = await db.select({ paymentId: paymentAllocationsTable.paymentId }).from(paymentAllocationsTable).where(eq(paymentAllocationsTable.authorizationId, authA)).limit(1);
+    const [payment] = paymentLink ? await db.select().from(paymentsTable).where(eq(paymentsTable.id, paymentLink.paymentId)) : [];
     const base = { clientId: clientA, altaReference: `${nonce}-remit`, remittanceDate: "2026-03-20", amount: "100.00", paymentMonth: "2026-03" };
     expect((await request(app).post("/api/remittances").set("Cookie", cookie).send({ ...base, authorizationId: authB })).status).toBe(400);
     expect((await db.select().from(remittancesTable).where(eq(remittancesTable.clientId, clientA))).length).toBe(0);
@@ -104,6 +110,7 @@ describe("cross-participant create validation", () => {
       clientId: clientA, authorizationId: authA, vendorId: vendorA, submittedByRole: "staff",
       submittedDate: "2026-03-01", serviceMonth: "2026-05", amountRequested: "100.00", paymentType: "direct_payment",
     }).returning();
+    await db.insert(invoiceLineItemsTable).values({ invoiceId: deletedInvoice.id, authorizationId: authA, serviceMonth: "2026-05", amount: "100.00" });
     await db.update(clientsTable).set({ isDeleted: true }).where(eq(clientsTable.id, deletedClient.id));
     await db.update(authorizationsTable).set({ isDeleted: true }).where(eq(authorizationsTable.id, deletedAuth.id));
     await db.update(invoicesTable).set({ isDeleted: true }).where(eq(invoicesTable.id, deletedInvoice.id));
@@ -118,10 +125,12 @@ describe("cross-participant create validation", () => {
     };
     const invoiceDeletedAuth = await request(app).post("/api/invoices").set("Cookie", cookie).send({
       clientId: clientA, authorizationId: deletedAuth.id, vendorId: vendorA, serviceMonth: "2026-06", amountRequested: "100.00", paymentType: "direct_payment",
+      lineItems: [{ authorizationId: deletedAuth.id, serviceMonth: "2026-06", amount: "100.00" }],
     });
     expect(invoiceDeletedAuth.status).toBe(400); expect(invoiceDeletedAuth.body.error).toContain("authorizationId");
     const deletedClientResult = await request(app).post("/api/invoices").set("Cookie", cookie).send({
       clientId: deletedClient.id, serviceMonth: "2026-06", amountRequested: "100.00", paymentType: "direct_payment",
+      lineItems: [{ authorizationId: authA, serviceMonth: "2026-06", amount: "100.00" }],
     });
     expect(deletedClientResult.status).toBe(400); expect(deletedClientResult.body.error).toContain("clientId");
     const paymentDeletedAuth = await request(app).post("/api/payments").set("Cookie", cookie).send(paymentBody({ authorizationId: deletedAuth.id }));

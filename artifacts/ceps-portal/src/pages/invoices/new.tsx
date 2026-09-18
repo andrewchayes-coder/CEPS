@@ -1,5 +1,5 @@
 import React from 'react';
-import { useForm } from 'react-hook-form';
+import { useForm, useFieldArray } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import { useCreateInvoice, useListClients, useListVendors, useListAuthorizations, InvoiceInputPaymentType } from '@workspace/api-client-react';
@@ -12,22 +12,25 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
 import { useToast } from '@/hooks/use-toast';
-import { ArrowLeft, Save, FileText } from 'lucide-react';
+import { ArrowLeft, Save, FileText, Plus, Trash2 } from 'lucide-react';
 import { Link } from 'wouter';
 import { FileUpload } from '@/components/file-upload';
 import { useAuth } from '@/components/auth/auth-provider';
 import { trackAnalyticsEvent } from '@/lib/analytics';
 import { SearchableSelect } from '@/components/searchable-select';
+import { MonthYearInput } from '@/components/month-year-input';
 import { useDebounce } from '@/hooks/use-debounce';
 
 const formSchema = z.object({
   clientId: z.string().min(1, 'Participant is required'),
-  authorizationId: z.string().optional(),
   vendorId: z.string().optional(),
-  serviceMonth: z.string().regex(/^\d{4}-\d{2}$/, 'Must be YYYY-MM format'),
-  amountRequested: z.string().min(1, 'Amount is required'),
   paymentType: z.enum(['direct_payment', 'reimbursement']),
   notes: z.string().optional(),
+  lineItems: z.array(z.object({
+    authorizationId: z.string().min(1, 'Required'),
+    serviceMonth: z.string().regex(/^\d{4}-\d{2}$/, 'Must be YYYY-MM'),
+    amount: z.string().min(1, 'Required').regex(/^\d+(\.\d{1,2})?$/, 'Invalid format'),
+  })).min(1, 'At least one line item is required'),
 });
 
 export default function InvoiceNewPage() {
@@ -36,21 +39,26 @@ export default function InvoiceNewPage() {
   const createInvoice = useCreateInvoice();
   const { user } = useAuth();
   const [documentUrl, setDocumentUrl] = React.useState<string | undefined>(undefined);
-  
+
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
     defaultValues: {
       clientId: '',
-      authorizationId: '',
       vendorId: '',
-      serviceMonth: new Date().toISOString().substring(0, 7), // YYYY-MM
-      amountRequested: '',
       paymentType: 'direct_payment',
-      notes: ''
+      notes: '',
+      lineItems: [{ authorizationId: '', serviceMonth: new Date().toISOString().substring(0, 7), amount: '' }]
     }
   });
 
+  const { fields, append, remove } = useFieldArray({
+    control: form.control,
+    name: "lineItems"
+  });
+
   const selectedClientId = form.watch('clientId');
+  const lineItems = form.watch('lineItems');
+  const totalAmount = lineItems.reduce((sum, item) => sum + (parseFloat(item.amount) || 0), 0);
 
   const [clientSearch, setClientSearch] = React.useState('');
   const debouncedClientSearch = useDebounce(clientSearch, 300);
@@ -73,18 +81,19 @@ export default function InvoiceNewPage() {
   );
   const filteredVendors = vendorsData?.items ?? [];
 
-  // On participant change clear authorization and vendor
+  // On participant change clear authorizations in line items and vendor
   React.useEffect(() => {
-    form.setValue('authorizationId', '');
     form.setValue('vendorId', '');
+    const currentLines = form.getValues('lineItems');
+    form.setValue('lineItems', currentLines.map(line => ({ ...line, authorizationId: '' })));
   }, [selectedClientId, form]);
 
-  const handleAuthChange = (authId: string) => {
-    form.setValue('authorizationId', authId);
+  const handleAuthChange = (index: number, authId: string) => {
+    form.setValue(`lineItems.${index}.authorizationId`, authId);
     if (!authId || authId === 'none') return;
 
     const auth = filteredAuthorizations.find(a => a.id === authId);
-    if (auth?.vendorId) {
+    if (auth?.vendorId && form.getValues('vendorId') === '') {
       if (filteredVendors.some(v => v.id === auth.vendorId)) {
         form.setValue('vendorId', auth.vendorId);
       }
@@ -95,10 +104,10 @@ export default function InvoiceNewPage() {
     createInvoice.mutate({
       data: {
         ...data,
-        authorizationId: data.authorizationId === 'none' || data.authorizationId === '' ? undefined : data.authorizationId,
         vendorId: data.vendorId === 'none' || data.vendorId === '' ? undefined : data.vendorId,
         paymentType: data.paymentType as InvoiceInputPaymentType,
-        documentUrl: documentUrl || undefined
+        documentUrl: documentUrl || undefined,
+        amountRequested: totalAmount.toFixed(2)
       }
     }, {
       onSuccess: () => {
@@ -137,7 +146,7 @@ export default function InvoiceNewPage() {
         <CardContent>
           <Form {...form}>
             <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
-              
+
               <div className="grid grid-cols-2 gap-4">
                 <FormField control={form.control} name="clientId" render={({ field }) => (
                   <FormItem>
@@ -157,31 +166,6 @@ export default function InvoiceNewPage() {
                     <FormMessage />
                   </FormItem>
                 )} />
-                <FormField control={form.control} name="authorizationId" render={({ field }) => (
-                  <FormItem>
-                    <FormLabel htmlFor="invoice-authorization">Authorization</FormLabel>
-                    <FormControl>
-                      <SearchableSelect
-                        id="invoice-authorization"
-                        value={field.value ?? ''}
-                        onValueChange={handleAuthChange}
-                        options={filteredAuthorizations.map(a => ({ value: a.id, label: a.authNumber, subtitle: a.activityDescription ?? undefined }))}
-                        onSearchChange={setAuthSearch}
-                        loading={authorizationsLoading}
-                        disabled={!selectedClientId}
-                        placeholder={!selectedClientId ? "Select a participant first" : "Select authorization"}
-                        emptyMessage={!selectedClientId ? "Select a participant first" : "No authorizations found"}
-                        allowClear
-                        clearLabel="None"
-                        data-testid="select-invoice-authorization"
-                      />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )} />
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
                 <FormField control={form.control} name="vendorId" render={({ field }) => (
                   <FormItem>
                     <FormLabel htmlFor="invoice-vendor">Vendor</FormLabel>
@@ -204,13 +188,6 @@ export default function InvoiceNewPage() {
                     <FormMessage />
                   </FormItem>
                 )} />
-                <FormField control={form.control} name="serviceMonth" render={({ field }) => (
-                  <FormItem>
-                    <FormLabel htmlFor="invoice-service-month">Service Month (YYYY-MM)</FormLabel>
-                    <FormControl><Input id="invoice-service-month" type="month" {...field} /></FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )} />
               </div>
 
               <div className="grid grid-cols-2 gap-4">
@@ -229,18 +206,87 @@ export default function InvoiceNewPage() {
                 )} />
               </div>
 
-              <FormField control={form.control} name="amountRequested" render={({ field }) => (
-                <FormItem>
-                  <FormLabel htmlFor="invoice-amount-requested">Amount Requested</FormLabel>
-                  <FormControl>
-                    <div className="relative">
-                      <span className="absolute left-3 top-2.5 text-muted-foreground">$</span>
-                      <Input id="invoice-amount-requested" className="pl-7" placeholder="0.00" {...field} />
+              <div className="space-y-4 border rounded-md p-4">
+                <div className="flex items-center justify-between">
+                  <h3 className="font-semibold">Line Items</h3>
+                  <div className="font-medium">Total: ${totalAmount.toFixed(2)}</div>
+                </div>
+
+                {fields.map((field, index) => (
+                  <div key={field.id} className="grid grid-cols-12 gap-3 items-start border-b pb-4 last:border-0 last:pb-0" data-testid={`row-line-item-${index}`}>
+                    <div className="col-span-5">
+                      <FormField control={form.control} name={`lineItems.${index}.authorizationId`} render={({ field }) => (
+                        <FormItem>
+                          <FormLabel className="text-xs" htmlFor={`line-${index}-auth`}>Authorization</FormLabel>
+                          <FormControl>
+                            <SearchableSelect
+                              id={`line-${index}-auth`}
+                              value={field.value ?? ''}
+                              onValueChange={(v) => handleAuthChange(index, v)}
+                              options={filteredAuthorizations.map(a => ({ value: a.id, label: a.authNumber, subtitle: a.activityDescription ?? undefined }))}
+                              onSearchChange={setAuthSearch}
+                              loading={authorizationsLoading}
+                              disabled={!selectedClientId}
+                              placeholder={!selectedClientId ? "Select participant first" : "Select authorization"}
+                              emptyMessage={!selectedClientId ? "Select participant first" : "No authorizations found"}
+                              data-testid={`select-line-${index}-authorization`}
+                            />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )} />
                     </div>
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )} />
+                    <div className="col-span-4">
+                      <FormField control={form.control} name={`lineItems.${index}.serviceMonth`} render={({ field }) => (
+                        <FormItem>
+                          <FormLabel className="text-xs" htmlFor={`line-${index}-month`}>Service Month</FormLabel>
+                          <FormControl>
+                            <MonthYearInput id={`line-${index}-month`} value={field.value} onChange={field.onChange} />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )} />
+                    </div>
+                    <div className="col-span-2">
+                      <FormField control={form.control} name={`lineItems.${index}.amount`} render={({ field }) => (
+                        <FormItem>
+                          <FormLabel className="text-xs" htmlFor={`line-${index}-amount`}>Amount</FormLabel>
+                          <FormControl>
+                            <div className="relative">
+                              <span className="absolute left-2 top-2 text-muted-foreground text-sm">$</span>
+                              <Input id={`line-${index}-amount`} className="pl-6 text-sm" placeholder="0.00" {...field} data-testid={`input-line-${index}-amount`} />
+                            </div>
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )} />
+                    </div>
+                    <div className="col-span-1 pt-6 text-right">
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => remove(index)}
+                        disabled={fields.length === 1}
+                        className="text-destructive hover:text-destructive hover:bg-destructive/10"
+                        data-testid={`button-remove-line-${index}`}
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </Button>
+                    </div>
+                  </div>
+                ))}
+
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => append({ authorizationId: '', serviceMonth: new Date().toISOString().substring(0, 7), amount: '' })}
+                  data-testid="button-add-line-item"
+                >
+                  <Plus className="w-4 h-4 mr-2" /> Add Line Item
+                </Button>
+              </div>
 
               <FormField control={form.control} name="notes" render={({ field }) => (
                 <FormItem>

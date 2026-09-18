@@ -26,8 +26,8 @@ const vendors = {
 };
 
 const invoices = {
-  'client-1': [{ id: 'invoice-1', clientId: 'client-1', serviceMonth: '2026-07', amountRequested: '125.00', status: 'approved' }],
-  'client-2': [{ id: 'invoice-2', clientId: 'client-2', serviceMonth: '2026-08', amountRequested: '225.00', status: 'approved' }],
+  'client-1': [{ id: 'invoice-1', clientId: 'client-1', vendorId: 'vendor-1', serviceMonth: '2026-07', amountRequested: '125.00', status: 'approved', lineItems: [] }],
+  'client-2': [{ id: 'invoice-2', clientId: 'client-2', vendorId: 'vendor-2', serviceMonth: '2026-08', amountRequested: '225.00', status: 'approved', lineItems: [] }],
 };
 
 type ClientId = keyof typeof authorizations;
@@ -89,14 +89,11 @@ test('invoice submission keeps authorization and vendor scoped to the selected p
   await page.goto('/invoices/new');
 
   await expect(page.getByRole('combobox', { name: 'Participant' })).toBeVisible();
-  await expect(page.getByRole('combobox', { name: 'Authorization' })).toBeVisible();
   await expect(page.getByRole('combobox', { name: 'Vendor' })).toBeVisible();
-  await expect(page.getByLabel('Service Month (YYYY-MM)')).toBeVisible();
   await expect(page.getByRole('combobox', { name: 'Payment Type' })).toBeVisible();
-  await expect(page.getByLabel('Amount Requested')).toBeVisible();
-  await expect(page.getByLabel('Notes (Optional)')).toBeVisible();
+  await expect(page.getByTestId('select-line-0-authorization')).toBeVisible();
 
-  await expect(page.getByTestId('select-invoice-authorization')).toBeDisabled();
+  await expect(page.getByTestId('select-line-0-authorization')).toBeDisabled();
   await expect(page.getByTestId('select-invoice-vendor')).toBeDisabled();
   expect(requests.authorizations).toHaveLength(0);
   expect(requests.vendors).toHaveLength(0);
@@ -104,24 +101,24 @@ test('invoice submission keeps authorization and vendor scoped to the selected p
   await selectOption(page, 'select-invoice-client', 'Pat Participant');
   await expectLastRequestFor(requests.authorizations, 'client-1');
   await expectLastRequestFor(requests.vendors, 'client-1');
-  await selectOption(page, 'select-invoice-authorization', 'AUTH-100');
+  await selectOption(page, 'select-line-0-authorization', 'AUTH-100');
   await expect(page.getByTestId('select-invoice-vendor')).toContainText('Pat Provider');
 
   await selectOption(page, 'select-invoice-client', 'Sam Second');
-  await expect(page.getByTestId('select-invoice-authorization')).toContainText('Select authorization');
+  await expect(page.getByTestId('select-line-0-authorization')).toContainText('Select authorization');
   await expect(page.getByTestId('select-invoice-vendor')).toContainText('Select vendor');
   await expectLastRequestFor(requests.authorizations, 'client-2');
   await expectLastRequestFor(requests.vendors, 'client-2');
 
-  await selectOption(page, 'select-invoice-authorization', 'AUTH-200');
+  await selectOption(page, 'select-line-0-authorization', 'AUTH-200');
   await page.getByPlaceholder('0.00').fill('225.00');
   await page.getByRole('button', { name: 'Submit Invoice' }).click();
 
   await expect.poll(() => createPayload).toMatchObject({
     clientId: 'client-2',
-    authorizationId: 'authorization-2',
     vendorId: 'vendor-2',
     amountRequested: '225.00',
+    lineItems: [{ authorizationId: 'authorization-2', amount: '225.00' }]
   });
 });
 
@@ -145,16 +142,14 @@ test('payment logging clears all participant-owned choices and submits only the 
   await expect(paymentDialog.getByRole('combobox', { name: 'Participant' })).toBeVisible();
   await expect(paymentDialog.getByLabel('Check #')).toBeVisible();
   await expect(paymentDialog.getByLabel('Payment Date')).toBeVisible();
-  await expect(paymentDialog.getByLabel('Amount')).toBeVisible();
-  await expect(paymentDialog.getByLabel('Payment Month')).toBeVisible();
   await expect(paymentDialog.getByRole('combobox', { name: 'Payment Type' })).toBeVisible();
   await expect(paymentDialog.getByRole('combobox', { name: 'Vendor' })).toBeVisible();
   await expect(paymentDialog.getByRole('combobox', { name: 'Invoice' })).toBeVisible();
-  await expect(paymentDialog.getByRole('combobox', { name: 'Authorization' })).toBeVisible();
+  await expect(paymentDialog.getByTestId('select-payment-alloc-0-auth')).toBeVisible();
 
   await expect(page.getByTestId('select-payment-vendor-id')).toBeDisabled();
   await expect(page.getByTestId('select-payment-invoice-id')).toBeDisabled();
-  await expect(page.getByTestId('select-payment-authorization-id')).toBeDisabled();
+  await expect(page.getByTestId('select-payment-alloc-0-auth')).toBeDisabled();
   expect(requests.authorizations).toHaveLength(0);
   expect(requests.vendors).toHaveLength(0);
   expect(requests.invoices).toHaveLength(0);
@@ -165,30 +160,28 @@ test('payment logging clears all participant-owned choices and submits only the 
   await expectLastRequestFor(requests.invoices, 'client-1');
   await selectOption(page, 'select-payment-vendor-id', 'Pat Provider');
   await selectOption(page, 'select-payment-invoice-id', '2026-07 – $125.00');
-  await selectOption(page, 'select-payment-authorization-id', 'AUTH-100');
 
   await selectOption(page, 'select-payment-client-id', 'Sam Second');
   await expect(page.getByTestId('select-payment-vendor-id')).toContainText('Select vendor');
   await expect(page.getByTestId('select-payment-invoice-id')).toContainText('Select invoice');
-  await expect(page.getByTestId('select-payment-authorization-id')).toContainText('Select authorization');
+  await expect(page.getByTestId('select-payment-alloc-0-auth')).toContainText('Select authorization');
   await expectLastRequestFor(requests.authorizations, 'client-2');
   await expectLastRequestFor(requests.vendors, 'client-2');
   await expectLastRequestFor(requests.invoices, 'client-2');
 
   await selectOption(page, 'select-payment-vendor-id', 'Sam Provider');
   await selectOption(page, 'select-payment-invoice-id', '2026-08 – $225.00');
-  await selectOption(page, 'select-payment-authorization-id', 'AUTH-200');
+  await selectOption(page, 'select-payment-alloc-0-auth', 'AUTH-200');
   await page.getByTestId('input-payment-check-number').fill('CHECK-200');
   await page.getByTestId('input-payment-date').fill('2026-09-05');
-  await page.getByTestId('input-payment-amount').fill('225.00');
-  await page.getByTestId('input-payment-month').fill('2026-08');
+  await page.getByTestId('input-payment-alloc-0-amount').fill('225.00');
   await page.getByTestId('button-save-payment').click();
 
   await expect.poll(() => createPayload).toMatchObject({
     clientId: 'client-2',
     vendorId: 'vendor-2',
     invoiceId: 'invoice-2',
-    authorizationId: 'authorization-2',
+    allocations: [{ authorizationId: 'authorization-2', amount: '225.00' }]
   });
 });
 
@@ -254,6 +247,7 @@ test('invoice edit fields expose their visible labels as accessible names', asyn
       paymentType: 'direct_payment',
       notes: 'Existing note',
       submittedByRole: 'staff',
+      lineItems: [{ authorizationId: 'authorization-1', serviceMonth: '2026-07', amount: '125.00' }]
     },
   }));
   await page.route('**/api/invoices/invoice-1/validate', (route) => route.fulfill({
@@ -271,10 +265,7 @@ test('invoice edit fields expose their visible labels as accessible names', asyn
 
   const dialog = page.getByRole('dialog', { name: 'Edit Invoice' });
   await expect(dialog.getByLabel('Participant')).toBeVisible();
-  await expect(dialog.getByRole('combobox', { name: 'Authorization' })).toBeVisible();
   await expect(dialog.getByRole('combobox', { name: 'Vendor' })).toBeVisible();
-  await expect(dialog.getByLabel('Service Month')).toBeVisible();
-  await expect(dialog.getByLabel('Amount Requested')).toBeVisible();
   await expect(dialog.getByRole('combobox', { name: 'Payment Type' })).toBeVisible();
   await expect(dialog.getByRole('combobox', { name: 'Status' })).toBeVisible();
   await expect(dialog.getByLabel('Notes')).toBeVisible();
@@ -299,6 +290,7 @@ test('payment edit fields expose their visible labels as accessible names', asyn
       paymentType: 'direct_payment',
       source: 'manual',
       remitted: false,
+      allocations: [{ authorizationId: 'authorization-1', amount: '125.00' }]
     },
   }));
   await page.route('**/api/authorizations?*', (route) => route.fulfill({
@@ -317,10 +309,7 @@ test('payment edit fields expose their visible labels as accessible names', asyn
   const dialog = page.getByRole('dialog', { name: 'Edit Payment' });
   await expect(dialog.getByLabel('Check #')).toBeVisible();
   await expect(dialog.getByLabel('Payment Date')).toBeVisible();
-  await expect(dialog.getByLabel('Amount')).toBeVisible();
-  await expect(dialog.getByLabel('Payment Month')).toBeVisible();
   await expect(dialog.getByRole('combobox', { name: 'Payment Type' })).toBeVisible();
   await expect(dialog.getByRole('combobox', { name: 'Vendor' })).toBeVisible();
   await expect(dialog.getByRole('combobox', { name: 'Invoice' })).toBeVisible();
-  await expect(dialog.getByRole('combobox', { name: 'Authorization' })).toBeVisible();
 });

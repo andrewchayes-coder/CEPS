@@ -22,6 +22,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow, Sortable
 import { stableSort, useTableSort } from '@/lib/table-sorting';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { DocumentPreview } from '@/components/document-preview';
+import { getInvoiceDisplayMonth } from '@/lib/invoice-utils';
 
 const documentStatusPresentation: Record<string, { label: string; className: string }> = {
   pending: {
@@ -169,7 +170,7 @@ export default function ClientDetailPage() {
     status: (auth) => auth.status,
   });
   const sortedInvoices = stableSort(invoices, invoicesSort.sort, {
-    serviceMonth: (invoice) => invoice.serviceMonth,
+    serviceMonth: (invoice) => getInvoiceDisplayMonth(invoice),
     vendorName: (invoice) => invoice.vendorName,
     authNumber: (invoice) => invoice.authNumber,
     amountRequested: (invoice) => Number(invoice.amountRequested),
@@ -427,14 +428,24 @@ export default function ClientDetailPage() {
                     <TableRow key={inv.id}>
                       <TableCell className="font-medium">
                         <Link href={`/invoices/${inv.id}`} className="text-primary hover:underline" data-testid="link-client-invoice">
-                          {inv.serviceMonth}
+                          {getInvoiceDisplayMonth(inv)}
                         </Link>
                       </TableCell>
                       <TableCell><VendorLink id={inv.vendorId} name={inv.vendorName} /></TableCell>
-                      <TableCell className="text-muted-foreground">
-                        {inv.authorizationId ? (
-                          <Link href={`/authorizations/${inv.authorizationId}`} className="text-primary hover:underline">{inv.authNumber}</Link>
-                        ) : inv.authNumber}
+                      <TableCell className="text-muted-foreground text-xs space-y-1">
+                        {inv.lineItems && inv.lineItems.length > 0 ? (
+                          Array.from(new Set(inv.lineItems.filter(l => l.authorizationId).map(l =>
+                            JSON.stringify({ id: l.authorizationId, num: l.authNumber })
+                          ))).map(str => JSON.parse(str)).map((auth: any, idx: number) => (
+                            <div key={`${auth.id}-${idx}`}>
+                              <Link href={`/authorizations/${auth.id}`} className="text-primary hover:underline">{auth.num}</Link>
+                            </div>
+                          ))
+                        ) : (
+                          inv.authorizationId ? (
+                            <Link href={`/authorizations/${inv.authorizationId}`} className="text-primary hover:underline">{inv.authNumber}</Link>
+                          ) : inv.authNumber || '-'
+                        )}
                       </TableCell>
                       <TableCell className="text-right">${parseFloat(inv.amountRequested).toFixed(2)}</TableCell>
                       <TableCell><Badge variant="outline">{inv.status}</Badge></TableCell>
@@ -448,7 +459,7 @@ export default function ClientDetailPage() {
             </CardContent>
           </Card>
         </TabsContent>
-        
+
         <TabsContent value="payments" className="pt-6">
           <div className="space-y-6">
            <div className="grid gap-4 sm:grid-cols-2">
@@ -482,10 +493,20 @@ export default function ClientDetailPage() {
                         </Link>
                       </TableCell>
                       <TableCell><VendorLink id={p.vendorId} name={p.vendorName} /></TableCell>
-                      <TableCell className="text-muted-foreground">
-                        {p.authorizationId ? (
-                          <Link href={`/authorizations/${p.authorizationId}`} className="text-primary hover:underline">{p.authNumber}</Link>
-                        ) : p.authNumber}
+                      <TableCell className="text-muted-foreground text-xs space-y-1">
+                        {p.allocations && p.allocations.length > 0 ? (
+                          Array.from(new Set(p.allocations.filter(a => a.authorizationId).map(a =>
+                            JSON.stringify({ id: a.authorizationId, num: a.authNumber })
+                          ))).map(str => JSON.parse(str)).map((auth: any, idx: number) => (
+                            <div key={`${auth.id}-${idx}`}>
+                              <Link href={`/authorizations/${auth.id}`} className="text-primary hover:underline">{auth.num}</Link>
+                            </div>
+                          ))
+                        ) : (
+                          p.authorizationId ? (
+                            <Link href={`/authorizations/${p.authorizationId}`} className="text-primary hover:underline">{p.authNumber}</Link>
+                          ) : p.authNumber || '-'
+                        )}
                       </TableCell>
                       <TableCell className="text-right font-medium">${parseFloat(p.amount).toFixed(2)}</TableCell>
                       <TableCell>{p.remitted ? <CheckCircle2 className="w-4 h-4 text-chart-5" /> : '-'}</TableCell>

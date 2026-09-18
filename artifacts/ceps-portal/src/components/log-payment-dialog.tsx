@@ -11,7 +11,6 @@ import {
 } from '@workspace/api-client-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { MonthYearInput, isValidPaymentMonth } from '@/components/month-year-input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import {
@@ -31,10 +30,11 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { useToast } from '@/hooks/use-toast';
-import { Plus, AlertTriangle } from 'lucide-react';
+import { Plus, AlertTriangle, Trash2 } from 'lucide-react';
 import { trackAnalyticsEvent } from '@/lib/analytics';
 import { SearchableSelect } from '@/components/searchable-select';
 import { useDebounce } from '@/hooks/use-debounce';
+import { getInvoiceDisplayMonth } from '@/lib/invoice-utils';
 
 const PAYMENT_TYPES = ['direct_payment', 'reimbursement', 'fee'];
 
@@ -47,12 +47,10 @@ const emptyForm = {
   clientId: '',
   qbCheckNumber: '',
   checkDate: '',
-  amount: '',
-  paymentMonth: '',
   paymentType: 'direct_payment',
   vendorId: 'none',
   invoiceId: 'none',
-  authorizationId: 'none',
+  allocations: [{ authorizationId: 'none', amount: '' }]
 };
 
 // The customFetch layer throws an ApiError carrying { status, data }. We read
@@ -103,7 +101,7 @@ export function LogPaymentDialog({ onSaved, defaultClientId }: Props) {
   );
   const invoices = Array.from(new Map(
     [...(validatedInvoicesData?.items ?? []), ...(approvedInvoicesData?.items ?? [])].map((invoice) => [invoice.id, invoice]),
-  ).values()).sort((a, b) => a.serviceMonth.localeCompare(b.serviceMonth));
+  ).values()).sort((a, b) => getInvoiceDisplayMonth(a).localeCompare(getInvoiceDisplayMonth(b)));
   const invoicesLoading = validatedInvoicesLoading || approvedInvoicesLoading;
 
   const [authSearch, setAuthSearch] = useState('');
@@ -114,7 +112,7 @@ export function LogPaymentDialog({ onSaved, defaultClientId }: Props) {
   );
   const authorizations = authorizationsData?.items;
 
-  const set = (k: string, v: string) => setForm((p) => ({ ...p, [k]: v }));
+  const set = (k: string, v: any) => setForm((p) => ({ ...p, [k]: v }));
 
   const handleClientChange = (v: string) => {
     setForm((p) => ({
@@ -122,9 +120,55 @@ export function LogPaymentDialog({ onSaved, defaultClientId }: Props) {
       clientId: v,
       vendorId: 'none',
       invoiceId: 'none',
-      authorizationId: 'none',
+      allocations: [{ authorizationId: 'none', amount: '' }],
     }));
   };
+
+  const handleInvoiceChange = (invId: string) => {
+    const inv = invoices.find(i => i.id === invId);
+    if (!inv || !inv.lineItems) {
+      setForm(p => ({ ...p, invoiceId: invId, allocations: [{ authorizationId: 'none', amount: '' }] }));
+      return;
+    }
+
+    // Group lineItems by authorizationId, summing amount
+    const grouped = inv.lineItems.reduce((acc, line) => {
+      const authId = line.authorizationId || 'none';
+      if (!acc[authId]) acc[authId] = 0;
+      acc[authId] += parseFloat(line.amount) || 0;
+      return acc;
+    }, {} as Record<string, number>);
+
+    const newAllocations = Object.entries(grouped).map(([authId, sum]) => ({
+      authorizationId: authId,
+      amount: sum.toFixed(2),
+    }));
+
+    setForm(p => ({
+      ...p,
+      invoiceId: invId,
+      vendorId: inv.vendorId || 'none',
+      allocations: newAllocations.length > 0 ? newAllocations : [{ authorizationId: 'none', amount: '' }]
+    }));
+  };
+
+  const handleAddAllocation = () => {
+    setForm(p => ({ ...p, allocations: [...p.allocations, { authorizationId: 'none', amount: '' }] }));
+  };
+
+  const handleRemoveAllocation = (index: number) => {
+    setForm(p => ({ ...p, allocations: p.allocations.filter((_, i) => i !== index) }));
+  };
+
+  const handleAllocationChange = (index: number, key: 'authorizationId' | 'amount', value: string) => {
+    setForm(p => {
+      const newAllocs = [...p.allocations];
+      newAllocs[index] = { ...newAllocs[index], [key]: value };
+      return { ...p, allocations: newAllocs };
+    });
+  };
+
+  const computedTotal = form.allocations.reduce((sum, a) => sum + (parseFloat(a.amount) || 0), 0);
 
   const reset = () => {
     setForm({ ...emptyForm, clientId: defaultClientId ?? '' });
@@ -141,20 +185,18 @@ export function LogPaymentDialog({ onSaved, defaultClientId }: Props) {
       toast({ variant: 'destructive', title: 'Justification required', description: 'Enter a written justification to override the duplicate-payment stop.' });
       return;
     }
-    if (!isValidPaymentMonth(form.paymentMonth)) {
-      toast({ variant: 'destructive', title: 'Invalid payment month', description: 'Enter a valid month in YYYY-MM format.' });
-      return;
-    }
     const data: PaymentInput = {
       clientId: form.clientId,
       qbCheckNumber: form.qbCheckNumber,
       checkDate: form.checkDate,
-      amount: form.amount,
-      paymentMonth: form.paymentMonth === '' ? undefined : form.paymentMonth,
+      amount: computedTotal.toFixed(2),
       paymentType: form.paymentType as PaymentInput['paymentType'],
       vendorId: form.vendorId === 'none' ? null : form.vendorId,
       invoiceId: form.invoiceId === 'none' ? null : form.invoiceId,
-      authorizationId: form.authorizationId === 'none' ? null : form.authorizationId,
+      allocations: form.allocations.map(a => ({
+        authorizationId: a.authorizationId === 'none' ? '' : a.authorizationId,
+        amount: a.amount
+      })),
       ...(override ? { overrideDuplicate: true, overrideJustification: justification.trim() } : {}),
     };
     createPayment.mutate(
@@ -223,13 +265,6 @@ export function LogPaymentDialog({ onSaved, defaultClientId }: Props) {
             <Input id="payment-date" type="date" value={form.checkDate} onChange={(e) => set('checkDate', e.target.value)} data-testid="input-payment-date" />
           </div>
           <div className="space-y-2">
-            <Label htmlFor="payment-amount">Amount</Label>
-            <Input id="payment-amount" value={form.amount} onChange={(e) => set('amount', e.target.value)} data-testid="input-payment-amount" />
-          </div>
-          <div className="space-y-2">
-            <MonthYearInput id="payment-month" value={form.paymentMonth} onChange={(value) => set('paymentMonth', value)} />
-          </div>
-          <div className="space-y-2">
             <Label htmlFor="payment-type">Payment Type</Label>
             <Select value={form.paymentType} onValueChange={(v) => set('paymentType', v)}>
               <SelectTrigger id="payment-type" data-testid="select-payment-type"><SelectValue /></SelectTrigger>
@@ -261,10 +296,10 @@ export function LogPaymentDialog({ onSaved, defaultClientId }: Props) {
             <SearchableSelect
               id="payment-invoice"
               value={form.invoiceId}
-              onValueChange={(v) => set('invoiceId', v)}
+              onValueChange={handleInvoiceChange}
               options={invoices?.map((i) => ({
                 value: i.id,
-                label: `${i.serviceMonth} – $${parseFloat(i.amountRequested).toFixed(2)}`
+                label: `${getInvoiceDisplayMonth(i)} – $${parseFloat(i.amountRequested).toFixed(2)}`
               })) ?? []}
               onSearchChange={setInvoiceSearch}
               loading={invoicesLoading}
@@ -275,26 +310,59 @@ export function LogPaymentDialog({ onSaved, defaultClientId }: Props) {
               data-testid="select-payment-invoice-id"
             />
           </div>
-          <div className="space-y-2">
-            <Label htmlFor="payment-authorization">Authorization</Label>
-            <SearchableSelect
-              id="payment-authorization"
-              value={form.authorizationId}
-              onValueChange={(v) => set('authorizationId', v)}
-              options={authorizations?.map((a) => ({
-                value: a.id,
-                label: a.authNumber,
-                subtitle: a.activityDescription ?? undefined
-              })) ?? []}
-              onSearchChange={setAuthSearch}
-              loading={authorizationsLoading}
-              disabled={!form.clientId}
-              placeholder="Select authorization"
-              allowClear
-              clearLabel="None"
-              data-testid="select-payment-authorization-id"
-            />
+        </div>
+
+        <div className="space-y-4 border rounded-md p-4">
+          <div className="flex items-center justify-between">
+            <h3 className="font-semibold text-sm">Allocations</h3>
+            <div className="font-medium text-sm">Total: ${computedTotal.toFixed(2)}</div>
           </div>
+
+          {form.allocations.map((alloc, index) => (
+            <div key={index} className="flex gap-3 items-start" data-testid={`row-payment-allocation-${index}`}>
+              <div className="flex-1 space-y-1">
+                <SearchableSelect
+                  value={alloc.authorizationId}
+                  onValueChange={(v) => handleAllocationChange(index, 'authorizationId', v)}
+                  options={authorizations?.map((a) => ({
+                    value: a.id,
+                    label: a.authNumber,
+                    subtitle: a.activityDescription ?? undefined
+                  })) ?? []}
+                  onSearchChange={setAuthSearch}
+                  loading={authorizationsLoading}
+                  disabled={!form.clientId}
+                  placeholder={!form.clientId ? "Select participant first" : "Select authorization"}
+                  allowClear
+                  clearLabel="None"
+                  data-testid={`select-payment-alloc-${index}-auth`}
+                />
+              </div>
+              <div className="w-28 space-y-1">
+                <Input
+                  placeholder="0.00"
+                  value={alloc.amount}
+                  onChange={(e) => handleAllocationChange(index, 'amount', e.target.value)}
+                  data-testid={`input-payment-alloc-${index}-amount`}
+                />
+              </div>
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                onClick={() => handleRemoveAllocation(index)}
+                disabled={form.allocations.length === 1}
+                className="text-destructive mt-0.5"
+                data-testid={`button-remove-payment-alloc-${index}`}
+              >
+                <Trash2 className="w-4 h-4" />
+              </Button>
+            </div>
+          ))}
+
+          <Button type="button" variant="outline" size="sm" onClick={handleAddAllocation} data-testid="button-add-payment-allocation">
+            <Plus className="w-4 h-4 mr-2" /> Add Allocation
+          </Button>
         </div>
 
         {duplicate && (
@@ -346,7 +414,7 @@ export function LogPaymentDialog({ onSaved, defaultClientId }: Props) {
           ) : (
             <Button
               onClick={() => submit(false)}
-              disabled={createPayment.isPending || !isValidPaymentMonth(form.paymentMonth)}
+              disabled={createPayment.isPending}
               data-testid="button-save-payment"
             >
               {createPayment.isPending ? 'Saving…' : 'Log Payment'}

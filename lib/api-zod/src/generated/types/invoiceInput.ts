@@ -6,6 +6,7 @@
  * OpenAPI spec version: 0.1.0
  */
 import type { InvoiceInputPaymentType } from './invoiceInputPaymentType';
+import type { InvoiceLineItemInput } from './invoiceLineItemInput';
 
 export interface InvoiceInput {
   clientId: string;
@@ -13,9 +14,11 @@ export interface InvoiceInput {
   authorizationId?: string | null;
   /** @nullable */
   vendorId?: string | null;
-  serviceMonth: string;
-  amountRequested: string;
+  serviceMonth?: string;
+  amountRequested?: string;
   paymentType: InvoiceInputPaymentType;
   documentUrl?: string;
   notes?: string;
+  /** @minItems 1 */
+  lineItems: InvoiceLineItemInput[];
 }

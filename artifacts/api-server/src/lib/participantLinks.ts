@@ -1,6 +1,6 @@
 import { and, eq } from "drizzle-orm";
 import {
-  authorizationsTable, clientsTable, db, feesTable, invoicesTable, paymentsTable, remittancesTable, vendorsTable,
+  authorizationsTable, clientsTable, db, feesTable, invoicesTable, invoiceLineItemsTable, paymentsTable, paymentAllocationsTable, remittancesTable, vendorsTable,
 } from "@workspace/db";
 import { notDeleted } from "./serializers";
 
@@ -56,10 +56,12 @@ export async function softDeleteAuthorization(
 
   const fees = await tx.select({ id: feesTable.id, feeMonth: feesTable.feeMonth }).from(feesTable)
     .where(and(eq(feesTable.authorizationId, id), notDeleted(feesTable)));
-  const invoices = await tx.select({ id: invoicesTable.id, serviceMonth: invoicesTable.serviceMonth }).from(invoicesTable)
-    .where(and(eq(invoicesTable.authorizationId, id), notDeleted(invoicesTable)));
-  const payments = await tx.select({ id: paymentsTable.id, checkNumber: paymentsTable.qbCheckNumber }).from(paymentsTable)
-    .where(and(eq(paymentsTable.authorizationId, id), notDeleted(paymentsTable)));
+  const invoices = await tx.select({ id: invoicesTable.id, serviceMonth: invoiceLineItemsTable.serviceMonth }).from(invoiceLineItemsTable)
+    .innerJoin(invoicesTable, eq(invoicesTable.id, invoiceLineItemsTable.invoiceId))
+    .where(and(eq(invoiceLineItemsTable.authorizationId, id), notDeleted(invoicesTable)));
+  const payments = await tx.select({ id: paymentsTable.id, checkNumber: paymentsTable.qbCheckNumber }).from(paymentAllocationsTable)
+    .innerJoin(paymentsTable, eq(paymentsTable.id, paymentAllocationsTable.paymentId))
+    .where(and(eq(paymentAllocationsTable.authorizationId, id), notDeleted(paymentsTable)));
   const remittances = await tx.select({ id: remittancesTable.id, reference: remittancesTable.altaReference }).from(remittancesTable)
     .where(and(eq(remittancesTable.authorizationId, id), notDeleted(remittancesTable)));
   const blockers = activeBlockers([
@@ -113,7 +115,8 @@ export async function softDeleteClient(
     .where(and(eq(authorizationsTable.clientId, id), notDeleted(authorizationsTable)));
   const fees = await tx.select({ id: feesTable.id, feeMonth: feesTable.feeMonth }).from(feesTable)
     .where(and(eq(feesTable.clientId, id), notDeleted(feesTable)));
-  const invoices = await tx.select({ id: invoicesTable.id, serviceMonth: invoicesTable.serviceMonth }).from(invoicesTable)
+  const invoices = await tx.select({ id: invoicesTable.id, serviceMonth: invoiceLineItemsTable.serviceMonth }).from(invoicesTable)
+    .leftJoin(invoiceLineItemsTable, eq(invoiceLineItemsTable.invoiceId, invoicesTable.id))
     .where(and(eq(invoicesTable.clientId, id), notDeleted(invoicesTable)));
   const payments = await tx.select({ id: paymentsTable.id, checkNumber: paymentsTable.qbCheckNumber }).from(paymentsTable)
     .where(and(eq(paymentsTable.clientId, id), notDeleted(paymentsTable)));

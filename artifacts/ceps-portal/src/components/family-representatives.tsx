@@ -351,7 +351,7 @@ export function FamilyRepresentativesSection({ clientId }: { clientId: string })
                   </div>
                 </div>
                 
-                <div className="flex items-center gap-2 shrink-0 flex-wrap sm:flex-nowrap">
+                <div className="flex items-center gap-2 shrink-0 flex-wrap">
                   {isStaff && rep.portalAccountStatus === 'none' && (
                     <InvitePortalDialog 
                       linkedRecordType="client" 

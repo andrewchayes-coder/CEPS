@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import request from "supertest";
-import { inArray, eq } from "drizzle-orm";
+import { inArray, eq, and } from "drizzle-orm";
 import {
   db,
   usersTable,
@@ -9,6 +9,7 @@ import {
   vendorsTable,
   referralsTable,
   auditLogTable,
+  familyRepresentativesTable,
 } from "@workspace/db";
 import app from "../app";
 import { newToken } from "../lib/auth";
@@ -83,6 +84,18 @@ afterAll(async () => {
   }
   if (createdVendorNames.length) {
     await db.delete(vendorsTable).where(inArray(vendorsTable.name, createdVendorNames));
+  }
+  if (createdClientUcis.length) {
+    const referralClients = await db.select({ id: clientsTable.id }).from(clientsTable)
+      .where(inArray(clientsTable.uciNumber, createdClientUcis));
+    if (referralClients.length) {
+      await db.delete(referralsTable).where(inArray(referralsTable.clientId, referralClients.map((c) => c.id)));
+    }
+    const repClients = await db.select({ id: clientsTable.id }).from(clientsTable)
+      .where(inArray(clientsTable.uciNumber, createdClientUcis));
+    if (repClients.length) {
+      await db.delete(familyRepresentativesTable).where(inArray(familyRepresentativesTable.clientId, repClients.map((c) => c.id)));
+    }
   }
   if (createdClientUcis.length) {
     await db.delete(clientsTable).where(inArray(clientsTable.uciNumber, createdClientUcis));
@@ -180,5 +193,122 @@ describe("POST /referrals diagnosis/eligibility/document fields", () => {
     expect(res.body.diagnosis).toBeNull();
     expect(res.body.eligibilityCategory).toBeNull();
     expect(res.body.supportingDocumentUrl).toBeNull();
+  });
+});
+
+describe("POST /referrals client contact and family representative carryover", () => {
+  it("backfills blank contact fields, overwrites differing values with an audit, and does not erase on blank intake", async () => {
+    const uci = `${nonce}-existing-contact`;
+    const vendorName = `${nonce} Existing Contact Vendor`;
+    createdClientUcis.push(uci);
+    createdVendorNames.push(vendorName);
+    const [client] = await db.insert(clientsTable).values({
+      firstName: "Existing",
+      lastName: "Contact",
+      dateOfBirth: "2015-05-05",
+      uciNumber: uci,
+      isMinor: false,
+      phone: "555-old",
+      email: null,
+      address: null,
+    }).returning();
+
+    const firstIntake = {
+      ...baseIntake(uci, vendorName),
+      clientIsMinor: false,
+      contactPhone: "555-new",
+      contactEmail: "new@example.test",
+      contactStreet: "10 New Street",
+      contactCity: "Sacramento",
+      contactState: "CA",
+      contactZip: "95814",
+    };
+    const first = await request(app).post("/api/referrals").set("Cookie", staffCookie).send({
+      submittedVia: "staff_manual_entry",
+      intakeFields: firstIntake,
+    });
+    expect(first.status).toBe(201);
+    const [backfilled] = await db.select().from(clientsTable).where(eq(clientsTable.id, client.id));
+    expect(backfilled.phone).toBe("555-new");
+    expect(backfilled.email).toBe("new@example.test");
+    expect(backfilled.address).toBe("10 New Street, Sacramento, CA, 95814");
+    const overwriteAudit = await db.select().from(auditLogTable).where(and(
+      eq(auditLogTable.userId, staffId),
+      eq(auditLogTable.entityId, client.id),
+      eq(auditLogTable.action, "update_client_contact_from_referral"),
+    ));
+    expect(overwriteAudit).toHaveLength(1);
+    expect(overwriteAudit[0].detail).toContain("phone");
+    expect(overwriteAudit[0].detail).toContain("555-old");
+    expect(overwriteAudit[0].detail).toContain("555-new");
+
+    const second = await request(app).post("/api/referrals").set("Cookie", staffCookie).send({
+      submittedVia: "staff_manual_entry",
+      intakeFields: {
+        ...baseIntake(uci, `${nonce} Blank Contact Vendor`),
+        clientIsMinor: false,
+        contactPhone: "",
+        contactEmail: " ",
+        contactStreet: "",
+        contactCity: "",
+        contactState: "",
+        contactZip: "",
+      },
+    });
+    expect(second.status).toBe(201);
+    const [unchanged] = await db.select().from(clientsTable).where(eq(clientsTable.id, client.id));
+    expect(unchanged.phone).toBe("555-new");
+    expect(unchanged.email).toBe("new@example.test");
+    expect(unchanged.address).toBe("10 New Street, Sacramento, CA, 95814");
+  });
+
+  it("creates a canonical representative for a new minor without deprecated client columns or an account link", async () => {
+    const uci = `${nonce}-new-minor-rep`;
+    const vendorName = `${nonce} New Minor Vendor`;
+    createdClientUcis.push(uci);
+    createdVendorNames.push(vendorName);
+    const res = await request(app).post("/api/referrals").set("Cookie", staffCookie).send({
+      submittedVia: "staff_manual_entry",
+      intakeFields: baseIntake(uci, vendorName),
+    });
+    expect(res.status).toBe(201);
+    const [client] = await db.select().from(clientsTable).where(eq(clientsTable.uciNumber, uci));
+    expect(client.familyRepName).toBeNull();
+    expect(client.familyRepPhone).toBeNull();
+    expect(client.familyRepEmail).toBeNull();
+    expect(client.familyRepAddress).toBeNull();
+    const [rep] = await db.select().from(familyRepresentativesTable).where(eq(familyRepresentativesTable.clientId, client.id));
+    expect(rep).toMatchObject({
+      name: "Parent Tester",
+      relationship: "parent",
+      phone: "5550001111",
+      email: "parent@test.local",
+      address: "2 Elm St, Sacramento, CA, 95814",
+      isPrimary: true,
+      userId: null,
+      createdBy: staffId,
+    });
+  });
+
+  it("creates a representative for an existing minor and reuses an identical representative on retry", async () => {
+    const uci = `${nonce}-existing-minor-rep`;
+    const vendorName = `${nonce} Existing Minor Vendor`;
+    createdClientUcis.push(uci);
+    createdVendorNames.push(vendorName);
+    await db.insert(clientsTable).values({
+      firstName: "Existing",
+      lastName: "Minor",
+      dateOfBirth: "2015-05-05",
+      uciNumber: uci,
+      isMinor: true,
+    });
+    const body = { submittedVia: "staff_manual_entry", intakeFields: baseIntake(uci, vendorName) };
+    expect((await request(app).post("/api/referrals").set("Cookie", staffCookie).send(body)).status).toBe(201);
+    expect((await request(app).post("/api/referrals").set("Cookie", staffCookie).send(body)).status).toBe(201);
+    const [client] = await db.select().from(clientsTable).where(eq(clientsTable.uciNumber, uci));
+    const reps = await db.select().from(familyRepresentativesTable).where(eq(familyRepresentativesTable.clientId, client.id));
+    expect(reps).toHaveLength(1);
+    expect(reps[0].isPrimary).toBe(true);
+    expect(reps[0].userId).toBeNull();
   });
 });

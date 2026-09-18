@@ -334,77 +334,160 @@ router.post("/referrals", requireStaffOrCoordinator, async (req, res): Promise<v
     return;
   }
 
-  // Find or create the client by UCI
-  let [client] = await db.select().from(clientsTable).where(eq(clientsTable.uciNumber, f.clientUci));
-  if (!client) {
+  const clientUci = f.clientUci;
+  const clientFirstName = f.clientFirstName;
+  const clientLastName = f.clientLastName;
+  const clientDob = f.clientDob;
+  const address = [f.contactStreet, f.contactCity, f.contactState, f.contactZip].filter(Boolean).join(", ");
+  const contact = {
+    phone: clean(f.contactPhone),
+    email: clean(f.contactEmail),
+    address: clean(address),
+  };
+  const result = await db.transaction(async (tx) => {
+    // Lock an existing UCI row so contact and representative reconciliation is
+    // atomic with referral creation. A concurrent new-UCI insert is still
+    // guarded by the database unique constraint.
+    let [client] = await tx.select().from(clientsTable)
+      .where(eq(clientsTable.uciNumber, clientUci)).for("update");
     const contactIsFamily = f.clientIsMinor === true;
-    const address = [f.contactStreet, f.contactCity, f.contactState, f.contactZip].filter(Boolean).join(", ");
-    [client] = await db
-      .insert(clientsTable)
+    if (!client) {
+      const [createdClient] = await tx
+        .insert(clientsTable)
+        .values({
+          firstName: clientFirstName,
+          lastName: clientLastName,
+          dateOfBirth: clientDob,
+          uciNumber: clientUci,
+          regionalCenter: f.regionalCenterName,
+          preferredLanguage: f.preferredLanguage,
+          isMinor: f.clientIsMinor,
+          phone: contactIsFamily ? null : contact.phone,
+          email: contactIsFamily ? null : contact.email,
+          address: contactIsFamily ? null : contact.address,
+          // These columns are deprecated; canonical representatives are
+          // created below for minor referrals.
+          familyRepName: null,
+          familyRepPhone: null,
+          familyRepEmail: null,
+          familyRepAddress: null,
+          assignedCoordinatorId: req.user!.role === "service_coordinator" ? req.user!.id : null,
+        })
+        .returning();
+      client = createdClient;
+    } else {
+      const clientUpdates: Record<string, string> = {};
+      const changes: string[] = [];
+      for (const field of ["phone", "email", "address"] as const) {
+        const incoming = contact[field];
+        if (!incoming) continue;
+        if (client[field] !== incoming) {
+          clientUpdates[field] = incoming;
+          if (client[field]) {
+            changes.push(`${field}: ${JSON.stringify(client[field])} -> ${JSON.stringify(incoming)}`);
+          }
+        }
+      }
+      if (Object.keys(clientUpdates).length) {
+        [client] = await tx.update(clientsTable).set(clientUpdates).where(eq(clientsTable.id, client.id)).returning();
+        if (changes.length) {
+          await audit(
+            req.user!.id,
+            "update_client_contact_from_referral",
+            "client",
+            client.id,
+            changes.join("; "),
+            tx as unknown as typeof db,
+          );
+        }
+      }
+    }
+
+    let familyRepresentative: typeof familyRepresentativesTable.$inferSelect | undefined;
+    const repName = clean(f.familyRepName);
+    if (contactIsFamily && repName) {
+      const reps = await tx.select().from(familyRepresentativesTable).where(and(
+        eq(familyRepresentativesTable.clientId, client.id),
+        eq(familyRepresentativesTable.isDeleted, false),
+      ));
+      familyRepresentative = reps.find((rep) =>
+        rep.name.trim() === repName &&
+        rep.relationship === "parent" &&
+        rep.phone === contact.phone &&
+        rep.email === contact.email &&
+        rep.address === contact.address &&
+        rep.userId === null,
+      );
+      if (!familyRepresentative) {
+        [familyRepresentative] = await tx.insert(familyRepresentativesTable).values({
+          clientId: client.id,
+          name: repName,
+          relationship: "parent",
+          phone: contact.phone,
+          email: contact.email,
+          address: contact.address,
+          isPrimary: true,
+          userId: null,
+          createdBy: req.user!.id,
+        }).returning();
+        await audit(
+          req.user!.id,
+          "create_family_representative",
+          "family_representative",
+          familyRepresentative.id,
+          `Created ${repName} from referral intake`,
+          tx as unknown as typeof db,
+        );
+      }
+    }
+
+    // Find or create the vendor by name.
+    if (f.vendorName) {
+      const [vendor] = await tx.select().from(vendorsTable).where(eq(vendorsTable.name, f.vendorName));
+      if (!vendor) {
+        const serviceAddress = [f.vendorServiceStreet, f.vendorServiceCity, f.vendorServiceState, f.vendorServiceZip]
+          .filter(Boolean)
+          .join(", ");
+        const billingAddress =
+          f.vendorBillingDifferent === "yes"
+            ? [f.vendorBillingStreet, f.vendorBillingCity, f.vendorBillingState, f.vendorBillingZip].filter(Boolean).join(", ")
+            : serviceAddress;
+        await tx.insert(vendorsTable).values({
+          name: f.vendorName,
+          email: f.vendorEmail,
+          phone: f.vendorPhone,
+          contactPerson: f.vendorContactPerson,
+          serviceAddress: serviceAddress || null,
+          billingAddress: billingAddress || null,
+        });
+      }
+    }
+
+    // Portal sends '' for untouched optional fields — normalize to null.
+    const [referral] = await tx
+      .insert(referralsTable)
       .values({
-        firstName: f.clientFirstName,
-        lastName: f.clientLastName,
-        dateOfBirth: f.clientDob,
-        uciNumber: f.clientUci,
-        regionalCenter: f.regionalCenterName,
-        preferredLanguage: f.preferredLanguage,
-        isMinor: f.clientIsMinor,
-        phone: contactIsFamily ? null : f.contactPhone,
-        email: contactIsFamily ? null : f.contactEmail,
-        address: contactIsFamily ? null : address || null,
-        familyRepName: contactIsFamily ? f.familyRepName : null,
-        familyRepPhone: contactIsFamily ? f.contactPhone : null,
-        familyRepEmail: contactIsFamily ? f.contactEmail : null,
-        familyRepAddress: contactIsFamily ? address || null : null,
-        assignedCoordinatorId: req.user!.role === "service_coordinator" ? req.user!.id : null,
+        clientId: client.id,
+        serviceCoordinatorId: req.user!.role === "service_coordinator" ? req.user!.id : null,
+        referralDate: new Date().toISOString().slice(0, 10),
+        status: "intake",
+        submittedVia: parsed.data.submittedVia ?? "staff_manual_entry",
+        intakeFields: f,
+        serviceFrequency: parsed.data.serviceFrequency,
+        cost: clean(parsed.data.cost),
+        paymentSchedule: clean(parsed.data.paymentSchedule),
+        paymentTypeRequested: clean(parsed.data.paymentTypeRequested),
+        diagnosis: clean(parsed.data.diagnosis),
+        eligibilityCategory: clean(parsed.data.eligibilityCategory),
+        supportingDocumentUrl: clean(parsed.data.supportingDocumentUrl),
+        notes: parsed.data.notes,
       })
       .returning();
-  }
 
-  // Find or create the vendor by name
-  if (f.vendorName) {
-    const [vendor] = await db.select().from(vendorsTable).where(eq(vendorsTable.name, f.vendorName));
-    if (!vendor) {
-      const serviceAddress = [f.vendorServiceStreet, f.vendorServiceCity, f.vendorServiceState, f.vendorServiceZip]
-        .filter(Boolean)
-        .join(", ");
-      const billingAddress =
-        f.vendorBillingDifferent === "yes"
-          ? [f.vendorBillingStreet, f.vendorBillingCity, f.vendorBillingState, f.vendorBillingZip].filter(Boolean).join(", ")
-          : serviceAddress;
-      await db.insert(vendorsTable).values({
-        name: f.vendorName,
-        email: f.vendorEmail,
-        phone: f.vendorPhone,
-        contactPerson: f.vendorContactPerson,
-        serviceAddress: serviceAddress || null,
-        billingAddress: billingAddress || null,
-      });
-    }
-  }
-
-  // Portal sends '' for untouched optional fields — normalize to null.
-  const [referral] = await db
-    .insert(referralsTable)
-    .values({
-      clientId: client.id,
-      serviceCoordinatorId: req.user!.role === "service_coordinator" ? req.user!.id : null,
-      referralDate: new Date().toISOString().slice(0, 10),
-      status: "intake",
-      submittedVia: parsed.data.submittedVia ?? "staff_manual_entry",
-      intakeFields: f,
-      serviceFrequency: parsed.data.serviceFrequency,
-      cost: clean(parsed.data.cost),
-      paymentSchedule: clean(parsed.data.paymentSchedule),
-      paymentTypeRequested: clean(parsed.data.paymentTypeRequested),
-      diagnosis: clean(parsed.data.diagnosis),
-      eligibilityCategory: clean(parsed.data.eligibilityCategory),
-      supportingDocumentUrl: clean(parsed.data.supportingDocumentUrl),
-      notes: parsed.data.notes,
-    })
-    .returning();
-
-  await audit(req.user!.id, "create_referral", "referral", referral.id, `Referral for ${client.firstName} ${client.lastName}`);
+    await audit(req.user!.id, "create_referral", "referral", referral.id, `Referral for ${client.firstName} ${client.lastName}`, tx as unknown as typeof db);
+    return { client, referral, familyRepresentative };
+  });
+  const { client, referral, familyRepresentative } = result;
   const coordNames = await userNameMap([referral.serviceCoordinatorId]);
   res.status(201).json(
     CreateReferralResponse.parse(
@@ -413,7 +496,7 @@ router.post("/referrals", requireStaffOrCoordinator, async (req, res): Promise<v
         `${client.firstName} ${client.lastName}`,
         referral.serviceCoordinatorId ? coordNames.get(referral.serviceCoordinatorId) : null,
         client.isMinor,
-        { participant: client.email, familyRep: client.familyRepEmail },
+        { participant: client.email, familyRep: familyRepresentative?.email ?? client.familyRepEmail },
       ),
     ),
   );

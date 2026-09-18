@@ -1,0 +1,43 @@
+In the CEPS app, fix three related bugs in the referral-intake-to-client data
+flow.
+
+1. Contact info not carrying over for existing clients.
+   In the create-referral endpoint, when a client already exists (matched by
+   UCI number), the code currently does nothing with the intake form's
+   address/phone/email — it only ever writes those fields when *creating* a
+   brand-new client record. Change this so that whenever intake supplies a
+   non-blank phone, email, or address, the existing client record is updated
+   too (fill in any field that's currently blank on the client; for a field
+   that already has a different value on file, update it to the new intake
+   value but write an audit-log entry noting the prior value, rather than
+   silently overwriting with no trail).
+
+2. Family Representative not created for minors.
+   For a new minor client, the create-referral endpoint currently writes the
+   parent/guardian's name/phone/email/address into the four deprecated
+   `clients.familyRep*` columns (familyRepName, familyRepPhone, familyRepEmail,
+   familyRepAddress) — these were superseded by the real `family_representatives`
+   table when that feature was built, and nothing in the current UI reads
+   those columns anymore, so this data is currently going nowhere. Change
+   create-referral so that for a minor client, it instead inserts a row into
+   `family_representatives` (name = family rep name from intake, relationship
+   = "parent", phone/email/address from intake, isPrimary = true), for both
+   the new-client and existing-client paths. Do not write to the deprecated
+   columns anymore.
+
+3. Family Representative card action buttons overflow their container.
+   In the family-representatives component, the action-button row
+   (Edit / Invite to Portal / Remove) is currently `flex items-center gap-2
+   shrink-0 flex-wrap sm:flex-nowrap` — at the `sm` breakpoint and above this
+   forces the buttons into a single non-shrinking, non-wrapping row, which
+   overflows the card in narrower layouts (e.g. embedded in the Participant
+   detail page). Remove the `sm:flex-nowrap` override so the button row can
+   wrap at all screen sizes, or switch to icon-only buttons with tooltips if
+   that reads better — either way, verify the row never extends past the
+   card's border down to a narrow (~375px) viewport.
+
+Write tests covering: referral submission for an existing client backfills
+blank contact fields and logs an overwrite when a field already differs; a
+minor referral creates a family_representatives row (not the deprecated
+columns) with isPrimary true; and that this doesn't regress the existing
+multi-rep / staff-vs-self edit-scoping rules already built for family reps.

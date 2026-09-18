@@ -24,6 +24,7 @@ import type {
   AltaFmsPaymentImportResult,
   AltaRemittanceImportInput,
   AltaRemittanceImportResult,
+  AuditMonthlyFeesParams,
   Authorization,
   AuthorizationInput,
   AuthorizationResult,
@@ -87,6 +88,9 @@ import type {
   MagicLinkConsumeInput,
   MagicLinkRequestInput,
   MagicLinkResult,
+  MonthlyFeeAuditReport,
+  MonthlyFeeRepairInput,
+  MonthlyFeeRepairResult,
   OkResult,
   Payment,
   PaymentInput,
@@ -4007,6 +4011,161 @@ export const useCreatePayment = <TError = ErrorType<DuplicatePaymentError>,
         TContext
       > => {
       return useMutation(getCreatePaymentMutationOptions(options));
+    }
+
+export const getAuditMonthlyFeesUrl = (params?: AuditMonthlyFeesParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/payments/monthly-fees/audit?${stringifiedParams}` : `/api/payments/monthly-fees/audit`
+}
+
+/**
+ * @summary Report participant-months that do not match the confirmed flat monthly fee rule (staff)
+ */
+export const auditMonthlyFees = async (params?: AuditMonthlyFeesParams, options?: Parameters<typeof customFetch>[1]): Promise<MonthlyFeeAuditReport> => {
+
+  return customFetch<MonthlyFeeAuditReport>(getAuditMonthlyFeesUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getAuditMonthlyFeesQueryKey = (params?: AuditMonthlyFeesParams,) => {
+    return [
+    `/api/payments/monthly-fees/audit`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getAuditMonthlyFeesQueryOptions = <TData = Awaited<ReturnType<typeof auditMonthlyFees>>, TError = ErrorType<void>>(params?: AuditMonthlyFeesParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof auditMonthlyFees>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getAuditMonthlyFeesQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof auditMonthlyFees>>> = ({ signal }) => auditMonthlyFees(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof auditMonthlyFees>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type AuditMonthlyFeesQueryResult = NonNullable<Awaited<ReturnType<typeof auditMonthlyFees>>>
+export type AuditMonthlyFeesQueryError = ErrorType<void>
+
+
+/**
+ * @summary Report participant-months that do not match the confirmed flat monthly fee rule (staff)
+ */
+
+export function useAuditMonthlyFees<TData = Awaited<ReturnType<typeof auditMonthlyFees>>, TError = ErrorType<void>>(
+ params?: AuditMonthlyFeesParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof auditMonthlyFees>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getAuditMonthlyFeesQueryOptions(params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getRepairMonthlyFeesUrl = () => {
+
+
+
+
+  return `/api/payments/monthly-fees/repair`
+}
+
+/**
+ * @summary Repair safe monthly fee discrepancies under the confirmed flat rule (staff)
+ */
+export const repairMonthlyFees = async (monthlyFeeRepairInput: MonthlyFeeRepairInput, options?: Parameters<typeof customFetch>[1]): Promise<MonthlyFeeRepairResult> => {
+
+  return customFetch<MonthlyFeeRepairResult>(getRepairMonthlyFeesUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(monthlyFeeRepairInput)
+  }
+);}
+
+
+
+
+
+export const getRepairMonthlyFeesMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof repairMonthlyFees>>, TError,{data: BodyType<MonthlyFeeRepairInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof repairMonthlyFees>>, TError,{data: BodyType<MonthlyFeeRepairInput>}, TContext> => {
+
+const mutationKey = ['repairMonthlyFees'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof repairMonthlyFees>>, {data: BodyType<MonthlyFeeRepairInput>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  repairMonthlyFees(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type RepairMonthlyFeesMutationResult = NonNullable<Awaited<ReturnType<typeof repairMonthlyFees>>>
+    export type RepairMonthlyFeesMutationBody = BodyType<MonthlyFeeRepairInput>
+    export type RepairMonthlyFeesMutationError = ErrorType<void>
+
+    /**
+ * @summary Repair safe monthly fee discrepancies under the confirmed flat rule (staff)
+ */
+export const useRepairMonthlyFees = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof repairMonthlyFees>>, TError,{data: BodyType<MonthlyFeeRepairInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof repairMonthlyFees>>,
+        TError,
+        {data: BodyType<MonthlyFeeRepairInput>},
+        TContext
+      > => {
+      return useMutation(getRepairMonthlyFeesMutationOptions(options));
     }
 
 export const getGetPaymentUrl = (id: string,) => {

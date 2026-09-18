@@ -1836,6 +1836,74 @@ export interface PaymentUpdate {
   overrideJustification?: string;
 }
 
+export type MonthlyFeeAuditItemIssue = typeof MonthlyFeeAuditItemIssue[keyof typeof MonthlyFeeAuditItemIssue];
+
+
+export const MonthlyFeeAuditItemIssue = {
+  missing: 'missing',
+  stale: 'stale',
+  obsolete_rule: 'obsolete_rule',
+} as const;
+
+export type MonthlyFeeAuditItemRepairAction = typeof MonthlyFeeAuditItemRepairAction[keyof typeof MonthlyFeeAuditItemRepairAction];
+
+
+export const MonthlyFeeAuditItemRepairAction = {
+  create: 'create',
+  reverse: 'reverse',
+  replace: 'replace',
+  none: 'none',
+} as const;
+
+export interface MonthlyFeeAuditItem {
+  clientId: string;
+  clientName: string;
+  /** @pattern ^\d{4}-(0[1-9]|1[0-2])$ */
+  feeMonth: string;
+  issue: MonthlyFeeAuditItemIssue;
+  qualifyingPaymentCount: number;
+  /** @nullable */
+  feeId?: string | null;
+  /** @nullable */
+  feeAmount?: string | null;
+  /** @nullable */
+  feeStatus?: string | null;
+  /** @nullable */
+  feeRuleApplied?: string | null;
+  protected: boolean;
+  repairAction: MonthlyFeeAuditItemRepairAction;
+  reason?: string;
+}
+
+export interface MonthlyFeeAuditReport {
+  generatedAt: string;
+  ruleApplied: string;
+  flatAmount: string;
+  totalIssues: number;
+  repairableIssues: number;
+  protectedIssues: number;
+  items: MonthlyFeeAuditItem[];
+}
+
+export interface MonthlyFeeRepairInput {
+  /** Must be true; callers should review the audit report first. */
+  confirm: boolean;
+  /**
+     * One or more selected participants; whole-database repair is intentionally not supported.
+     * @minItems 1
+     */
+  clientIds: string[];
+}
+
+export interface MonthlyFeeRepairResult {
+  created: number;
+  reversed: number;
+  replaced: number;
+  protected: number;
+  remainingIssues: number;
+  report?: MonthlyFeeAuditReport;
+}
+
 export interface RemittanceUpdate {
   /** @nullable */
   authorizationId?: string | null;
@@ -2321,6 +2389,10 @@ export const ListPaymentsSortDirection = {
 export type ListPayments200 = {
   items: Payment[];
   total: number;
+};
+
+export type AuditMonthlyFeesParams = {
+clientId?: string;
 };
 
 export type ListFeesParams = {

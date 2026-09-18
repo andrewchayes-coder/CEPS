@@ -2079,6 +2079,85 @@ export const CreatePaymentResponse = zod.object({
 
 
 /**
+ * @summary Report participant-months that do not match the confirmed flat monthly fee rule (staff)
+ */
+export const AuditMonthlyFeesQueryParams = zod.object({
+  "clientId": zod.coerce.string().optional()
+})
+
+export const auditMonthlyFeesResponseItemsItemFeeMonthRegExp = new RegExp('^\\d{4}-(0[1-9]|1[0-2])$');
+
+
+export const AuditMonthlyFeesResponse = zod.object({
+  "generatedAt": zod.string(),
+  "ruleApplied": zod.string(),
+  "flatAmount": zod.string(),
+  "totalIssues": zod.int(),
+  "repairableIssues": zod.int(),
+  "protectedIssues": zod.int(),
+  "items": zod.array(zod.object({
+  "clientId": zod.string(),
+  "clientName": zod.string(),
+  "feeMonth": zod.string().regex(auditMonthlyFeesResponseItemsItemFeeMonthRegExp),
+  "issue": zod.enum(['missing', 'stale', 'obsolete_rule']),
+  "qualifyingPaymentCount": zod.int(),
+  "feeId": zod.string().nullish(),
+  "feeAmount": zod.string().nullish(),
+  "feeStatus": zod.string().nullish(),
+  "feeRuleApplied": zod.string().nullish(),
+  "protected": zod.boolean(),
+  "repairAction": zod.enum(['create', 'reverse', 'replace', 'none']),
+  "reason": zod.string().optional()
+}))
+})
+
+
+/**
+ * @summary Repair safe monthly fee discrepancies under the confirmed flat rule (staff)
+ */
+
+
+
+export const RepairMonthlyFeesBody = zod.object({
+  "confirm": zod.boolean().describe('Must be true; callers should review the audit report first.'),
+  "clientIds": zod.array(zod.string()).min(1).describe('One or more selected participants; whole-database repair is intentionally not supported.')
+})
+
+export const repairMonthlyFeesResponseReportItemsItemFeeMonthRegExp = new RegExp('^\\d{4}-(0[1-9]|1[0-2])$');
+
+
+export const RepairMonthlyFeesResponse = zod.object({
+  "created": zod.int(),
+  "reversed": zod.int(),
+  "replaced": zod.int(),
+  "protected": zod.int(),
+  "remainingIssues": zod.int(),
+  "report": zod.object({
+  "generatedAt": zod.string(),
+  "ruleApplied": zod.string(),
+  "flatAmount": zod.string(),
+  "totalIssues": zod.int(),
+  "repairableIssues": zod.int(),
+  "protectedIssues": zod.int(),
+  "items": zod.array(zod.object({
+  "clientId": zod.string(),
+  "clientName": zod.string(),
+  "feeMonth": zod.string().regex(repairMonthlyFeesResponseReportItemsItemFeeMonthRegExp),
+  "issue": zod.enum(['missing', 'stale', 'obsolete_rule']),
+  "qualifyingPaymentCount": zod.int(),
+  "feeId": zod.string().nullish(),
+  "feeAmount": zod.string().nullish(),
+  "feeStatus": zod.string().nullish(),
+  "feeRuleApplied": zod.string().nullish(),
+  "protected": zod.boolean(),
+  "repairAction": zod.enum(['create', 'reverse', 'replace', 'none']),
+  "reason": zod.string().optional()
+}))
+}).optional()
+})
+
+
+/**
  * @summary Payment detail (scoped by role)
  */
 export const GetPaymentParams = zod.object({

@@ -44,9 +44,9 @@ beforeAll(async () => {
   cookie = `ceps_session=${token}`;
 });
 afterAll(async () => {
-  await db.delete(feesTable).where(eq(feesTable.clientId, clientId));
+  await db.delete(feesTable).where(inArray(feesTable.clientId, [clientId, otherClientId]));
   await db.delete(remittancesTable).where(inArray(remittancesTable.clientId, [clientId, otherClientId]));
-  await db.delete(paymentsTable).where(eq(paymentsTable.clientId, clientId));
+  await db.delete(paymentsTable).where(inArray(paymentsTable.clientId, [clientId, otherClientId]));
   await db.delete(invoicesTable).where(inArray(invoicesTable.clientId, [clientId, otherClientId]));
   await db.delete(authorizationsTable).where(inArray(authorizationsTable.clientId, [clientId, otherClientId]));
   await db.delete(auditLogTable).where(eq(auditLogTable.userId, staffId));
@@ -56,12 +56,12 @@ afterAll(async () => {
   await db.delete(usersTable).where(inArray(usersTable.id, [staffId]));
 });
 
-async function createPayment(amount: string, checkDate = "2026-01-15", paymentType = "direct_payment") {
+async function createPayment(amount: string, checkDate = "2026-01-15", paymentType = "direct_payment", ownerId = clientId) {
   const qb = `${nonce}-chk-${checkCounter++}`;
   const res = await request(app)
     .post("/api/payments")
     .set("Cookie", cookie)
-    .send({ clientId, qbCheckNumber: qb, checkDate, amount, paymentType });
+    .send({ clientId: ownerId, qbCheckNumber: qb, checkDate, amount, paymentType });
   expect(res.status).toBe(201);
   return res.body as { id: string; amount: string; paymentMonth: string };
 }
@@ -222,6 +222,101 @@ describe("monthly payment fees", () => {
     ]);
     expect(left.id).not.toBe(right.id);
     expect(await monthlyFees("2026-11")).toHaveLength(1);
+  });
+
+  it("audits and idempotently repairs missing, obsolete, and protected monthly fees", async () => {
+    const missingPayment = await createPayment("100.00", "2031-01-15", "direct_payment", otherClientId);
+    const [missingFee] = await monthlyFees("2031-01", otherClientId);
+    await db.delete(feesTable).where(eq(feesTable.id, missingFee.id));
+
+    await createPayment("100.00", "2031-02-15", "direct_payment", otherClientId);
+    const [obsoleteFee] = await monthlyFees("2031-02", otherClientId);
+    await db.update(feesTable).set({
+      amount: "10.00",
+      ruleApplied: "legacy_ten_percent_per_payment",
+    }).where(eq(feesTable.id, obsoleteFee.id));
+
+    const stalePayment = await createPayment("100.00", "2031-03-15", "direct_payment", otherClientId);
+    const [staleFee] = await monthlyFees("2031-03", otherClientId);
+    await db.update(feesTable).set({ status: "invoiced" }).where(eq(feesTable.id, staleFee.id));
+    await db.update(paymentsTable).set({
+      isDeleted: true,
+      deletedAt: new Date(),
+      deletedBy: staffId,
+    }).where(eq(paymentsTable.id, stalePayment.id));
+
+    await createPayment("100.00", "2031-04-15");
+    const [unselectedFee] = await monthlyFees("2031-04");
+    await db.delete(feesTable).where(eq(feesTable.id, unselectedFee.id));
+
+    const auditReport = await request(app)
+      .get(`/api/payments/monthly-fees/audit?clientId=${otherClientId}`)
+      .set("Cookie", cookie);
+    expect(auditReport.status).toBe(200);
+    expect(auditReport.body.items).toEqual(expect.arrayContaining([
+      expect.objectContaining({ feeMonth: "2031-01", issue: "missing", repairAction: "create", protected: false }),
+      expect.objectContaining({ feeMonth: "2031-02", issue: "obsolete_rule", repairAction: "replace", protected: false }),
+      expect.objectContaining({ feeMonth: "2031-03", issue: "stale", repairAction: "none", protected: true }),
+    ]));
+
+    const unconfirmed = await request(app)
+      .post("/api/payments/monthly-fees/repair")
+      .set("Cookie", cookie)
+      .send({ confirm: false, clientIds: [otherClientId] });
+    expect(unconfirmed.status).toBe(400);
+
+    const emptyScope = await request(app)
+      .post("/api/payments/monthly-fees/repair")
+      .set("Cookie", cookie)
+      .send({ confirm: true, clientIds: [] });
+    expect(emptyScope.status).toBe(400);
+    expect(await monthlyFees("2031-04")).toHaveLength(0);
+
+    const repaired = await request(app)
+      .post("/api/payments/monthly-fees/repair")
+      .set("Cookie", cookie)
+      .send({ confirm: true, clientIds: [otherClientId] });
+    expect(repaired.status).toBe(200);
+    expect(repaired.body).toMatchObject({
+      created: 1,
+      replaced: 1,
+      reversed: 0,
+      protected: 1,
+      remainingIssues: 1,
+    });
+    expect((await monthlyFees("2031-01", otherClientId))[0]).toMatchObject({
+      paymentId: missingPayment.id,
+      amount: "160.00",
+      ruleApplied: MONTHLY_FEE_RULE,
+    });
+    expect((await monthlyFees("2031-02", otherClientId))[0]).toMatchObject({
+      amount: "160.00",
+      ruleApplied: MONTHLY_FEE_RULE,
+    });
+    expect((await monthlyFees("2031-03", otherClientId))[0]).toMatchObject({
+      id: staleFee.id,
+      status: "invoiced",
+    });
+    expect(await monthlyFees("2031-04")).toHaveLength(0);
+
+    const repeated = await request(app)
+      .post("/api/payments/monthly-fees/repair")
+      .set("Cookie", cookie)
+      .send({ confirm: true, clientIds: [otherClientId] });
+    expect(repeated.status).toBe(200);
+    expect(repeated.body).toMatchObject({
+      created: 0,
+      replaced: 0,
+      reversed: 0,
+      protected: 1,
+      remainingIssues: 1,
+    });
+
+    const repairAudits = await db.select().from(auditLogTable).where(and(
+      eq(auditLogTable.userId, staffId),
+      eq(auditLogTable.action, "repair_monthly_fees"),
+    ));
+    expect(repairAudits).toHaveLength(2);
   });
 });
 

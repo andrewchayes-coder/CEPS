@@ -23,6 +23,9 @@ import {
   MatchRemittanceResponse,
   ImportAltaRemittancesBody,
   ImportAltaRemittancesResponse,
+  AuditMonthlyFeesResponse,
+  RepairMonthlyFeesBody,
+  RepairMonthlyFeesResponse,
 } from "@workspace/api-zod";
 import { requireAuth, requireStaff, audit } from "../lib/auth";
 import { paymentJson, remittanceJson, clientNameMap, vendorNameMap, authNumberMap, notDeleted, diffDetail } from "../lib/serializers";
@@ -40,6 +43,168 @@ class DuplicateFingerprint extends Error {}
 const MONTHLY_FEE_RULE = "flat_160_per_client_month";
 const QUALIFYING_FEE_PAYMENT_TYPES = ["direct_payment", "reimbursement"] as const;
 
+type MonthlyFeeAuditItem = {
+  clientId: string;
+  clientName: string;
+  feeMonth: string;
+  issue: "missing" | "stale" | "obsolete_rule";
+  qualifyingPaymentCount: number;
+  feeId: string | null;
+  feeAmount: string | null;
+  feeStatus: string | null;
+  feeRuleApplied: string | null;
+  protected: boolean;
+  repairAction: "create" | "reverse" | "replace" | "none";
+  reason: string;
+};
+
+function isUntouchedAutomaticFee(fee: typeof feesTable.$inferSelect): boolean {
+  return fee.status === "pending" &&
+    fee.notes === null &&
+    fee.createdBy === null &&
+    fee.ruleApplied !== `${MONTHLY_FEE_RULE}_manually_adjusted`;
+}
+
+async function monthlyFeeAudit(database: typeof db = db, clientIds?: string[]) {
+  const paymentConditions = [
+    inArray(paymentsTable.paymentType, [...QUALIFYING_FEE_PAYMENT_TYPES]),
+    sql`${paymentsTable.source} <> 'historical_import'`,
+    sql`${paymentsTable.paymentMonth} is not null`,
+    notDeleted(paymentsTable),
+  ];
+  const feeConditions = [
+    sql`${feesTable.feeMonth} is not null`,
+    notDeleted(feesTable),
+  ];
+  if (clientIds !== undefined) {
+    paymentConditions.push(clientIds.length ? inArray(paymentsTable.clientId, clientIds) : sql`false`);
+    feeConditions.push(clientIds.length ? inArray(feesTable.clientId, clientIds) : sql`false`);
+  }
+  const [qualifyingPayments, activeFees] = await Promise.all([
+    database
+      .select({
+        clientId: paymentsTable.clientId,
+        clientName: sql<string>`${clientsTable.firstName} || ' ' || ${clientsTable.lastName}`,
+        feeMonth: paymentsTable.paymentMonth,
+        paymentId: paymentsTable.id,
+      })
+      .from(paymentsTable)
+      .innerJoin(clientsTable, and(
+        eq(clientsTable.id, paymentsTable.clientId),
+        notDeleted(clientsTable),
+      ))
+      .where(and(...paymentConditions)),
+    database
+      .select({
+        fee: feesTable,
+        clientName: sql<string>`${clientsTable.firstName} || ' ' || ${clientsTable.lastName}`,
+      })
+      .from(feesTable)
+      .innerJoin(clientsTable, and(
+        eq(clientsTable.id, feesTable.clientId),
+        notDeleted(clientsTable),
+      ))
+      .where(and(...feeConditions)),
+  ]);
+
+  const months = new Map<string, {
+    clientId: string;
+    clientName: string;
+    feeMonth: string;
+    paymentIds: string[];
+    fee?: typeof feesTable.$inferSelect;
+  }>();
+  for (const payment of qualifyingPayments) {
+    if (!payment.feeMonth) continue;
+    const key = `${payment.clientId}:${payment.feeMonth}`;
+    const row = months.get(key) ?? {
+      clientId: payment.clientId,
+      clientName: payment.clientName,
+      feeMonth: payment.feeMonth,
+      paymentIds: [],
+    };
+    row.paymentIds.push(payment.paymentId);
+    months.set(key, row);
+  }
+  for (const { fee, clientName } of activeFees) {
+    if (!fee.feeMonth) continue;
+    const key = `${fee.clientId}:${fee.feeMonth}`;
+    const row = months.get(key) ?? {
+      clientId: fee.clientId,
+      clientName,
+      feeMonth: fee.feeMonth,
+      paymentIds: [],
+    };
+    row.fee = fee;
+    months.set(key, row);
+  }
+
+  const items: MonthlyFeeAuditItem[] = [];
+  for (const row of months.values()) {
+    const paymentCount = row.paymentIds.length;
+    const fee = row.fee;
+    if (!fee) {
+      items.push({
+        clientId: row.clientId,
+        clientName: row.clientName,
+        feeMonth: row.feeMonth,
+        issue: "missing",
+        qualifyingPaymentCount: paymentCount,
+        feeId: null,
+        feeAmount: null,
+        feeStatus: null,
+        feeRuleApplied: null,
+        protected: false,
+        repairAction: "create",
+        reason: "A qualifying payment exists, but there is no active monthly fee.",
+      });
+      continue;
+    }
+
+    const matchesConfirmedRule =
+      fee.ruleApplied === MONTHLY_FEE_RULE && fee.amount === "160.00";
+    if (matchesConfirmedRule && paymentCount > 0) continue;
+
+    const untouched = isUntouchedAutomaticFee(fee);
+    const obsoleteRule = fee.ruleApplied !== MONTHLY_FEE_RULE;
+    const protectedFee = !untouched;
+    items.push({
+      clientId: row.clientId,
+      clientName: row.clientName,
+      feeMonth: row.feeMonth,
+      issue: obsoleteRule ? "obsolete_rule" : "stale",
+      qualifyingPaymentCount: paymentCount,
+      feeId: fee.id,
+      feeAmount: fee.amount,
+      feeStatus: fee.status,
+      feeRuleApplied: fee.ruleApplied,
+      protected: protectedFee,
+      repairAction: protectedFee ? "none" : paymentCount > 0 ? "replace" : "reverse",
+      reason: protectedFee
+        ? "The fee has progressed or was manually created or adjusted, so it requires staff review."
+        : paymentCount > 0
+          ? "An untouched obsolete fee must be replaced by the confirmed flat $160 fee."
+          : "No qualifying payment remains for this untouched automatic fee.",
+    });
+  }
+
+  items.sort((a, b) =>
+    a.feeMonth.localeCompare(b.feeMonth) ||
+    a.clientName.localeCompare(b.clientName) ||
+    a.clientId.localeCompare(b.clientId)
+  );
+  const protectedIssues = items.filter((item) => item.protected).length;
+  return {
+    generatedAt: new Date().toISOString(),
+    ruleApplied: MONTHLY_FEE_RULE,
+    flatAmount: "160.00",
+    totalIssues: items.length,
+    repairableIssues: items.length - protectedIssues,
+    protectedIssues,
+    items,
+  };
+}
+
 function qualifiesForMonthlyFee(paymentType: string): boolean {
   return (QUALIFYING_FEE_PAYMENT_TYPES as readonly string[]).includes(paymentType);
 }
@@ -49,8 +214,8 @@ async function reconcileMonthlyFee(
   paymentMonth: string | null,
   userId: string,
   tx: typeof db = db,
-): Promise<void> {
-  if (!paymentMonth) return;
+): Promise<"created" | "reversed" | "none"> {
+  if (!paymentMonth) return "none";
 
   // Fee reconciliation is keyed by participant + month (not authorization).
   // Serialize that key so concurrent qualifying payments cannot both decide a
@@ -81,7 +246,7 @@ async function reconcileMonthlyFee(
     .limit(1);
 
   if (qualifyingPayments.length > 0) {
-    if (activeFee) return;
+    if (activeFee) return "none";
     const trigger = qualifyingPayments[0];
     const [fee] = await tx
     .insert(feesTable)
@@ -98,8 +263,9 @@ async function reconcileMonthlyFee(
     .returning();
     if (fee) {
       await audit(userId, "auto_generate_fee", "fee", fee.id, `Auto-generated $160.00 (${MONTHLY_FEE_RULE}) for client month ${paymentMonth}, triggered by check ${trigger.qbCheckNumber}`, tx);
+      return "created";
     }
-    return;
+    return "none";
   }
 
   // A fee is reversible only while it remains exactly as this rule created it.
@@ -129,8 +295,10 @@ async function reconcileMonthlyFee(
       .returning();
     if (reversed) {
       await audit(userId, "auto_reverse_fee", "fee", reversed.id, `Auto-reversed $160.00 (${MONTHLY_FEE_RULE}) for client month ${paymentMonth}; no qualifying payments remain`, tx);
+      return "reversed";
     }
   }
+  return "none";
 }
 
 async function enrichPayments(payments: (typeof paymentsTable.$inferSelect)[]) {
@@ -247,6 +415,98 @@ router.get("/payments", requireAuth, async (req, res): Promise<void> => {
       .offset(offset),
   ]);
   res.json(ListPaymentsResponse.parse({ items: await enrichPayments(payments), total }));
+});
+
+router.get("/payments/monthly-fees/audit", requireStaff, async (req, res): Promise<void> => {
+  const clientId = typeof req.query.clientId === "string" ? req.query.clientId : undefined;
+  res.json(AuditMonthlyFeesResponse.parse(await monthlyFeeAudit(db, clientId ? [clientId] : undefined)));
+});
+
+router.post("/payments/monthly-fees/repair", requireStaff, async (req, res): Promise<void> => {
+  const parsed = RepairMonthlyFeesBody.safeParse(req.body);
+  if (!parsed.success || parsed.data.confirm !== true) {
+    res.status(400).json({ error: "Review the monthly fee audit and set confirm to true before repairing." });
+    return;
+  }
+
+  const result = await db.transaction(async (tx) => {
+    const txDb = tx as unknown as typeof db;
+    await tx.execute(sql`select pg_advisory_xact_lock(hashtext('monthly-fee-audit-repair'))`);
+    const before = await monthlyFeeAudit(txDb, parsed.data.clientIds);
+    let created = 0;
+    let reversed = 0;
+    let replaced = 0;
+
+    for (const item of before.items) {
+      if (item.repairAction === "none") continue;
+      if (item.repairAction === "create") {
+        const outcome = await reconcileMonthlyFee(item.clientId, item.feeMonth, req.user!.id, txDb);
+        if (outcome === "created") created++;
+        continue;
+      }
+
+      const lockKey = `${item.clientId}:${item.feeMonth}`;
+      await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${lockKey}))`);
+      const [fee] = await tx
+        .select()
+        .from(feesTable)
+        .where(and(
+          eq(feesTable.id, item.feeId!),
+          notDeleted(feesTable),
+        ))
+        .limit(1);
+      if (!fee || !isUntouchedAutomaticFee(fee)) continue;
+
+      const deletedAt = new Date();
+      const [removed] = await tx
+        .update(feesTable)
+        .set({ isDeleted: true, deletedAt, deletedBy: req.user!.id })
+        .where(and(
+          eq(feesTable.id, fee.id),
+          eq(feesTable.status, "pending"),
+          isNull(feesTable.notes),
+          isNull(feesTable.createdBy),
+          notDeleted(feesTable),
+        ))
+        .returning();
+      if (!removed) continue;
+      await audit(
+        req.user!.id,
+        "repair_reverse_obsolete_fee",
+        "fee",
+        removed.id,
+        `Monthly fee repair reversed ${removed.amount} (${removed.ruleApplied ?? "no rule"}) for client month ${item.feeMonth}.`,
+        txDb,
+      );
+      if (item.repairAction === "replace") {
+        const outcome = await reconcileMonthlyFee(item.clientId, item.feeMonth, req.user!.id, txDb);
+        if (outcome === "created") replaced++;
+        else reversed++;
+      } else {
+        reversed++;
+      }
+    }
+
+    const after = await monthlyFeeAudit(txDb, parsed.data.clientIds);
+    await audit(
+      req.user!.id,
+      "repair_monthly_fees",
+      "fee",
+      undefined,
+      `${created} created, ${reversed} reversed, ${replaced} replaced, ${after.protectedIssues} protected, ${after.totalIssues} remaining.`,
+      txDb,
+    );
+    return {
+      created,
+      reversed,
+      replaced,
+      protected: after.protectedIssues,
+      remainingIssues: after.totalIssues,
+      report: after,
+    };
+  });
+
+  res.json(RepairMonthlyFeesResponse.parse(result));
 });
 
 router.post("/payments", requireStaff, async (req, res): Promise<void> => {

@@ -815,6 +815,7 @@ export const AuthorizationStatus = {
   expired: 'expired',
   pending: 'pending',
   exhausted: 'exhausted',
+  canceled: 'canceled',
 } as const;
 
 export interface Authorization {
@@ -841,6 +842,8 @@ export interface Authorization {
   /** @nullable */
   units?: number | null;
   status: AuthorizationStatus;
+  /** @nullable */
+  posNotes?: string | null;
   /** @nullable */
   posPdfUrl?: string | null;
   /** @nullable */
@@ -1268,6 +1271,30 @@ export interface SignatureResult {
   accountCreationError?: string | null;
 }
 
+export interface AuthorizationLookupResult {
+  exists: boolean;
+  authorization: Authorization | null;
+}
+
+export interface AuthorizationAmendInput {
+  servicePeriodStart: string;
+  servicePeriodEnd: string;
+  /** @nullable */
+  monthlyAmount?: string | null;
+  maxPeriodAmount: string;
+  /** @nullable */
+  posNotes?: string | null;
+  /** @nullable */
+  posPdfUrl?: string | null;
+  confirmed: boolean;
+  acceptMaxAmountWarning?: boolean;
+}
+
+export interface AuthorizationCancelInput {
+  /** @minLength 1 */
+  reason: string;
+}
+
 export type AuthorizationInputServiceCode = typeof AuthorizationInputServiceCode[keyof typeof AuthorizationInputServiceCode];
 
 
@@ -1315,6 +1342,8 @@ export interface AuthorizationInput {
   maxPeriodAmount: string;
   units?: number;
   status?: AuthorizationInputStatus;
+  /** @nullable */
+  posNotes?: string | null;
   receivedDate?: string;
   /** Stored object path of the uploaded POS PDF */
   posPdfUrl?: string;
@@ -1358,6 +1387,8 @@ export interface AuthorizationUpdate {
   units?: number | null;
   receivedDate?: string;
   acceptMaxAmountWarning?: boolean;
+  /** @nullable */
+  posNotes?: string | null;
 }
 
 export interface AuthorizationResult {
@@ -1391,6 +1422,8 @@ export interface AuthorizationVersion {
   posPdfUrl?: string | null;
   /** @nullable */
   receivedDate?: string | null;
+  /** @nullable */
+  posNotes?: string | null;
   isDeleted: boolean;
   createdAt: string;
   changedAt: string;
@@ -1437,6 +1470,8 @@ export type PosParseResultFields = {
   maxPeriodAmount?: string | null;
   /** @nullable */
   caseworkerName?: string | null;
+  /** @nullable */
+  posNotes?: string | null;
 };
 
 export interface PosParseResult {
@@ -1477,6 +1512,8 @@ export interface UnmatchedPosDocument {
   maxPeriodAmount?: string | null;
   /** @nullable */
   caseworkerName?: string | null;
+  /** @nullable */
+  posNotes?: string | null;
   createdBy: string;
   createdAt: string;
   updatedAt: string;
@@ -1513,6 +1550,8 @@ export interface UnmatchedPosInput {
   maxPeriodAmount?: string | null;
   /** @nullable */
   caseworkerName?: string | null;
+  /** @nullable */
+  posNotes?: string | null;
 }
 
 export interface UnmatchedPosList {
@@ -2493,6 +2532,11 @@ export const ListAuthorizationsSortDirection = {
 export type ListAuthorizations200 = {
   items: Authorization[];
   total: number;
+};
+
+export type LookupAuthorizationParams = {
+clientId: string;
+authNumber: string;
 };
 
 export type ListUnmatchedPosParams = {

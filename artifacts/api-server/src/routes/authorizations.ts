@@ -24,6 +24,14 @@ import {
   CompleteUnmatchedPosParams,
   CompleteUnmatchedPosBody,
   CompleteUnmatchedPosResponse,
+  LookupAuthorizationQueryParams,
+  LookupAuthorizationResponse,
+  AmendAuthorizationParams,
+  AmendAuthorizationBody,
+  AmendAuthorizationResponse,
+  CancelAuthorizationParams,
+  CancelAuthorizationBody,
+  CancelAuthorizationResponse,
 } from "@workspace/api-zod";
 import { requireAuth, requireStaff, audit } from "../lib/auth";
 import {
@@ -43,7 +51,7 @@ const router: IRouter = Router();
 // Normalize empty strings from the form to null for optional/numeric columns.
 function cleanAuthFields<T extends Record<string, unknown>>(obj: T): T {
   const out = { ...obj };
-  for (const k of ["vendorId", "activityDescription", "monthlyAmount", "oneTimeAmount", "receivedDate", "posPdfUrl"] as const) {
+  for (const k of ["vendorId", "activityDescription", "monthlyAmount", "oneTimeAmount", "receivedDate", "posPdfUrl", "posNotes"] as const) {
     if (out[k] === "") (out as Record<string, unknown>)[k] = null;
   }
   return out;
@@ -119,10 +127,17 @@ router.get("/authorizations", requireAuth, async (req, res): Promise<void> => {
   // vendors see only their own vendor's auths; parent/self only their linked
   // client's auths.
   const u = req.user!;
-  if (u.role === "vendor" && u.linkedRecordType === "vendor") {
-    conditions.push(eq(authorizationsTable.vendorId, u.linkedRecordId ?? ""));
-  } else if ((u.role === "parent_guardian" || u.role === "self") && u.linkedRecordType === "client") {
+  if (u.role === "staff") {
+    // Staff are intentionally unrestricted.
+  } else if (u.role === "service_coordinator") {
+    conditions.push(sql`${authorizationsTable.clientId} in (select id from clients where assigned_coordinator_id = ${u.id} and is_deleted = false)`);
+  } else if (u.role === "vendor" && u.linkedRecordType === "vendor" && u.linkedRecordId) {
+    conditions.push(eq(authorizationsTable.vendorId, u.linkedRecordId));
+  } else if ((u.role === "parent_guardian" || u.role === "self") && u.linkedRecordType === "client" && u.linkedRecordId) {
     conditions.push(eq(authorizationsTable.clientId, u.linkedRecordId ?? ""));
+  } else {
+    // A malformed linked identity must fail closed rather than returning all rows.
+    conditions.push(sql`false`);
   }
   const escapeLike = (s: string) => s.replace(/[\\%_]/g, (c) => `\\${c}`);
   // Query-string filters on plain columns.
@@ -183,7 +198,7 @@ router.get("/authorizations", requireAuth, async (req, res): Promise<void> => {
   //   effective  = pending | expired (period end past) | exhausted (paid ≥ max) | status
   //   days       = ceil((servicePeriodEnd@00:00Z − now) / 1 day)
   const totalPaidSql = sql`coalesce((select sum(${paymentAllocationsTable.amount}) from ${paymentAllocationsTable} inner join ${paymentsTable} on ${paymentsTable.id} = ${paymentAllocationsTable.paymentId} where ${paymentAllocationsTable.authorizationId} = ${authorizationsTable.id} and ${paymentsTable.isDeleted} = false), 0)`;
-  const effectiveStatusSql = sql`case when ${authorizationsTable.servicePeriodStart} > (now() at time zone 'utc')::date then 'pending' when ${authorizationsTable.status} = 'pending' then 'pending' when ${authorizationsTable.servicePeriodEnd} < (now() at time zone 'utc')::date then 'expired' when ${totalPaidSql} >= ${authorizationsTable.maxPeriodAmount} then 'exhausted' else ${authorizationsTable.status} end`;
+  const effectiveStatusSql = sql`case when ${authorizationsTable.status} = 'canceled' then 'canceled' when ${authorizationsTable.servicePeriodStart} > (now() at time zone 'utc')::date then 'pending' when ${authorizationsTable.status} = 'pending' then 'pending' when ${authorizationsTable.servicePeriodEnd} < (now() at time zone 'utc')::date then 'expired' when ${totalPaidSql} >= ${authorizationsTable.maxPeriodAmount} then 'exhausted' else ${authorizationsTable.status} end`;
   const daysUntilExpirySql = sql`ceil(extract(epoch from ((${authorizationsTable.servicePeriodEnd} || 'T00:00:00Z')::timestamptz - now())) / 86400)`;
   if (query.data.status) {
     conditions.push(sql`${effectiveStatusSql} = ${query.data.status}`);
@@ -244,6 +259,20 @@ router.post("/authorizations", requireStaff, async (req, res): Promise<void> => 
     return;
   }
   const d = parsed.data;
+  if (!d.authNumber.trim()) {
+    res.status(400).json({ error: "authNumber must contain a nonblank value" });
+    return;
+  }
+  if ((d.status as string | undefined) === "canceled") {
+    res.status(400).json({ error: "Canceled authorizations must use the dedicated cancellation endpoint." });
+    return;
+  }
+  const existing = await db.select({ id: authorizationsTable.id }).from(authorizationsTable)
+    .where(and(eq(authorizationsTable.clientId, d.clientId), eq(authorizationsTable.authNumber, d.authNumber), notDeleted(authorizationsTable))).limit(1);
+  if (existing[0]) {
+    res.status(409).json({ error: "An authorization with this client and authorization number already exists; amend the existing authorization instead." });
+    return;
+  }
   const warning = maxAmountWarning(d);
   if (warning && !d.acceptMaxAmountWarning) {
     res.status(200).json(CreateAuthorizationResponse.parse({ saved: false, warnings: [warning] }));
@@ -251,23 +280,32 @@ router.post("/authorizations", requireStaff, async (req, res): Promise<void> => 
   }
   const { acceptMaxAmountWarning: _accept, ...values } = d;
   let relationshipError: string | undefined;
-  const auth = await db.transaction(async (tx) => {
-    const txDb = tx as unknown as typeof db;
-    relationshipError = (await validateParticipantLinks(txDb, d.clientId, {})).error;
-    if (relationshipError) return undefined;
-    const [created] = await tx
-      .insert(authorizationsTable)
-      .values({
-        ...cleanAuthFields(values),
-        paymentType: d.paymentType ?? derivePaymentType(d.serviceCode),
-        status: d.status ?? "active",
-      })
-      .returning();
-    if (created) {
-      await advanceReferralForAuthorization(txDb, created, req.user!.id);
+  let auth: typeof authorizationsTable.$inferSelect | undefined;
+  try {
+    auth = await db.transaction(async (tx) => {
+      const txDb = tx as unknown as typeof db;
+      relationshipError = (await validateParticipantLinks(txDb, d.clientId, {})).error;
+      if (relationshipError) return undefined;
+      const [created] = await tx
+        .insert(authorizationsTable)
+        .values({
+          ...cleanAuthFields(values),
+          paymentType: d.paymentType ?? derivePaymentType(d.serviceCode),
+          status: d.status ?? "active",
+        })
+        .returning();
+      if (created) {
+        await advanceReferralForAuthorization(txDb, created, req.user!.id);
+      }
+      return created;
+    });
+  } catch (error) {
+    if ((error as { code?: string }).code === "23505") {
+      res.status(409).json({ error: "An authorization with this client and authorization number already exists; amend the existing authorization instead." });
+      return;
     }
-    return created;
-  });
+    throw error;
+  }
   if (!auth) {
     res.status(400).json({ error: relationshipError ?? "Invalid participant link" });
     return;
@@ -291,6 +329,41 @@ router.post("/authorizations", requireStaff, async (req, res): Promise<void> => 
   );
 });
 
+router.get("/authorizations/lookup", requireStaff, async (req, res): Promise<void> => {
+  const parsed = LookupAuthorizationQueryParams.safeParse(req.query);
+  if (!parsed.success) {
+    res.status(400).json({ error: parsed.error.message });
+    return;
+  }
+  if (!parsed.data.authNumber.trim()) {
+    res.status(400).json({ error: "authNumber must contain a nonblank value" });
+    return;
+  }
+  const authNumber = parsed.data.authNumber;
+  const [auth] = await db.select().from(authorizationsTable).where(and(
+    eq(authorizationsTable.clientId, parsed.data.clientId),
+    eq(authorizationsTable.authNumber, authNumber),
+    notDeleted(authorizationsTable),
+  )).limit(1);
+  if (!auth) {
+    res.json(LookupAuthorizationResponse.parse({ exists: false, authorization: null }));
+    return;
+  }
+  const totals = await authorizationTotalsPaid([auth.id]);
+  const [clientNames, vendorNames] = await Promise.all([
+    clientNameMap([auth.clientId]),
+    vendorNameMap([auth.vendorId]),
+  ]);
+  res.json(LookupAuthorizationResponse.parse({
+    exists: true,
+    authorization: authorizationJson(auth, {
+      clientName: clientNames.get(auth.clientId),
+      vendorName: auth.vendorId ? vendorNames.get(auth.vendorId) : null,
+      totalPaid: totals.get(auth.id) ?? 0,
+    }),
+  }));
+});
+
 router.get("/authorizations/:id", requireAuth, async (req, res): Promise<void> => {
   const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
   const [auth] = await db
@@ -305,16 +378,31 @@ router.get("/authorizations/:id", requireAuth, async (req, res): Promise<void> =
   // staff/coordinator see all; parent/self only their linked client's auths;
   // vendors only their own vendor's auths.
   const u = req.user!;
-  if (u.role === "vendor" && u.linkedRecordType === "vendor") {
-    if (auth.vendorId !== u.linkedRecordId) {
+  if (u.role === "staff") {
+    // unrestricted
+  } else if (u.role === "service_coordinator") {
+    const [caseload] = await db.select({ id: clientsTable.id }).from(clientsTable).where(and(
+      eq(clientsTable.id, auth.clientId),
+      eq(clientsTable.assignedCoordinatorId, u.id),
+      eq(clientsTable.isDeleted, false),
+    ));
+    if (!caseload) {
       res.status(403).json({ error: "Forbidden" });
       return;
     }
-  } else if ((u.role === "parent_guardian" || u.role === "self") && u.linkedRecordType === "client") {
-    if (auth.clientId !== u.linkedRecordId) {
+  } else if (u.role === "vendor") {
+    if (u.linkedRecordType !== "vendor" || !u.linkedRecordId || auth.vendorId !== u.linkedRecordId) {
       res.status(403).json({ error: "Forbidden" });
       return;
     }
+  } else if (u.role === "parent_guardian" || u.role === "self") {
+    if (u.linkedRecordType !== "client" || !u.linkedRecordId || auth.clientId !== u.linkedRecordId) {
+      res.status(403).json({ error: "Forbidden" });
+      return;
+    }
+  } else {
+    res.status(403).json({ error: "Forbidden" });
+    return;
   }
   const totals = await authorizationTotalsPaid([auth.id]);
   const [clientNames, vendorNames] = await Promise.all([
@@ -382,6 +470,7 @@ router.patch("/authorizations/:id", requireStaff, async (req, res): Promise<void
       maxPeriodAmount: before.maxPeriodAmount,
       units: before.units,
       status: before.status,
+      posNotes: before.posNotes,
       posPdfUrl: before.posPdfUrl,
       receivedDate: before.receivedDate,
       isDeleted: before.isDeleted,
@@ -423,6 +512,116 @@ router.patch("/authorizations/:id", requireStaff, async (req, res): Promise<void
       }),
     }),
   );
+});
+
+router.post("/authorizations/:id/amend", requireStaff, async (req, res): Promise<void> => {
+  const params = AmendAuthorizationParams.safeParse(req.params);
+  const parsed = AmendAuthorizationBody.safeParse(req.body);
+  if (!params.success || !parsed.success) {
+    res.status(400).json({ error: !params.success ? params.error.message : "Invalid amendment body" });
+    return;
+  }
+  if (!parsed.data.confirmed) {
+    res.status(400).json({ error: "Explicit confirmation is required before applying an amendment." });
+    return;
+  }
+  const warning = maxAmountWarning(parsed.data);
+  if (warning && !parsed.data.acceptMaxAmountWarning) {
+    res.status(200).json(AmendAuthorizationResponse.parse({ saved: false, warnings: [warning] }));
+    return;
+  }
+  let before: typeof authorizationsTable.$inferSelect | undefined;
+  const auth = await db.transaction(async (tx) => {
+    [before] = await tx.select().from(authorizationsTable)
+      .where(and(eq(authorizationsTable.id, params.data.id), notDeleted(authorizationsTable))).for("update");
+    if (!before) return undefined;
+    const updates = {
+      servicePeriodStart: parsed.data.servicePeriodStart,
+      servicePeriodEnd: parsed.data.servicePeriodEnd,
+      monthlyAmount: parsed.data.monthlyAmount,
+      maxPeriodAmount: parsed.data.maxPeriodAmount,
+      posNotes: parsed.data.posNotes,
+      ...(parsed.data.posPdfUrl !== undefined ? { posPdfUrl: parsed.data.posPdfUrl } : {}),
+    };
+    const [updated] = await tx.update(authorizationsTable).set(updates)
+      .where(and(eq(authorizationsTable.id, before.id), notDeleted(authorizationsTable))).returning();
+    if (!updated) return undefined;
+    await tx.insert(authorizationVersionsTable).values({
+      authorizationId: before.id, clientId: before.clientId, vendorId: before.vendorId,
+      authNumber: before.authNumber, serviceCode: before.serviceCode, paymentType: before.paymentType,
+      activityDescription: before.activityDescription, servicePeriodStart: before.servicePeriodStart,
+      servicePeriodEnd: before.servicePeriodEnd, monthlyAmount: before.monthlyAmount,
+      oneTimeAmount: before.oneTimeAmount, maxPeriodAmount: before.maxPeriodAmount, units: before.units,
+      status: before.status, posNotes: before.posNotes, posPdfUrl: before.posPdfUrl,
+      receivedDate: before.receivedDate, isDeleted: before.isDeleted, deletedAt: before.deletedAt,
+      deletedBy: before.deletedBy, createdAt: before.createdAt, changedBy: req.user!.id,
+      changedFields: Object.keys(updates),
+    });
+    return updated;
+  });
+  if (!auth || !before) {
+    res.status(404).json({ error: "Authorization not found" });
+    return;
+  }
+  await audit(req.user!.id, "amend_authorization", "authorization", auth.id, diffDetail(before, auth, [
+    "servicePeriodStart", "servicePeriodEnd", "monthlyAmount", "maxPeriodAmount", "posNotes", "posPdfUrl",
+  ]));
+  const totals = await authorizationTotalsPaid([auth.id]);
+  const [clientNames, vendorNames] = await Promise.all([clientNameMap([auth.clientId]), vendorNameMap([auth.vendorId])]);
+  res.json(AmendAuthorizationResponse.parse({ saved: true, warnings: [], authorization: authorizationJson(auth, {
+    clientName: clientNames.get(auth.clientId), vendorName: auth.vendorId ? vendorNames.get(auth.vendorId) : null,
+    totalPaid: totals.get(auth.id) ?? 0,
+  }) }));
+});
+
+router.post("/authorizations/:id/cancel", requireStaff, async (req, res): Promise<void> => {
+  const params = CancelAuthorizationParams.safeParse(req.params);
+  const parsed = CancelAuthorizationBody.safeParse(req.body);
+  if (!params.success || !parsed.success) {
+    res.status(400).json({ error: !params.success ? params.error.message : "Invalid cancellation body" });
+    return;
+  }
+  if (!parsed.data.reason.trim()) {
+    res.status(400).json({ error: "A nonblank cancellation reason is required." });
+    return;
+  }
+  let before: typeof authorizationsTable.$inferSelect | undefined;
+  const auth = await db.transaction(async (tx) => {
+    [before] = await tx.select().from(authorizationsTable)
+      .where(and(eq(authorizationsTable.id, params.data.id), notDeleted(authorizationsTable))).for("update");
+    if (!before) return undefined;
+    if (before.status === "canceled") return null;
+    const [updated] = await tx.update(authorizationsTable).set({ status: "canceled" })
+      .where(and(eq(authorizationsTable.id, before.id), notDeleted(authorizationsTable))).returning();
+    if (!updated) return undefined;
+    await tx.insert(authorizationVersionsTable).values({
+      authorizationId: before.id, clientId: before.clientId, vendorId: before.vendorId,
+      authNumber: before.authNumber, serviceCode: before.serviceCode, paymentType: before.paymentType,
+      activityDescription: before.activityDescription, servicePeriodStart: before.servicePeriodStart,
+      servicePeriodEnd: before.servicePeriodEnd, monthlyAmount: before.monthlyAmount,
+      oneTimeAmount: before.oneTimeAmount, maxPeriodAmount: before.maxPeriodAmount, units: before.units,
+      status: before.status, posNotes: before.posNotes, posPdfUrl: before.posPdfUrl,
+      receivedDate: before.receivedDate, isDeleted: before.isDeleted, deletedAt: before.deletedAt,
+      deletedBy: before.deletedBy, createdAt: before.createdAt, changedBy: req.user!.id,
+      changedFields: ["status"],
+    });
+    return updated;
+  });
+  if (auth === null) {
+    res.status(400).json({ error: "Authorization is already canceled." });
+    return;
+  }
+  if (!auth || !before) {
+    res.status(404).json({ error: "Authorization not found" });
+    return;
+  }
+  await audit(req.user!.id, "cancel_authorization", "authorization", auth.id, parsed.data.reason.trim());
+  const totals = await authorizationTotalsPaid([auth.id]);
+  const [clientNames, vendorNames] = await Promise.all([clientNameMap([auth.clientId]), vendorNameMap([auth.vendorId])]);
+  res.json(CancelAuthorizationResponse.parse({ saved: true, warnings: [], authorization: authorizationJson(auth, {
+    clientName: clientNames.get(auth.clientId), vendorName: auth.vendorId ? vendorNames.get(auth.vendorId) : null,
+    totalPaid: totals.get(auth.id) ?? 0,
+  }) }));
 });
 
 router.get("/authorizations/:id/versions", requireStaff, async (req, res): Promise<void> => {
@@ -588,6 +787,7 @@ router.post("/unmatched-pos/:id/complete", requireStaff, async (req, res): Promi
       serviceCode,
       paymentType: body.data.paymentType ?? derivePaymentType(serviceCode),
       activityDescription: row.activityDescription,
+      posNotes: row.posNotes,
       servicePeriodStart: row.servicePeriodStart,
       servicePeriodEnd: row.servicePeriodEnd,
       monthlyAmount: row.monthlyAmount,
@@ -637,7 +837,7 @@ router.post("/unmatched-pos/:id/complete", requireStaff, async (req, res): Promi
   }));
 });
 
-const PARSE_PROMPT = `You are extracting fields from a California Regional Center Purchase of Service (POS) authorization PDF. Return ONLY a JSON object (no markdown fences, no commentary) with these keys (use null when a value is not present):
+const PARSE_PROMPT = `You are extracting fields from a California Regional Center Purchase of Service (POS) authorization PDF. Carefully inspect the entire document, including Alta accounting notes, footer text, adjustment details, and handwritten or appended notes. Extract those notes into posNotes verbatim: preserve the original wording, punctuation, ordering, and line breaks. Do not interpret, summarize, normalize, or paraphrase notes. Return ONLY a JSON object (no markdown fences, no commentary) with these keys (use null when a value is not present):
 {
   "clientName": string|null,
   "clientAddress": string|null,
@@ -651,7 +851,8 @@ const PARSE_PROMPT = `You are extracting fields from a California Regional Cente
   "units": number|null,
   "monthlyAmount": string|null,      // decimal string, no $ sign
   "maxPeriodAmount": string|null,    // decimal string, no $ sign
-  "caseworkerName": string|null
+  "caseworkerName": string|null,
+  "posNotes": string|null
 }`;
 
 router.post("/authorizations/parse-pdf", requireStaff, async (req, res): Promise<void> => {
@@ -680,7 +881,7 @@ router.post("/authorizations/parse-pdf", requireStaff, async (req, res): Promise
     const block = message.content[0];
     const text = block?.type === "text" ? block.text : "";
     const jsonText = text.replace(/^```(?:json)?\s*/m, "").replace(/```\s*$/m, "").trim();
-    const fields = JSON.parse(jsonText);
+     const fields = JSON.parse(jsonText);
     await audit(req.user!.id, "parse_pos_pdf", "authorization", undefined, parsed.data.fileName);
     res.json(ParseAuthorizationPdfResponse.parse({ success: true, error: null, fields }));
   } catch (err) {

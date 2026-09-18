@@ -36,6 +36,8 @@ export interface UnmatchedPosDocument {
   maxPeriodAmount?: string | null;
   /** @nullable */
   caseworkerName?: string | null;
+  /** @nullable */
+  posNotes?: string | null;
   createdBy: string;
   createdAt: Date;
   updatedAt: Date;

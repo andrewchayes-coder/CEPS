@@ -3,6 +3,7 @@ import { useLocation, useParams, Link } from 'wouter';
 import { useGetAuthorization, useDeleteAuthorization, useListAuthorizationVersions } from '@workspace/api-client-react';
 import { useAuth } from '@/components/auth/auth-provider';
 import { EditAuthorizationDialog } from '@/components/edit-authorization-dialog';
+import { CancelAuthorizationDialog } from '@/components/cancel-authorization-dialog';
 import { DeleteEntityButton } from '@/components/delete-entity-button';
 import { ClientLink, VendorLink } from '@/components/entity-links';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -26,6 +27,7 @@ const changedFieldLabels: Record<string, string> = {
   vendorId: 'Vendor',
   receivedDate: 'Received date',
   posPdfUrl: 'POS PDF',
+  posNotes: 'POS notes',
 };
 
 export default function AuthorizationDetailPage() {
@@ -71,6 +73,9 @@ export default function AuthorizationDetailPage() {
           {isStaff && (
             <>
               <EditAuthorizationDialog id={id} authorization={auth} onSaved={() => { void refetch(); void refetchVersions(); }} />
+              {auth.status !== 'canceled' && (
+                <CancelAuthorizationDialog id={id} variant="outline" onCanceled={() => { void refetch(); void refetchVersions(); }} trigger={<Button variant="outline" size="sm" data-testid="button-cancel-authorization">Cancel Auth</Button>} />
+              )}
               <DeleteEntityButton
                 entityLabel="Authorization"
                 testId="button-delete-authorization"
@@ -122,6 +127,11 @@ export default function AuthorizationDetailPage() {
               {auth.receivedDate && (
                 <>
                   <dt className="text-muted-foreground">Received:</dt><dd className="col-span-2">{auth.receivedDate}</dd>
+                </>
+              )}
+              {auth.posNotes && (
+                <>
+                  <dt className="text-muted-foreground">POS Notes:</dt><dd className="col-span-2 whitespace-pre-wrap">{auth.posNotes}</dd>
                 </>
               )}
             </dl>

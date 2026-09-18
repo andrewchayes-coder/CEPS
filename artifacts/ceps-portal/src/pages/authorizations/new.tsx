@@ -13,16 +13,19 @@ import {
     useSaveUnmatchedPos,
     PosParseResultFields,
     PosMatchResultClient,
-    PosMatchResult
+    PosMatchResult,
+    useLookupAuthorization,
+    getLookupAuthorizationQueryKey,
+    useAmendAuthorization
 } from '@workspace/api-client-react';
 import { useLocation } from 'wouter';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useToast } from '@/hooks/use-toast';
-import { ArrowLeft, Save, AlertTriangle, Sparkles, Loader2, ArrowRight, CheckCircle } from 'lucide-react';
+import { ArrowLeft, Save, AlertTriangle, Sparkles, Loader2, ArrowRight, CheckCircle, FileEdit, CheckSquare } from 'lucide-react';
 import { Link } from 'wouter';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
@@ -30,6 +33,8 @@ import { FileUpload } from '@/components/file-upload';
 import { trackAnalyticsEvent } from '@/lib/analytics';
 import { SearchableSelect } from '@/components/searchable-select';
 import { useDebounce } from '@/hooks/use-debounce';
+import { Textarea } from '@/components/ui/textarea';
+import { Checkbox } from '@/components/ui/checkbox';
 
 type ApiErrorResponse = { data?: { error?: string; message?: string } };
 
@@ -45,6 +50,7 @@ const formSchema = z.object({
   monthlyAmount: z.string().optional(),
   oneTimeAmount: z.string().optional(),
   maxPeriodAmount: z.string().min(1, 'Max period amount is required'),
+  posNotes: z.string().optional(),
   acceptMaxAmountWarning: z.boolean().default(false)
 });
 
@@ -55,6 +61,7 @@ export default function AuthorizationNewPage() {
   const matchClient = useMatchPosClient();
   const saveUnmatched = useSaveUnmatchedPos();
   const parsePdf = useParseAuthorizationPdf();
+  const amendAuth = useAmendAuthorization();
 
   const [clientSearch, setClientSearch] = useState('');
   const debouncedClientSearch = useDebounce(clientSearch, 300);
@@ -81,6 +88,8 @@ export default function AuthorizationNewPage() {
   const [queueSaveFailed, setQueueSaveFailed] = useState(false);
   const activeFileIdRef = useRef<string | null>(null);
   const queueingFileIdRef = useRef<string | null>(null);
+  const [activeUploadId, setActiveUploadId] = useState<string | null>(null);
+  const isUploadPending = activeUploadId === activeFileIdRef.current && activeFileIdRef.current !== null;
 
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
@@ -96,12 +105,47 @@ export default function AuthorizationNewPage() {
       monthlyAmount: '',
       oneTimeAmount: '',
       maxPeriodAmount: '',
+      posNotes: '',
       acceptMaxAmountWarning: false
     }
   });
 
   const { watch, setValue } = form;
   const serviceCode = watch('serviceCode');
+  const watchClientId = watch('clientId');
+  const watchAuthNumber = watch('authNumber');
+
+  const currentDiffFingerprint = JSON.stringify({
+    servicePeriodStart: watch('servicePeriodStart'),
+    servicePeriodEnd: watch('servicePeriodEnd'),
+    monthlyAmount: watch('monthlyAmount'),
+    maxPeriodAmount: watch('maxPeriodAmount'),
+    posNotes: watch('posNotes'),
+    posPdfUrl
+  });
+
+  const debouncedClientId = useDebounce(watchClientId, 300);
+  const debouncedAuthNumber = useDebounce(watchAuthNumber, 300);
+  const trimmedAuthNumber = debouncedAuthNumber.trim();
+
+  const isSyncingPair = watchClientId !== debouncedClientId || watchAuthNumber !== debouncedAuthNumber;
+
+  const isLookupEnabled = !!debouncedClientId && trimmedAuthNumber.length > 0 && !isQueued;
+  const { data: lookupResult, isFetching: isCheckingLookup } = useLookupAuthorization(
+    { clientId: debouncedClientId, authNumber: debouncedAuthNumber },
+    {
+      query: {
+        enabled: isLookupEnabled,
+        staleTime: 0,
+        queryKey: getLookupAuthorizationQueryKey({ clientId: debouncedClientId, authNumber: debouncedAuthNumber })
+      }
+    }
+  );
+
+  const isAmendment = !isSyncingPair && !!(lookupResult?.exists && lookupResult.authorization);
+  const existingAuth = !isSyncingPair ? lookupResult?.authorization : null;
+  const [confirmedFingerprint, setConfirmedFingerprint] = useState<string | null>(null);
+  const isAmendmentConfirmed = confirmedFingerprint === currentDiffFingerprint;
 
   const allClientOptions = React.useMemo(() => {
     const opts = clients.map(c => ({ value: c.id, label: `${c.firstName} ${c.lastName} (${c.uciNumber})` }));
@@ -122,6 +166,7 @@ export default function AuthorizationNewPage() {
     const fileId = `${file.name}-${Date.now()}`;
     activeFileIdRef.current = fileId;
     queueingFileIdRef.current = null;
+    setActiveUploadId(fileId);
     setFileName(file.name);
     setPosPdfUrl(undefined);
     setParsedFields(null);
@@ -132,6 +177,7 @@ export default function AuthorizationNewPage() {
     setParseNote(null);
     setAutoFilled(new Set());
     setWarnings([]);
+    setConfirmedFingerprint(null);
     form.reset({
       clientId: '',
       vendorId: '',
@@ -144,6 +190,7 @@ export default function AuthorizationNewPage() {
       monthlyAmount: '',
       oneTimeAmount: '',
       maxPeriodAmount: '',
+      posNotes: '',
       acceptMaxAmountWarning: false
     });
 
@@ -179,6 +226,7 @@ export default function AuthorizationNewPage() {
             setIf('servicePeriodEnd', f.servicePeriodEnd);
             setIf('monthlyAmount', f.monthlyAmount);
             setIf('maxPeriodAmount', f.maxPeriodAmount);
+            setIf('posNotes', f.posNotes);
             setAutoFilled(filled);
 
             matchClient.mutate({ data: { clientName: f.clientName, uciNumber: f.uciNumber } }, {
@@ -217,6 +265,7 @@ export default function AuthorizationNewPage() {
       );
     };
     reader.readAsDataURL(file);
+    return fileId;
   };
 
   React.useEffect(() => {
@@ -255,6 +304,7 @@ export default function AuthorizationNewPage() {
                 monthlyAmount: parsedFields.monthlyAmount,
                 maxPeriodAmount: parsedFields.maxPeriodAmount,
                 caseworkerName: parsedFields.caseworkerName,
+                posNotes: parsedFields.posNotes,
             }
         }, {
             onSuccess: () => {
@@ -283,13 +333,63 @@ export default function AuthorizationNewPage() {
     ) : null;
 
   const onSubmit = (data: z.infer<typeof formSchema>) => {
+    if (isAmendment && existingAuth) {
+      if (!isAmendmentConfirmed) {
+        toast({ variant: "destructive", title: "Confirmation Required", description: "You must confirm the amendment changes." });
+        return;
+      }
+      amendAuth.mutate({
+        id: existingAuth.id,
+        data: {
+          servicePeriodStart: data.servicePeriodStart,
+          servicePeriodEnd: data.servicePeriodEnd,
+          monthlyAmount: data.monthlyAmount || null,
+          maxPeriodAmount: data.maxPeriodAmount,
+          posNotes: data.posNotes || null,
+          ...(posPdfUrl ? { posPdfUrl } : {}),
+          confirmed: true,
+          acceptMaxAmountWarning: data.acceptMaxAmountWarning,
+        }
+      }, {
+        onSuccess: (res) => {
+          if (!res.saved && res.warnings && res.warnings.length > 0) {
+            setWarnings(res.warnings);
+            toast({
+              variant: "destructive",
+              title: "Data Quality Warning",
+              description: "Please review the warnings before forcing save.",
+            });
+          } else {
+            trackAnalyticsEvent('authorization_amended', {
+              authorization_id: existingAuth.id,
+            });
+            toast({
+              title: "Authorization Amended",
+              description: "The authorization has been successfully amended.",
+            });
+            setLocation(`/authorizations/${existingAuth.id}`);
+          }
+        },
+        onError: (err: unknown) => {
+          const apiErr = err as ApiErrorResponse;
+          toast({
+            variant: "destructive",
+            title: "Error",
+            description: apiErr?.data?.error || apiErr?.data?.message || "Failed to amend authorization.",
+          });
+        }
+      });
+      return;
+    }
+
     createAuth.mutate({
       data: {
         ...data,
         posPdfUrl,
         serviceCode: data.serviceCode as AuthorizationInputServiceCode,
         paymentType: data.paymentType as AuthorizationInputPaymentType,
-        vendorId: data.vendorId === 'none' ? undefined : data.vendorId
+        vendorId: data.vendorId === 'none' ? undefined : data.vendorId,
+        posNotes: data.posNotes || null,
       }
     }, {
       onSuccess: (res) => {
@@ -309,7 +409,7 @@ export default function AuthorizationNewPage() {
             title: "Authorization Created",
             description: "The POS has been saved successfully.",
           });
-          setLocation('/authorizations');
+          setLocation(res.authorization ? `/authorizations/${res.authorization.id}` : '/authorizations');
         }
       },
       onError: (err: unknown) => {
@@ -323,6 +423,20 @@ export default function AuthorizationNewPage() {
     });
   };
 
+  const DiffRow = ({ label, current, proposed }: { label: string, current: string | null | undefined, proposed: string | null | undefined }) => {
+    const isChanged = current !== proposed;
+    return (
+      <div className="grid grid-cols-3 gap-4 py-2 border-b last:border-0 text-sm">
+        <div className="text-muted-foreground font-medium">{label}</div>
+        <div className="text-muted-foreground">{current || '—'}</div>
+        <div className={`font-medium ${isChanged ? 'text-chart-1 font-bold' : ''}`}>
+          {proposed || '—'}
+          {isChanged && <span className="ml-2 text-[10px] uppercase tracking-wider bg-chart-1/10 text-chart-1 px-1.5 py-0.5 rounded">Changed</span>}
+        </div>
+      </div>
+    );
+  };
+
   return (
     <div className="max-w-2xl mx-auto space-y-6 pb-20">
       <Button variant="ghost" size="sm" asChild className="-ml-2 text-muted-foreground">
@@ -330,8 +444,14 @@ export default function AuthorizationNewPage() {
       </Button>
 
       <div>
-        <h1 className="text-3xl font-bold tracking-tight">Manual POS Entry</h1>
-        <p className="text-muted-foreground mt-1">Enter a new purchase of service authorization from Alta.</p>
+        <h1 className="text-3xl font-bold tracking-tight">
+          {isAmendment ? 'Amend Authorization' : 'Manual POS Entry'}
+        </h1>
+        <p className="text-muted-foreground mt-1">
+          {isAmendment
+            ? 'An authorization with this POS number already exists for this participant. Review the changes below to amend it.'
+            : 'Enter a new purchase of service authorization from Alta.'}
+        </p>
       </div>
 
       {warnings.length > 0 && (
@@ -384,9 +504,16 @@ export default function AuthorizationNewPage() {
             accept=".pdf"
             label="Drag & drop the POS PDF here, or click to browse"
             onFileSelected={handlePosFile}
+            onUploadError={(_, uploadId) => {
+              if (uploadId === activeFileIdRef.current) {
+                setActiveUploadId(null);
+                setPosPdfUrl(undefined);
+              }
+            }}
             onUploaded={(r) => {
-              if (activeFileIdRef.current) {
+              if (r.uploadId === activeFileIdRef.current) {
                 setPosPdfUrl(r.objectPath);
+                setActiveUploadId(null);
               }
             }}
           />
@@ -416,7 +543,10 @@ export default function AuthorizationNewPage() {
 
       <Card className={isQueued ? 'opacity-60 pointer-events-none' : ''}>
         <CardHeader>
-          <CardTitle>Authorization Details</CardTitle>
+          <div className="flex justify-between items-center">
+            <CardTitle>{isAmendment ? 'Proposed Details' : 'Authorization Details'}</CardTitle>
+            {isCheckingLookup && <Loader2 className="w-4 h-4 animate-spin text-muted-foreground" />}
+          </div>
         </CardHeader>
         <CardContent>
           <Form {...form}>
@@ -426,14 +556,14 @@ export default function AuthorizationNewPage() {
                 <FormField control={form.control} name="authNumber" render={({ field }) => (
                   <FormItem>
                     <FormLabel>POS Number<AutoBadge name="authNumber" /></FormLabel>
-                    <FormControl><Input placeholder="e.g. 12345678" {...field} disabled={isQueued} /></FormControl>
+                    <FormControl><Input placeholder="e.g. 12345678" {...field} disabled={isQueued || isAmendment} /></FormControl>
                     <FormMessage />
                   </FormItem>
                 )} />
                 <FormField control={form.control} name="serviceCode" render={({ field }) => (
                   <FormItem>
                     <FormLabel>Service Code<AutoBadge name="serviceCode" /></FormLabel>
-                    <Select onValueChange={field.onChange} defaultValue={field.value} value={field.value} disabled={isQueued}>
+                    <Select onValueChange={field.onChange} defaultValue={field.value} value={field.value} disabled={isQueued || isAmendment}>
                       <FormControl>
                         <SelectTrigger><SelectValue placeholder="Select code" /></SelectTrigger>
                       </FormControl>
@@ -461,7 +591,7 @@ export default function AuthorizationNewPage() {
                         loading={clientsLoading}
                         placeholder="Select participant"
                         data-testid="select-auth-client"
-                        disabled={isQueued}
+                        disabled={isQueued || isAmendment}
                       />
                     </FormControl>
                     <FormMessage />
@@ -481,7 +611,7 @@ export default function AuthorizationNewPage() {
                         allowClear
                         clearLabel="None"
                         data-testid="select-auth-vendor"
-                        disabled={isQueued}
+                        disabled={isQueued || isAmendment}
                       />
                     </FormControl>
                     <FormMessage />
@@ -512,33 +642,119 @@ export default function AuthorizationNewPage() {
                   <FormField control={form.control} name="monthlyAmount" render={({ field }) => (
                     <FormItem>
                       <FormLabel>Monthly Amount (Optional)<AutoBadge name="monthlyAmount" /></FormLabel>
-                      <FormControl>
-                        <div className="relative">
-                          <span className="absolute left-3 top-2.5 text-muted-foreground">$</span>
+                      <div className="relative">
+                        <span className="absolute left-3 top-2.5 text-muted-foreground">$</span>
+                        <FormControl>
                           <Input className="pl-7" placeholder="0.00" {...field} disabled={isQueued} />
-                        </div>
-                      </FormControl>
+                        </FormControl>
+                      </div>
                       <FormMessage />
                     </FormItem>
                   )} />
                   <FormField control={form.control} name="maxPeriodAmount" render={({ field }) => (
                     <FormItem>
                       <FormLabel>Max Period Amount<AutoBadge name="maxPeriodAmount" /></FormLabel>
-                      <FormControl>
-                        <div className="relative">
-                          <span className="absolute left-3 top-2.5 text-muted-foreground">$</span>
+                      <div className="relative">
+                        <span className="absolute left-3 top-2.5 text-muted-foreground">$</span>
+                        <FormControl>
                           <Input className="pl-7" placeholder="0.00" {...field} disabled={isQueued} />
-                        </div>
-                      </FormControl>
+                        </FormControl>
+                      </div>
                       <FormMessage />
                     </FormItem>
                   )} />
                 </div>
               </div>
 
-              <Button type="submit" className="w-full" disabled={createAuth.isPending || isQueued}>
-                <Save className="w-4 h-4 mr-2" />
-                {createAuth.isPending ? 'Saving...' : 'Save Authorization'}
+              <FormField control={form.control} name="posNotes" render={({ field }) => (
+                <FormItem>
+                  <FormLabel>POS Notes<AutoBadge name="posNotes" /></FormLabel>
+                  <FormControl>
+                    <Textarea
+                      placeholder="Add any notes from the POS here..."
+                      className="min-h-[80px]"
+                      {...field}
+                      disabled={isQueued}
+                    />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )} />
+
+              {isAmendment && existingAuth && (
+                <div className="mt-8 border rounded-lg overflow-hidden border-primary/20">
+                  <div className="bg-primary/5 px-4 py-3 border-b border-primary/20">
+                    <h3 className="font-semibold text-primary flex items-center gap-2">
+                      <FileEdit className="w-4 h-4" /> Amendment Summary
+                    </h3>
+                  </div>
+                  <div className="p-4 space-y-2">
+                    <div className="grid grid-cols-3 gap-4 pb-2 border-b text-xs font-semibold uppercase text-muted-foreground tracking-wider">
+                      <div>Field</div>
+                      <div>Current</div>
+                      <div>Proposed</div>
+                    </div>
+
+                    <DiffRow label="Start Date" current={existingAuth.servicePeriodStart?.slice(0, 10)} proposed={form.watch('servicePeriodStart')} />
+                    <DiffRow label="End Date" current={existingAuth.servicePeriodEnd?.slice(0, 10)} proposed={form.watch('servicePeriodEnd')} />
+                    <DiffRow label="Monthly Amount" current={existingAuth.monthlyAmount} proposed={form.watch('monthlyAmount')} />
+                    <DiffRow label="Max Period Amount" current={existingAuth.maxPeriodAmount} proposed={form.watch('maxPeriodAmount')} />
+                    <DiffRow label="POS Notes" current={existingAuth.posNotes} proposed={form.watch('posNotes')} />
+                    <DiffRow
+                      label="POS PDF"
+                      current={existingAuth.posPdfUrl ? 'Existing PDF' : 'None'}
+                      proposed={posPdfUrl ? 'New PDF uploaded' : (existingAuth.posPdfUrl ? 'Existing PDF' : 'None')}
+                    />
+
+                    <div className="pt-4 mt-2">
+                      <div className="flex items-start space-x-3 bg-secondary/20 p-4 rounded-md border">
+                        <Checkbox
+                          id="confirm-amendment"
+                          checked={isAmendmentConfirmed}
+                          onCheckedChange={(checked) => setConfirmedFingerprint(checked ? currentDiffFingerprint : null)}
+                          className="mt-0.5"
+                        />
+                        <div className="grid gap-1.5 leading-none">
+                          <label
+                            htmlFor="confirm-amendment"
+                            className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
+                          >
+                            Confirm Amendment
+                          </label>
+                          <p className="text-sm text-muted-foreground">
+                            I verify that these changes reflect the new POS document.
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              <Button
+                type="submit"
+                className="w-full"
+                disabled={
+                  createAuth.isPending ||
+                  amendAuth.isPending ||
+                  isQueued ||
+                  isCheckingLookup ||
+                  isUploadPending ||
+                  isSyncingPair ||
+                  !!(isAmendment && !isAmendmentConfirmed)
+                }
+              >
+                {isAmendment ? (
+                  <>
+                    <CheckSquare className="w-4 h-4 mr-2" />
+                    {amendAuth.isPending ? 'Applying Amendment...' : 'Apply Amendment'}
+                  </>
+                ) : (
+                  <>
+                    <Save className="w-4 h-4 mr-2" />
+                    {createAuth.isPending ? 'Saving...' : 'Save Authorization'}
+                  </>
+                )}
               </Button>
             </form>
           </Form>

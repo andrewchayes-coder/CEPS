@@ -33,7 +33,8 @@ export const authorizationsTable = pgTable("authorizations", {
     scale: 2,
   }).notNull(),
   units: integer("units"),
-  status: text("status").notNull().default("pending"), // active | expired | pending | exhausted
+  status: text("status").notNull().default("pending"), // active | expired | pending | exhausted | canceled
+  posNotes: text("pos_notes"),
   posPdfUrl: text("pos_pdf_url"),
   receivedDate: date("received_date", { mode: "string" }),
   isDeleted: boolean("is_deleted").notNull().default(false),

@@ -25,6 +25,7 @@ const soonEnd = new Date(Date.now() + 10 * 24 * 60 * 60 * 1000).toISOString().sl
 let staffId: string;
 let vendorUserId: string;
 let parentUserId: string;
+let coordinatorUserId: string;
 let vendorId: string;
 let otherVendorId: string;
 let clientA: string; // parent user's linked client
@@ -32,6 +33,7 @@ let clientB: string; // a different client
 let staffCookie: string;
 let vendorCookie: string;
 let parentCookie: string;
+let coordinatorCookie: string;
 
 const createdAuthIds: string[] = [];
 let authActive: string; // clientA + vendor, active, far-future end
@@ -85,6 +87,10 @@ beforeAll(async () => {
     .values({ name: "AU Staff", email: `${nonce}-staff@test.local`, role: "staff" })
     .returning();
   staffId = staff.id;
+  const [coordinator] = await db.insert(usersTable).values({
+    name: "AU Coordinator", email: `${nonce}-coordinator@test.local`, role: "service_coordinator",
+  }).returning();
+  coordinatorUserId = coordinator.id;
 
   const [vendor] = await db.insert(vendorsTable).values({ name: `${nonce}-vendor` }).returning();
   vendorId = vendor.id;
@@ -93,7 +99,7 @@ beforeAll(async () => {
 
   const [ca] = await db
     .insert(clientsTable)
-    .values({ firstName: "AU", lastName: "ClientA", dateOfBirth: "2000-01-01", uciNumber: `${nonce}-uciA` })
+    .values({ firstName: "AU", lastName: "ClientA", dateOfBirth: "2000-01-01", uciNumber: `${nonce}-uciA`, assignedCoordinatorId: coordinatorUserId })
     .returning();
   clientA = ca.id;
   const [cb] = await db
@@ -129,6 +135,7 @@ beforeAll(async () => {
   staffCookie = await session(staffId);
   vendorCookie = await session(vendorUserId);
   parentCookie = await session(parentUserId);
+  coordinatorCookie = await session(coordinatorUserId);
 
   // Auth matrix (all no payments → totalPaid 0, never "exhausted"):
   authActive = (await insertAuth({ clientId: clientA, vendorId, status: "active" })).id;
@@ -142,9 +149,9 @@ beforeAll(async () => {
 
 afterAll(async () => {
   await db.delete(authorizationsTable).where(inArray(authorizationsTable.id, createdAuthIds));
-  await db.delete(sessionsTable).where(inArray(sessionsTable.userId, [staffId, vendorUserId, parentUserId]));
-  await db.delete(usersTable).where(inArray(usersTable.id, [staffId, vendorUserId, parentUserId]));
+  await db.delete(sessionsTable).where(inArray(sessionsTable.userId, [staffId, vendorUserId, parentUserId, coordinatorUserId]));
   await db.delete(clientsTable).where(inArray(clientsTable.id, [clientA, clientB]));
+  await db.delete(usersTable).where(inArray(usersTable.id, [staffId, vendorUserId, parentUserId, coordinatorUserId]));
   await db.delete(vendorsTable).where(inArray(vendorsTable.id, [vendorId, otherVendorId]));
 });
 
@@ -229,6 +236,15 @@ describe("GET /authorizations SQL-level role scoping", () => {
     const res = await get(parentCookie, { clientId: clientB, limit: 1000 });
     expect(res.body.total).toBe(0);
     expect(res.body.items).toEqual([]);
+  });
+
+  it("coordinators see only clients assigned to their caseload", async () => {
+    const res = await get(coordinatorCookie, { limit: 1000 });
+    expect(res.status).toBe(200);
+    expect(res.body.total).toBe(3);
+    for (const a of res.body.items) expect(a.clientId).toBe(clientA);
+    const outside = await get(coordinatorCookie, { clientId: clientB, limit: 1000 });
+    expect(outside.body.total).toBe(0);
   });
 });
 

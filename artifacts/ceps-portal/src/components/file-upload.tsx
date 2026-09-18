@@ -15,13 +15,17 @@ export interface FileUploadResult {
   filename: string;
   contentType: string;
   size: number;
+  /** Pass-through identifier from the file selection phase to handle races */
+  uploadId?: string;
 }
 
 interface FileUploadProps {
   /** Called with the stored object path and metadata after a successful upload. */
   onUploaded: (result: FileUploadResult) => void;
-  /** Called with the raw File as soon as it passes client-side validation (before upload completes). */
-  onFileSelected?: (file: File) => void;
+  /** Called if the upload fails. */
+  onUploadError?: (error: Error, uploadId?: string) => void;
+  /** Called with the raw File as soon as it passes client-side validation (before upload completes). Returns an optional identifier to include in onUploaded. */
+  onFileSelected?: (file: File) => string | void;
   /** Accept attribute for the file picker. Defaults to PDF/PNG/JPG. */
   accept?: string;
   /** Label shown in the drop zone. */
@@ -32,6 +36,7 @@ interface FileUploadProps {
 
 export function FileUpload({
   onUploaded,
+  onUploadError,
   onFileSelected,
   accept = DEFAULT_ACCEPT,
   label = 'Drag & drop a file here, or click to browse',
@@ -42,23 +47,11 @@ export function FileUpload({
   const [dragOver, setDragOver] = useState(false);
   const [uploadedName, setUploadedName] = useState<string | null>(null);
   const [localError, setLocalError] = useState<string | null>(null);
-  const pendingFile = useRef<File | null>(null);
 
-  const { uploadFile, isUploading, progress, error } = useUpload({
-    onSuccess: (response) => {
-      const f = pendingFile.current;
-      setUploadedName(f?.name ?? 'file');
-      onUploaded({
-        objectPath: response.objectPath,
-        filename: f?.name ?? 'file',
-        contentType: f?.type ?? 'application/octet-stream',
-        size: f?.size ?? 0,
-      });
-    },
-  });
+  const { uploadFile, isUploading, progress, error: useUploadError } = useUpload();
 
   const handleFile = useCallback(
-    (file: File) => {
+    async (file: File) => {
       setLocalError(null);
       setUploadedName(null);
       if (!ALLOWED_TYPES.includes(file.type)) {
@@ -69,14 +62,27 @@ export function FileUpload({
         setLocalError('File is larger than the 10MB limit.');
         return;
       }
-      pendingFile.current = file;
-      onFileSelected?.(file);
-      void uploadFile(file);
+
+      const uploadId = onFileSelected?.(file) || undefined;
+      const response = await uploadFile(file);
+
+      if (response) {
+        setUploadedName(file.name);
+        onUploaded({
+          objectPath: response.objectPath,
+          filename: file.name,
+          contentType: file.type || 'application/octet-stream',
+          size: file.size,
+          uploadId,
+        });
+      } else {
+        onUploadError?.(new Error('Upload failed'), uploadId);
+      }
     },
-    [uploadFile, onFileSelected],
+    [uploadFile, onFileSelected, onUploaded, onUploadError],
   );
 
-  const displayError = localError ?? (error ? error.message : null);
+  const displayError = localError ?? (useUploadError ? useUploadError.message : null);
 
   return (
     <div className={className}>

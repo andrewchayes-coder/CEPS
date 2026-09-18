@@ -191,6 +191,7 @@ export async function authorizationTotalsPaid(ids: string[]): Promise<Map<string
 }
 
 export function effectiveAuthStatus(a: Authorization, totalPaid: Decimal | number): string {
+  if (a.status === "canceled") return "canceled";
   const today = new Date().toISOString().slice(0, 10);
   if (a.servicePeriodStart > today) return "pending";
   if (a.status === "pending") return "pending";
@@ -224,6 +225,7 @@ export function authorizationJson(
     maxPeriodAmount: a.maxPeriodAmount,
     units: a.units,
     status: effectiveAuthStatus(a, totalPaid),
+    posNotes: a.posNotes,
     posPdfUrl: a.posPdfUrl,
     receivedDate: a.receivedDate,
     totalPaid: totalPaid.toFixed(2),

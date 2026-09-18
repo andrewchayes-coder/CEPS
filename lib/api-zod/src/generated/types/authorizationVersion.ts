@@ -31,6 +31,8 @@ export interface AuthorizationVersion {
   posPdfUrl?: string | null;
   /** @nullable */
   receivedDate?: string | null;
+  /** @nullable */
+  posNotes?: string | null;
   isDeleted: boolean;
   createdAt: Date;
   changedAt: Date;

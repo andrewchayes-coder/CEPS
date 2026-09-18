@@ -20,3 +20,4 @@
 - [Literal wildcard search](literal-wildcard-search.md) — normalize enum separators before ILIKE and avoid raw JSON text, or escaped "_" searches still match stored keys/values.
 - [Unmatched POS lifecycle](unmatched-pos-lifecycle.md) — UCI-first matching and durable PDF-backed queue completion must remain server-validated and transactional.
 - [Invoice and payment child rows](invoice-payment-child-rows.md) — financial truth lives in invoice line items and payment allocations; validation and remittance capacity must honor every child.
+- [POS amendment invariants](pos-amendment-invariants.md) — exact pair checks must match DB uniqueness; amendments snapshot once, preserve status, and never reuse stale PDF uploads.

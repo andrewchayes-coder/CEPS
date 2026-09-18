@@ -34,6 +34,8 @@ export interface Authorization {
   units?: number | null;
   status: AuthorizationStatus;
   /** @nullable */
+  posNotes?: string | null;
+  /** @nullable */
   posPdfUrl?: string | null;
   /** @nullable */
   receivedDate?: string | null;

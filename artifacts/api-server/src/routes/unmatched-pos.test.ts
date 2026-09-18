@@ -121,6 +121,7 @@ describe("unmatched POS API", () => {
       monthlyAmount: "125.50",
       maxPeriodAmount: "753.00",
       caseworkerName: "Case Worker",
+      posNotes: "POS note preserved verbatim",
     };
     const response = await request(app)
       .post("/api/unmatched-pos")
@@ -150,6 +151,7 @@ describe("unmatched POS API", () => {
       monthlyAmount: "200.00",
       maxPeriodAmount: "200.00",
       caseworkerName: "Queue Worker",
+      posNotes: "queued note",
       createdBy: staffId,
     }).returning();
     queueIds.push(queued.id);
@@ -175,6 +177,7 @@ describe("unmatched POS API", () => {
       maxPeriodAmount: "200.00",
       units: 1,
       posPdfUrl: `/objects/uploads/${nonce}-complete.pdf`,
+      posNotes: "queued note",
     });
     const [removed] = await db.select().from(unmatchedPosDocumentsTable)
       .where(eq(unmatchedPosDocumentsTable.id, queued.id));
@@ -182,5 +185,6 @@ describe("unmatched POS API", () => {
     const [storedAuth] = await db.select().from(authorizationsTable)
       .where(and(eq(authorizationsTable.id, auth.id), eq(authorizationsTable.clientId, queueClientId)));
     expect(storedAuth.posPdfUrl).toBe(`/objects/uploads/${nonce}-complete.pdf`);
+    expect(storedAuth.posNotes).toBe("queued note");
   });
 });

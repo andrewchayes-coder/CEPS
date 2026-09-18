@@ -1000,6 +1000,73 @@ paths:
               schema:
                 $ref: "#/components/schemas/OkResult"
         "404": { description: Not found }
+  /authorizations/lookup:
+    get:
+      operationId: lookupAuthorization
+      tags: [authorizations]
+      summary: Check an exact client and authorization-number pair (staff only)
+      parameters:
+        - name: clientId
+          in: query
+          required: true
+          schema: { type: string }
+        - name: authNumber
+          in: query
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: Existing authorization, if any
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AuthorizationLookupResult" }
+  /authorizations/{id}/amend:
+    post:
+      operationId: amendAuthorization
+      tags: [authorizations]
+      summary: Apply a confirmed POS amendment to an authorization (staff only)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/AuthorizationAmendInput" }
+      responses:
+        "200":
+          description: Amendment applied
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AuthorizationResult" }
+        "400": { description: Confirmation or validation required }
+        "404": { description: Not found }
+        "409": { description: Existing data-quality conflict }
+  /authorizations/{id}/cancel:
+    post:
+      operationId: cancelAuthorization
+      tags: [authorizations]
+      summary: Cancel an authorization (staff only)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/AuthorizationCancelInput" }
+      responses:
+        "200":
+          description: Authorization canceled
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AuthorizationResult" }
+        "400": { description: Reason required or already canceled }
+        "404": { description: Not found }
   /authorizations/{id}/versions:
     get:
       operationId: listAuthorizationVersions
@@ -2791,6 +2858,29 @@ components:
         accountCreationError:
           type: ["string", "null"]
           description: "Human-readable reason account creation was skipped, or null."
+    AuthorizationLookupResult:
+      type: object
+      required: [exists, authorization]
+      properties:
+        exists: { type: boolean }
+        authorization: { allOf: [{ $ref: "#/components/schemas/Authorization" }], nullable: true }
+    AuthorizationAmendInput:
+      type: object
+      required: [servicePeriodStart, servicePeriodEnd, maxPeriodAmount, confirmed]
+      properties:
+        servicePeriodStart: { type: string }
+        servicePeriodEnd: { type: string }
+        monthlyAmount: { type: ["string", "null"] }
+        maxPeriodAmount: { type: string }
+        posNotes: { type: ["string", "null"] }
+        posPdfUrl: { type: ["string", "null"] }
+        confirmed: { type: boolean }
+        acceptMaxAmountWarning: { type: boolean }
+    AuthorizationCancelInput:
+      type: object
+      required: [reason]
+      properties:
+        reason: { type: string, minLength: 1 }
     Authorization:
       type: object
       required: [id, clientId, authNumber, serviceCode, paymentType, servicePeriodStart, servicePeriodEnd, maxPeriodAmount, status]
@@ -2810,7 +2900,8 @@ components:
         oneTimeAmount: { type: ["string", "null"] }
         maxPeriodAmount: { type: string }
         units: { type: ["integer", "null"] }
-        status: { type: string, enum: [active, expired, pending, exhausted] }
+        status: { type: string, enum: [active, expired, pending, exhausted, canceled] }
+        posNotes: { type: ["string", "null"] }
         posPdfUrl: { type: ["string", "null"] }
         receivedDate: { type: ["string", "null"] }
         totalPaid: { type: ["string", "null"] }
@@ -2833,6 +2924,7 @@ components:
         maxPeriodAmount: { type: string }
         units: { type: integer }
         status: { type: string, enum: [active, expired, pending, exhausted] }
+        posNotes: { type: ["string", "null"] }
         receivedDate: { type: string }
         posPdfUrl: { type: string, description: "Stored object path of the uploaded POS PDF" }
         acceptMaxAmountWarning: { type: boolean, description: "Set true to save despite the max-amount data-quality warning" }
@@ -2852,6 +2944,7 @@ components:
         units: { type: ["integer", "null"] }
         receivedDate: { type: string }
         acceptMaxAmountWarning: { type: boolean }
+        posNotes: { type: ["string", "null"] }
     AuthorizationResult:
       type: object
       required: [saved]
@@ -2882,6 +2975,7 @@ components:
         status: { type: string }
         posPdfUrl: { type: ["string", "null"] }
         receivedDate: { type: ["string", "null"] }
+        posNotes: { type: ["string", "null"] }
         isDeleted: { type: boolean }
         createdAt: { type: string, format: date-time }
         changedAt: { type: string, format: date-time }
@@ -2917,6 +3011,7 @@ components:
             monthlyAmount: { type: ["string", "null"] }
             maxPeriodAmount: { type: ["string", "null"] }
             caseworkerName: { type: ["string", "null"] }
+            posNotes: { type: ["string", "null"] }
     UnmatchedPosDocument:
       type: object
       required: [id, posPdfUrl, sourceFileName, createdBy, createdAt, updatedAt]
@@ -2937,6 +3032,7 @@ components:
         monthlyAmount: { type: ["string", "null"] }
         maxPeriodAmount: { type: ["string", "null"] }
         caseworkerName: { type: ["string", "null"] }
+        posNotes: { type: ["string", "null"] }
         createdBy: { type: string }
         createdAt: { type: string, format: date-time }
         updatedAt: { type: string, format: date-time }
@@ -2959,6 +3055,7 @@ components:
         monthlyAmount: { type: ["string", "null"] }
         maxPeriodAmount: { type: ["string", "null"] }
         caseworkerName: { type: ["string", "null"] }
+        posNotes: { type: ["string", "null"] }
     UnmatchedPosList:
       type: object
       required: [items, total]

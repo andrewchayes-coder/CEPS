@@ -25,6 +25,8 @@ export interface AuthorizationInput {
   maxPeriodAmount: string;
   units?: number;
   status?: AuthorizationInputStatus;
+  /** @nullable */
+  posNotes?: string | null;
   receivedDate?: string;
   /** Stored object path of the uploaded POS PDF */
   posPdfUrl?: string;

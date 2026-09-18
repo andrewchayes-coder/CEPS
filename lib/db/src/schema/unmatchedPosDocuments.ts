@@ -26,6 +26,7 @@ export const unmatchedPosDocumentsTable = pgTable("unmatched_pos_documents", {
   monthlyAmount: numeric("monthly_amount", { precision: 12, scale: 2 }),
   maxPeriodAmount: numeric("max_period_amount", { precision: 12, scale: 2 }),
   caseworkerName: text("caseworker_name"),
+  posNotes: text("pos_notes"),
   createdBy: uuid("created_by").notNull().references(() => usersTable.id),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),

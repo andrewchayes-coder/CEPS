@@ -26,7 +26,10 @@ import type {
   AltaRemittanceImportResult,
   AuditMonthlyFeesParams,
   Authorization,
+  AuthorizationAmendInput,
+  AuthorizationCancelInput,
   AuthorizationInput,
+  AuthorizationLookupResult,
   AuthorizationResult,
   AuthorizationUpdate,
   AuthorizationVersion,
@@ -89,6 +92,7 @@ import type {
   ListVendors200,
   ListVendorsParams,
   LoginInput,
+  LookupAuthorizationParams,
   MagicLinkConsumeInput,
   MagicLinkRequestInput,
   MagicLinkResult,
@@ -3347,6 +3351,234 @@ export const useDeleteAuthorization = <TError = ErrorType<void>,
         TContext
       > => {
       return useMutation(getDeleteAuthorizationMutationOptions(options));
+    }
+
+export const getLookupAuthorizationUrl = (params: LookupAuthorizationParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/authorizations/lookup?${stringifiedParams}` : `/api/authorizations/lookup`
+}
+
+/**
+ * @summary Check an exact client and authorization-number pair (staff only)
+ */
+export const lookupAuthorization = async (params: LookupAuthorizationParams, options?: Parameters<typeof customFetch>[1]): Promise<AuthorizationLookupResult> => {
+
+  return customFetch<AuthorizationLookupResult>(getLookupAuthorizationUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getLookupAuthorizationQueryKey = (params?: LookupAuthorizationParams,) => {
+    return [
+    `/api/authorizations/lookup`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getLookupAuthorizationQueryOptions = <TData = Awaited<ReturnType<typeof lookupAuthorization>>, TError = ErrorType<unknown>>(params: LookupAuthorizationParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof lookupAuthorization>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getLookupAuthorizationQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof lookupAuthorization>>> = ({ signal }) => lookupAuthorization(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof lookupAuthorization>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type LookupAuthorizationQueryResult = NonNullable<Awaited<ReturnType<typeof lookupAuthorization>>>
+export type LookupAuthorizationQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary Check an exact client and authorization-number pair (staff only)
+ */
+
+export function useLookupAuthorization<TData = Awaited<ReturnType<typeof lookupAuthorization>>, TError = ErrorType<unknown>>(
+ params: LookupAuthorizationParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof lookupAuthorization>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getLookupAuthorizationQueryOptions(params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getAmendAuthorizationUrl = (id: string,) => {
+
+
+
+
+  return `/api/authorizations/${id}/amend`
+}
+
+/**
+ * @summary Apply a confirmed POS amendment to an authorization (staff only)
+ */
+export const amendAuthorization = async (id: string,
+    authorizationAmendInput: AuthorizationAmendInput, options?: Parameters<typeof customFetch>[1]): Promise<AuthorizationResult> => {
+
+  return customFetch<AuthorizationResult>(getAmendAuthorizationUrl(id),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(authorizationAmendInput)
+  }
+);}
+
+
+
+
+
+export const getAmendAuthorizationMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof amendAuthorization>>, TError,{id: string;data: BodyType<AuthorizationAmendInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof amendAuthorization>>, TError,{id: string;data: BodyType<AuthorizationAmendInput>}, TContext> => {
+
+const mutationKey = ['amendAuthorization'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof amendAuthorization>>, {id: string;data: BodyType<AuthorizationAmendInput>}> = (props) => {
+          const {id,data} = props ?? {};
+
+          return  amendAuthorization(id,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type AmendAuthorizationMutationResult = NonNullable<Awaited<ReturnType<typeof amendAuthorization>>>
+    export type AmendAuthorizationMutationBody = BodyType<AuthorizationAmendInput>
+    export type AmendAuthorizationMutationError = ErrorType<void>
+
+    /**
+ * @summary Apply a confirmed POS amendment to an authorization (staff only)
+ */
+export const useAmendAuthorization = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof amendAuthorization>>, TError,{id: string;data: BodyType<AuthorizationAmendInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof amendAuthorization>>,
+        TError,
+        {id: string;data: BodyType<AuthorizationAmendInput>},
+        TContext
+      > => {
+      return useMutation(getAmendAuthorizationMutationOptions(options));
+    }
+
+export const getCancelAuthorizationUrl = (id: string,) => {
+
+
+
+
+  return `/api/authorizations/${id}/cancel`
+}
+
+/**
+ * @summary Cancel an authorization (staff only)
+ */
+export const cancelAuthorization = async (id: string,
+    authorizationCancelInput: AuthorizationCancelInput, options?: Parameters<typeof customFetch>[1]): Promise<AuthorizationResult> => {
+
+  return customFetch<AuthorizationResult>(getCancelAuthorizationUrl(id),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(authorizationCancelInput)
+  }
+);}
+
+
+
+
+
+export const getCancelAuthorizationMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof cancelAuthorization>>, TError,{id: string;data: BodyType<AuthorizationCancelInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof cancelAuthorization>>, TError,{id: string;data: BodyType<AuthorizationCancelInput>}, TContext> => {
+
+const mutationKey = ['cancelAuthorization'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof cancelAuthorization>>, {id: string;data: BodyType<AuthorizationCancelInput>}> = (props) => {
+          const {id,data} = props ?? {};
+
+          return  cancelAuthorization(id,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type CancelAuthorizationMutationResult = NonNullable<Awaited<ReturnType<typeof cancelAuthorization>>>
+    export type CancelAuthorizationMutationBody = BodyType<AuthorizationCancelInput>
+    export type CancelAuthorizationMutationError = ErrorType<void>
+
+    /**
+ * @summary Cancel an authorization (staff only)
+ */
+export const useCancelAuthorization = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof cancelAuthorization>>, TError,{id: string;data: BodyType<AuthorizationCancelInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof cancelAuthorization>>,
+        TError,
+        {id: string;data: BodyType<AuthorizationCancelInput>},
+        TContext
+      > => {
+      return useMutation(getCancelAuthorizationMutationOptions(options));
     }
 
 export const getListAuthorizationVersionsUrl = (id: string,) => {

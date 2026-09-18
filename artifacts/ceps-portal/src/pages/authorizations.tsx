@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { useListAuthorizations, useDeleteAuthorization } from '@workspace/api-client-react';
 import { DeleteEntityButton } from '@/components/delete-entity-button';
 import { EditAuthorizationDialog } from '@/components/edit-authorization-dialog';
+import { CancelAuthorizationDialog } from '@/components/cancel-authorization-dialog';
 import { ClientLink, VendorLink } from '@/components/entity-links';
 import { Link } from 'wouter';
 import { format } from 'date-fns';
@@ -154,6 +155,12 @@ export default function AuthorizationsPage() {
                               authorization={auth}
                               onSaved={() => refetch()}
                             />
+                            {auth.status !== 'canceled' && (
+                              <CancelAuthorizationDialog
+                                id={auth.id}
+                                onCanceled={() => refetch()}
+                              />
+                            )}
                             <DeleteEntityButton
                               variant="ghost"
                               buttonLabel=""

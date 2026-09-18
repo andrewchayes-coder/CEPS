@@ -26,4 +26,6 @@ export interface AuthorizationUpdate {
   units?: number | null;
   receivedDate?: string;
   acceptMaxAmountWarning?: boolean;
+  /** @nullable */
+  posNotes?: string | null;
 }

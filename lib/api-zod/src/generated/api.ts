@@ -680,7 +680,8 @@ export const GetClientCaseResponse = zod.object({
   "oneTimeAmount": zod.string().nullish(),
   "maxPeriodAmount": zod.string(),
   "units": zod.int().nullish(),
-  "status": zod.enum(['active', 'expired', 'pending', 'exhausted']),
+  "status": zod.enum(['active', 'expired', 'pending', 'exhausted', 'canceled']),
+  "posNotes": zod.string().nullish(),
   "posPdfUrl": zod.string().nullish(),
   "receivedDate": zod.string().nullish(),
   "totalPaid": zod.string().nullish(),
@@ -1622,7 +1623,8 @@ export const ListAuthorizationsResponse = zod.object({
   "oneTimeAmount": zod.string().nullish(),
   "maxPeriodAmount": zod.string(),
   "units": zod.int().nullish(),
-  "status": zod.enum(['active', 'expired', 'pending', 'exhausted']),
+  "status": zod.enum(['active', 'expired', 'pending', 'exhausted', 'canceled']),
+  "posNotes": zod.string().nullish(),
   "posPdfUrl": zod.string().nullish(),
   "receivedDate": zod.string().nullish(),
   "totalPaid": zod.string().nullish(),
@@ -1650,6 +1652,7 @@ export const CreateAuthorizationBody = zod.object({
   "maxPeriodAmount": zod.string(),
   "units": zod.int().optional(),
   "status": zod.enum(['active', 'expired', 'pending', 'exhausted']).optional(),
+  "posNotes": zod.string().nullish(),
   "receivedDate": zod.string().optional(),
   "posPdfUrl": zod.string().optional().describe('Stored object path of the uploaded POS PDF'),
   "acceptMaxAmountWarning": zod.boolean().optional().describe('Set true to save despite the max-amount data-quality warning')
@@ -1673,7 +1676,8 @@ export const CreateAuthorizationResponse = zod.object({
   "oneTimeAmount": zod.string().nullish(),
   "maxPeriodAmount": zod.string(),
   "units": zod.int().nullish(),
-  "status": zod.enum(['active', 'expired', 'pending', 'exhausted']),
+  "status": zod.enum(['active', 'expired', 'pending', 'exhausted', 'canceled']),
+  "posNotes": zod.string().nullish(),
   "posPdfUrl": zod.string().nullish(),
   "receivedDate": zod.string().nullish(),
   "totalPaid": zod.string().nullish(),
@@ -1707,7 +1711,8 @@ export const GetAuthorizationResponse = zod.object({
   "oneTimeAmount": zod.string().nullish(),
   "maxPeriodAmount": zod.string(),
   "units": zod.int().nullish(),
-  "status": zod.enum(['active', 'expired', 'pending', 'exhausted']),
+  "status": zod.enum(['active', 'expired', 'pending', 'exhausted', 'canceled']),
+  "posNotes": zod.string().nullish(),
   "posPdfUrl": zod.string().nullish(),
   "receivedDate": zod.string().nullish(),
   "totalPaid": zod.string().nullish(),
@@ -1736,7 +1741,8 @@ export const UpdateAuthorizationBody = zod.object({
   "maxPeriodAmount": zod.string().optional(),
   "units": zod.int().nullish(),
   "receivedDate": zod.string().optional(),
-  "acceptMaxAmountWarning": zod.boolean().optional()
+  "acceptMaxAmountWarning": zod.boolean().optional(),
+  "posNotes": zod.string().nullish()
 })
 
 export const UpdateAuthorizationResponse = zod.object({
@@ -1757,7 +1763,8 @@ export const UpdateAuthorizationResponse = zod.object({
   "oneTimeAmount": zod.string().nullish(),
   "maxPeriodAmount": zod.string(),
   "units": zod.int().nullish(),
-  "status": zod.enum(['active', 'expired', 'pending', 'exhausted']),
+  "status": zod.enum(['active', 'expired', 'pending', 'exhausted', 'canceled']),
+  "posNotes": zod.string().nullish(),
   "posPdfUrl": zod.string().nullish(),
   "receivedDate": zod.string().nullish(),
   "totalPaid": zod.string().nullish(),
@@ -1777,6 +1784,135 @@ export const DeleteAuthorizationParams = zod.object({
 
 export const DeleteAuthorizationResponse = zod.object({
   "ok": zod.boolean()
+})
+
+
+/**
+ * @summary Check an exact client and authorization-number pair (staff only)
+ */
+export const LookupAuthorizationQueryParams = zod.object({
+  "clientId": zod.coerce.string(),
+  "authNumber": zod.coerce.string()
+})
+
+export const LookupAuthorizationResponse = zod.object({
+  "exists": zod.boolean(),
+  "authorization": zod.object({
+  "id": zod.string(),
+  "clientId": zod.string(),
+  "clientName": zod.string().nullish(),
+  "vendorId": zod.string().nullish(),
+  "vendorName": zod.string().nullish(),
+  "authNumber": zod.string(),
+  "serviceCode": zod.enum(['459', '024', '490']),
+  "paymentType": zod.enum(['direct_payment', 'reimbursement', 'fee']),
+  "activityDescription": zod.string().nullish(),
+  "servicePeriodStart": zod.string(),
+  "servicePeriodEnd": zod.string(),
+  "monthlyAmount": zod.string().nullish(),
+  "oneTimeAmount": zod.string().nullish(),
+  "maxPeriodAmount": zod.string(),
+  "units": zod.int().nullish(),
+  "status": zod.enum(['active', 'expired', 'pending', 'exhausted', 'canceled']),
+  "posNotes": zod.string().nullish(),
+  "posPdfUrl": zod.string().nullish(),
+  "receivedDate": zod.string().nullish(),
+  "totalPaid": zod.string().nullish(),
+  "remainingAmount": zod.string().nullish(),
+  "daysUntilExpiry": zod.int().nullish()
+}).nullable()
+})
+
+
+/**
+ * @summary Apply a confirmed POS amendment to an authorization (staff only)
+ */
+export const AmendAuthorizationParams = zod.object({
+  "id": zod.coerce.string()
+})
+
+export const AmendAuthorizationBody = zod.object({
+  "servicePeriodStart": zod.string(),
+  "servicePeriodEnd": zod.string(),
+  "monthlyAmount": zod.string().nullish(),
+  "maxPeriodAmount": zod.string(),
+  "posNotes": zod.string().nullish(),
+  "posPdfUrl": zod.string().nullish(),
+  "confirmed": zod.boolean(),
+  "acceptMaxAmountWarning": zod.boolean().optional()
+})
+
+export const AmendAuthorizationResponse = zod.object({
+  "saved": zod.boolean(),
+  "authorization": zod.object({
+  "id": zod.string(),
+  "clientId": zod.string(),
+  "clientName": zod.string().nullish(),
+  "vendorId": zod.string().nullish(),
+  "vendorName": zod.string().nullish(),
+  "authNumber": zod.string(),
+  "serviceCode": zod.enum(['459', '024', '490']),
+  "paymentType": zod.enum(['direct_payment', 'reimbursement', 'fee']),
+  "activityDescription": zod.string().nullish(),
+  "servicePeriodStart": zod.string(),
+  "servicePeriodEnd": zod.string(),
+  "monthlyAmount": zod.string().nullish(),
+  "oneTimeAmount": zod.string().nullish(),
+  "maxPeriodAmount": zod.string(),
+  "units": zod.int().nullish(),
+  "status": zod.enum(['active', 'expired', 'pending', 'exhausted', 'canceled']),
+  "posNotes": zod.string().nullish(),
+  "posPdfUrl": zod.string().nullish(),
+  "receivedDate": zod.string().nullish(),
+  "totalPaid": zod.string().nullish(),
+  "remainingAmount": zod.string().nullish(),
+  "daysUntilExpiry": zod.int().nullish()
+}).optional(),
+  "warnings": zod.array(zod.string()).optional()
+})
+
+
+/**
+ * @summary Cancel an authorization (staff only)
+ */
+export const CancelAuthorizationParams = zod.object({
+  "id": zod.coerce.string()
+})
+
+
+
+
+export const CancelAuthorizationBody = zod.object({
+  "reason": zod.string().min(1)
+})
+
+export const CancelAuthorizationResponse = zod.object({
+  "saved": zod.boolean(),
+  "authorization": zod.object({
+  "id": zod.string(),
+  "clientId": zod.string(),
+  "clientName": zod.string().nullish(),
+  "vendorId": zod.string().nullish(),
+  "vendorName": zod.string().nullish(),
+  "authNumber": zod.string(),
+  "serviceCode": zod.enum(['459', '024', '490']),
+  "paymentType": zod.enum(['direct_payment', 'reimbursement', 'fee']),
+  "activityDescription": zod.string().nullish(),
+  "servicePeriodStart": zod.string(),
+  "servicePeriodEnd": zod.string(),
+  "monthlyAmount": zod.string().nullish(),
+  "oneTimeAmount": zod.string().nullish(),
+  "maxPeriodAmount": zod.string(),
+  "units": zod.int().nullish(),
+  "status": zod.enum(['active', 'expired', 'pending', 'exhausted', 'canceled']),
+  "posNotes": zod.string().nullish(),
+  "posPdfUrl": zod.string().nullish(),
+  "receivedDate": zod.string().nullish(),
+  "totalPaid": zod.string().nullish(),
+  "remainingAmount": zod.string().nullish(),
+  "daysUntilExpiry": zod.int().nullish()
+}).optional(),
+  "warnings": zod.array(zod.string()).optional()
 })
 
 
@@ -1805,6 +1941,7 @@ export const ListAuthorizationVersionsResponseItem = zod.object({
   "status": zod.string(),
   "posPdfUrl": zod.string().nullish(),
   "receivedDate": zod.string().nullish(),
+  "posNotes": zod.string().nullish(),
   "isDeleted": zod.boolean(),
   "createdAt": zod.coerce.date(),
   "changedAt": zod.coerce.date(),
@@ -1839,7 +1976,8 @@ export const ParseAuthorizationPdfResponse = zod.object({
   "units": zod.int().nullish(),
   "monthlyAmount": zod.string().nullish(),
   "maxPeriodAmount": zod.string().nullish(),
-  "caseworkerName": zod.string().nullish()
+  "caseworkerName": zod.string().nullish(),
+  "posNotes": zod.string().nullish()
 }).optional().describe('Extracted draft values — staff must review before saving')
 })
 
@@ -1871,6 +2009,7 @@ export const ListUnmatchedPosResponse = zod.object({
   "monthlyAmount": zod.string().nullish(),
   "maxPeriodAmount": zod.string().nullish(),
   "caseworkerName": zod.string().nullish(),
+  "posNotes": zod.string().nullish(),
   "createdBy": zod.string(),
   "createdAt": zod.coerce.date(),
   "updatedAt": zod.coerce.date()
@@ -1901,7 +2040,8 @@ export const SaveUnmatchedPosBody = zod.object({
   "units": zod.int().nullish(),
   "monthlyAmount": zod.string().nullish(),
   "maxPeriodAmount": zod.string().nullish(),
-  "caseworkerName": zod.string().nullish()
+  "caseworkerName": zod.string().nullish(),
+  "posNotes": zod.string().nullish()
 })
 
 export const SaveUnmatchedPosResponse = zod.object({
@@ -1921,6 +2061,7 @@ export const SaveUnmatchedPosResponse = zod.object({
   "monthlyAmount": zod.string().nullish(),
   "maxPeriodAmount": zod.string().nullish(),
   "caseworkerName": zod.string().nullish(),
+  "posNotes": zod.string().nullish(),
   "createdBy": zod.string(),
   "createdAt": zod.coerce.date(),
   "updatedAt": zod.coerce.date()
@@ -1970,6 +2111,7 @@ export const GetUnmatchedPosResponse = zod.object({
   "monthlyAmount": zod.string().nullish(),
   "maxPeriodAmount": zod.string().nullish(),
   "caseworkerName": zod.string().nullish(),
+  "posNotes": zod.string().nullish(),
   "createdBy": zod.string(),
   "createdAt": zod.coerce.date(),
   "updatedAt": zod.coerce.date()
@@ -2008,7 +2150,8 @@ export const CompleteUnmatchedPosResponse = zod.object({
   "oneTimeAmount": zod.string().nullish(),
   "maxPeriodAmount": zod.string(),
   "units": zod.int().nullish(),
-  "status": zod.enum(['active', 'expired', 'pending', 'exhausted']),
+  "status": zod.enum(['active', 'expired', 'pending', 'exhausted', 'canceled']),
+  "posNotes": zod.string().nullish(),
   "posPdfUrl": zod.string().nullish(),
   "receivedDate": zod.string().nullish(),
   "totalPaid": zod.string().nullish(),

@@ -20,6 +20,7 @@ export const authorizationVersionsTable = pgTable("authorization_versions", {
   maxPeriodAmount: numeric("max_period_amount", { precision: 12, scale: 2 }).notNull(),
   units: integer("units"),
   status: text("status").notNull(),
+  posNotes: text("pos_notes"),
   posPdfUrl: text("pos_pdf_url"),
   receivedDate: date("received_date", { mode: "string" }),
   isDeleted: boolean("is_deleted").notNull(),

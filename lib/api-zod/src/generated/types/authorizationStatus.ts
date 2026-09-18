@@ -14,4 +14,5 @@ export const AuthorizationStatus = {
   expired: 'expired',
   pending: 'pending',
   exhausted: 'exhausted',
+  canceled: 'canceled',
 } as const;

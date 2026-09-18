@@ -36,4 +36,6 @@ export type PosParseResultFields = {
   maxPeriodAmount?: string | null;
   /** @nullable */
   caseworkerName?: string | null;
+  /** @nullable */
+  posNotes?: string | null;
 };

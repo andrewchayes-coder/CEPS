@@ -9,6 +9,10 @@ import type { ListAuditLogSortBy } from './listAuditLogSortBy';
 import type { ListAuditLogSortDirection } from './listAuditLogSortDirection';
 
 export type ListAuditLogParams = {
+/**
+ * Search displayed user, action, entity, detail, and timestamp values.
+ */
+search?: string;
 userId?: string;
 action?: string;
 entityType?: string;

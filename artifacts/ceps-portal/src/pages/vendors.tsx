@@ -27,7 +27,7 @@ export default function VendorsPage() {
     setPage(0);
   };
 
-  // Server-driven search (vendor name) + pagination — mirrors the audit-log page.
+  // Server-driven broad search (name, contact details) + pagination.
   const params = {
     ...(search ? { search } : {}),
     ...(startDate ? { startDate } : {}),
@@ -70,7 +70,7 @@ export default function VendorsPage() {
               <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
               <Input
                 type="search"
-                placeholder="Search vendors..."
+                placeholder="Search by vendor name, email, or phone..."
                 className="pl-8"
                 value={search}
                 onChange={(e) => onSearch(e.target.value)}

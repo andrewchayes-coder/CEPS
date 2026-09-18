@@ -1,5 +1,5 @@
 import { Router, type IRouter } from "express";
-import { eq, and, ilike, asc, desc, count, sql, gte, lte, type SQL } from "drizzle-orm";
+import { eq, and, ilike, or, asc, desc, count, sql, gte, lte, type SQL } from "drizzle-orm";
 import { db, vendorsTable } from "@workspace/db";
 import {
   ListVendorsQueryParams,
@@ -83,7 +83,38 @@ router.get("/vendors", requireAuth, async (req, res): Promise<void> => {
         and payments.is_deleted = false
     )`);
   }
-  if (query.data.search) conditions.push(ilike(vendorsTable.name, `%${escapeLike(query.data.search)}%`));
+  if (query.data.search) {
+    const like = `%${escapeLike(query.data.search)}%`;
+    conditions.push(
+      or(
+        ilike(vendorsTable.name, like),
+        ilike(sql`coalesce(${vendorsTable.altaVendorNumber}, '')`, like),
+        ilike(sql`coalesce(${vendorsTable.ein}, '')`, like),
+        ilike(sql`coalesce(${vendorsTable.billingAddress}, '')`, like),
+        ilike(sql`coalesce(${vendorsTable.serviceAddress}, '')`, like),
+        ilike(sql`coalesce(${vendorsTable.phone}, '')`, like),
+        ilike(sql`coalesce(${vendorsTable.email}, '')`, like),
+        ilike(sql`coalesce(${vendorsTable.contactPerson}, '')`, like),
+        ilike(sql`replace(${vendorsTable.w9Status}, '_', ' ')`, like),
+        ilike(sql`case when ${vendorsTable.active} then 'active' else 'inactive' end`, like),
+        ilike(sql`case when ${vendorsTable.preferred} then 'preferred' else 'not preferred' end`, like),
+        sql`exists (select 1 from authorizations where authorizations.vendor_id = ${vendorsTable.id}
+          and authorizations.is_deleted = false and (
+            authorizations.auth_number ilike ${like}
+            or coalesce(authorizations.activity_description, '') ilike ${like}
+            or authorizations.service_code ilike ${like}
+            or replace(authorizations.status, '_', ' ') ilike ${like}
+            or authorizations.max_period_amount::text ilike ${like}
+          ))`,
+        sql`exists (select 1 from invoices where invoices.vendor_id = ${vendorsTable.id}
+          and invoices.is_deleted = false and (
+            invoices.service_month ilike ${like}
+            or replace(invoices.status, '_', ' ') ilike ${like}
+            or invoices.amount_requested::text ilike ${like}
+          ))`,
+      )!,
+    );
+  }
   if (query.data.w9Status) conditions.push(eq(vendorsTable.w9Status, query.data.w9Status));
   if (query.data.startDate) conditions.push(gte(vendorsTable.createdAt, new Date(`${query.data.startDate}T00:00:00.000Z`)));
   if (query.data.endDate) conditions.push(lte(vendorsTable.createdAt, new Date(`${query.data.endDate}T23:59:59.999Z`)));

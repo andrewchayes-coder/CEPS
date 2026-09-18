@@ -2144,6 +2144,10 @@ limit?: number;
 };
 
 export type ListAuditLogParams = {
+/**
+ * Search displayed user, action, entity, detail, and timestamp values.
+ */
+search?: string;
 userId?: string;
 action?: string;
 entityType?: string;

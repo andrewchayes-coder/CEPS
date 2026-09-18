@@ -126,11 +126,45 @@ router.get("/clients", requireAuth, async (req, res): Promise<void> => {
   if (query.data.endDate) conditions.push(lte(clientsTable.createdAt, new Date(`${query.data.endDate}T23:59:59.999Z`)));
   if (query.data.search) {
     const like = `%${escapeLike(query.data.search)}%`;
-    // Matches the JS filter: "firstName lastName" concat OR uciNumber (case-insensitive).
+    // Search the values shown/managed on the client record, including the
+    // assigned coordinator's name. Cast non-text values so identifiers,
+    // statuses, dates, and other searchable values behave consistently.
     conditions.push(
       or(
         ilike(sql`${clientsTable.firstName} || ' ' || ${clientsTable.lastName}`, like),
         ilike(clientsTable.uciNumber, like),
+        ilike(clientsTable.firstName, like),
+        ilike(clientsTable.lastName, like),
+        ilike(sql`${clientsTable.dateOfBirth}::text`, like),
+        ilike(sql`to_char(${clientsTable.dateOfBirth}, 'MM/DD/YYYY')`, like),
+        ilike(sql`coalesce(${clientsTable.address}, '')`, like),
+        ilike(sql`coalesce(${clientsTable.phone}, '')`, like),
+        ilike(sql`coalesce(${clientsTable.email}, '')`, like),
+        ilike(sql`replace(${clientsTable.status}, '_', ' ')`, like),
+        ilike(sql`coalesce(${clientsTable.regionalCenter}, '')`, like),
+        ilike(sql`coalesce(${clientsTable.preferredLanguage}, '')`, like),
+        ilike(sql`coalesce(${clientsTable.familyRepName}, '')`, like),
+        ilike(sql`coalesce(${clientsTable.familyRepPhone}, '')`, like),
+        ilike(sql`coalesce(${clientsTable.familyRepEmail}, '')`, like),
+        ilike(sql`coalesce(${clientsTable.familyRepAddress}, '')`, like),
+        ilike(sql`${clientsTable.isMinor}::text`, like),
+        ilike(sql`coalesce((select name from users where id = ${clientsTable.assignedCoordinatorId}), '')`, like),
+        sql`exists (select 1 from authorizations where authorizations.client_id = ${clientsTable.id}
+          and authorizations.is_deleted = false and (
+            authorizations.auth_number ilike ${like}
+            or coalesce(authorizations.activity_description, '') ilike ${like}
+            or authorizations.service_code ilike ${like}
+            or replace(authorizations.status, '_', ' ') ilike ${like}
+            or authorizations.service_period_start::text ilike ${like}
+            or authorizations.service_period_end::text ilike ${like}
+            or authorizations.max_period_amount::text ilike ${like}
+          ))`,
+        sql`exists (select 1 from invoices where invoices.client_id = ${clientsTable.id}
+          and invoices.is_deleted = false and (
+            invoices.service_month ilike ${like}
+            or replace(invoices.status, '_', ' ') ilike ${like}
+            or invoices.amount_requested::text ilike ${like}
+          ))`,
       )!,
     );
   }

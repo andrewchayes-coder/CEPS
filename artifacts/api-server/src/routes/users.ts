@@ -149,6 +149,21 @@ router.get("/audit-log", requireStaff, async (req, res): Promise<void> => {
   if (userId) conditions.push(eq(auditLogTable.userId, userId));
   if (action) conditions.push(ilike(auditLogTable.action, `%${escapeLike(action)}%`));
   if (entityType) conditions.push(ilike(auditLogTable.entityType, `%${escapeLike(entityType)}%`));
+  // The audit log's free-text search covers every displayed field, including
+  // related actor names and the displayed entity identifier.
+  const search = query.data.search;
+  if (search) {
+    const like = `%${escapeLike(search)}%`;
+    conditions.push(or(
+      ilike(auditLogTable.action, like),
+      ilike(auditLogTable.entityType, like),
+      ilike(auditLogTable.entityId, like),
+      ilike(auditLogTable.detail, like),
+      sql`${auditLogTable.userId} in (select id from users where name ilike ${like} or email ilike ${like})`,
+      sql`cast(${auditLogTable.createdAt} as text) ilike ${like}`,
+      sql`to_char(${auditLogTable.createdAt}, 'Mon FMDD, YYYY FMHH12:MI AM') ilike ${like}`,
+    )!);
+  }
   if (dateFrom) {
     const from = new Date(`${dateFrom}T00:00:00Z`);
     if (!Number.isNaN(from.getTime())) conditions.push(gte(auditLogTable.createdAt, from));

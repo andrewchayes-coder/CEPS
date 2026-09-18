@@ -284,6 +284,20 @@ describe("GET /payments filters", () => {
     expect(res.body.total).toBeGreaterThanOrEqual(1);
     for (const p of res.body.items) expect(p.clientId).toBe(clientA);
   });
+
+  it("searches UI-formatted dates and currency", async () => {
+    const date = await get(staffCookie, { clientId: clientA, search: "Jan 15, 2026", limit: 1000 });
+    expect(date.body.total).toBe(2);
+    const amount = await get(staffCookie, { clientId: clientA, search: "$100.00", limit: 1000 });
+    expect(amount.body.total).toBe(2);
+  });
+
+  it("searches the related vendor and human remittance labels", async () => {
+    const vendor = await get(staffCookie, { clientId: clientA, search: `${nonce}-vendor`, limit: 1000 });
+    expect(vendor.body.total).toBe(1);
+    const state = await get(staffCookie, { clientId: clientA, search: "unremitted", limit: 1000 });
+    expect(state.body.total).toBe(2);
+  });
 });
 
 describe("GET /remittances search by client name", () => {

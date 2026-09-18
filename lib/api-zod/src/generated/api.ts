@@ -313,6 +313,7 @@ export const DeleteUserResponse = zod.object({
  * @summary Per-user audit history (staff only)
  */
 export const ListAuditLogQueryParams = zod.object({
+  "search": zod.coerce.string().optional().describe('Search displayed user, action, entity, detail, and timestamp values.'),
   "userId": zod.coerce.string().optional(),
   "action": zod.coerce.string().optional(),
   "entityType": zod.coerce.string().optional(),

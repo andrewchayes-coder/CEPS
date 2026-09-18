@@ -32,8 +32,7 @@ export default function PaymentsPage() {
   const isStaff = user?.role === 'staff';
   const deletePayment = useDeletePayment();
 
-  // Server-driven search (matches the check #) + pagination — mirrors the
-  // audit-log page pattern.
+  // Server-driven broad search (check number, vendor, or participant) + pagination.
   const params = {
     ...(search ? { search } : {}),
     ...(startDate ? { startDate } : {}),
@@ -77,7 +76,7 @@ export default function PaymentsPage() {
               <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
               <Input
                 type="search"
-                placeholder="Search by check #..."
+                placeholder="Search by check #, vendor, or participant..."
                 className="pl-8"
                 value={search}
                 onChange={(e) => onSearch(e.target.value)}

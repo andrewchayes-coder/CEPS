@@ -234,3 +234,23 @@ describe("GET /invoices ?search — offset interaction (page reset)", () => {
     expect(res.body.total).toBe(2);
   });
 });
+
+describe("GET /invoices ?search — operational display values", () => {
+  it("matches the displayed currency value", async () => {
+    const res = await get({ search: "$100.00", limit: 1000 });
+    expect(res.status).toBe(200);
+    expect(res.body.total).toBe(3);
+  });
+
+  it("matches a human status label when storage uses underscores", async () => {
+    const res = await get({ search: "pending review", limit: 1000 });
+    expect(res.status).toBe(200);
+    expect(res.body.total).toBe(3);
+  });
+
+  it("matches the short displayed submission date", async () => {
+    const res = await get({ search: "01/15/25", limit: 1000 });
+    expect(res.status).toBe(200);
+    expect(res.body.total).toBe(3);
+  });
+});

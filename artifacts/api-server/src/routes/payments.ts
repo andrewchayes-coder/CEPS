@@ -378,10 +378,31 @@ router.get("/payments", requireAuth, async (req, res): Promise<void> => {
   if (query.data.status) conditions.push(eq(paymentsTable.paymentType, query.data.status));
   if (query.data.search) {
     const like = `%${escapeLike(query.data.search)}%`;
+    // Numeric searches are commonly copied from the UI ("$1,234.00").
+    // Compare both the entered spelling and a normalized numeric spelling.
+    const normalizedSearch = query.data.search.replace(/[$,]/g, "");
+    const numericLike = `%${escapeLike(normalizedSearch)}%`;
     conditions.push(
       or(
         ilike(paymentsTable.qbCheckNumber, like),
         sql`${paymentsTable.clientId} in (select id from clients where (first_name || ' ' || last_name) ilike ${like} and is_deleted = false)`,
+        sql`${paymentsTable.vendorId} in (select id from vendors where name ilike ${like})`,
+        sql`replace(lower(${paymentsTable.paymentType}), '_', ' ') ilike ${like}`,
+        sql`case when ${paymentsTable.remitted} then 'remitted' else 'unremitted' end ilike ${like}`,
+        sql`case when ${paymentsTable.remitted} then 'allocated' else 'remaining' end ilike ${like}`,
+        ilike(paymentsTable.paymentMonth, like),
+        sql`to_char(${paymentsTable.checkDate}, 'Mon FMDD, YYYY') ilike ${like}`,
+        sql`cast(${paymentsTable.checkDate} as text) ilike ${like}`,
+        normalizedSearch ? sql`cast(${paymentsTable.amount} as text) ilike ${numericLike}` : sql`false`,
+        normalizedSearch ? sql`cast(coalesce(
+          (select sum(ra.amount) from remittance_allocations ra where ra.payment_id = ${paymentsTable.id}),
+          case when ${paymentsTable.remitted} then ${paymentsTable.amount} else 0 end
+        ) as text) ilike ${numericLike}` : sql`false`,
+        normalizedSearch ? sql`cast(${paymentsTable.amount} - coalesce(
+          (select sum(ra.amount) from remittance_allocations ra where ra.payment_id = ${paymentsTable.id}),
+          case when ${paymentsTable.remitted} then ${paymentsTable.amount} else 0 end
+        ) as text) ilike ${numericLike}` : sql`false`,
+        sql`${paymentsTable.authorizationId} in (select id from authorizations where (auth_number ilike ${like} or service_code ilike ${like} or replace(lower(status), '_', ' ') ilike ${like} or to_char(service_period_start, 'Mon FMDD, YYYY') ilike ${like} or to_char(service_period_end, 'Mon FMDD, YYYY') ilike ${like}) and is_deleted = false)`,
       )!,
     );
   }
@@ -1110,8 +1131,34 @@ router.get("/remittances", requireAuth, async (req, res): Promise<void> => {
   if (query.data.search) {
     const escapeLike = (s: string) => s.replace(/[\\%_]/g, (c) => `\\${c}`);
     const like = `%${escapeLike(query.data.search)}%`;
+    const normalizedSearch = query.data.search.replace(/[$,]/g, "");
+    const numericLike = `%${escapeLike(normalizedSearch)}%`;
     conditions.push(
-      sql`${remittancesTable.clientId} in (select id from clients where (first_name || ' ' || last_name) ilike ${like} and is_deleted = false)`,
+      or(
+        sql`${remittancesTable.clientId} in (select id from clients where (first_name || ' ' || last_name) ilike ${like} and is_deleted = false)`,
+        ilike(remittancesTable.altaReference, like),
+        ilike(remittancesTable.reportReference, like),
+        ilike(remittancesTable.remittanceBatchId, like),
+        sql`replace(lower(${remittancesTable.status}), '_', ' ') ilike ${like}`,
+        sql`case when ${remittancesTable.status} = 'matched' then 'allocated' else 'remaining' end ilike ${like}`,
+        sql`replace(lower(${remittancesTable.source}), '_', ' ') ilike ${like}`,
+        ilike(remittancesTable.paymentMonth, like),
+        ilike(remittancesTable.reviewReason, like),
+        sql`case when ${remittancesTable.autoMatched} then 'auto matched' else 'unmatched' end ilike ${like}`,
+        sql`to_char(${remittancesTable.remittanceDate}, 'Mon FMDD, YYYY') ilike ${like}`,
+        sql`cast(${remittancesTable.remittanceDate} as text) ilike ${like}`,
+        normalizedSearch ? sql`cast(${remittancesTable.amount} as text) ilike ${numericLike}` : sql`false`,
+        normalizedSearch ? sql`cast(${remittancesTable.expectedAmount} as text) ilike ${numericLike}` : sql`false`,
+        normalizedSearch ? sql`cast(coalesce(
+          (select sum(ra.amount) from remittance_allocations ra where ra.remittance_id = ${remittancesTable.id}),
+          case when ${remittancesTable.matchedPaymentId} is not null then ${remittancesTable.amount} else 0 end
+        ) as text) ilike ${numericLike}` : sql`false`,
+        normalizedSearch ? sql`cast(${remittancesTable.amount} - coalesce(
+          (select sum(ra.amount) from remittance_allocations ra where ra.remittance_id = ${remittancesTable.id}),
+          case when ${remittancesTable.matchedPaymentId} is not null then ${remittancesTable.amount} else 0 end
+        ) as text) ilike ${numericLike}` : sql`false`,
+        sql`${remittancesTable.authorizationId} in (select id from authorizations where auth_number ilike ${like} and is_deleted = false)`,
+      )!,
     );
   }
   const where = and(...conditions);

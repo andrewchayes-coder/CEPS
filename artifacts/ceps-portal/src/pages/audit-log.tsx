@@ -34,7 +34,7 @@ export default function AuditLogPage() {
   const { toast } = useToast();
 
   const filterParams = {
-    ...(search ? { action: search } : {}),
+    ...(search ? { search } : {}),
     ...(entityType ? { entityType } : {}),
     ...(userId !== ALL_USERS ? { userId } : {}),
     ...(dateFrom ? { dateFrom } : {}),
@@ -133,11 +133,12 @@ export default function AuditLogPage() {
               </Select>
             </div>
             <div className="space-y-1">
-              <Label htmlFor="audit-search" className="text-xs">Action</Label>
+              <Label htmlFor="audit-search" className="text-xs">Search</Label>
               <Input
                 id="audit-search"
                 data-testid="input-audit-search"
-                placeholder="Search action…"
+                type="search"
+                placeholder="Search users, actions, entities, or details..."
                 value={search}
                 onChange={(e) => setFilter(setSearch)(e.target.value)}
               />

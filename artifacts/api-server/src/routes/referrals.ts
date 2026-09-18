@@ -216,7 +216,11 @@ router.get("/referrals", requireAuth, async (req, res): Promise<void> => {
     res.status(400).json({ error: "startDate must be on or before endDate" });
     return;
   }
-  const conditions: SQL[] = [];
+  const conditions: SQL[] = [
+    // Referrals for removed participants are not visible through any list or
+    // search path, including searches over referral-owned fields.
+    sql`${referralsTable.clientId} in (select id from clients where is_deleted = false)`,
+  ];
   // Role scoping — mirrors the audit-log SQL-WHERE pattern:
   // coordinators see only referrals they own; parent/self only their linked
   // client's; vendors see none (forced to an unsatisfiable condition).
@@ -238,10 +242,30 @@ router.get("/referrals", requireAuth, async (req, res): Promise<void> => {
   if (query.data.endDate) conditions.push(lte(referralsTable.referralDate, query.data.endDate));
   if (query.data.search) {
     const like = `%${escapeLike(query.data.search)}%`;
+    const normalizedSearch = query.data.search.replace(/[$,]/g, "");
+    const numericLike = `%${escapeLike(normalizedSearch)}%`;
     conditions.push(
       or(
         sql`${referralsTable.clientId} in (select id from clients where (first_name || ' ' || last_name) ilike ${like} and is_deleted = false)`,
         sql`${referralsTable.serviceCoordinatorId} in (select id from users where name ilike ${like})`,
+        sql`replace(lower(${referralsTable.status}), '_', ' ') ilike ${like}`,
+        sql`replace(lower(${referralsTable.submittedVia}), '_', ' ') ilike ${like}`,
+        sql`replace(lower(${referralsTable.intakeSentTo}), '_', ' ') ilike ${like}`,
+        ilike(referralsTable.parentEmail, like),
+        ilike(referralsTable.signedByName, like),
+        sql`replace(lower(${referralsTable.signerRelationship}), '_', ' ') ilike ${like}`,
+        sql`replace(lower(${referralsTable.serviceFrequency}), '_', ' ') ilike ${like}`,
+        sql`replace(lower(${referralsTable.paymentTypeRequested}), '_', ' ') ilike ${like}`,
+        sql`replace(lower(${referralsTable.paymentSchedule}), '_', ' ') ilike ${like}`,
+        ilike(referralsTable.diagnosis, like),
+        sql`replace(lower(${referralsTable.eligibilityCategory}), '_', ' ') ilike ${like}`,
+        ilike(referralsTable.notes, like),
+        sql`to_char(${referralsTable.referralDate}, 'Mon FMDD, YYYY') ilike ${like}`,
+        normalizedSearch ? sql`cast(${referralsTable.cost} as text) ilike ${numericLike}` : sql`false`,
+        sql`cast(${referralsTable.intakeSentAt} as text) ilike ${like}`,
+        sql`cast(${referralsTable.parentSignedAt} as text) ilike ${like}`,
+        sql`cast(${referralsTable.altaAuthReceivedAt} as text) ilike ${like}`,
+        sql`replace(lower(coalesce(${referralsTable.intakeFields}->>'serviceType', '')), '_', ' ') ilike ${like}`,
       )!,
     );
   }

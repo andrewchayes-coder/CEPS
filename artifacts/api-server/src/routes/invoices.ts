@@ -74,9 +74,24 @@ router.get("/invoices", requireAuth, async (req, res): Promise<void> => {
     const like = `%${escapeLike(query.data.search)}%`;
     conditions.push(
       or(
+        ilike(sql`replace(${invoicesTable.submittedByRole}, '_', ' ')`, like),
+        ilike(sql`${invoicesTable.submittedDate}::text`, like),
+        ilike(sql`to_char(${invoicesTable.submittedDate}, 'MM/DD/YYYY')`, like),
+        ilike(sql`to_char(${invoicesTable.submittedDate}, 'MM/DD/YY')`, like),
+        ilike(invoicesTable.serviceMonth, like),
+        ilike(sql`to_char(to_date(${invoicesTable.serviceMonth} || '-01', 'YYYY-MM-DD'), 'Mon YYYY')`, like),
+        ilike(sql`${invoicesTable.amountRequested}::text`, like),
+        ilike(sql`to_char(${invoicesTable.amountRequested}, 'FM$999,999,999,990.00')`, like),
+        ilike(sql`replace(${invoicesTable.paymentType}, '_', ' ')`, like),
+        ilike(sql`replace(${invoicesTable.status}, '_', ' ')`, like),
+        ilike(sql`coalesce(${invoicesTable.notes}, '')`, like),
         sql`${invoicesTable.clientId} in (select id from clients where (first_name || ' ' || last_name) ilike ${like} and is_deleted = false)`,
+        sql`${invoicesTable.clientId} in (select id from clients where uci_number ilike ${like} and is_deleted = false)`,
         sql`${invoicesTable.vendorId} in (select id from vendors where name ilike ${like})`,
+        sql`${invoicesTable.vendorId} in (select id from vendors where coalesce(alta_vendor_number, '') ilike ${like} or coalesce(contact_person, '') ilike ${like} or coalesce(email, '') ilike ${like})`,
         sql`${invoicesTable.authorizationId} in (select id from authorizations where auth_number ilike ${like})`,
+        sql`${invoicesTable.authorizationId} in (select id from authorizations where service_code ilike ${like} or coalesce(activity_description, '') ilike ${like})`,
+        sql`${invoicesTable.reviewedBy} in (select id from users where name ilike ${like})`,
       )!,
     );
   }

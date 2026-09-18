@@ -207,3 +207,18 @@ describe("GET /authorizations ?search — offset interaction (page reset)", () =
     expect(res.body.total).toBe(3);
   });
 });
+
+describe("GET /authorizations ?search — operational display values", () => {
+  it("matches the displayed currency value with a dollar sign", async () => {
+    const res = await get({ search: "$5,000.00", limit: 1000 });
+    expect(res.status).toBe(200);
+    expect(res.body.total).toBe(3);
+  });
+
+  it("matches a human payment-type label when storage uses underscores", async () => {
+    const res = await get({ search: "direct payment", limit: 1000 });
+    expect(res.status).toBe(200);
+    expect(res.body.total).toBeGreaterThan(0);
+    expect(res.body.items.every((item: { paymentType: string }) => item.paymentType === "direct_payment")).toBe(true);
+  });
+});

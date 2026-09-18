@@ -107,6 +107,29 @@ describe("GET /audit-log auth", () => {
   });
 });
 
+describe("GET /audit-log search", () => {
+  it("searches displayed entity IDs, details, actor names, and timestamps", async () => {
+    const [entry] = await db.insert(auditLogTable).values({
+      userId: staffId,
+      action: `${nonce}-search-action`,
+      entityType: "payment",
+      entityId: "displayed-entity-114",
+      detail: "Paid $1,000.00",
+      createdAt: at("2026-05-06T12:00:00Z"),
+    }).returning();
+    try {
+      const byDetail = await get({ search: "$1,000.00", limit: 1000 });
+      expect(byDetail.body.entries.map((e: { id: string }) => e.id)).toContain(entry.id);
+      const byActor = await get({ search: "T16 Staff", limit: 1000 });
+      expect(byActor.body.entries.map((e: { id: string }) => e.id)).toContain(entry.id);
+      const byTimestamp = await get({ search: "2026-05-06", limit: 1000 });
+      expect(byTimestamp.body.entries.map((e: { id: string }) => e.id)).toContain(entry.id);
+    } finally {
+      await db.delete(auditLogTable).where(eq(auditLogTable.id, entry.id));
+    }
+  });
+});
+
 describe("GET /audit-log pagination", () => {
   it("returns total and first page, newest first", async () => {
     const res = await get({ userId: staffId, limit: 2, offset: 0 });

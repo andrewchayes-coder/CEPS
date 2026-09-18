@@ -389,6 +389,10 @@ paths:
       tags: [audit]
       summary: Per-user audit history (staff only)
       parameters:
+        - name: search
+          in: query
+          description: Search displayed user, action, entity, detail, and timestamp values.
+          schema: { type: string }
         - name: userId
           in: query
           schema: { type: string }

@@ -14,7 +14,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { format } from 'date-fns';
-import { ChevronLeft, ChevronRight, X, AlertTriangle } from 'lucide-react';
+import { ChevronLeft, ChevronRight, X, AlertTriangle, Search } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
 import { DateRangeFilter } from '@/components/date-range-filter';
 
@@ -35,6 +35,7 @@ type RemittanceTab = 'all' | 'needs_manual_match';
 
 export default function RemittancesPage() {
   const [page, setPage] = useState(0);
+  const [search, setSearch] = useState('');
   const [batchFilter, setBatchFilter] = useState<string>('');
   const [startDate, setStartDate] = useState<string>();
   const [endDate, setEndDate] = useState<string>();
@@ -52,6 +53,7 @@ export default function RemittancesPage() {
   const params = {
     limit: PAGE_SIZE,
     offset: page * PAGE_SIZE,
+    ...(search ? { search } : {}),
     ...(batchFilter ? { remittanceBatchId: batchFilter } : {}),
     ...(startDate ? { startDate } : {}),
     ...(endDate ? { endDate } : {}),
@@ -137,7 +139,22 @@ export default function RemittancesPage() {
         <CardHeader className="pb-3 border-b">
           <div className="flex flex-col gap-4">
             <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-              <div className="flex-1">
+              <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 flex-1">
+                <div className="relative w-full sm:w-[280px]">
+                  <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+                  <Input
+                    type="search"
+                    placeholder="Search participant, reference, auth #, or batch..."
+                    className="pl-8"
+                    value={search}
+                    onChange={(e) => {
+                      setSearch(e.target.value);
+                      setPage(0);
+                    }}
+                    data-testid="input-remittances-search"
+                  />
+                </div>
+                <div className="flex-1">
                 {batchFilter ? (
                   <div className="flex items-center gap-2" data-testid="banner-batch-filter">
                     <Badge variant="outline" className="font-mono">
@@ -172,6 +189,7 @@ export default function RemittancesPage() {
                     <span className="text-xs text-muted-foreground hidden lg:inline">Press Enter to filter to one uploaded report.</span>
                   </div>
                 ) : null}
+                </div>
               </div>
               <div className="w-full sm:w-auto shrink-0">
                 <DateRangeFilter

@@ -17,3 +17,4 @@
 - [Participant link integrity](participant-link-integrity.md) — financial writes must reuse participant/vendor associations established by authorizations and validate all related records transactionally.
 - [Monthly participant fees](monthly-participant-fees.md) — one active $160 fee per participant/service month; trigger payments are traceability, not fee ownership.
 - [Family representative workflow boundary](family-representative-boundary.md) — account links are invite-managed, intake links are send-managed, and legacy signature links retain an explicit fallback.
+- [Literal wildcard search](literal-wildcard-search.md) — normalize enum separators before ILIKE and avoid raw JSON text, or escaped "_" searches still match stored keys/values.

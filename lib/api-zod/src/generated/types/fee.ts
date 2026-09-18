@@ -28,6 +28,8 @@ export interface Fee {
   /** @nullable */
   notes?: string | null;
   /** @nullable */
+  waiverReason?: string | null;
+  /** @nullable */
   createdBy?: string | null;
   /** @nullable */
   createdAt?: string | null;

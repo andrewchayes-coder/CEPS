@@ -20,6 +20,7 @@ export const feesTable = pgTable("fees", {
   ruleApplied: text("rule_applied"), // e.g. confirmed_flat_160_per_participant_service_month
   status: text("status").notNull().default("pending"), // pending | invoiced | collected | waived
   notes: text("notes"),
+  waiverReason: text("waiver_reason"),
   createdBy: uuid("created_by").references(() => usersTable.id),
   isDeleted: boolean("is_deleted").notNull().default(false),
   deletedAt: timestamp("deleted_at", { withTimezone: true }),

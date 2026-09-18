@@ -1776,6 +1776,8 @@ export interface Fee {
   /** @nullable */
   notes?: string | null;
   /** @nullable */
+  waiverReason?: string | null;
+  /** @nullable */
   createdBy?: string | null;
   /** @nullable */
   createdAt?: string | null;
@@ -1808,16 +1810,6 @@ export interface FeeInput {
   notes?: string;
 }
 
-export type FeeUpdateInputStatus = typeof FeeUpdateInputStatus[keyof typeof FeeUpdateInputStatus];
-
-
-export const FeeUpdateInputStatus = {
-  pending: 'pending',
-  invoiced: 'invoiced',
-  collected: 'collected',
-  waived: 'waived',
-} as const;
-
 export interface FeeUpdateInput {
   /**
      * @nullable
@@ -1825,8 +1817,12 @@ export interface FeeUpdateInput {
      */
   feeMonth?: string | null;
   amount?: string;
-  status?: FeeUpdateInputStatus;
   notes?: string;
+}
+
+export interface FeeReasonInput {
+  /** @minLength 1 */
+  reason: string;
 }
 
 export type PaymentUpdatePaymentType = typeof PaymentUpdatePaymentType[keyof typeof PaymentUpdatePaymentType];

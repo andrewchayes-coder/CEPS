@@ -134,6 +134,13 @@
       "when": 1789748783237,
       "tag": "0018_abandoned_vivisector",
       "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1789749509868,
+      "tag": "0019_icy_supreme_intelligence",
+      "breakpoints": true
     }
   ]
 }

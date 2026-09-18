@@ -337,6 +337,7 @@ export function feeJson(f: Fee, opts: { clientName?: string | null } = {}) {
     ruleApplied: f.ruleApplied,
     status: f.status,
     notes: f.notes,
+    waiverReason: f.waiverReason,
     createdBy: f.createdBy,
     createdAt: iso(f.createdAt),
   };

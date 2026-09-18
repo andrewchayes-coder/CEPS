@@ -10,6 +10,7 @@ import {
   paymentsTable,
   remittancesTable,
   auditLogTable,
+  feesTable,
 } from "@workspace/db";
 import request from "supertest";
 import app from "../app";
@@ -98,6 +99,7 @@ beforeAll(async () => {
 });
 
 afterAll(async () => {
+  await db.delete(feesTable).where(inArray(feesTable.clientId, [clientAId, clientBId]));
   await db.delete(remittancesTable).where(inArray(remittancesTable.clientId, [clientAId, clientBId]));
   await db.delete(paymentsTable).where(inArray(paymentsTable.clientId, [clientAId, clientBId]));
   await db.delete(authorizationsTable).where(inArray(authorizationsTable.clientId, [clientAId, clientBId]));
@@ -129,6 +131,10 @@ describe("POST /remittances/import (Alta batch import)", () => {
   });
 
   it("imports a batch: shared batch id, auto-match runs, unresolvable rows errored, audit logged", async () => {
+    await db.insert(feesTable).values({
+      clientId: clientAId, paymentId: matchPaymentId, amount: "160.00",
+      feeMonth: "2026-01", ruleApplied: "flat_160_per_client_month", status: "pending",
+    });
     const csvText = altaReport(`${nonce}-REPORT`, "2026-01-20", [
       { uci: `${nonce}-UCI-A`, auth: `${nonce}-AUTH-A`, month: "2026-01", amount: "500.00" },
       { uci: `${nonce}-UCI-B`, auth: `${nonce}-AUTH-B`, month: "2026-02", amount: "42.00" },
@@ -177,6 +183,8 @@ describe("POST /remittances/import (Alta batch import)", () => {
     // Auto-match flipped the payment's remitted flag.
     const [payAfter] = await db.select().from(paymentsTable).where(eq(paymentsTable.id, matchPaymentId));
     expect(payAfter.remitted).toBe(true);
+    const [collectedFee] = await db.select().from(feesTable).where(eq(feesTable.paymentId, matchPaymentId));
+    expect(collectedFee.status).toBe("collected");
     const matched = inserted.find((r) => r.matchedPaymentId === matchPaymentId);
     expect(matched?.status).toBe("matched");
     expect(matched?.autoMatched).toBe(true);
@@ -378,6 +386,10 @@ describe("POST /remittances/import (Alta batch import)", () => {
       source: "manual",
       remitted: false,
     }).returning();
+    const [partialFee] = await db.insert(feesTable).values({
+      clientId: clientAId, paymentId: payment.id, amount: "160.00",
+      feeMonth: "2026-09", ruleApplied: "flat_160_per_client_month", status: "pending",
+    }).returning();
     const first = await makePartialRemittance("60.00", "2026-09-20");
     const second = await makePartialRemittance("50.00", "2026-09-21");
 
@@ -389,6 +401,7 @@ describe("POST /remittances/import (Alta batch import)", () => {
     expect(firstAllocation.body.allocatedAmount).toBe("60.00");
     expect(firstAllocation.body.remainingAmount).toBe("0.00");
     expect((await db.select().from(paymentsTable).where(eq(paymentsTable.id, payment.id)))[0].remitted).toBe(false);
+    expect((await db.select().from(feesTable).where(eq(feesTable.id, partialFee.id)))[0].status).toBe("pending");
 
     const automaticAfterPartial = await request(app).post("/api/remittances").set("Cookie", cookie).send({
       clientId: clientAId,
@@ -429,6 +442,7 @@ describe("POST /remittances/import (Alta batch import)", () => {
     expect(finalAllocation.body.allocatedAmount).toBe("40.00");
     expect(finalAllocation.body.remainingAmount).toBe("10.00");
     expect((await db.select().from(paymentsTable).where(eq(paymentsTable.id, payment.id)))[0].remitted).toBe(true);
+    expect((await db.select().from(feesTable).where(eq(feesTable.id, partialFee.id)))[0].status).toBe("collected");
 
     const detail = await request(app).get(`/api/payments/${payment.id}`).set("Cookie", cookie);
     expect(detail.body.allocatedAmount).toBe("100.00");

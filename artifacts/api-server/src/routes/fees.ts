@@ -8,6 +8,8 @@ import {
   CreateFeeResponse,
   UpdateFeeBody,
   UpdateFeeResponse,
+  WaiveFeeBody,
+  CorrectFeeCollectionBody,
 } from "@workspace/api-zod";
 import { requireAuth, requireStaff, audit } from "../lib/auth";
 import { feeJson, clientNameMap, notDeleted, diffDetail } from "../lib/serializers";
@@ -82,6 +84,10 @@ router.post("/fees", requireStaff, async (req, res): Promise<void> => {
 
 router.patch("/fees/:id", requireStaff, async (req, res): Promise<void> => {
   const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+  if (Object.prototype.hasOwnProperty.call(req.body ?? {}, "status")) {
+    res.status(400).json({ error: "Fee status can only be changed through lifecycle actions" });
+    return;
+  }
   const body = { ...req.body, ...(req.body?.feeMonth === "" ? { feeMonth: null } : {}) };
   const parsed = UpdateFeeBody.safeParse(body);
   if (!parsed.success) {
@@ -155,6 +161,51 @@ router.patch("/fees/:id", requireStaff, async (req, res): Promise<void> => {
     return;
   }
   res.json(UpdateFeeResponse.parse((await enrichFees([result.fee]))[0]));
+});
+
+router.post("/fees/:id/waive", requireStaff, async (req, res): Promise<void> => {
+  const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+  const parsed = WaiveFeeBody.safeParse(req.body);
+  if (!parsed.success || !parsed.data.reason.trim()) {
+    res.status(400).json({ error: "A waiver reason is required" });
+    return;
+  }
+  const result = await db.transaction(async (tx) => {
+    const [before] = await tx.select().from(feesTable)
+      .where(and(eq(feesTable.id, id), notDeleted(feesTable))).for("update");
+    if (!before) return { kind: "not_found" as const };
+    if (before.status === "collected") return { kind: "collected" as const };
+    const [fee] = await tx.update(feesTable)
+      .set({ status: "waived", waiverReason: parsed.data.reason.trim() })
+      .where(and(eq(feesTable.id, id), notDeleted(feesTable))).returning();
+    await audit(req.user!.id, "waive_fee", "fee", fee.id, parsed.data.reason.trim(), tx as unknown as typeof db);
+    return { kind: "updated" as const, fee };
+  });
+  if (result.kind === "not_found") { res.status(404).json({ error: "Fee not found" }); return; }
+  if (result.kind === "collected") { res.status(400).json({ error: "Correct the collection before waiving a collected fee" }); return; }
+  res.json((await enrichFees([result.fee]))[0]);
+});
+
+router.post("/fees/:id/correct-collection", requireStaff, async (req, res): Promise<void> => {
+  const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+  const parsed = CorrectFeeCollectionBody.safeParse(req.body);
+  if (!parsed.success || !parsed.data.reason.trim()) {
+    res.status(400).json({ error: "A correction reason is required" });
+    return;
+  }
+  const result = await db.transaction(async (tx) => {
+    const [before] = await tx.select().from(feesTable)
+      .where(and(eq(feesTable.id, id), notDeleted(feesTable))).for("update");
+    if (!before) return { kind: "not_found" as const };
+    if (before.status !== "collected") return { kind: "not_collected" as const };
+    const [fee] = await tx.update(feesTable).set({ status: "pending" })
+      .where(and(eq(feesTable.id, id), eq(feesTable.status, "collected"), notDeleted(feesTable))).returning();
+    await audit(req.user!.id, "correct_fee_collection", "fee", fee.id, parsed.data.reason.trim(), tx as unknown as typeof db);
+    return { kind: "updated" as const, fee };
+  });
+  if (result.kind === "not_found") { res.status(404).json({ error: "Fee not found" }); return; }
+  if (result.kind === "not_collected") { res.status(400).json({ error: "Fee is not collected" }); return; }
+  res.json((await enrichFees([result.fee]))[0]);
 });
 
 function isFeeMonthConflict(error: unknown): boolean {

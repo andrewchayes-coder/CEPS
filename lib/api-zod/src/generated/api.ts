@@ -2395,6 +2395,7 @@ export const ListFeesResponseItem = zod.object({
   "ruleApplied": zod.string().nullish(),
   "status": zod.enum(['pending', 'invoiced', 'collected', 'waived']),
   "notes": zod.string().nullish(),
+  "waiverReason": zod.string().nullish(),
   "createdBy": zod.string().nullish(),
   "createdAt": zod.string().nullish()
 })
@@ -2432,6 +2433,7 @@ export const CreateFeeResponse = zod.object({
   "ruleApplied": zod.string().nullish(),
   "status": zod.enum(['pending', 'invoiced', 'collected', 'waived']),
   "notes": zod.string().nullish(),
+  "waiverReason": zod.string().nullish(),
   "createdBy": zod.string().nullish(),
   "createdAt": zod.string().nullish()
 })
@@ -2450,7 +2452,6 @@ export const updateFeeBodyFeeMonthRegExp = new RegExp('^\\d{4}-(0[1-9]|1[0-2])$'
 export const UpdateFeeBody = zod.object({
   "feeMonth": zod.string().regex(updateFeeBodyFeeMonthRegExp).nullish(),
   "amount": zod.string().optional(),
-  "status": zod.enum(['pending', 'invoiced', 'collected', 'waived']).optional(),
   "notes": zod.string().optional()
 })
 
@@ -2468,6 +2469,7 @@ export const UpdateFeeResponse = zod.object({
   "ruleApplied": zod.string().nullish(),
   "status": zod.enum(['pending', 'invoiced', 'collected', 'waived']),
   "notes": zod.string().nullish(),
+  "waiverReason": zod.string().nullish(),
   "createdBy": zod.string().nullish(),
   "createdAt": zod.string().nullish()
 })
@@ -2482,6 +2484,74 @@ export const DeleteFeeParams = zod.object({
 
 export const DeleteFeeResponse = zod.object({
   "ok": zod.boolean()
+})
+
+
+/**
+ * @summary Waive a fee with a required reason (staff)
+ */
+export const WaiveFeeParams = zod.object({
+  "id": zod.coerce.string()
+})
+
+
+
+
+export const WaiveFeeBody = zod.object({
+  "reason": zod.string().min(1)
+})
+
+export const waiveFeeResponseFeeMonthRegExp = new RegExp('^\\d{4}-(0[1-9]|1[0-2])$');
+
+
+export const WaiveFeeResponse = zod.object({
+  "id": zod.string(),
+  "clientId": zod.string(),
+  "clientName": zod.string().nullish(),
+  "paymentId": zod.string().nullish(),
+  "authorizationId": zod.string().nullish(),
+  "feeMonth": zod.string().regex(waiveFeeResponseFeeMonthRegExp).nullish(),
+  "amount": zod.string(),
+  "ruleApplied": zod.string().nullish(),
+  "status": zod.enum(['pending', 'invoiced', 'collected', 'waived']),
+  "notes": zod.string().nullish(),
+  "waiverReason": zod.string().nullish(),
+  "createdBy": zod.string().nullish(),
+  "createdAt": zod.string().nullish()
+})
+
+
+/**
+ * @summary Correct a fee collection mismatch (staff)
+ */
+export const CorrectFeeCollectionParams = zod.object({
+  "id": zod.coerce.string()
+})
+
+
+
+
+export const CorrectFeeCollectionBody = zod.object({
+  "reason": zod.string().min(1)
+})
+
+export const correctFeeCollectionResponseFeeMonthRegExp = new RegExp('^\\d{4}-(0[1-9]|1[0-2])$');
+
+
+export const CorrectFeeCollectionResponse = zod.object({
+  "id": zod.string(),
+  "clientId": zod.string(),
+  "clientName": zod.string().nullish(),
+  "paymentId": zod.string().nullish(),
+  "authorizationId": zod.string().nullish(),
+  "feeMonth": zod.string().regex(correctFeeCollectionResponseFeeMonthRegExp).nullish(),
+  "amount": zod.string(),
+  "ruleApplied": zod.string().nullish(),
+  "status": zod.enum(['pending', 'invoiced', 'collected', 'waived']),
+  "notes": zod.string().nullish(),
+  "waiverReason": zod.string().nullish(),
+  "createdBy": zod.string().nullish(),
+  "createdAt": zod.string().nullish()
 })
 
 

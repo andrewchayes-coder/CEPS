@@ -43,6 +43,25 @@ class DuplicateFingerprint extends Error {}
 const MONTHLY_FEE_RULE = "flat_160_per_client_month";
 const QUALIFYING_FEE_PAYMENT_TYPES = ["direct_payment", "reimbursement"] as const;
 
+async function collectFeeForPayment(
+  paymentId: string,
+  userId: string,
+  tx: typeof db,
+): Promise<void> {
+  const [fee] = await tx
+    .update(feesTable)
+    .set({ status: "collected" })
+    .where(and(
+      eq(feesTable.paymentId, paymentId),
+      eq(feesTable.status, "pending"),
+      notDeleted(feesTable),
+    ))
+    .returning();
+  if (fee) {
+    await audit(userId, "collect_fee", "fee", fee.id, `Fee collected when trigger payment ${paymentId} was fully remitted`, tx);
+  }
+}
+
 type MonthlyFeeAuditItem = {
   clientId: string;
   clientName: string;
@@ -1246,6 +1265,7 @@ router.post("/remittances", requireStaff, async (req, res): Promise<void> => {
       await tx.insert(remittanceAllocationsTable).values({
         remittanceId: created.id, paymentId: match.id, amount: created.amount, autoMatched: true,
       });
+      await collectFeeForPayment(match.id, req.user!.id, txDb);
     }
     return created;
   });
@@ -1295,6 +1315,7 @@ router.post("/remittances/:id/match", requireStaff, async (req, res): Promise<vo
     const paymentComplete = allocationAmount.equals(paymentRemaining);
     const remittanceComplete = allocationAmount.equals(remittanceRemaining);
     await tx.update(paymentsTable).set({ remitted: paymentComplete }).where(and(eq(paymentsTable.id, payment.id), notDeleted(paymentsTable)));
+    if (paymentComplete) await collectFeeForPayment(payment.id, req.user!.id, tx as unknown as typeof db);
     const [matched] = await tx.update(remittancesTable)
       .set({ status: remittanceComplete ? "matched" : "received", matchedPaymentId: null, autoMatched: false, reviewReason: remittanceComplete ? null : "partially_allocated", expectedAmount: null })
       .where(and(eq(remittancesTable.id, id), notDeleted(remittancesTable)))
@@ -1498,6 +1519,7 @@ router.post("/remittances/import", requireStaff, async (req, res): Promise<void>
         await tx.insert(remittanceAllocationsTable).values({
           remittanceId: r.id, paymentId: claimedPayment.id, amount: r.amount, autoMatched: true,
         });
+        await collectFeeForPayment(claimedPayment.id, req.user!.id, txDb);
       }
       return { remittance: r, match: claimedPayment };
     }).catch((err) => {

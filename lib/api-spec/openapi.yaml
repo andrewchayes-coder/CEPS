@@ -1548,6 +1548,50 @@ paths:
               schema:
                 $ref: "#/components/schemas/OkResult"
         "404": { description: Not found }
+  /fees/{id}/waive:
+    post:
+      operationId: waiveFee
+      tags: [fees]
+      summary: Waive a fee with a required reason (staff)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/FeeReasonInput" }
+      responses:
+        "200":
+          description: Waived fee
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/Fee" } }
+        "400": { description: Reason required or fee already collected }
+        "404": { description: Fee not found }
+  /fees/{id}/correct-collection:
+    post:
+      operationId: correctFeeCollection
+      tags: [fees]
+      summary: Correct a fee collection mismatch (staff)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/FeeReasonInput" }
+      responses:
+        "200":
+          description: Corrected fee
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/Fee" } }
+        "400": { description: Reason required or fee is not collected }
+        "404": { description: Fee not found }
   /remittances:
     get:
       operationId: listRemittances
@@ -3106,6 +3150,7 @@ components:
         ruleApplied: { type: ["string", "null"] }
         status: { type: string, enum: [pending, invoiced, collected, waived] }
         notes: { type: ["string", "null"] }
+        waiverReason: { type: ["string", "null"] }
         createdBy: { type: ["string", "null"] }
         createdAt: { type: ["string", "null"] }
     FeeInput:
@@ -3129,8 +3174,12 @@ components:
           type: ["string", "null"]
           pattern: '^\d{4}-(0[1-9]|1[0-2])$'
         amount: { type: string }
-        status: { type: string, enum: [pending, invoiced, collected, waived] }
         notes: { type: string }
+    FeeReasonInput:
+      type: object
+      required: [reason]
+      properties:
+        reason: { type: string, minLength: 1 }
     PaymentUpdate:
       type: object
       properties:

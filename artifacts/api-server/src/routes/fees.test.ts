@@ -171,3 +171,35 @@ describe("monthly fee CRUD", () => {
     expect(afterAudits).toHaveLength(beforeAudits.length);
   });
 });
+
+describe("fee lifecycle actions", () => {
+  it("requires and stores a waiver reason, and prevents routine status updates", async () => {
+    const created = await request(app).post("/api/fees").set("Cookie", cookie).send({
+      clientId: clientA, amount: "160.00", feeMonth: "2099-01",
+    });
+    expect(created.status).toBe(201);
+    const deniedStatus = await request(app).patch(`/api/fees/${created.body.id}`).set("Cookie", cookie).send({ status: "collected" });
+    expect(deniedStatus.status).toBe(400);
+    const missingReason = await request(app).post(`/api/fees/${created.body.id}/waive`).set("Cookie", cookie).send({ reason: " " });
+    expect(missingReason.status).toBe(400);
+    const waived = await request(app).post(`/api/fees/${created.body.id}/waive`).set("Cookie", cookie).send({ reason: "Participant opted out" });
+    expect(waived.status).toBe(200);
+    expect(waived.body.status).toBe("waived");
+    expect(waived.body.waiverReason).toBe("Participant opted out");
+    const audits = await db.select().from(auditLogTable).where(eq(auditLogTable.entityId, created.body.id));
+    expect(audits.some((audit) => audit.action === "waive_fee" && audit.detail === "Participant opted out")).toBe(true);
+  });
+
+  it("requires a reason for collected-fee correction and audits the correction", async () => {
+    const created = await request(app).post("/api/fees").set("Cookie", cookie).send({
+      clientId: clientA, amount: "160.00", feeMonth: "2099-02",
+    });
+    await db.update(feesTable).set({ status: "collected" }).where(eq(feesTable.id, created.body.id));
+    expect((await request(app).post(`/api/fees/${created.body.id}/correct-collection`).set("Cookie", cookie).send({ reason: "" })).status).toBe(400);
+    const corrected = await request(app).post(`/api/fees/${created.body.id}/correct-collection`).set("Cookie", cookie).send({ reason: "Matched to wrong check" });
+    expect(corrected.status).toBe(200);
+    expect(corrected.body.status).toBe("pending");
+    const audits = await db.select().from(auditLogTable).where(eq(auditLogTable.entityId, created.body.id));
+    expect(audits.some((audit) => audit.action === "correct_fee_collection")).toBe(true);
+  });
+});

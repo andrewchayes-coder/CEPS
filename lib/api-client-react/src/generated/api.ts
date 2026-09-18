@@ -42,6 +42,7 @@ import type {
   FamilyRepresentativeUpdate,
   Fee,
   FeeInput,
+  FeeReasonInput,
   FeeUpdateInput,
   GetCaseStatusReport200,
   GetCaseStatusReportParams,
@@ -5054,6 +5055,150 @@ export const useDeleteFee = <TError = ErrorType<void>,
         TContext
       > => {
       return useMutation(getDeleteFeeMutationOptions(options));
+    }
+
+export const getWaiveFeeUrl = (id: string,) => {
+
+
+
+
+  return `/api/fees/${id}/waive`
+}
+
+/**
+ * @summary Waive a fee with a required reason (staff)
+ */
+export const waiveFee = async (id: string,
+    feeReasonInput: FeeReasonInput, options?: Parameters<typeof customFetch>[1]): Promise<Fee> => {
+
+  return customFetch<Fee>(getWaiveFeeUrl(id),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(feeReasonInput)
+  }
+);}
+
+
+
+
+
+export const getWaiveFeeMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof waiveFee>>, TError,{id: string;data: BodyType<FeeReasonInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof waiveFee>>, TError,{id: string;data: BodyType<FeeReasonInput>}, TContext> => {
+
+const mutationKey = ['waiveFee'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof waiveFee>>, {id: string;data: BodyType<FeeReasonInput>}> = (props) => {
+          const {id,data} = props ?? {};
+
+          return  waiveFee(id,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type WaiveFeeMutationResult = NonNullable<Awaited<ReturnType<typeof waiveFee>>>
+    export type WaiveFeeMutationBody = BodyType<FeeReasonInput>
+    export type WaiveFeeMutationError = ErrorType<void>
+
+    /**
+ * @summary Waive a fee with a required reason (staff)
+ */
+export const useWaiveFee = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof waiveFee>>, TError,{id: string;data: BodyType<FeeReasonInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof waiveFee>>,
+        TError,
+        {id: string;data: BodyType<FeeReasonInput>},
+        TContext
+      > => {
+      return useMutation(getWaiveFeeMutationOptions(options));
+    }
+
+export const getCorrectFeeCollectionUrl = (id: string,) => {
+
+
+
+
+  return `/api/fees/${id}/correct-collection`
+}
+
+/**
+ * @summary Correct a fee collection mismatch (staff)
+ */
+export const correctFeeCollection = async (id: string,
+    feeReasonInput: FeeReasonInput, options?: Parameters<typeof customFetch>[1]): Promise<Fee> => {
+
+  return customFetch<Fee>(getCorrectFeeCollectionUrl(id),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(feeReasonInput)
+  }
+);}
+
+
+
+
+
+export const getCorrectFeeCollectionMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof correctFeeCollection>>, TError,{id: string;data: BodyType<FeeReasonInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof correctFeeCollection>>, TError,{id: string;data: BodyType<FeeReasonInput>}, TContext> => {
+
+const mutationKey = ['correctFeeCollection'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof correctFeeCollection>>, {id: string;data: BodyType<FeeReasonInput>}> = (props) => {
+          const {id,data} = props ?? {};
+
+          return  correctFeeCollection(id,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type CorrectFeeCollectionMutationResult = NonNullable<Awaited<ReturnType<typeof correctFeeCollection>>>
+    export type CorrectFeeCollectionMutationBody = BodyType<FeeReasonInput>
+    export type CorrectFeeCollectionMutationError = ErrorType<void>
+
+    /**
+ * @summary Correct a fee collection mismatch (staff)
+ */
+export const useCorrectFeeCollection = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof correctFeeCollection>>, TError,{id: string;data: BodyType<FeeReasonInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof correctFeeCollection>>,
+        TError,
+        {id: string;data: BodyType<FeeReasonInput>},
+        TContext
+      > => {
+      return useMutation(getCorrectFeeCollectionMutationOptions(options));
     }
 
 export const getListRemittancesUrl = (params?: ListRemittancesParams,) => {

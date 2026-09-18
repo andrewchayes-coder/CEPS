@@ -6,12 +6,7 @@
  * OpenAPI spec version: 0.1.0
  */
 
-export interface FeeUpdateInput {
-  /**
-     * @nullable
-     * @pattern ^\d{4}-(0[1-9]|1[0-2])$
-     */
-  feeMonth?: string | null;
-  amount?: string;
-  notes?: string;
+export interface FeeReasonInput {
+  /** @minLength 1 */
+  reason: string;
 }

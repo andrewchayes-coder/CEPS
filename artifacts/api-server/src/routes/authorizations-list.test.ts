@@ -38,6 +38,7 @@ let authActive: string; // clientA + vendor, active, far-future end
 let authExpired: string; // clientA + no vendor, period end in the past
 let authPending: string; // clientB + otherVendor, status pending
 let authExpiringSoon: string; // clientA + vendor, active, end ~10 days out
+let authFutureStart: string; // clientA + vendor, stored active but future start => pending
 
 async function session(userId: string) {
   const token = newToken();
@@ -134,6 +135,9 @@ beforeAll(async () => {
   authExpired = (await insertAuth({ clientId: clientA, vendorId: null, status: "active", servicePeriodEnd: "2020-01-01" })).id;
   authPending = (await insertAuth({ clientId: clientB, vendorId: otherVendorId, status: "pending" })).id;
   authExpiringSoon = (await insertAuth({ clientId: clientA, vendorId, status: "active", servicePeriodEnd: soonEnd })).id;
+  const futureStart = new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+  const futureEnd = new Date(Date.now() + 45 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+  authFutureStart = (await insertAuth({ clientId: clientB, vendorId: otherVendorId, status: "active", servicePeriodStart: futureStart, servicePeriodEnd: futureEnd })).id;
 });
 
 afterAll(async () => {
@@ -163,7 +167,7 @@ describe("GET /authorizations envelope + pagination", () => {
     const a = await get(staffCookie, { clientId: clientA, limit: 1000 });
     const b = await get(staffCookie, { clientId: clientB, limit: 1000 });
     expect(a.body.total).toBe(3);
-    expect(b.body.total).toBe(1);
+    expect(b.body.total).toBe(2);
   });
 
   it("paginates with a stable total and SQL limit/offset", async () => {
@@ -231,8 +235,8 @@ describe("GET /authorizations SQL-level role scoping", () => {
 describe("GET /authorizations derived filters", () => {
   it("filters by vendorId at the SQL level", async () => {
     const res = await get(staffCookie, { vendorId: otherVendorId, limit: 1000 });
-    expect(res.body.total).toBe(1);
-    expect(res.body.items[0].id).toBe(authPending);
+    expect(res.body.total).toBe(2);
+    expect(res.body.items.map((a: { id: string }) => a.id)).toEqual(expect.arrayContaining([authPending, authFutureStart]));
   });
 
   it("status filter matches the DERIVED effective status (expired via period end)", async () => {
@@ -253,8 +257,14 @@ describe("GET /authorizations derived filters", () => {
 
   it("status filter matches pending (derived) auths", async () => {
     const res = await get(staffCookie, { clientId: clientB, status: "pending", limit: 1000 });
-    expect(res.body.total).toBe(1);
-    expect(res.body.items[0].id).toBe(authPending);
+    expect(res.body.total).toBe(2);
+    expect(res.body.items.map((a: { id: string }) => a.id)).toEqual(expect.arrayContaining([authPending, authFutureStart]));
+  });
+
+  it("derives pending for a future-start authorization regardless of stored active status", async () => {
+    const res = await get(staffCookie, { clientId: clientB, status: "pending", limit: 1000 });
+    const row = res.body.items.find((a: { id: string }) => a.id === authFutureStart);
+    expect(row?.status).toBe("pending");
   });
 
   it("expiringWithinDays only returns active auths inside the window", async () => {

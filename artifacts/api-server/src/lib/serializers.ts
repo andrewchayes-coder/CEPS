@@ -191,8 +191,9 @@ export async function authorizationTotalsPaid(ids: string[]): Promise<Map<string
 }
 
 export function effectiveAuthStatus(a: Authorization, totalPaid: Decimal | number): string {
-  if (a.status === "pending") return "pending";
   const today = new Date().toISOString().slice(0, 10);
+  if (a.servicePeriodStart > today) return "pending";
+  if (a.status === "pending") return "pending";
   if (a.servicePeriodEnd < today) return "expired";
   if (money(totalPaid).greaterThanOrEqualTo(money(a.maxPeriodAmount))) return "exhausted";
   return a.status;

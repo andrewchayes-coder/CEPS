@@ -28,7 +28,7 @@ export * from './authorizationStatus';
 export * from './authorizationUpdate';
 export * from './authorizationUpdatePaymentType';
 export * from './authorizationUpdateServiceCode';
-export * from './authorizationUpdateStatus';
+export * from './authorizationVersion';
 export * from './caseDocument';
 export * from './caseDocumentCategory';
 export * from './caseDocumentRecordType';

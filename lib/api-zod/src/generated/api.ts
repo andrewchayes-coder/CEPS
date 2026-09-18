@@ -1731,7 +1731,6 @@ export const UpdateAuthorizationBody = zod.object({
   "oneTimeAmount": zod.string().nullish(),
   "maxPeriodAmount": zod.string().optional(),
   "units": zod.int().nullish(),
-  "status": zod.enum(['active', 'expired', 'pending', 'exhausted']).optional(),
   "receivedDate": zod.string().optional(),
   "acceptMaxAmountWarning": zod.boolean().optional()
 })
@@ -1775,6 +1774,41 @@ export const DeleteAuthorizationParams = zod.object({
 export const DeleteAuthorizationResponse = zod.object({
   "ok": zod.boolean()
 })
+
+
+/**
+ * @summary List prior authorization snapshots (staff only)
+ */
+export const ListAuthorizationVersionsParams = zod.object({
+  "id": zod.coerce.string()
+})
+
+export const ListAuthorizationVersionsResponseItem = zod.object({
+  "id": zod.string(),
+  "authorizationId": zod.string(),
+  "clientId": zod.string(),
+  "vendorId": zod.string().nullish(),
+  "authNumber": zod.string(),
+  "serviceCode": zod.string(),
+  "paymentType": zod.string(),
+  "activityDescription": zod.string().nullish(),
+  "servicePeriodStart": zod.string(),
+  "servicePeriodEnd": zod.string(),
+  "monthlyAmount": zod.string().nullish(),
+  "oneTimeAmount": zod.string().nullish(),
+  "maxPeriodAmount": zod.string(),
+  "units": zod.int().nullish(),
+  "status": zod.string(),
+  "posPdfUrl": zod.string().nullish(),
+  "receivedDate": zod.string().nullish(),
+  "isDeleted": zod.boolean(),
+  "createdAt": zod.coerce.date(),
+  "changedAt": zod.coerce.date(),
+  "changedBy": zod.string().nullish(),
+  "changedByName": zod.string().nullish(),
+  "changedFields": zod.array(zod.string())
+})
+export const ListAuthorizationVersionsResponse = zod.array(ListAuthorizationVersionsResponseItem)
 
 
 /**

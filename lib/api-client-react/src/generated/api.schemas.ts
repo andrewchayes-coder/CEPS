@@ -1325,16 +1325,6 @@ export const AuthorizationUpdatePaymentType = {
   fee: 'fee',
 } as const;
 
-export type AuthorizationUpdateStatus = typeof AuthorizationUpdateStatus[keyof typeof AuthorizationUpdateStatus];
-
-
-export const AuthorizationUpdateStatus = {
-  active: 'active',
-  expired: 'expired',
-  pending: 'pending',
-  exhausted: 'exhausted',
-} as const;
-
 export interface AuthorizationUpdate {
   /** @nullable */
   vendorId?: string | null;
@@ -1351,7 +1341,6 @@ export interface AuthorizationUpdate {
   maxPeriodAmount?: string;
   /** @nullable */
   units?: number | null;
-  status?: AuthorizationUpdateStatus;
   receivedDate?: string;
   acceptMaxAmountWarning?: boolean;
 }
@@ -1360,6 +1349,41 @@ export interface AuthorizationResult {
   saved: boolean;
   authorization?: Authorization;
   warnings?: string[];
+}
+
+export interface AuthorizationVersion {
+  id: string;
+  authorizationId: string;
+  clientId: string;
+  /** @nullable */
+  vendorId?: string | null;
+  authNumber: string;
+  serviceCode: string;
+  paymentType: string;
+  /** @nullable */
+  activityDescription?: string | null;
+  servicePeriodStart: string;
+  servicePeriodEnd: string;
+  /** @nullable */
+  monthlyAmount?: string | null;
+  /** @nullable */
+  oneTimeAmount?: string | null;
+  maxPeriodAmount: string;
+  /** @nullable */
+  units?: number | null;
+  status: string;
+  /** @nullable */
+  posPdfUrl?: string | null;
+  /** @nullable */
+  receivedDate?: string | null;
+  isDeleted: boolean;
+  createdAt: string;
+  changedAt: string;
+  /** @nullable */
+  changedBy?: string | null;
+  /** @nullable */
+  changedByName?: string | null;
+  changedFields: string[];
 }
 
 export interface PosPdfInput {

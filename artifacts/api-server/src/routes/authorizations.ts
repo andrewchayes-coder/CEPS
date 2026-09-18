@@ -1,7 +1,7 @@
 import { Router, type IRouter } from "express";
-import { eq, desc, and, count, sql, ilike, or, lte, gte, type SQL } from "drizzle-orm";
+import { eq, desc, and, count, sql, ilike, or, lte, gte, inArray, type SQL } from "drizzle-orm";
 import { anthropic } from "@workspace/integrations-anthropic-ai";
-import { db, authorizationsTable, referralsTable, vendorsTable, paymentsTable } from "@workspace/db";
+import { db, authorizationsTable, authorizationVersionsTable, referralsTable, vendorsTable, paymentsTable, usersTable } from "@workspace/db";
 import {
   ListAuthorizationsQueryParams,
   ListAuthorizationsResponse,
@@ -10,6 +10,7 @@ import {
   GetAuthorizationResponse,
   UpdateAuthorizationBody,
   UpdateAuthorizationResponse,
+  ListAuthorizationVersionsResponse,
   ParseAuthorizationPdfBody,
   ParseAuthorizationPdfResponse,
 } from "@workspace/api-zod";
@@ -129,7 +130,7 @@ router.get("/authorizations", requireAuth, async (req, res): Promise<void> => {
   //   effective  = pending | expired (period end past) | exhausted (paid ≥ max) | status
   //   days       = ceil((servicePeriodEnd@00:00Z − now) / 1 day)
   const totalPaidSql = sql`coalesce((select sum(${paymentsTable.amount}) from ${paymentsTable} where ${paymentsTable.authorizationId} = ${authorizationsTable.id} and ${paymentsTable.isDeleted} = false), 0)`;
-  const effectiveStatusSql = sql`case when ${authorizationsTable.status} = 'pending' then 'pending' when ${authorizationsTable.servicePeriodEnd} < (now() at time zone 'utc')::date then 'expired' when ${totalPaidSql} >= ${authorizationsTable.maxPeriodAmount} then 'exhausted' else ${authorizationsTable.status} end`;
+  const effectiveStatusSql = sql`case when ${authorizationsTable.servicePeriodStart} > (now() at time zone 'utc')::date then 'pending' when ${authorizationsTable.status} = 'pending' then 'pending' when ${authorizationsTable.servicePeriodEnd} < (now() at time zone 'utc')::date then 'expired' when ${totalPaidSql} >= ${authorizationsTable.maxPeriodAmount} then 'exhausted' else ${authorizationsTable.status} end`;
   const daysUntilExpirySql = sql`ceil(extract(epoch from ((${authorizationsTable.servicePeriodEnd} || 'T00:00:00Z')::timestamptz - now())) / 86400)`;
   if (query.data.status) {
     conditions.push(sql`${effectiveStatusSql} = ${query.data.status}`);
@@ -299,19 +300,66 @@ router.patch("/authorizations/:id", requireStaff, async (req, res): Promise<void
   }
   const { acceptMaxAmountWarning: _accept, ...rawUpdates } = parsed.data;
   const updates = cleanAuthFields(rawUpdates);
-  const [before] = await db
-    .select()
-    .from(authorizationsTable)
-    .where(and(eq(authorizationsTable.id, id), notDeleted(authorizationsTable)));
+  const warning = parsed.data.maxPeriodAmount && parsed.data.servicePeriodStart && parsed.data.servicePeriodEnd
+    ? maxAmountWarning({
+        monthlyAmount: parsed.data.monthlyAmount,
+        maxPeriodAmount: parsed.data.maxPeriodAmount,
+        servicePeriodStart: parsed.data.servicePeriodStart,
+        servicePeriodEnd: parsed.data.servicePeriodEnd,
+      })
+    : null;
+  if (warning && !parsed.data.acceptMaxAmountWarning) {
+    res.status(200).json(UpdateAuthorizationResponse.parse({ saved: false, warnings: [warning] }));
+    return;
+  }
+  let before: typeof authorizationsTable.$inferSelect | undefined;
+  const auth = await db.transaction(async (tx) => {
+    [before] = await tx
+      .select()
+      .from(authorizationsTable)
+      .where(and(eq(authorizationsTable.id, id), notDeleted(authorizationsTable)))
+      .for("update");
+    if (!before) return undefined;
+    const [updated] = await tx
+      .update(authorizationsTable)
+      .set(updates)
+      .where(and(eq(authorizationsTable.id, id), notDeleted(authorizationsTable)))
+      .returning();
+    if (!updated) return undefined;
+    await tx.insert(authorizationVersionsTable).values({
+      authorizationId: before.id,
+      clientId: before.clientId,
+      vendorId: before.vendorId,
+      authNumber: before.authNumber,
+      serviceCode: before.serviceCode,
+      paymentType: before.paymentType,
+      activityDescription: before.activityDescription,
+      servicePeriodStart: before.servicePeriodStart,
+      servicePeriodEnd: before.servicePeriodEnd,
+      monthlyAmount: before.monthlyAmount,
+      oneTimeAmount: before.oneTimeAmount,
+      maxPeriodAmount: before.maxPeriodAmount,
+      units: before.units,
+      status: before.status,
+      posPdfUrl: before.posPdfUrl,
+      receivedDate: before.receivedDate,
+      isDeleted: before.isDeleted,
+      deletedAt: before.deletedAt,
+      deletedBy: before.deletedBy,
+      createdAt: before.createdAt,
+      changedBy: req.user!.id,
+      changedFields: Object.keys(updates),
+    });
+    return updated;
+  });
+  if (!auth) {
+    res.status(404).json({ error: "Authorization not found" });
+    return;
+  }
   if (!before) {
     res.status(404).json({ error: "Authorization not found" });
     return;
   }
-  const [auth] = await db
-    .update(authorizationsTable)
-    .set(updates)
-    .where(and(eq(authorizationsTable.id, id), notDeleted(authorizationsTable)))
-    .returning();
   await audit(
     req.user!.id,
     "update_authorization",
@@ -334,6 +382,32 @@ router.patch("/authorizations/:id", requireStaff, async (req, res): Promise<void
       }),
     }),
   );
+});
+
+router.get("/authorizations/:id/versions", requireStaff, async (req, res): Promise<void> => {
+  const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+  const [authorization] = await db.select({ id: authorizationsTable.id }).from(authorizationsTable)
+    .where(and(eq(authorizationsTable.id, id), notDeleted(authorizationsTable)));
+  if (!authorization) {
+    res.status(404).json({ error: "Authorization not found" });
+    return;
+  }
+  const versions = await db
+    .select()
+    .from(authorizationVersionsTable)
+    .where(eq(authorizationVersionsTable.authorizationId, id))
+    .orderBy(desc(authorizationVersionsTable.changedAt));
+  const names = new Map<string, string>();
+  const userIds = versions.map((v) => v.changedBy).filter((v): v is string => Boolean(v));
+  if (userIds.length) {
+    const users = await db.select({ id: usersTable.id, name: usersTable.name }).from(usersTable).where(inArray(usersTable.id, userIds));
+    for (const user of users) names.set(user.id, user.name);
+  }
+  res.json(ListAuthorizationVersionsResponse.parse(versions.map((v) => ({
+    ...v,
+    changedByName: v.changedBy ? names.get(v.changedBy) ?? null : null,
+    changedAt: v.changedAt.toISOString(),
+  }))));
 });
 
 router.delete("/authorizations/:id", requireStaff, async (req, res): Promise<void> => {

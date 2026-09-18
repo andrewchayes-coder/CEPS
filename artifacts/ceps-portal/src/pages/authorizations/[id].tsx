@@ -1,6 +1,6 @@
 import React from 'react';
 import { useLocation, useParams, Link } from 'wouter';
-import { useGetAuthorization, useDeleteAuthorization } from '@workspace/api-client-react';
+import { useGetAuthorization, useDeleteAuthorization, useListAuthorizationVersions } from '@workspace/api-client-react';
 import { useAuth } from '@/components/auth/auth-provider';
 import { EditAuthorizationDialog } from '@/components/edit-authorization-dialog';
 import { DeleteEntityButton } from '@/components/delete-entity-button';
@@ -9,9 +9,23 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
-import { ArrowLeft, AlertCircle } from 'lucide-react';
+import { ArrowLeft, AlertCircle, ExternalLink } from 'lucide-react';
 import { format } from 'date-fns';
 import { DocumentPreview } from '@/components/document-preview';
+
+const changedFieldLabels: Record<string, string> = {
+  authNumber: 'Auth #',
+  serviceCode: 'Service code',
+  activityDescription: 'Activity',
+  monthlyAmount: 'Monthly amount',
+  oneTimeAmount: 'One-time amount',
+  maxPeriodAmount: 'Max period amount',
+  servicePeriodStart: 'Period start',
+  servicePeriodEnd: 'Period end',
+  vendorId: 'Vendor',
+  receivedDate: 'Received date',
+  posPdfUrl: 'POS PDF',
+};
 
 export default function AuthorizationDetailPage() {
   const { id } = useParams<{ id: string }>();
@@ -22,6 +36,9 @@ export default function AuthorizationDetailPage() {
 
   const { data: auth, isLoading, refetch } = useGetAuthorization(id, {
     query: { enabled: !!id, queryKey: ['authorization', id] },
+  });
+  const { data: versions = [], refetch: refetchVersions } = useListAuthorizationVersions(id, {
+    query: { enabled: !!id && isStaff, queryKey: ['authorization-versions', id] },
   });
 
   if (isLoading) return <div className="p-8 text-center">Loading authorization...</div>;
@@ -52,7 +69,7 @@ export default function AuthorizationDetailPage() {
           </Badge>
           {isStaff && (
             <>
-              <EditAuthorizationDialog id={id} authorization={auth} onSaved={() => refetch()} />
+              <EditAuthorizationDialog id={id} authorization={auth} onSaved={() => { void refetch(); void refetchVersions(); }} />
               <DeleteEntityButton
                 entityLabel="Authorization"
                 testId="button-delete-authorization"
@@ -143,6 +160,32 @@ export default function AuthorizationDetailPage() {
               </CardHeader>
               <CardContent>
                 <DocumentPreview objectPath={auth.posPdfUrl} filename={`POS-${auth.authNumber}.pdf`} className="max-h-[500px]" />
+              </CardContent>
+            </Card>
+          )}
+          {isStaff && (
+            <Card>
+              <CardHeader><CardTitle>Version History</CardTitle></CardHeader>
+              <CardContent className="space-y-4">
+                {versions.length === 0 ? (
+                  <p className="text-sm text-muted-foreground">No prior versions.</p>
+                ) : versions.map((version) => (
+                  <div key={version.id} className="border-b pb-3 last:border-0 last:pb-0">
+                    <div className="flex justify-between gap-3 text-sm">
+                      <span>{format(new Date(version.changedAt), 'MM/dd/yy h:mm a')}</span>
+                      <span className="text-muted-foreground">{version.changedByName ?? 'Staff'}</span>
+                    </div>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      Changed: {version.changedFields.length
+                        ? version.changedFields.map((field) => changedFieldLabels[field] ?? field).join(', ')
+                        : 'authorization details'}
+                    </p>
+                    <div className="flex gap-3 text-xs mt-1">
+                      {version.receivedDate && <span>Received {version.receivedDate}</span>}
+                      {version.posPdfUrl && <a href={`${import.meta.env.BASE_URL}api/storage${version.posPdfUrl}`} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-primary hover:underline">POS PDF <ExternalLink className="w-3 h-3" /></a>}
+                    </div>
+                  </div>
+                ))}
               </CardContent>
             </Card>
           )}

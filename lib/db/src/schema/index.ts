@@ -4,6 +4,7 @@ export * from "./familyRepresentatives";
 export * from "./vendors";
 export * from "./referrals";
 export * from "./authorizations";
+export * from "./authorizationVersions";
 export * from "./invoices";
 export * from "./payments";
 export * from "./remittances";

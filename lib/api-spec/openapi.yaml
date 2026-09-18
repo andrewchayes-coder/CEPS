@@ -1000,6 +1000,25 @@ paths:
               schema:
                 $ref: "#/components/schemas/OkResult"
         "404": { description: Not found }
+  /authorizations/{id}/versions:
+    get:
+      operationId: listAuthorizationVersions
+      tags: [authorizations]
+      summary: List prior authorization snapshots (staff only)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: Authorization version history
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/AuthorizationVersion" }
+        "404": { description: Authorization not found }
   /authorizations/parse-pdf:
     post:
       operationId: parseAuthorizationPdf
@@ -2692,7 +2711,6 @@ components:
         oneTimeAmount: { type: ["string", "null"] }
         maxPeriodAmount: { type: string }
         units: { type: ["integer", "null"] }
-        status: { type: string, enum: [active, expired, pending, exhausted] }
         receivedDate: { type: string }
         acceptMaxAmountWarning: { type: boolean }
     AuthorizationResult:
@@ -2704,6 +2722,33 @@ components:
         warnings:
           type: array
           items: { type: string }
+    AuthorizationVersion:
+      type: object
+      required: [id, authorizationId, clientId, authNumber, serviceCode, paymentType, servicePeriodStart, servicePeriodEnd, maxPeriodAmount, status, isDeleted, createdAt, changedAt, changedFields]
+      properties:
+        id: { type: string }
+        authorizationId: { type: string }
+        clientId: { type: string }
+        vendorId: { type: ["string", "null"] }
+        authNumber: { type: string }
+        serviceCode: { type: string }
+        paymentType: { type: string }
+        activityDescription: { type: ["string", "null"] }
+        servicePeriodStart: { type: string }
+        servicePeriodEnd: { type: string }
+        monthlyAmount: { type: ["string", "null"] }
+        oneTimeAmount: { type: ["string", "null"] }
+        maxPeriodAmount: { type: string }
+        units: { type: ["integer", "null"] }
+        status: { type: string }
+        posPdfUrl: { type: ["string", "null"] }
+        receivedDate: { type: ["string", "null"] }
+        isDeleted: { type: boolean }
+        createdAt: { type: string, format: date-time }
+        changedAt: { type: string, format: date-time }
+        changedBy: { type: ["string", "null"] }
+        changedByName: { type: ["string", "null"] }
+        changedFields: { type: array, items: { type: string } }
     PosPdfInput:
       type: object
       required: [pdfBase64]

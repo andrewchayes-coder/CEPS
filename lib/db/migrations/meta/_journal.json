@@ -127,6 +127,13 @@
       "when": 1789073732940,
       "tag": "0017_funny_agent_brand",
       "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "7",
+      "when": 1789748783237,
+      "tag": "0018_abandoned_vivisector",
+      "breakpoints": true
     }
   ]
 }

@@ -29,6 +29,7 @@ import type {
   AuthorizationInput,
   AuthorizationResult,
   AuthorizationUpdate,
+  AuthorizationVersion,
   Client,
   ClientCase,
   ClientInput,
@@ -3339,6 +3340,83 @@ export const useDeleteAuthorization = <TError = ErrorType<void>,
       > => {
       return useMutation(getDeleteAuthorizationMutationOptions(options));
     }
+
+export const getListAuthorizationVersionsUrl = (id: string,) => {
+
+
+
+
+  return `/api/authorizations/${id}/versions`
+}
+
+/**
+ * @summary List prior authorization snapshots (staff only)
+ */
+export const listAuthorizationVersions = async (id: string, options?: Parameters<typeof customFetch>[1]): Promise<AuthorizationVersion[]> => {
+
+  return customFetch<AuthorizationVersion[]>(getListAuthorizationVersionsUrl(id),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListAuthorizationVersionsQueryKey = (id: string,) => {
+    return [
+    `/api/authorizations/${id}/versions`
+    ] as const;
+    }
+
+
+export const getListAuthorizationVersionsQueryOptions = <TData = Awaited<ReturnType<typeof listAuthorizationVersions>>, TError = ErrorType<void>>(id: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listAuthorizationVersions>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListAuthorizationVersionsQueryKey(id);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listAuthorizationVersions>>> = ({ signal }) => listAuthorizationVersions(id, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: id !== null && id !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listAuthorizationVersions>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListAuthorizationVersionsQueryResult = NonNullable<Awaited<ReturnType<typeof listAuthorizationVersions>>>
+export type ListAuthorizationVersionsQueryError = ErrorType<void>
+
+
+/**
+ * @summary List prior authorization snapshots (staff only)
+ */
+
+export function useListAuthorizationVersions<TData = Awaited<ReturnType<typeof listAuthorizationVersions>>, TError = ErrorType<void>>(
+ id: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listAuthorizationVersions>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListAuthorizationVersionsQueryOptions(id,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
 
 export const getParseAuthorizationPdfUrl = () => {
 

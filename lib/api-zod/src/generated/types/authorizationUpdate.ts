@@ -7,7 +7,6 @@
  */
 import type { AuthorizationUpdatePaymentType } from './authorizationUpdatePaymentType';
 import type { AuthorizationUpdateServiceCode } from './authorizationUpdateServiceCode';
-import type { AuthorizationUpdateStatus } from './authorizationUpdateStatus';
 
 export interface AuthorizationUpdate {
   /** @nullable */
@@ -25,7 +24,6 @@ export interface AuthorizationUpdate {
   maxPeriodAmount?: string;
   /** @nullable */
   units?: number | null;
-  status?: AuthorizationUpdateStatus;
   receivedDate?: string;
   acceptMaxAmountWarning?: boolean;
 }

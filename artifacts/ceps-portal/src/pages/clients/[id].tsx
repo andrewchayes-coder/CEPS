@@ -23,6 +23,90 @@ import { stableSort, useTableSort } from '@/lib/table-sorting';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { DocumentPreview } from '@/components/document-preview';
 
+const documentStatusPresentation: Record<string, { label: string; className: string }> = {
+  pending: {
+    label: 'Pending',
+    className: 'border-amber-500/50 bg-amber-500/10 text-amber-700 dark:text-amber-300',
+  },
+  sent: {
+    label: 'Sent',
+    className: 'border-blue-500/50 bg-blue-500/10 text-blue-700 dark:text-blue-300',
+  },
+  received: {
+    label: 'Received',
+    className: 'border-emerald-500/50 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300',
+  },
+};
+
+const signatureStatusPresentation: Record<string, { label: string; className: string }> = {
+  signed: {
+    label: 'Signed',
+    className: 'border-emerald-500/50 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300',
+  },
+  unsigned: {
+    label: 'Unsigned',
+    className: 'border-slate-400/60 bg-slate-500/10 text-slate-700 dark:text-slate-300',
+  },
+  pending: {
+    label: 'Pending',
+    className: 'border-amber-500/50 bg-amber-500/10 text-amber-700 dark:text-amber-300',
+  },
+  sent: {
+    label: 'Sent',
+    className: 'border-blue-500/50 bg-blue-500/10 text-blue-700 dark:text-blue-300',
+  },
+};
+
+function humanizeStatus(status: string) {
+  return status
+    .replace(/[_-]+/g, ' ')
+    .trim()
+    .replace(/\b\w/g, (letter) => letter.toUpperCase());
+}
+
+function getStatusPresentation(
+  status: string,
+  presentations: Record<string, { label: string; className: string }>,
+) {
+  return presentations[status.toLowerCase()] ?? {
+    label: humanizeStatus(status),
+    className: 'border-border bg-muted/50 text-muted-foreground',
+  };
+}
+
+function DocumentStatusGroup({ document }: { document: CaseDocument }) {
+  const documentStatus = getStatusPresentation(document.status, documentStatusPresentation);
+  const signatureStatus = document.signatureStatus
+    ? getStatusPresentation(document.signatureStatus, signatureStatusPresentation)
+    : null;
+
+  return (
+    <div className="flex min-w-[116px] flex-col items-start gap-1.5" data-testid={`status-group-document-${document.id}`}>
+      <Badge
+        variant="outline"
+        className={`min-w-[78px] justify-center ${documentStatus.className}`}
+        data-status-kind="document"
+        data-testid={`status-document-${document.id}`}
+      >
+        {documentStatus.label}
+      </Badge>
+      {signatureStatus && (
+        <div className="flex items-center gap-1.5" data-testid={`signature-group-document-${document.id}`}>
+          <span className="text-[11px] font-medium leading-none text-muted-foreground">Signature</span>
+          <Badge
+            variant="outline"
+            className={`min-w-[68px] justify-center px-2 py-0 text-[11px] ${signatureStatus.className}`}
+            data-status-kind="signature"
+            data-testid={`status-signature-${document.id}`}
+          >
+            {signatureStatus.label}
+          </Badge>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function ViewDocumentDialog({ document }: { document: CaseDocument }) {
   return (
     <Dialog>
@@ -564,13 +648,8 @@ export default function ClientDetailPage() {
                           {doc.recordType === 'referral' && <Link href={`/referrals/${doc.recordId}`} className="text-primary hover:underline">{doc.recordLabel}</Link>}
                           {doc.recordType === 'vendor' && <VendorLink id={doc.recordId} name={doc.recordLabel} />}
                         </TableCell>
-                        <TableCell>
-                          <div className="flex flex-col gap-1">
-                            <Badge variant="outline" className={doc.status === 'received' ? 'border-chart-5 text-chart-5' : ''} data-testid={`status-document-${doc.id}`}>{doc.status}</Badge>
-                            {doc.signatureStatus && (
-                              <span className="text-xs text-muted-foreground">{doc.signatureStatus}</span>
-                            )}
-                          </div>
+                        <TableCell className="align-middle">
+                          <DocumentStatusGroup document={doc} />
                         </TableCell>
                         <TableCell className="text-sm text-muted-foreground whitespace-nowrap">
                           {doc.statusDate ? format(new Date(doc.statusDate), 'MMM d, yyyy') : '-'}

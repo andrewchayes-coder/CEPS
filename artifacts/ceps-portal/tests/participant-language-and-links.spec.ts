@@ -221,6 +221,62 @@ test('participant Payments tab has a remittance empty state', async ({ page }) =
   await expect(page.getByText('No remittances found for this participant.')).toBeVisible();
 });
 
+test('staff Documents tab formats document and signature statuses as compact semantic groups', async ({ page }) => {
+  await mockSession(page, 'staff');
+  const client = {
+    id: participantId,
+    firstName: 'Jordan',
+    lastName: 'Rivera',
+    uciNumber: 'UCI-100',
+    dateOfBirth: '2000-01-01',
+    status: 'active',
+  };
+  const documents = [
+    { id: 'doc-pending', name: 'Pending form', category: 'intake', recordType: 'referral', recordId: referralId, recordLabel: 'Referral', status: 'pending', statusDate: '2026-09-01', signatureStatus: 'unsigned', objectPath: null },
+    { id: 'doc-sent', name: 'Sent agreement', category: 'agreement', recordType: 'referral', recordId: referralId, recordLabel: 'Referral', status: 'sent', statusDate: '2026-09-02', signatureStatus: 'sent', objectPath: null },
+    { id: 'doc-received', name: 'Signed agreement', category: 'agreement', recordType: 'referral', recordId: referralId, recordLabel: 'Referral', status: 'received', statusDate: '2026-09-03', signatureStatus: 'signed', objectPath: null },
+    { id: 'doc-fallback', name: 'Archived form', category: 'other', recordType: 'referral', recordId: referralId, recordLabel: 'Referral', status: 'needs_review', statusDate: null, signatureStatus: null, objectPath: null },
+  ];
+  await page.route(`**/api/clients/${participantId}/case`, (route) =>
+    route.fulfill({ json: { client, referrals: [], authorizations: [], invoices: [], payments: [], remittances: [], documents } }),
+  );
+  await page.route('**/api/fees?*', (route) => route.fulfill({ json: [] }));
+
+  await page.goto(`/clients/${participantId}?tab=documents`);
+
+  await expect(page.getByRole('tab', { name: 'Documents' })).toHaveAttribute('data-state', 'active');
+  await expect(page.getByTestId('status-document-doc-pending')).toHaveText('Pending');
+  await expect(page.getByTestId('status-document-doc-sent')).toHaveText('Sent');
+  await expect(page.getByTestId('status-document-doc-received')).toHaveText('Received');
+  await expect(page.getByTestId('status-document-doc-fallback')).toHaveText('Needs Review');
+  await expect(page.getByTestId('status-signature-doc-pending')).toHaveText('Unsigned');
+  await expect(page.getByTestId('status-signature-doc-sent')).toHaveText('Sent');
+  await expect(page.getByTestId('status-signature-doc-received')).toHaveText('Signed');
+  await expect(page.getByTestId('signature-group-document-doc-pending')).toContainText('Signature');
+  await expect(page.locator('[data-status-kind="document"]')).toHaveCount(4);
+  await expect(page.locator('[data-status-kind="signature"]')).toHaveCount(3);
+  await expect(page.getByTestId('row-document-doc-received')).toContainText('Sep 3, 2026');
+  await expect(page.getByTestId('row-document-doc-fallback')).toContainText('-');
+});
+
+test('Documents tab remains staff-only', async ({ page }) => {
+  await mockSession(page, 'parent_guardian');
+  await page.route(`**/api/clients/${participantId}/case`, (route) =>
+    route.fulfill({
+      json: {
+        client: { id: participantId, firstName: 'Jordan', lastName: 'Rivera', uciNumber: 'UCI-100', dateOfBirth: '2000-01-01', status: 'active' },
+        referrals: [], authorizations: [], invoices: [], payments: [], remittances: [], documents: [],
+      },
+    }),
+  );
+  await page.route('**/api/fees?*', (route) => route.fulfill({ json: [] }));
+
+  await page.goto(`/clients/${participantId}?tab=documents`);
+
+  await expect(page.getByRole('tab', { name: 'Documents' })).toHaveCount(0);
+  await expect(page.getByText('Case Documents')).toHaveCount(0);
+});
+
 test('fee-blocked participant deletion opens the Fees tab and closes the conflict dialog', async ({ page }) => {
   await mockSession(page, 'staff');
   const client = {

@@ -64,7 +64,37 @@ export default function DashboardPage() {
       {/* Alerts Section (High Priority) */}
       {summary.alerts && summary.alerts.length > 0 && (
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-          {groupAlerts(summary.alerts).map((group) => (
+          {groupAlerts(summary.alerts).map((group) => group.kind === 'authorization_exhausted_active' ? (
+            <Card
+              key={group.kind}
+              className={`border-l-4 ${getAlertBorderColor(group.kind)} h-full`}
+              data-testid={`card-alert-${group.kind}`}
+            >
+              <CardContent className="p-4 flex gap-4 items-start">
+                <div className={`mt-0.5 ${getAlertIconColor(group.kind)}`}>
+                  <AlertTriangle className="h-5 w-5" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-semibold">
+                    {getExhaustedAlertTitle(group.alerts.length)}
+                  </p>
+                  <ul className="mt-1.5 max-h-48 space-y-1 overflow-y-auto">
+                    {group.alerts.map((alert, i) => (
+                      <li key={alert.entityId ?? i} className="text-xs truncate">
+                        <Link
+                          href={`/authorizations/${alert.entityId}`}
+                          className="text-primary hover:underline"
+                          data-testid={`link-alert-authorization-${alert.entityId ?? i}`}
+                        >
+                          {alert.message}
+                        </Link>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              </CardContent>
+            </Card>
+          ) : (
             <Link key={group.kind} href={getAlertLink(group)} className="block">
               <Card
                 className={`border-l-4 ${getAlertBorderColor(group.kind)} h-full cursor-pointer transition-colors hover:bg-accent/50`}
@@ -351,9 +381,16 @@ function getAlertGroupTitle(type: string) {
     case 'pending_w9': return 'vendors missing a W-9 — payments blocked';
     case 'pending_signature': return 'referrals awaiting signature';
     case 'unmatched_remittance': return 'remittances with no matching payment';
+    case 'authorization_exhausted_active': return 'authorizations needing review';
     case 'recently_completed': return 'recently completed intakes';
     default: return 'alerts';
   }
+}
+
+function getExhaustedAlertTitle(count: number) {
+  return count === 1
+    ? 'Authorization needing review'
+    : `${count} authorizations needing review`;
 }
 
 function getAlertBorderColor(type: string) {
@@ -362,6 +399,7 @@ function getAlertBorderColor(type: string) {
     case 'missing_document': return 'border-destructive';
     case 'pending_w9': return 'border-destructive';
     case 'unmatched_remittance': return 'border-chart-2';
+    case 'authorization_exhausted_active': return 'border-destructive';
     case 'pending_signature': return 'border-chart-4';
     case 'recently_completed': return 'border-chart-5';
     default: return 'border-primary';
@@ -374,6 +412,7 @@ function getAlertIconColor(type: string) {
     case 'missing_document': return 'text-destructive';
     case 'pending_w9': return 'text-destructive';
     case 'unmatched_remittance': return 'text-chart-2';
+    case 'authorization_exhausted_active': return 'text-destructive';
     case 'pending_signature': return 'text-chart-4';
     case 'recently_completed': return 'text-chart-5';
     default: return 'text-primary';
@@ -390,6 +429,7 @@ function getAlertLink(group: { kind: string; alerts: DashboardAlert[] }) {
     case 'pending_w9': return '/reports?tab=missing-docs&docType=w9';
     case 'pending_signature': return '/reports?tab=missing-docs&docType=signature';
     case 'unmatched_remittance': return '/remittances';
+    case 'authorization_exhausted_active': return group.alerts[0]?.entityId ? `/authorizations/${group.alerts[0].entityId}` : '/authorizations';
     case 'recently_completed': return '/referrals';
     default: return '/';
   }

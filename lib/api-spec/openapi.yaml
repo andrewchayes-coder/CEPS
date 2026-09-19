@@ -3660,7 +3660,7 @@ components:
             type: object
             required: [kind, message]
             properties:
-              kind: { type: string, enum: [expiring_authorization, missing_document, pending_w9, unmatched_remittance, pending_signature, recently_completed, family_updated_participant] }
+              kind: { type: string, enum: [expiring_authorization, missing_document, pending_w9, unmatched_remittance, authorization_exhausted_active, pending_signature, recently_completed, family_updated_participant] }
               message: { type: string }
               entityType: { type: ["string", "null"] }
               entityId: { type: ["string", "null"] }

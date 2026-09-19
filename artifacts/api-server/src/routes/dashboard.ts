@@ -99,6 +99,13 @@ router.get("/dashboard/summary", requireAuth, async (req, res): Promise<void> =>
 
   const missingW9 = vendors.filter((v) => v.active && v.w9Status !== "on_file");
   const unmatchedRemits = remits.filter((r) => r.status !== "matched");
+  const today = new Date().toISOString().slice(0, 10);
+  let exhaustedActiveAlerts: {
+    kind: string;
+    message: string;
+    entityType: string;
+    entityId: string;
+  }[] = [];
 
   const alerts: { kind: string; message: string; entityType?: string | null; entityId?: string | null }[] = [];
   for (const { a, status } of withStatus) {
@@ -162,6 +169,18 @@ router.get("/dashboard/summary", requireAuth, async (req, res): Promise<void> =>
     if (u.role === "staff") for (const r of unmatchedRemits) {
       alerts.push({ kind: "unmatched_remittance", message: `An Alta remittance of $${r.amount} has no matching payment.`, entityType: "remittance", entityId: r.id });
     }
+    if (u.role === "staff") {
+      const exhaustedActive = withStatus.filter(
+        ({ a, status }) => status === "exhausted" && a.servicePeriodEnd >= today,
+      );
+      const exhaustedClientNames = await clientNameMap(exhaustedActive.map(({ a }) => a.clientId));
+      exhaustedActiveAlerts = exhaustedActive.map(({ a }) => ({
+          kind: "authorization_exhausted_active",
+          message: `Authorization ${a.authNumber} for ${exhaustedClientNames.get(a.clientId) ?? "an unnamed participant"} has reached its maximum period amount and needs review.`,
+          entityType: "authorization",
+          entityId: a.id,
+      }));
+    }
   }
 
   let recentActivity: {
@@ -200,7 +219,12 @@ router.get("/dashboard/summary", requireAuth, async (req, res): Promise<void> =>
         paymentsThisMonth: paymentsThisMonth.toFixed(2),
         unmatchedRemittances: unmatchedRemits.length,
       },
-      alerts: alerts.slice(0, 25),
+      // Keep the existing cap for general alerts while ensuring every
+      // exhausted-active authorization remains visible for staff review.
+      alerts: [
+        ...alerts.slice(0, 25),
+        ...exhaustedActiveAlerts,
+      ],
       recentActivity,
     }),
   );

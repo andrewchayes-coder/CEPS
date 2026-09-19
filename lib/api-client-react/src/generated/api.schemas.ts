@@ -2254,6 +2254,7 @@ export const DashboardSummaryAlertsItemKind = {
   missing_document: 'missing_document',
   pending_w9: 'pending_w9',
   unmatched_remittance: 'unmatched_remittance',
+  authorization_exhausted_active: 'authorization_exhausted_active',
   pending_signature: 'pending_signature',
   recently_completed: 'recently_completed',
   family_updated_participant: 'family_updated_participant',

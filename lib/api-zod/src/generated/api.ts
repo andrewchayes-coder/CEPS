@@ -3464,7 +3464,7 @@ export const GetDashboardSummaryResponse = zod.object({
   "unmatchedRemittances": zod.int().optional()
 }),
   "alerts": zod.array(zod.object({
-  "kind": zod.enum(['expiring_authorization', 'missing_document', 'pending_w9', 'unmatched_remittance', 'pending_signature', 'recently_completed', 'family_updated_participant']),
+  "kind": zod.enum(['expiring_authorization', 'missing_document', 'pending_w9', 'unmatched_remittance', 'authorization_exhausted_active', 'pending_signature', 'recently_completed', 'family_updated_participant']),
   "message": zod.string(),
   "entityType": zod.string().nullish(),
   "entityId": zod.string().nullish()

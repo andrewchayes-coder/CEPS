@@ -7,7 +7,6 @@ import {
   timestamp,
   index,
 } from "drizzle-orm/pg-core";
-import { sql } from "drizzle-orm";
 import { usersTable } from "./users";
 
 export const clientsTable = pgTable("clients", {
@@ -48,14 +47,6 @@ export const clientsTable = pgTable("clients", {
   statusIdx: index("clients_status_idx").on(table.status),
   assignedCoordinatorIdIdx: index("clients_assigned_coordinator_id_idx").on(
     table.assignedCoordinatorId,
-  ),
-  // pg_trgm indexes support the contains searches used by the list endpoint.
-  firstNameTrgmIdx: index("clients_first_name_trgm_idx").using("gin", sql`${table.firstName} gin_trgm_ops`),
-  lastNameTrgmIdx: index("clients_last_name_trgm_idx").using("gin", sql`${table.lastName} gin_trgm_ops`),
-  uciNumberTrgmIdx: index("clients_uci_number_trgm_idx").using("gin", sql`${table.uciNumber} gin_trgm_ops`),
-  fullNameTrgmIdx: index("clients_full_name_trgm_idx").using(
-    "gin",
-    sql`(${table.firstName} || ' ' || ${table.lastName}) gin_trgm_ops`,
   ),
 }));
 

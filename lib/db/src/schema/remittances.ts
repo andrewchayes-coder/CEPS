@@ -56,11 +56,6 @@ export const remittancesTable = pgTable("remittances", {
   clientIdIdx: index("remittances_client_id_idx").on(table.clientId),
   statusIdx: index("remittances_status_idx").on(table.status),
   createdAtIdx: index("remittances_created_at_idx").on(table.createdAt.desc()),
-  altaReferenceTrgmIdx: index("remittances_alta_reference_trgm_idx").using("gin", sql`coalesce(${table.altaReference}, '') gin_trgm_ops`),
-  paymentMonthTrgmIdx: index("remittances_payment_month_trgm_idx").using("gin", sql`coalesce(${table.paymentMonth}, '') gin_trgm_ops`),
-  remittanceBatchIdTrgmIdx: index("remittances_batch_id_trgm_idx").using("gin", sql`coalesce(${table.remittanceBatchId}, '') gin_trgm_ops`),
-  reportReferenceTrgmIdx: index("remittances_report_reference_trgm_idx").using("gin", sql`coalesce(${table.reportReference}, '') gin_trgm_ops`),
-  reviewReasonTrgmIdx: index("remittances_review_reason_trgm_idx").using("gin", sql`coalesce(${table.reviewReason}, '') gin_trgm_ops`),
   // Idempotency for Alta report re-uploads: at most one remittance per source
   // report row. Partial (WHERE fingerprint IS NOT NULL) so manually-entered
   // remittances — which carry no fingerprint — are unaffected.

@@ -11,7 +11,6 @@ import {
 import { clientsTable } from "./clients";
 import { usersTable } from "./users";
 import { familyRepresentativesTable } from "./familyRepresentatives";
-import { sql } from "drizzle-orm";
 
 export const referralsTable = pgTable("referrals", {
   id: uuid("id").primaryKey().defaultRandom(),
@@ -62,11 +61,6 @@ export const referralsTable = pgTable("referrals", {
     table.serviceCoordinatorId,
   ),
   statusIdx: index("referrals_status_idx").on(table.status),
-  parentEmailTrgmIdx: index("referrals_parent_email_trgm_idx").using("gin", sql`coalesce(${table.parentEmail}, '') gin_trgm_ops`),
-  intakeSentToTrgmIdx: index("referrals_intake_sent_to_trgm_idx").using("gin", sql`coalesce(${table.intakeSentTo}, '') gin_trgm_ops`),
-  diagnosisTrgmIdx: index("referrals_diagnosis_trgm_idx").using("gin", sql`coalesce(${table.diagnosis}, '') gin_trgm_ops`),
-  eligibilityCategoryTrgmIdx: index("referrals_eligibility_category_trgm_idx").using("gin", sql`coalesce(${table.eligibilityCategory}, '') gin_trgm_ops`),
-  notesTrgmIdx: index("referrals_notes_trgm_idx").using("gin", sql`coalesce(${table.notes}, '') gin_trgm_ops`),
 }));
 
 export type Referral = typeof referralsTable.$inferSelect;

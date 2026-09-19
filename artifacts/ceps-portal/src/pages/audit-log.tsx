@@ -13,14 +13,12 @@ import { format } from 'date-fns';
 import { downloadCSV } from '@/lib/csv';
 import { useToast } from '@/hooks/use-toast';
 import { DateRangeFilter } from '@/components/date-range-filter';
-import { useDebounce } from '@/hooks/use-debounce';
 
 const PAGE_SIZE = 50;
 const ALL_USERS = '__all__';
 
 export default function AuditLogPage() {
   const [search, setSearch] = useState('');
-  const debouncedSearch = useDebounce(search, 300);
   const [entityType, setEntityType] = useState('');
   const [userId, setUserId] = useState(ALL_USERS);
   const [dateFrom, setDateFrom] = useState('');
@@ -36,7 +34,7 @@ export default function AuditLogPage() {
   const { toast } = useToast();
 
   const filterParams = {
-    ...(debouncedSearch ? { search: debouncedSearch } : {}),
+    ...(search ? { search } : {}),
     ...(entityType ? { entityType } : {}),
     ...(userId !== ALL_USERS ? { userId } : {}),
     ...(dateFrom ? { dateFrom } : {}),

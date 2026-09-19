@@ -98,16 +98,16 @@ router.get("/vendors", requireAuth, async (req, res): Promise<void> => {
         ilike(sql`replace(${vendorsTable.w9Status}, '_', ' ')`, like),
         ilike(sql`case when ${vendorsTable.active} then 'active' else 'inactive' end`, like),
         ilike(sql`case when ${vendorsTable.preferred} then 'preferred' else 'not preferred' end`, like),
-        sql`${vendorsTable.id} in (select authorizations.vendor_id from authorizations
-          where authorizations.is_deleted = false and (
+        sql`exists (select 1 from authorizations where authorizations.vendor_id = ${vendorsTable.id}
+          and authorizations.is_deleted = false and (
             authorizations.auth_number ilike ${like}
             or coalesce(authorizations.activity_description, '') ilike ${like}
             or authorizations.service_code ilike ${like}
             or replace(authorizations.status, '_', ' ') ilike ${like}
             or authorizations.max_period_amount::text ilike ${like}
           ))`,
-        sql`${vendorsTable.id} in (select invoices.vendor_id from invoices
-          where invoices.is_deleted = false and (
+        sql`exists (select 1 from invoices where invoices.vendor_id = ${vendorsTable.id}
+          and invoices.is_deleted = false and (
             invoices.service_month ilike ${like}
             or replace(invoices.status, '_', ' ') ilike ${like}
             or invoices.amount_requested::text ilike ${like}

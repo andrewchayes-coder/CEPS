@@ -16,13 +16,11 @@ import { Search, CheckCircle2, ChevronLeft, ChevronRight } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
 import { DateRangeFilter } from '@/components/date-range-filter';
 import { CheckRunReconciliationDialog } from '@/components/check-run-reconciliation-dialog';
-import { useDebounce } from '@/hooks/use-debounce';
 
 const PAGE_SIZE = 50;
 
 export default function PaymentsPage() {
   const [search, setSearch] = useState('');
-  const debouncedSearch = useDebounce(search, 300);
   const [startDate, setStartDate] = useState<string>();
   const [endDate, setEndDate] = useState<string>();
   const [page, setPage] = useState(0);
@@ -38,7 +36,7 @@ export default function PaymentsPage() {
 
   // Server-driven broad search (check number, vendor, or participant) + pagination.
   const params = {
-    ...(debouncedSearch ? { search: debouncedSearch } : {}),
+    ...(search ? { search } : {}),
     ...(startDate ? { startDate } : {}),
     ...(endDate ? { endDate } : {}),
     limit: PAGE_SIZE,

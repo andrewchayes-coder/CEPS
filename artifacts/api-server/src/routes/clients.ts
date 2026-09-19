@@ -52,15 +52,24 @@ function scopeClientId(req: { user?: { role: string; linkedRecordType: string | 
 function associatedWithVendor(vendorId: string): SQL {
   // This is deliberately the inverse of the /vendors?clientId association:
   // an active authorization, invoice, or payment establishes the relationship.
-  return sql`${clientsTable.id} in (
-    select client_id from authorizations
-      where vendor_id = ${vendorId} and is_deleted = false
-    union
-    select client_id from invoices
-      where vendor_id = ${vendorId} and is_deleted = false
-    union
-    select client_id from payments
-      where vendor_id = ${vendorId} and is_deleted = false
+  return sql`exists (
+    select 1
+    from authorizations
+    where authorizations.client_id = ${clientsTable.id}
+      and authorizations.vendor_id = ${vendorId}
+      and authorizations.is_deleted = false
+    union all
+    select 1
+    from invoices
+    where invoices.client_id = ${clientsTable.id}
+      and invoices.vendor_id = ${vendorId}
+      and invoices.is_deleted = false
+    union all
+    select 1
+    from payments
+    where payments.client_id = ${clientsTable.id}
+      and payments.vendor_id = ${vendorId}
+      and payments.is_deleted = false
   )`;
 }
 
@@ -139,9 +148,9 @@ router.get("/clients", requireAuth, async (req, res): Promise<void> => {
         ilike(sql`coalesce(${clientsTable.familyRepEmail}, '')`, like),
         ilike(sql`coalesce(${clientsTable.familyRepAddress}, '')`, like),
         ilike(sql`${clientsTable.isMinor}::text`, like),
-        sql`${clientsTable.assignedCoordinatorId} in (select id from users where name ilike ${like})`,
-     sql`${clientsTable.id} in (select authorizations.client_id from authorizations
-       where authorizations.is_deleted = false and (
+        ilike(sql`coalesce((select name from users where id = ${clientsTable.assignedCoordinatorId}), '')`, like),
+        sql`exists (select 1 from authorizations where authorizations.client_id = ${clientsTable.id}
+          and authorizations.is_deleted = false and (
             authorizations.auth_number ilike ${like}
             or coalesce(authorizations.activity_description, '') ilike ${like}
             or authorizations.service_code ilike ${like}
@@ -149,9 +158,9 @@ router.get("/clients", requireAuth, async (req, res): Promise<void> => {
             or authorizations.service_period_start::text ilike ${like}
             or authorizations.service_period_end::text ilike ${like}
             or authorizations.max_period_amount::text ilike ${like}
-           ))`,
-       sql`${clientsTable.id} in (select invoices.client_id from invoices
-           where invoices.is_deleted = false and (
+          ))`,
+        sql`exists (select 1 from invoices where invoices.client_id = ${clientsTable.id}
+          and invoices.is_deleted = false and (
             invoices.service_month ilike ${like}
             or replace(invoices.status, '_', ' ') ilike ${like}
             or invoices.amount_requested::text ilike ${like}

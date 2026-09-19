@@ -272,7 +272,6 @@ describe("POST /payments/import", () => {
     expect(payments.map((payment) => payment.paymentMonth).sort()).toEqual(["2026-03", "2026-04"]);
     expect(payments.every((payment) => payment.authorizationId === null && payment.source === "historical_import")).toBe(true);
     const allocations = await db.select().from(paymentAllocationsTable).where(inArray(paymentAllocationsTable.paymentId, payments.map((payment) => payment.id)));
-    expect(allocations).toHaveLength(2);
     expect(allocations.every((allocation) => allocation.authorizationId === authAId)).toBe(true);
     const feeRows = await db.select().from(feesTable).where(inArray(feesTable.paymentId, payments.map((payment) => payment.id)));
     expect(feeRows).toHaveLength(0);

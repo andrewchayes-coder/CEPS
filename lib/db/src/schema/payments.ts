@@ -63,8 +63,6 @@ export const paymentsTable = pgTable("payments", {
     sql`${table.amount} > 0 AND ${table.amount} <> 'NaN'::numeric`,
   ),
   validPaymentMonth: check("payments_valid_payment_month", sql`${table.paymentMonth} IS NULL OR ${table.paymentMonth} ~ '^[0-9]{4}-(0[1-9]|1[0-2])$'`),
-  qbCheckNumberTrgmIdx: index("payments_qb_check_number_trgm_idx").using("gin", sql`${table.qbCheckNumber} gin_trgm_ops`),
-  paymentMonthTrgmIdx: index("payments_payment_month_trgm_idx").using("gin", sql`coalesce(${table.paymentMonth}, '') gin_trgm_ops`),
 }));
 
 export type Payment = typeof paymentsTable.$inferSelect;

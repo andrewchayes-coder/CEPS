@@ -37,21 +37,21 @@ export const vendorsTable = pgTable("vendors", {
   // Case-insensitive (lower(name)) — mirrors the case-insensitive name matching
   // the import's FK resolver uses.
   nameLowerUnique: uniqueIndex("vendors_name_lower_unique").on(sql`lower(${table.name})`),
-  nameFtsIdx: index("vendors_name_fts_idx").using(
+  nameTrgmIdx: index("vendors_name_trgm_idx").using(
     "gin",
-    sql`to_tsvector('simple', ${table.name})`,
+    sql`${table.name} gin_trgm_ops`,
   ),
-  altaVendorNumberFtsIdx: index("vendors_alta_vendor_number_fts_idx").using(
+  altaVendorNumberTrgmIdx: index("vendors_alta_vendor_number_trgm_idx").using(
     "gin",
-    sql`to_tsvector('simple', coalesce(${table.altaVendorNumber}, ''))`,
+    sql`coalesce(${table.altaVendorNumber}, '') gin_trgm_ops`,
   ),
-  contactPersonFtsIdx: index("vendors_contact_person_fts_idx").using(
+  contactPersonTrgmIdx: index("vendors_contact_person_trgm_idx").using(
     "gin",
-    sql`to_tsvector('simple', coalesce(${table.contactPerson}, ''))`,
+    sql`coalesce(${table.contactPerson}, '') gin_trgm_ops`,
   ),
-  emailFtsIdx: index("vendors_email_fts_idx").using(
+  emailTrgmIdx: index("vendors_email_trgm_idx").using(
     "gin",
-    sql`to_tsvector('simple', regexp_replace(coalesce(${table.email}, ''), '[^a-zA-Z0-9]+', ' ', 'g'))`,
+    sql`coalesce(${table.email}, '') gin_trgm_ops`,
   ),
 }));
 

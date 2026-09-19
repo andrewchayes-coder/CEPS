@@ -63,13 +63,13 @@ export const paymentsTable = pgTable("payments", {
     sql`${table.amount} > 0 AND ${table.amount} <> 'NaN'::numeric`,
   ),
   validPaymentMonth: check("payments_valid_payment_month", sql`${table.paymentMonth} IS NULL OR ${table.paymentMonth} ~ '^[0-9]{4}-(0[1-9]|1[0-2])$'`),
-  qbCheckNumberFtsIdx: index("payments_qb_check_number_fts_idx").using(
+  qbCheckNumberTrgmIdx: index("payments_qb_check_number_trgm_idx").using(
     "gin",
-    sql`to_tsvector('simple', ${table.qbCheckNumber})`,
+    sql`${table.qbCheckNumber} gin_trgm_ops`,
   ),
-  paymentMonthFtsIdx: index("payments_payment_month_fts_idx").using(
+  paymentMonthTrgmIdx: index("payments_payment_month_trgm_idx").using(
     "gin",
-    sql`to_tsvector('simple', coalesce(${table.paymentMonth}, ''))`,
+    sql`coalesce(${table.paymentMonth}, '') gin_trgm_ops`,
   ),
 }));
 

@@ -16,21 +16,44 @@ function correlatedLoopCounts(node: ExplainNode): number[] {
 }
 
 /**
- * Query-plan regression checks for the full-text search surface. These checks
+ * Query-plan regression checks for the pg_trgm search surface. These checks
  * deliberately run against the configured DATABASE_URL rather than a mock:
  * the planner and operator class are the thing under test. Planner settings
  * are left untouched; on small databases PostgreSQL may choose a sequential
  * scan for formatted predicates, while costs remain useful baseline output.
  */
-describe("full-text search query plans", () => {
-  it("has all the full-text search indexes", async () => {
+describe("pg_trgm search query plans", () => {
+  it("has the extension and all direct-search indexes", async () => {
     const result = await db.execute(sql`
       select indexname
       from pg_indexes
       where schemaname = 'public'
-        and indexname like '%_fts_idx'
+        and indexname in (
+          'clients_first_name_trgm_idx', 'clients_last_name_trgm_idx',
+          'clients_uci_number_trgm_idx', 'clients_full_name_trgm_idx',
+          'vendors_name_trgm_idx', 'vendors_alta_vendor_number_trgm_idx',
+          'vendors_contact_person_trgm_idx', 'vendors_email_trgm_idx',
+          'authorizations_auth_number_trgm_idx',
+          'authorizations_service_code_trgm_idx',
+          'authorizations_activity_description_trgm_idx',
+          'invoices_service_month_trgm_idx', 'invoices_notes_trgm_idx',
+          'payments_qb_check_number_trgm_idx', 'payments_payment_month_trgm_idx',
+          'users_name_trgm_idx', 'users_email_trgm_idx', 'users_phone_trgm_idx',
+          'referrals_parent_email_trgm_idx', 'referrals_intake_sent_to_trgm_idx',
+          'referrals_diagnosis_trgm_idx', 'referrals_eligibility_category_trgm_idx',
+          'referrals_notes_trgm_idx', 'remittances_alta_reference_trgm_idx',
+          'remittances_payment_month_trgm_idx', 'remittances_batch_id_trgm_idx',
+          'remittances_report_reference_trgm_idx', 'remittances_review_reason_trgm_idx',
+          'audit_log_action_trgm_idx', 'audit_log_entity_type_trgm_idx',
+          'audit_log_entity_id_trgm_idx', 'audit_log_detail_trgm_idx'
+        )
     `);
-    expect(result.rows).toHaveLength(27);
+    expect(result.rows).toHaveLength(32);
+
+    const extension = await db.execute(sql`
+      select 1 from pg_extension where extname = 'pg_trgm'
+    `);
+    expect(extension.rows).toHaveLength(1);
   });
 
   it("keeps representative count and first-page plans linear", async () => {

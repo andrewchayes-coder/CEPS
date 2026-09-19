@@ -49,17 +49,6 @@ import { findPosClient } from "../lib/posMatching";
 
 const router: IRouter = Router();
 
-function toPrefixTsQuery(term: string): string {
-  return term.trim().split(/\s+/)
-    .flatMap((word) => {
-      const safeWord = word.replace(/[^a-zA-Z0-9@._+/-]/g, "");
-      return safeWord.includes("@") ? safeWord.split(/[^a-zA-Z0-9]+/) : [safeWord];
-    })
-    .filter((word) => /[a-zA-Z0-9]/.test(word))
-    .map((word) => `${word}:*`)
-    .join(" & ");
-}
-
 // Normalize empty strings from the form to null for optional/numeric columns.
 function cleanAuthFields<T extends Record<string, unknown>>(obj: T): T {
   const out = { ...obj };
@@ -138,15 +127,13 @@ router.get("/authorizations", requireAuth, async (req, res): Promise<void> => {
   if (query.data.endDate) conditions.push(lte(authorizationsTable.servicePeriodStart, query.data.endDate));
   if (query.data.search) {
     const like = `%${escapeLike(query.data.search)}%`;
-    const tsQuery = toPrefixTsQuery(query.data.search);
-    const fts = (condition: SQL) => tsQuery ? condition : sql`false`;
     const normalizedSearch = query.data.search.trim().toLowerCase().replace(/\s+/g, "_");
     conditions.push(
       or(
-        tsQuery ? sql`to_tsvector('simple', ${authorizationsTable.authNumber}) @@ to_tsquery('simple', ${tsQuery})` : sql`false`,
-        tsQuery ? sql`to_tsvector('simple', ${authorizationsTable.serviceCode}) @@ to_tsquery('simple', ${tsQuery})` : sql`false`,
+        ilike(authorizationsTable.authNumber, like),
+        ilike(authorizationsTable.serviceCode, like),
         ilike(sql`replace(${authorizationsTable.paymentType}, '_', ' ')`, like),
-        tsQuery ? sql`to_tsvector('simple', coalesce(${authorizationsTable.activityDescription}, '')) @@ to_tsquery('simple', ${tsQuery})` : sql`false`,
+        ilike(sql`coalesce(${authorizationsTable.activityDescription}, '')`, like),
         ilike(sql`${authorizationsTable.servicePeriodStart}::text`, like),
         ilike(sql`${authorizationsTable.servicePeriodEnd}::text`, like),
         ilike(sql`to_char(${authorizationsTable.servicePeriodStart}, 'MM/DD/YYYY')`, like),
@@ -165,10 +152,10 @@ router.get("/authorizations", requireAuth, async (req, res): Promise<void> => {
         ilike(sql`replace(${authorizationsTable.status}, '_', ' ')`, like),
         ilike(sql`coalesce(${authorizationsTable.receivedDate}::text, '')`, like),
         ilike(sql`to_char(${authorizationsTable.receivedDate}, 'MM/DD/YYYY')`, like),
-        fts(sql`${authorizationsTable.clientId} in (select id from clients where to_tsvector('simple', coalesce(first_name, '') || ' ' || coalesce(last_name, '')) @@ to_tsquery('simple', ${tsQuery}) and is_deleted = false)`),
-        fts(sql`${authorizationsTable.clientId} in (select id from clients where to_tsvector('simple', coalesce(uci_number, '')) @@ to_tsquery('simple', ${tsQuery}) and is_deleted = false)`),
-        fts(sql`${authorizationsTable.vendorId} in (select id from vendors where to_tsvector('simple', name) @@ to_tsquery('simple', ${tsQuery}))`),
-        fts(sql`${authorizationsTable.vendorId} in (select id from vendors where to_tsvector('simple', coalesce(alta_vendor_number, '')) @@ to_tsquery('simple', ${tsQuery}) or to_tsvector('simple', coalesce(contact_person, '')) @@ to_tsquery('simple', ${tsQuery}) or to_tsvector('simple', regexp_replace(coalesce(email, ''), '[^a-zA-Z0-9]+', ' ', 'g')) @@ to_tsquery('simple', ${tsQuery}))`),
+        sql`${authorizationsTable.clientId} in (select id from clients where (first_name || ' ' || last_name) ilike ${like} and is_deleted = false)`,
+        sql`${authorizationsTable.clientId} in (select id from clients where uci_number ilike ${like} and is_deleted = false)`,
+        sql`${authorizationsTable.vendorId} in (select id from vendors where name ilike ${like})`,
+        sql`${authorizationsTable.vendorId} in (select id from vendors where coalesce(alta_vendor_number, '') ilike ${like} or coalesce(contact_person, '') ilike ${like} or coalesce(email, '') ilike ${like})`,
       )!,
     );
     if (normalizedSearch === "direct_payment") {

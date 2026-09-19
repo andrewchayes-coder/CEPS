@@ -49,17 +49,6 @@ class DeletedParticipantError extends Error {
 
 const router: IRouter = Router();
 
-function toPrefixTsQuery(term: string): string {
-  return term.trim().split(/\s+/)
-    .flatMap((word) => {
-      const safeWord = word.replace(/[^a-zA-Z0-9@._+/-]/g, "");
-      return safeWord.includes("@") ? safeWord.split(/[^a-zA-Z0-9]+/) : [safeWord];
-    })
-    .filter((word) => /[a-zA-Z0-9]/.test(word))
-    .map((word) => `${word}:*`)
-    .join(" & ");
-}
-
 async function sendIntakeEmail(
   referralId: string,
   email: string,
@@ -261,24 +250,22 @@ router.get("/referrals", requireAuth, async (req, res): Promise<void> => {
   if (query.data.endDate) conditions.push(lte(referralsTable.referralDate, query.data.endDate));
   if (query.data.search) {
     const like = `%${escapeLike(query.data.search)}%`;
-    const tsQuery = toPrefixTsQuery(query.data.search);
-    const fts = (condition: SQL) => tsQuery ? condition : sql`false`;
     const normalizedSearch = query.data.search.replace(/[$,]/g, "");
     const numericLike = `%${escapeLike(normalizedSearch)}%`;
     conditions.push(
       or(
-        fts(sql`${referralsTable.clientId} in (select id from clients where to_tsvector('simple', coalesce(first_name, '') || ' ' || coalesce(last_name, '')) @@ to_tsquery('simple', ${tsQuery}) and is_deleted = false)`),
-        fts(sql`${referralsTable.serviceCoordinatorId} in (select id from users where to_tsvector('simple', name) @@ to_tsquery('simple', ${tsQuery}))`),
+        sql`${referralsTable.clientId} in (select id from clients where (first_name || ' ' || last_name) ilike ${like} and is_deleted = false)`,
+        sql`${referralsTable.serviceCoordinatorId} in (select id from users where name ilike ${like})`,
         sql`replace(lower(${referralsTable.status}), '_', ' ') ilike ${like}`,
         sql`replace(lower(${referralsTable.submittedVia}), '_', ' ') ilike ${like}`,
         sql`replace(lower(${referralsTable.intakeSentTo}), '_', ' ') ilike ${like}`,
-        tsQuery ? sql`to_tsvector('simple', regexp_replace(coalesce(${referralsTable.parentEmail}, ''), '[^a-zA-Z0-9]+', ' ', 'g')) @@ to_tsquery('simple', ${tsQuery})` : sql`false`,
+        ilike(referralsTable.parentEmail, like),
         ilike(referralsTable.signedByName, like),
         sql`replace(lower(${referralsTable.signerRelationship}), '_', ' ') ilike ${like}`,
         sql`replace(lower(${referralsTable.serviceFrequency}), '_', ' ') ilike ${like}`,
         sql`replace(lower(${referralsTable.paymentTypeRequested}), '_', ' ') ilike ${like}`,
         sql`replace(lower(${referralsTable.paymentSchedule}), '_', ' ') ilike ${like}`,
-        tsQuery ? sql`to_tsvector('simple', coalesce(${referralsTable.notes}, '')) @@ to_tsquery('simple', ${tsQuery})` : sql`false`,
+        ilike(referralsTable.notes, like),
         sql`to_char(${referralsTable.referralDate}, 'Mon FMDD, YYYY') ilike ${like}`,
         normalizedSearch ? sql`cast(${referralsTable.cost} as text) ilike ${numericLike}` : sql`false`,
         sql`cast(${referralsTable.intakeSentAt} as text) ilike ${like}`,

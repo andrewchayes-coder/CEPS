@@ -25,13 +25,17 @@ export const usersTable = pgTable("users", {
     .notNull()
     .defaultNow(),
 }, (table) => ({
-  nameFtsIdx: index("users_name_fts_idx").using(
+  nameTrgmIdx: index("users_name_trgm_idx").using(
     "gin",
-    sql`to_tsvector('simple', ${table.name})`,
+    sql`${table.name} gin_trgm_ops`,
   ),
-  emailFtsIdx: index("users_email_fts_idx").using(
+  emailTrgmIdx: index("users_email_trgm_idx").using(
     "gin",
-    sql`to_tsvector('simple', regexp_replace(${table.email}, '[^a-zA-Z0-9]+', ' ', 'g'))`,
+    sql`${table.email} gin_trgm_ops`,
+  ),
+  phoneTrgmIdx: index("users_phone_trgm_idx").using(
+    "gin",
+    sql`coalesce(${table.phone}, '') gin_trgm_ops`,
   ),
 }));
 

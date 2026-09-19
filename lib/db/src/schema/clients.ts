@@ -49,21 +49,21 @@ export const clientsTable = pgTable("clients", {
   assignedCoordinatorIdIdx: index("clients_assigned_coordinator_id_idx").on(
     table.assignedCoordinatorId,
   ),
-  firstNameFtsIdx: index("clients_first_name_fts_idx").using(
+  firstNameTrgmIdx: index("clients_first_name_trgm_idx").using(
     "gin",
-    sql`to_tsvector('simple', ${table.firstName})`,
+    sql`${table.firstName} gin_trgm_ops`,
   ),
-  lastNameFtsIdx: index("clients_last_name_fts_idx").using(
+  lastNameTrgmIdx: index("clients_last_name_trgm_idx").using(
     "gin",
-    sql`to_tsvector('simple', ${table.lastName})`,
+    sql`${table.lastName} gin_trgm_ops`,
   ),
-  uciNumberFtsIdx: index("clients_uci_number_fts_idx").using(
+  uciNumberTrgmIdx: index("clients_uci_number_trgm_idx").using(
     "gin",
-    sql`to_tsvector('simple', coalesce(${table.uciNumber}, ''))`,
+    sql`${table.uciNumber} gin_trgm_ops`,
   ),
-  fullNameFtsIdx: index("clients_full_name_fts_idx").using(
+  fullNameTrgmIdx: index("clients_full_name_trgm_idx").using(
     "gin",
-    sql`to_tsvector('simple', coalesce(${table.firstName}, '') || ' ' || coalesce(${table.lastName}, ''))`,
+    sql`(${table.firstName} || ' ' || ${table.lastName}) gin_trgm_ops`,
   ),
 }));
 

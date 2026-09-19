@@ -1,5 +1,5 @@
 {
-  "id": "c55b6ea6-d547-4c59-b5e3-86ba1d095ea4",
+  "id": "ff20cf4c-c5a4-40b9-82e2-97e51c6641ff",
   "prevId": "fc24a8aa-9620-43fa-86a7-20e3b2e8865f",
   "version": "7",
   "dialect": "postgresql",
@@ -261,11 +261,11 @@
         }
       },
       "indexes": {
-        "users_name_fts_idx": {
-          "name": "users_name_fts_idx",
+        "users_name_trgm_idx": {
+          "name": "users_name_trgm_idx",
           "columns": [
             {
-              "expression": "to_tsvector('simple', \"name\")",
+              "expression": "\"name\" gin_trgm_ops",
               "asc": true,
               "isExpression": true,
               "nulls": "last"
@@ -276,11 +276,26 @@
           "method": "gin",
           "with": {}
         },
-        "users_email_fts_idx": {
-          "name": "users_email_fts_idx",
+        "users_email_trgm_idx": {
+          "name": "users_email_trgm_idx",
           "columns": [
             {
-              "expression": "to_tsvector('simple', \"email\")",
+              "expression": "\"email\" gin_trgm_ops",
+              "asc": true,
+              "isExpression": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "gin",
+          "with": {}
+        },
+        "users_phone_trgm_idx": {
+          "name": "users_phone_trgm_idx",
+          "columns": [
+            {
+              "expression": "coalesce(\"phone\", '') gin_trgm_ops",
               "asc": true,
               "isExpression": true,
               "nulls": "last"
@@ -488,11 +503,11 @@
           "method": "btree",
           "with": {}
         },
-        "clients_first_name_fts_idx": {
-          "name": "clients_first_name_fts_idx",
+        "clients_first_name_trgm_idx": {
+          "name": "clients_first_name_trgm_idx",
           "columns": [
             {
-              "expression": "to_tsvector('simple', \"first_name\")",
+              "expression": "\"first_name\" gin_trgm_ops",
               "asc": true,
               "isExpression": true,
               "nulls": "last"
@@ -503,11 +518,11 @@
           "method": "gin",
           "with": {}
         },
-        "clients_last_name_fts_idx": {
-          "name": "clients_last_name_fts_idx",
+        "clients_last_name_trgm_idx": {
+          "name": "clients_last_name_trgm_idx",
           "columns": [
             {
-              "expression": "to_tsvector('simple', \"last_name\")",
+              "expression": "\"last_name\" gin_trgm_ops",
               "asc": true,
               "isExpression": true,
               "nulls": "last"
@@ -518,11 +533,11 @@
           "method": "gin",
           "with": {}
         },
-        "clients_uci_number_fts_idx": {
-          "name": "clients_uci_number_fts_idx",
+        "clients_uci_number_trgm_idx": {
+          "name": "clients_uci_number_trgm_idx",
           "columns": [
             {
-              "expression": "to_tsvector('simple', coalesce(\"uci_number\", ''))",
+              "expression": "\"uci_number\" gin_trgm_ops",
               "asc": true,
               "isExpression": true,
               "nulls": "last"
@@ -533,11 +548,11 @@
           "method": "gin",
           "with": {}
         },
-        "clients_full_name_fts_idx": {
-          "name": "clients_full_name_fts_idx",
+        "clients_full_name_trgm_idx": {
+          "name": "clients_full_name_trgm_idx",
           "columns": [
             {
-              "expression": "to_tsvector('simple', coalesce(\"first_name\", '') || ' ' || coalesce(\"last_name\", ''))",
+              "expression": "(\"first_name\" || ' ' || \"last_name\") gin_trgm_ops",
               "asc": true,
               "isExpression": true,
               "nulls": "last"
@@ -924,11 +939,11 @@
           "method": "btree",
           "with": {}
         },
-        "vendors_name_fts_idx": {
-          "name": "vendors_name_fts_idx",
+        "vendors_name_trgm_idx": {
+          "name": "vendors_name_trgm_idx",
           "columns": [
             {
-              "expression": "to_tsvector('simple', \"name\")",
+              "expression": "\"name\" gin_trgm_ops",
               "asc": true,
               "isExpression": true,
               "nulls": "last"
@@ -939,11 +954,11 @@
           "method": "gin",
           "with": {}
         },
-        "vendors_alta_vendor_number_fts_idx": {
-          "name": "vendors_alta_vendor_number_fts_idx",
+        "vendors_alta_vendor_number_trgm_idx": {
+          "name": "vendors_alta_vendor_number_trgm_idx",
           "columns": [
             {
-              "expression": "to_tsvector('simple', coalesce(\"alta_vendor_number\", ''))",
+              "expression": "coalesce(\"alta_vendor_number\", '') gin_trgm_ops",
               "asc": true,
               "isExpression": true,
               "nulls": "last"
@@ -954,11 +969,11 @@
           "method": "gin",
           "with": {}
         },
-        "vendors_contact_person_fts_idx": {
-          "name": "vendors_contact_person_fts_idx",
+        "vendors_contact_person_trgm_idx": {
+          "name": "vendors_contact_person_trgm_idx",
           "columns": [
             {
-              "expression": "to_tsvector('simple', coalesce(\"contact_person\", ''))",
+              "expression": "coalesce(\"contact_person\", '') gin_trgm_ops",
               "asc": true,
               "isExpression": true,
               "nulls": "last"
@@ -969,11 +984,11 @@
           "method": "gin",
           "with": {}
         },
-        "vendors_email_fts_idx": {
-          "name": "vendors_email_fts_idx",
+        "vendors_email_trgm_idx": {
+          "name": "vendors_email_trgm_idx",
           "columns": [
             {
-              "expression": "to_tsvector('simple', coalesce(\"email\", ''))",
+              "expression": "coalesce(\"email\", '') gin_trgm_ops",
               "asc": true,
               "isExpression": true,
               "nulls": "last"
@@ -1217,11 +1232,11 @@
           "method": "btree",
           "with": {}
         },
-        "referrals_parent_email_fts_idx": {
-          "name": "referrals_parent_email_fts_idx",
+        "referrals_parent_email_trgm_idx": {
+          "name": "referrals_parent_email_trgm_idx",
           "columns": [
             {
-              "expression": "to_tsvector('simple', coalesce(\"parent_email\", ''))",
+              "expression": "coalesce(\"parent_email\", '') gin_trgm_ops",
               "asc": true,
               "isExpression": true,
               "nulls": "last"
@@ -1232,11 +1247,56 @@
           "method": "gin",
           "with": {}
         },
-        "referrals_notes_fts_idx": {
-          "name": "referrals_notes_fts_idx",
+        "referrals_intake_sent_to_trgm_idx": {
+          "name": "referrals_intake_sent_to_trgm_idx",
           "columns": [
             {
-              "expression": "to_tsvector('simple', coalesce(\"notes\", ''))",
+              "expression": "coalesce(\"intake_sent_to\", '') gin_trgm_ops",
+              "asc": true,
+              "isExpression": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "gin",
+          "with": {}
+        },
+        "referrals_diagnosis_trgm_idx": {
+          "name": "referrals_diagnosis_trgm_idx",
+          "columns": [
+            {
+              "expression": "coalesce(\"diagnosis\", '') gin_trgm_ops",
+              "asc": true,
+              "isExpression": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "gin",
+          "with": {}
+        },
+        "referrals_eligibility_category_trgm_idx": {
+          "name": "referrals_eligibility_category_trgm_idx",
+          "columns": [
+            {
+              "expression": "coalesce(\"eligibility_category\", '') gin_trgm_ops",
+              "asc": true,
+              "isExpression": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "gin",
+          "with": {}
+        },
+        "referrals_notes_trgm_idx": {
+          "name": "referrals_notes_trgm_idx",
+          "columns": [
+            {
+              "expression": "coalesce(\"notes\", '') gin_trgm_ops",
               "asc": true,
               "isExpression": true,
               "nulls": "last"
@@ -1513,11 +1573,11 @@
           "method": "btree",
           "with": {}
         },
-        "authorizations_auth_number_fts_idx": {
-          "name": "authorizations_auth_number_fts_idx",
+        "authorizations_auth_number_trgm_idx": {
+          "name": "authorizations_auth_number_trgm_idx",
           "columns": [
             {
-              "expression": "to_tsvector('simple', \"auth_number\")",
+              "expression": "\"auth_number\" gin_trgm_ops",
               "asc": true,
               "isExpression": true,
               "nulls": "last"
@@ -1528,11 +1588,11 @@
           "method": "gin",
           "with": {}
         },
-        "authorizations_service_code_fts_idx": {
-          "name": "authorizations_service_code_fts_idx",
+        "authorizations_service_code_trgm_idx": {
+          "name": "authorizations_service_code_trgm_idx",
           "columns": [
             {
-              "expression": "to_tsvector('simple', \"service_code\")",
+              "expression": "\"service_code\" gin_trgm_ops",
               "asc": true,
               "isExpression": true,
               "nulls": "last"
@@ -1543,11 +1603,11 @@
           "method": "gin",
           "with": {}
         },
-        "authorizations_activity_description_fts_idx": {
-          "name": "authorizations_activity_description_fts_idx",
+        "authorizations_activity_description_trgm_idx": {
+          "name": "authorizations_activity_description_trgm_idx",
           "columns": [
             {
-              "expression": "to_tsvector('simple', coalesce(\"activity_description\", ''))",
+              "expression": "coalesce(\"activity_description\", '') gin_trgm_ops",
               "asc": true,
               "isExpression": true,
               "nulls": "last"
@@ -2011,11 +2071,26 @@
           "method": "btree",
           "with": {}
         },
-        "invoices_notes_fts_idx": {
-          "name": "invoices_notes_fts_idx",
+        "invoices_service_month_trgm_idx": {
+          "name": "invoices_service_month_trgm_idx",
           "columns": [
             {
-              "expression": "to_tsvector('simple', coalesce(\"notes\", ''))",
+              "expression": "coalesce(\"service_month\", '') gin_trgm_ops",
+              "asc": true,
+              "isExpression": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "gin",
+          "with": {}
+        },
+        "invoices_notes_trgm_idx": {
+          "name": "invoices_notes_trgm_idx",
+          "columns": [
+            {
+              "expression": "coalesce(\"notes\", '') gin_trgm_ops",
               "asc": true,
               "isExpression": true,
               "nulls": "last"
@@ -2311,11 +2386,11 @@
           "method": "btree",
           "with": {}
         },
-        "payments_qb_check_number_fts_idx": {
-          "name": "payments_qb_check_number_fts_idx",
+        "payments_qb_check_number_trgm_idx": {
+          "name": "payments_qb_check_number_trgm_idx",
           "columns": [
             {
-              "expression": "to_tsvector('simple', \"qb_check_number\")",
+              "expression": "\"qb_check_number\" gin_trgm_ops",
               "asc": true,
               "isExpression": true,
               "nulls": "last"
@@ -2326,11 +2401,11 @@
           "method": "gin",
           "with": {}
         },
-        "payments_payment_month_fts_idx": {
-          "name": "payments_payment_month_fts_idx",
+        "payments_payment_month_trgm_idx": {
+          "name": "payments_payment_month_trgm_idx",
           "columns": [
             {
-              "expression": "to_tsvector('simple', coalesce(\"payment_month\", ''))",
+              "expression": "coalesce(\"payment_month\", '') gin_trgm_ops",
               "asc": true,
               "isExpression": true,
               "nulls": "last"
@@ -2753,11 +2828,11 @@
           "method": "btree",
           "with": {}
         },
-        "remittances_alta_reference_fts_idx": {
-          "name": "remittances_alta_reference_fts_idx",
+        "remittances_alta_reference_trgm_idx": {
+          "name": "remittances_alta_reference_trgm_idx",
           "columns": [
             {
-              "expression": "to_tsvector('simple', coalesce(\"alta_reference\", ''))",
+              "expression": "coalesce(\"alta_reference\", '') gin_trgm_ops",
               "asc": true,
               "isExpression": true,
               "nulls": "last"
@@ -2768,11 +2843,11 @@
           "method": "gin",
           "with": {}
         },
-        "remittances_payment_month_fts_idx": {
-          "name": "remittances_payment_month_fts_idx",
+        "remittances_payment_month_trgm_idx": {
+          "name": "remittances_payment_month_trgm_idx",
           "columns": [
             {
-              "expression": "to_tsvector('simple', coalesce(\"payment_month\", ''))",
+              "expression": "coalesce(\"payment_month\", '') gin_trgm_ops",
               "asc": true,
               "isExpression": true,
               "nulls": "last"
@@ -2783,11 +2858,11 @@
           "method": "gin",
           "with": {}
         },
-        "remittances_batch_id_fts_idx": {
-          "name": "remittances_batch_id_fts_idx",
+        "remittances_batch_id_trgm_idx": {
+          "name": "remittances_batch_id_trgm_idx",
           "columns": [
             {
-              "expression": "to_tsvector('simple', coalesce(\"remittance_batch_id\", ''))",
+              "expression": "coalesce(\"remittance_batch_id\", '') gin_trgm_ops",
               "asc": true,
               "isExpression": true,
               "nulls": "last"
@@ -2798,11 +2873,11 @@
           "method": "gin",
           "with": {}
         },
-        "remittances_report_reference_fts_idx": {
-          "name": "remittances_report_reference_fts_idx",
+        "remittances_report_reference_trgm_idx": {
+          "name": "remittances_report_reference_trgm_idx",
           "columns": [
             {
-              "expression": "to_tsvector('simple', coalesce(\"report_reference\", ''))",
+              "expression": "coalesce(\"report_reference\", '') gin_trgm_ops",
               "asc": true,
               "isExpression": true,
               "nulls": "last"
@@ -2813,11 +2888,11 @@
           "method": "gin",
           "with": {}
         },
-        "remittances_review_reason_fts_idx": {
-          "name": "remittances_review_reason_fts_idx",
+        "remittances_review_reason_trgm_idx": {
+          "name": "remittances_review_reason_trgm_idx",
           "columns": [
             {
-              "expression": "to_tsvector('simple', coalesce(\"review_reason\", ''))",
+              "expression": "coalesce(\"review_reason\", '') gin_trgm_ops",
               "asc": true,
               "isExpression": true,
               "nulls": "last"
@@ -3435,11 +3510,11 @@
           "method": "btree",
           "with": {}
         },
-        "audit_log_action_fts_idx": {
-          "name": "audit_log_action_fts_idx",
+        "audit_log_action_trgm_idx": {
+          "name": "audit_log_action_trgm_idx",
           "columns": [
             {
-              "expression": "to_tsvector('simple', \"action\")",
+              "expression": "\"action\" gin_trgm_ops",
               "asc": true,
               "isExpression": true,
               "nulls": "last"
@@ -3450,11 +3525,11 @@
           "method": "gin",
           "with": {}
         },
-        "audit_log_entity_type_fts_idx": {
-          "name": "audit_log_entity_type_fts_idx",
+        "audit_log_entity_type_trgm_idx": {
+          "name": "audit_log_entity_type_trgm_idx",
           "columns": [
             {
-              "expression": "to_tsvector('simple', coalesce(\"entity_type\", ''))",
+              "expression": "coalesce(\"entity_type\", '') gin_trgm_ops",
               "asc": true,
               "isExpression": true,
               "nulls": "last"
@@ -3465,11 +3540,11 @@
           "method": "gin",
           "with": {}
         },
-        "audit_log_entity_id_fts_idx": {
-          "name": "audit_log_entity_id_fts_idx",
+        "audit_log_entity_id_trgm_idx": {
+          "name": "audit_log_entity_id_trgm_idx",
           "columns": [
             {
-              "expression": "to_tsvector('simple', coalesce(\"entity_id\", ''))",
+              "expression": "coalesce(\"entity_id\", '') gin_trgm_ops",
               "asc": true,
               "isExpression": true,
               "nulls": "last"
@@ -3480,11 +3555,11 @@
           "method": "gin",
           "with": {}
         },
-        "audit_log_detail_fts_idx": {
-          "name": "audit_log_detail_fts_idx",
+        "audit_log_detail_trgm_idx": {
+          "name": "audit_log_detail_trgm_idx",
           "columns": [
             {
-              "expression": "to_tsvector('simple', coalesce(\"detail\", ''))",
+              "expression": "coalesce(\"detail\", '') gin_trgm_ops",
               "asc": true,
               "isExpression": true,
               "nulls": "last"

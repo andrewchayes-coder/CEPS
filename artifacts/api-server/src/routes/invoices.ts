@@ -83,7 +83,7 @@ router.get("/invoices", requireAuth, async (req, res): Promise<void> => {
   if (query.data.clientId) conditions.push(eq(invoicesTable.clientId, query.data.clientId));
   if (query.data.vendorId) conditions.push(eq(invoicesTable.vendorId, query.data.vendorId));
   if (query.data.startDate || query.data.endDate) {
-    conditions.push(sql`exists (select 1 from invoice_line_items ili_filter where ili_filter.invoice_id = ${invoicesTable.id}
+    conditions.push(sql`${invoicesTable.id} in (select ili_filter.invoice_id from invoice_line_items ili_filter where true
       ${query.data.startDate ? sql`and ili_filter.service_month >= ${query.data.startDate.slice(0, 7)}` : sql``}
       ${query.data.endDate ? sql`and ili_filter.service_month <= ${query.data.endDate.slice(0, 7)}` : sql``})`);
   }
@@ -95,7 +95,7 @@ router.get("/invoices", requireAuth, async (req, res): Promise<void> => {
         ilike(sql`${invoicesTable.submittedDate}::text`, like),
         ilike(sql`to_char(${invoicesTable.submittedDate}, 'MM/DD/YYYY')`, like),
         ilike(sql`to_char(${invoicesTable.submittedDate}, 'MM/DD/YY')`, like),
-        sql`exists (select 1 from invoice_line_items ili_search where ili_search.invoice_id = ${invoicesTable.id} and (ili_search.service_month ilike ${like} or to_char(to_date(ili_search.service_month || '-01', 'YYYY-MM-DD'), 'Mon YYYY') ilike ${like}))`,
+        sql`${invoicesTable.id} in (select ili_search.invoice_id from invoice_line_items ili_search where ili_search.service_month ilike ${like} or to_char(to_date(ili_search.service_month || '-01', 'YYYY-MM-DD'), 'Mon YYYY') ilike ${like})`,
         ilike(sql`${invoicesTable.amountRequested}::text`, like),
         ilike(sql`to_char(${invoicesTable.amountRequested}, 'FM$999,999,999,990.00')`, like),
         ilike(sql`replace(${invoicesTable.paymentType}, '_', ' ')`, like),
@@ -105,8 +105,8 @@ router.get("/invoices", requireAuth, async (req, res): Promise<void> => {
         sql`${invoicesTable.clientId} in (select id from clients where uci_number ilike ${like} and is_deleted = false)`,
         sql`${invoicesTable.vendorId} in (select id from vendors where name ilike ${like})`,
         sql`${invoicesTable.vendorId} in (select id from vendors where coalesce(alta_vendor_number, '') ilike ${like} or coalesce(contact_person, '') ilike ${like} or coalesce(email, '') ilike ${like})`,
-         sql`exists (select 1 from invoice_line_items ili_auth inner join authorizations a_auth on a_auth.id = ili_auth.authorization_id where ili_auth.invoice_id = ${invoicesTable.id} and a_auth.auth_number ilike ${like})`,
-         sql`exists (select 1 from invoice_line_items ili_auth inner join authorizations a_auth on a_auth.id = ili_auth.authorization_id where ili_auth.invoice_id = ${invoicesTable.id} and (a_auth.service_code ilike ${like} or coalesce(a_auth.activity_description, '') ilike ${like}))`,
+        sql`${invoicesTable.id} in (select ili_auth.invoice_id from invoice_line_items ili_auth inner join authorizations a_auth on a_auth.id = ili_auth.authorization_id where a_auth.auth_number ilike ${like})`,
+        sql`${invoicesTable.id} in (select ili_auth.invoice_id from invoice_line_items ili_auth inner join authorizations a_auth on a_auth.id = ili_auth.authorization_id where a_auth.service_code ilike ${like} or coalesce(a_auth.activity_description, '') ilike ${like})`,
         sql`${invoicesTable.reviewedBy} in (select id from users where name ilike ${like})`,
       )!,
     );

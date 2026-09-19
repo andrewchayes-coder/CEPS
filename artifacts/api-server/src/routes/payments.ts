@@ -465,7 +465,7 @@ router.get("/payments", requireAuth, async (req, res): Promise<void> => {
   // Query-string filters
   if (query.data.clientId) conditions.push(eq(paymentsTable.clientId, query.data.clientId));
   if (query.data.vendorId) conditions.push(eq(paymentsTable.vendorId, query.data.vendorId));
-  if (query.data.authorizationId) conditions.push(sql`exists (select 1 from payment_allocations pa_filter where pa_filter.payment_id = ${paymentsTable.id} and pa_filter.authorization_id = ${query.data.authorizationId})`);
+  if (query.data.authorizationId) conditions.push(sql`${paymentsTable.id} in (select pa_filter.payment_id from payment_allocations pa_filter where pa_filter.authorization_id = ${query.data.authorizationId})`);
   if (query.data.paymentMonth) conditions.push(eq(paymentsTable.paymentMonth, query.data.paymentMonth));
   if (query.data.startDate) conditions.push(gte(paymentsTable.checkDate, query.data.startDate));
   if (query.data.endDate) conditions.push(lte(paymentsTable.checkDate, query.data.endDate));
@@ -502,7 +502,7 @@ router.get("/payments", requireAuth, async (req, res): Promise<void> => {
           (select sum(ra.amount) from remittance_allocations ra where ra.payment_id = ${paymentsTable.id}),
           case when ${paymentsTable.remitted} then ${paymentsTable.amount} else 0 end
         ) as text) ilike ${numericLike}` : sql`false`,
-        sql`exists (select 1 from payment_allocations pa_search inner join authorizations a_search on a_search.id = pa_search.authorization_id where pa_search.payment_id = ${paymentsTable.id} and (a_search.auth_number ilike ${like} or a_search.service_code ilike ${like} or replace(lower(a_search.status), '_', ' ') ilike ${like} or to_char(a_search.service_period_start, 'Mon FMDD, YYYY') ilike ${like} or to_char(a_search.service_period_end, 'Mon FMDD, YYYY') ilike ${like}) and a_search.is_deleted = false)`,
+        sql`${paymentsTable.id} in (select pa_search.payment_id from payment_allocations pa_search inner join authorizations a_search on a_search.id = pa_search.authorization_id where (a_search.auth_number ilike ${like} or a_search.service_code ilike ${like} or replace(lower(a_search.status), '_', ' ') ilike ${like} or to_char(a_search.service_period_start, 'Mon FMDD, YYYY') ilike ${like} or to_char(a_search.service_period_end, 'Mon FMDD, YYYY') ilike ${like}) and a_search.is_deleted = false)`,
       )!,
     );
   }

@@ -4,7 +4,9 @@ import {
   uuid,
   boolean,
   timestamp,
+  index,
 } from "drizzle-orm/pg-core";
+import { sql } from "drizzle-orm";
 import { familyRepresentativesTable } from "./familyRepresentatives";
 
 export const usersTable = pgTable("users", {
@@ -22,7 +24,20 @@ export const usersTable = pgTable("users", {
   createdAt: timestamp("created_at", { withTimezone: true })
     .notNull()
     .defaultNow(),
-});
+}, (table) => ({
+  nameTrgmIdx: index("users_name_trgm_idx").using(
+    "gin",
+    sql`${table.name} gin_trgm_ops`,
+  ),
+  emailTrgmIdx: index("users_email_trgm_idx").using(
+    "gin",
+    sql`${table.email} gin_trgm_ops`,
+  ),
+  phoneTrgmIdx: index("users_phone_trgm_idx").using(
+    "gin",
+    sql`coalesce(${table.phone}, '') gin_trgm_ops`,
+  ),
+}));
 
 export type User = typeof usersTable.$inferSelect;
 

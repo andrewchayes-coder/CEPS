@@ -13,6 +13,7 @@ import { Plus, Search, ChevronLeft, ChevronRight } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useAuth } from '@/components/auth/auth-provider';
 import { DateRangeFilter } from '@/components/date-range-filter';
+import { useDebounce } from '@/hooks/use-debounce';
 import { getInvoiceDisplayMonth } from '@/lib/invoice-utils';
 import { LogPaymentDialog } from '@/components/log-payment-dialog';
 
@@ -26,6 +27,7 @@ export default function InvoicesPage() {
   const canWriteChecks = permissions.has('check_writing');
   const [view, setView] = useState<'all' | 'validate' | 'approve' | 'checks'>('all');
   const [search, setSearch] = useState('');
+  const debouncedSearch = useDebounce(search, 300);
   const [startDate, setStartDate] = useState<string>();
   const [endDate, setEndDate] = useState<string>();
   const [page, setPage] = useState(0);
@@ -38,7 +40,7 @@ export default function InvoicesPage() {
   const params = {
     limit: PAGE_SIZE,
     offset: page * PAGE_SIZE,
-    ...(search ? { search } : {}),
+    ...(debouncedSearch ? { search: debouncedSearch } : {}),
     ...(startDate ? { startDate } : {}),
     ...(endDate ? { endDate } : {}),
     ...(sort.sortBy ? { sortBy: sort.sortBy, sortDirection: sort.sortDirection } : {}),

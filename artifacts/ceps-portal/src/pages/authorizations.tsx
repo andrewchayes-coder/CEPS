@@ -16,6 +16,7 @@ import { Input } from '@/components/ui/input';
 import { FileCheck, Plus, Search, AlertCircle, ChevronLeft, ChevronRight } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useAuth } from '@/components/auth/auth-provider';
+import { useDebounce } from '@/hooks/use-debounce';
 import { DateRangeFilter } from '@/components/date-range-filter';
 
 const PAGE_SIZE = 50;
@@ -24,6 +25,7 @@ export default function AuthorizationsPage() {
   const { user } = useAuth();
   const isStaff = user?.role === 'staff';
   const [search, setSearch] = useState('');
+  const debouncedSearch = useDebounce(search, 300);
   const [startDate, setStartDate] = useState<string>();
   const [endDate, setEndDate] = useState<string>();
   const [page, setPage] = useState(0);
@@ -36,7 +38,7 @@ export default function AuthorizationsPage() {
   const params = {
     limit: PAGE_SIZE,
     offset: page * PAGE_SIZE,
-    ...(search ? { search } : {}),
+    ...(debouncedSearch ? { search: debouncedSearch } : {}),
     ...(startDate ? { startDate } : {}),
     ...(endDate ? { endDate } : {}),
     ...(sort.sortBy ? { sortBy: sort.sortBy, sortDirection: sort.sortDirection } : {}),

@@ -8,6 +8,7 @@ import {
   timestamp,
   index,
 } from "drizzle-orm/pg-core";
+import { sql } from "drizzle-orm";
 import { clientsTable } from "./clients";
 import { authorizationsTable } from "./authorizations";
 import { vendorsTable } from "./vendors";
@@ -49,6 +50,14 @@ export const invoicesTable = pgTable("invoices", {
   vendorIdIdx: index("invoices_vendor_id_idx").on(table.vendorId),
   statusIdx: index("invoices_status_idx").on(table.status),
   createdAtIdx: index("invoices_created_at_idx").on(table.createdAt.desc()),
+  serviceMonthTrgmIdx: index("invoices_service_month_trgm_idx").using(
+    "gin",
+    sql`coalesce(${table.serviceMonth}, '') gin_trgm_ops`,
+  ),
+  notesTrgmIdx: index("invoices_notes_trgm_idx").using(
+    "gin",
+    sql`coalesce(${table.notes}, '') gin_trgm_ops`,
+  ),
 }));
 
 export type Invoice = typeof invoicesTable.$inferSelect;

@@ -17,6 +17,17 @@ import { sortedOrder } from "../lib/sorting";
 
 const router: IRouter = Router();
 
+function toPrefixTsQuery(term: string): string {
+  return term.trim().split(/\s+/)
+    .flatMap((word) => {
+      const safeWord = word.replace(/[^a-zA-Z0-9@._+/-]/g, "");
+      return safeWord.includes("@") ? safeWord.split(/[^a-zA-Z0-9]+/) : [safeWord];
+    })
+    .filter((word) => /[a-zA-Z0-9]/.test(word))
+    .map((word) => `${word}:*`)
+    .join(" & ");
+}
+
 router.get("/users", requireStaff, async (req, res): Promise<void> => {
   // Deliberately excluded from the reusable date-filter contract: this is the
   // small administrative account picker, returns an unpaginated array, and is
@@ -35,7 +46,11 @@ router.get("/users", requireStaff, async (req, res): Promise<void> => {
   if (query.data.search) {
     const escaped = query.data.search.replace(/[\\%_]/g, (c) => `\\${c}`);
     const like = `%${escaped}%`;
-    conditions.push(or(ilike(usersTable.name, like), ilike(usersTable.email, like))!);
+    const tsQuery = toPrefixTsQuery(query.data.search);
+    conditions.push(or(
+      tsQuery ? sql`to_tsvector('simple', ${usersTable.name}) @@ to_tsquery('simple', ${tsQuery})` : sql`false`,
+      tsQuery ? sql`to_tsvector('simple', regexp_replace(${usersTable.email}, '[^a-zA-Z0-9]+', ' ', 'g')) @@ to_tsquery('simple', ${tsQuery})` : sql`false`,
+    )!);
   }
   const usersQuery = db
     .select()
@@ -173,12 +188,14 @@ router.get("/audit-log", requireStaff, async (req, res): Promise<void> => {
   const search = query.data.search;
   if (search) {
     const like = `%${escapeLike(search)}%`;
+    const tsQuery = toPrefixTsQuery(search);
+    const fts = (condition: SQL) => tsQuery ? condition : sql`false`;
     conditions.push(or(
-      ilike(auditLogTable.action, like),
-      ilike(auditLogTable.entityType, like),
-      ilike(auditLogTable.entityId, like),
-      ilike(auditLogTable.detail, like),
-      sql`${auditLogTable.userId} in (select id from users where name ilike ${like} or email ilike ${like})`,
+      tsQuery ? sql`to_tsvector('simple', ${auditLogTable.action}) @@ to_tsquery('simple', ${tsQuery})` : sql`false`,
+      tsQuery ? sql`to_tsvector('simple', coalesce(${auditLogTable.entityType}, '')) @@ to_tsquery('simple', ${tsQuery})` : sql`false`,
+      tsQuery ? sql`to_tsvector('simple', coalesce(${auditLogTable.entityId}, '')) @@ to_tsquery('simple', ${tsQuery})` : sql`false`,
+      tsQuery ? sql`to_tsvector('simple', coalesce(${auditLogTable.detail}, '')) @@ to_tsquery('simple', ${tsQuery})` : sql`false`,
+      fts(sql`${auditLogTable.userId} in (select id from users where to_tsvector('simple', name) @@ to_tsquery('simple', ${tsQuery}) or to_tsvector('simple', regexp_replace(email, '[^a-zA-Z0-9]+', ' ', 'g')) @@ to_tsquery('simple', ${tsQuery}))`),
       sql`cast(${auditLogTable.createdAt} as text) ilike ${like}`,
       sql`to_char(${auditLogTable.createdAt}, 'Mon FMDD, YYYY FMHH12:MI AM') ilike ${like}`,
     )!);

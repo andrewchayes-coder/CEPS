@@ -66,25 +66,25 @@ export const remittancesTable = pgTable("remittances", {
     "remittances_positive_finite_amount",
     sql`${table.amount} > 0 AND ${table.amount} <> 'NaN'::numeric`,
   ),
-  altaReferenceTrgmIdx: index("remittances_alta_reference_trgm_idx").using(
+  altaReferenceFtsIdx: index("remittances_alta_reference_fts_idx").using(
     "gin",
-    sql`coalesce(${table.altaReference}, '') gin_trgm_ops`,
+    sql`to_tsvector('simple', coalesce(${table.altaReference}, ''))`,
   ),
-  paymentMonthTrgmIdx: index("remittances_payment_month_trgm_idx").using(
+  paymentMonthFtsIdx: index("remittances_payment_month_fts_idx").using(
     "gin",
-    sql`coalesce(${table.paymentMonth}, '') gin_trgm_ops`,
+    sql`to_tsvector('simple', coalesce(${table.paymentMonth}, ''))`,
   ),
-  batchIdTrgmIdx: index("remittances_batch_id_trgm_idx").using(
+  batchIdFtsIdx: index("remittances_batch_id_fts_idx").using(
     "gin",
-    sql`coalesce(${table.remittanceBatchId}, '') gin_trgm_ops`,
+    sql`to_tsvector('simple', coalesce(${table.remittanceBatchId}, ''))`,
   ),
-  reportReferenceTrgmIdx: index("remittances_report_reference_trgm_idx").using(
+  reportReferenceFtsIdx: index("remittances_report_reference_fts_idx").using(
     "gin",
-    sql`coalesce(${table.reportReference}, '') gin_trgm_ops`,
+    sql`to_tsvector('simple', coalesce(${table.reportReference}, ''))`,
   ),
-  reviewReasonTrgmIdx: index("remittances_review_reason_trgm_idx").using(
+  reviewReasonFtsIdx: index("remittances_review_reason_fts_idx").using(
     "gin",
-    sql`coalesce(${table.reviewReason}, '') gin_trgm_ops`,
+    sql`to_tsvector('simple', coalesce(${table.reviewReason}, ''))`,
   ),
 }));
 

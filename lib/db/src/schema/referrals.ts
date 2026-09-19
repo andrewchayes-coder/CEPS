@@ -62,25 +62,13 @@ export const referralsTable = pgTable("referrals", {
     table.serviceCoordinatorId,
   ),
   statusIdx: index("referrals_status_idx").on(table.status),
-  parentEmailTrgmIdx: index("referrals_parent_email_trgm_idx").using(
+  parentEmailFtsIdx: index("referrals_parent_email_fts_idx").using(
     "gin",
-    sql`coalesce(${table.parentEmail}, '') gin_trgm_ops`,
+    sql`to_tsvector('simple', regexp_replace(coalesce(${table.parentEmail}, ''), '[^a-zA-Z0-9]+', ' ', 'g'))`,
   ),
-  intakeSentToTrgmIdx: index("referrals_intake_sent_to_trgm_idx").using(
+  notesFtsIdx: index("referrals_notes_fts_idx").using(
     "gin",
-    sql`coalesce(${table.intakeSentTo}, '') gin_trgm_ops`,
-  ),
-  diagnosisTrgmIdx: index("referrals_diagnosis_trgm_idx").using(
-    "gin",
-    sql`coalesce(${table.diagnosis}, '') gin_trgm_ops`,
-  ),
-  eligibilityCategoryTrgmIdx: index("referrals_eligibility_category_trgm_idx").using(
-    "gin",
-    sql`coalesce(${table.eligibilityCategory}, '') gin_trgm_ops`,
-  ),
-  notesTrgmIdx: index("referrals_notes_trgm_idx").using(
-    "gin",
-    sql`coalesce(${table.notes}, '') gin_trgm_ops`,
+    sql`to_tsvector('simple', coalesce(${table.notes}, ''))`,
   ),
 }));
 

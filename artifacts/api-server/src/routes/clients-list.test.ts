@@ -343,4 +343,10 @@ describe("GET /clients filters", () => {
     expect(res.body.total).toBe(1);
     expect(res.body.items[0].id).toBe(clientA);
   });
+
+  it.each(["   ", "!!!"])("does not invoke an empty tsquery for %j search", async (search) => {
+    const res = await get(staffCookie, { search, limit: 1000 });
+    expect(res.status).toBe(200);
+    expect(Array.isArray(res.body.items)).toBe(true);
+  });
 });

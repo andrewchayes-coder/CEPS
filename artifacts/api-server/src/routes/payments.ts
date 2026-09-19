@@ -41,6 +41,17 @@ import { isValidIsoDate, parseCheckRunCsv, reconcileCheckRun } from "../lib/chec
 
 const router: IRouter = Router();
 
+function toPrefixTsQuery(term: string): string {
+  return term.trim().split(/\s+/)
+    .flatMap((word) => {
+      const safeWord = word.replace(/[^a-zA-Z0-9@._+/-]/g, "");
+      return safeWord.includes("@") ? safeWord.split(/[^a-zA-Z0-9]+/) : [safeWord];
+    })
+    .filter((word) => /[a-zA-Z0-9]/.test(word))
+    .map((word) => `${word}:*`)
+    .join(" & ");
+}
+
 class DuplicateFingerprint extends Error {}
 
 const MONTHLY_FEE_RULE = "flat_160_per_client_month";
@@ -478,19 +489,21 @@ router.get("/payments", requireAuth, async (req, res): Promise<void> => {
   if (query.data.status) conditions.push(eq(paymentsTable.paymentType, query.data.status));
   if (query.data.search) {
     const like = `%${escapeLike(query.data.search)}%`;
+    const tsQuery = toPrefixTsQuery(query.data.search);
+    const fts = (condition: SQL) => tsQuery ? condition : sql`false`;
     // Numeric searches are commonly copied from the UI ("$1,234.00").
     // Compare both the entered spelling and a normalized numeric spelling.
     const normalizedSearch = query.data.search.replace(/[$,]/g, "");
     const numericLike = `%${escapeLike(normalizedSearch)}%`;
     conditions.push(
       or(
-        ilike(paymentsTable.qbCheckNumber, like),
-        sql`${paymentsTable.clientId} in (select id from clients where (first_name || ' ' || last_name) ilike ${like} and is_deleted = false)`,
-        sql`${paymentsTable.vendorId} in (select id from vendors where name ilike ${like})`,
+        tsQuery ? sql`to_tsvector('simple', ${paymentsTable.qbCheckNumber}) @@ to_tsquery('simple', ${tsQuery})` : sql`false`,
+        fts(sql`${paymentsTable.clientId} in (select id from clients where to_tsvector('simple', coalesce(first_name, '') || ' ' || coalesce(last_name, '')) @@ to_tsquery('simple', ${tsQuery}) and is_deleted = false)`),
+        fts(sql`${paymentsTable.vendorId} in (select id from vendors where to_tsvector('simple', name) @@ to_tsquery('simple', ${tsQuery}))`),
         sql`replace(lower(${paymentsTable.paymentType}), '_', ' ') ilike ${like}`,
         sql`case when ${paymentsTable.remitted} then 'remitted' else 'unremitted' end ilike ${like}`,
         sql`case when ${paymentsTable.remitted} then 'allocated' else 'remaining' end ilike ${like}`,
-        ilike(paymentsTable.paymentMonth, like),
+        tsQuery ? sql`to_tsvector('simple', coalesce(${paymentsTable.paymentMonth}, '')) @@ to_tsquery('simple', ${tsQuery})` : sql`false`,
         sql`to_char(${paymentsTable.checkDate}, 'Mon FMDD, YYYY') ilike ${like}`,
         sql`cast(${paymentsTable.checkDate} as text) ilike ${like}`,
         normalizedSearch ? sql`cast(${paymentsTable.amount} as text) ilike ${numericLike}` : sql`false`,
@@ -502,7 +515,7 @@ router.get("/payments", requireAuth, async (req, res): Promise<void> => {
           (select sum(ra.amount) from remittance_allocations ra where ra.payment_id = ${paymentsTable.id}),
           case when ${paymentsTable.remitted} then ${paymentsTable.amount} else 0 end
         ) as text) ilike ${numericLike}` : sql`false`,
-        sql`${paymentsTable.id} in (select pa_search.payment_id from payment_allocations pa_search inner join authorizations a_search on a_search.id = pa_search.authorization_id where (a_search.auth_number ilike ${like} or a_search.service_code ilike ${like} or replace(lower(a_search.status), '_', ' ') ilike ${like} or to_char(a_search.service_period_start, 'Mon FMDD, YYYY') ilike ${like} or to_char(a_search.service_period_end, 'Mon FMDD, YYYY') ilike ${like}) and a_search.is_deleted = false)`,
+        fts(sql`${paymentsTable.id} in (select pa_search.payment_id from payment_allocations pa_search inner join authorizations a_search on a_search.id = pa_search.authorization_id where (to_tsvector('simple', a_search.auth_number) @@ to_tsquery('simple', ${tsQuery}) or to_tsvector('simple', a_search.service_code) @@ to_tsquery('simple', ${tsQuery}) or replace(lower(a_search.status), '_', ' ') ilike ${like} or to_char(a_search.service_period_start, 'Mon FMDD, YYYY') ilike ${like} or to_char(a_search.service_period_end, 'Mon FMDD, YYYY') ilike ${like}) and a_search.is_deleted = false)`),
       )!,
     );
   }
@@ -1362,19 +1375,21 @@ router.get("/remittances", requireAuth, async (req, res): Promise<void> => {
   if (query.data.search) {
     const escapeLike = (s: string) => s.replace(/[\\%_]/g, (c) => `\\${c}`);
     const like = `%${escapeLike(query.data.search)}%`;
+    const tsQuery = toPrefixTsQuery(query.data.search);
+    const fts = (condition: SQL) => tsQuery ? condition : sql`false`;
     const normalizedSearch = query.data.search.replace(/[$,]/g, "");
     const numericLike = `%${escapeLike(normalizedSearch)}%`;
     conditions.push(
       or(
-        sql`${remittancesTable.clientId} in (select id from clients where (first_name || ' ' || last_name) ilike ${like} and is_deleted = false)`,
-        ilike(remittancesTable.altaReference, like),
-        ilike(remittancesTable.reportReference, like),
-        ilike(remittancesTable.remittanceBatchId, like),
+        fts(sql`${remittancesTable.clientId} in (select id from clients where to_tsvector('simple', coalesce(first_name, '') || ' ' || coalesce(last_name, '')) @@ to_tsquery('simple', ${tsQuery}) and is_deleted = false)`),
+        tsQuery ? sql`to_tsvector('simple', coalesce(${remittancesTable.altaReference}, '')) @@ to_tsquery('simple', ${tsQuery})` : sql`false`,
+        tsQuery ? sql`to_tsvector('simple', coalesce(${remittancesTable.reportReference}, '')) @@ to_tsquery('simple', ${tsQuery})` : sql`false`,
+        tsQuery ? sql`to_tsvector('simple', coalesce(${remittancesTable.remittanceBatchId}, '')) @@ to_tsquery('simple', ${tsQuery})` : sql`false`,
         sql`replace(lower(${remittancesTable.status}), '_', ' ') ilike ${like}`,
         sql`case when ${remittancesTable.status} = 'matched' then 'allocated' else 'remaining' end ilike ${like}`,
         sql`replace(lower(${remittancesTable.source}), '_', ' ') ilike ${like}`,
-        ilike(remittancesTable.paymentMonth, like),
-        ilike(remittancesTable.reviewReason, like),
+        tsQuery ? sql`to_tsvector('simple', coalesce(${remittancesTable.paymentMonth}, '')) @@ to_tsquery('simple', ${tsQuery})` : sql`false`,
+        tsQuery ? sql`to_tsvector('simple', coalesce(${remittancesTable.reviewReason}, '')) @@ to_tsquery('simple', ${tsQuery})` : sql`false`,
         sql`case when ${remittancesTable.autoMatched} then 'auto matched' else 'unmatched' end ilike ${like}`,
         sql`to_char(${remittancesTable.remittanceDate}, 'Mon FMDD, YYYY') ilike ${like}`,
         sql`cast(${remittancesTable.remittanceDate} as text) ilike ${like}`,
@@ -1388,7 +1403,7 @@ router.get("/remittances", requireAuth, async (req, res): Promise<void> => {
           (select sum(ra.amount) from remittance_allocations ra where ra.remittance_id = ${remittancesTable.id}),
           case when ${remittancesTable.matchedPaymentId} is not null then ${remittancesTable.amount} else 0 end
         ) as text) ilike ${numericLike}` : sql`false`,
-        sql`${remittancesTable.authorizationId} in (select id from authorizations where auth_number ilike ${like} and is_deleted = false)`,
+        fts(sql`${remittancesTable.authorizationId} in (select id from authorizations where to_tsvector('simple', auth_number) @@ to_tsquery('simple', ${tsQuery}) and is_deleted = false)`),
       )!,
     );
   }

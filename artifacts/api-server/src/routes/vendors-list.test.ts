@@ -39,7 +39,13 @@ beforeAll(async () => {
 
   const [va] = await db
     .insert(vendorsTable)
-    .values({ name: `${nonce}Alpha`, preferred: true, active: true, w9Status: "on_file" })
+    .values({
+      name: `${nonce}Alpha`,
+      email: `${nonce}+billing@example.test`,
+      preferred: true,
+      active: true,
+      w9Status: "on_file",
+    })
     .returning();
   vendorA = va.id;
   const [vb] = await db
@@ -171,9 +177,19 @@ describe("GET /vendors filters", () => {
     expect(ids).not.toContain(vendorC);
   });
 
-  it("search matches the vendor name (ilike) at the SQL level", async () => {
+  it("search matches the vendor name by full-text prefix", async () => {
     const res = await get(staffCookie, { search: `${nonce}Charlie`, limit: 1000 });
     expect(res.body.total).toBe(1);
     expect(res.body.items[0].id).toBe(vendorC);
+  });
+
+  it("search matches a plus-tagged email by partial domain prefixes", async () => {
+    const res = await get(staffCookie, {
+      search: `${nonce}+bill@example.t`,
+      limit: 1000,
+    });
+    expect(res.status).toBe(200);
+    expect(res.body.total).toBe(1);
+    expect(res.body.items[0].id).toBe(vendorA);
   });
 });

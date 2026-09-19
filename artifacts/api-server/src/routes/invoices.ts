@@ -23,6 +23,17 @@ import { normalizeValidateOwnedUploadPath } from "../lib/upload-paths";
 
 const router: IRouter = Router();
 
+function toPrefixTsQuery(term: string): string {
+  return term.trim().split(/\s+/)
+    .flatMap((word) => {
+      const safeWord = word.replace(/[^a-zA-Z0-9@._+/-]/g, "");
+      return safeWord.includes("@") ? safeWord.split(/[^a-zA-Z0-9]+/) : [safeWord];
+    })
+    .filter((word) => /[a-zA-Z0-9]/.test(word))
+    .map((word) => `${word}:*`)
+    .join(" & ");
+}
+
 async function enrich(invoices: (typeof invoicesTable.$inferSelect)[]) {
   const [clientNames, vendorNames, authNums, reviewerNames, lineItems] = await Promise.all([
     clientNameMap(invoices.map((i) => i.clientId)),
@@ -89,6 +100,8 @@ router.get("/invoices", requireAuth, async (req, res): Promise<void> => {
   }
   if (query.data.search) {
     const like = `%${escapeLike(query.data.search)}%`;
+    const tsQuery = toPrefixTsQuery(query.data.search);
+    const fts = (condition: SQL) => tsQuery ? condition : sql`false`;
     conditions.push(
       or(
         ilike(sql`replace(${invoicesTable.submittedByRole}, '_', ' ')`, like),
@@ -100,14 +113,14 @@ router.get("/invoices", requireAuth, async (req, res): Promise<void> => {
         ilike(sql`to_char(${invoicesTable.amountRequested}, 'FM$999,999,999,990.00')`, like),
         ilike(sql`replace(${invoicesTable.paymentType}, '_', ' ')`, like),
         ilike(sql`replace(${invoicesTable.status}, '_', ' ')`, like),
-        ilike(sql`coalesce(${invoicesTable.notes}, '')`, like),
-        sql`${invoicesTable.clientId} in (select id from clients where (first_name || ' ' || last_name) ilike ${like} and is_deleted = false)`,
-        sql`${invoicesTable.clientId} in (select id from clients where uci_number ilike ${like} and is_deleted = false)`,
-        sql`${invoicesTable.vendorId} in (select id from vendors where name ilike ${like})`,
-        sql`${invoicesTable.vendorId} in (select id from vendors where coalesce(alta_vendor_number, '') ilike ${like} or coalesce(contact_person, '') ilike ${like} or coalesce(email, '') ilike ${like})`,
-        sql`${invoicesTable.id} in (select ili_auth.invoice_id from invoice_line_items ili_auth inner join authorizations a_auth on a_auth.id = ili_auth.authorization_id where a_auth.auth_number ilike ${like})`,
-        sql`${invoicesTable.id} in (select ili_auth.invoice_id from invoice_line_items ili_auth inner join authorizations a_auth on a_auth.id = ili_auth.authorization_id where a_auth.service_code ilike ${like} or coalesce(a_auth.activity_description, '') ilike ${like})`,
-        sql`${invoicesTable.reviewedBy} in (select id from users where name ilike ${like})`,
+        tsQuery ? sql`to_tsvector('simple', coalesce(${invoicesTable.notes}, '')) @@ to_tsquery('simple', ${tsQuery})` : sql`false`,
+        fts(sql`${invoicesTable.clientId} in (select id from clients where to_tsvector('simple', coalesce(first_name, '') || ' ' || coalesce(last_name, '')) @@ to_tsquery('simple', ${tsQuery}) and is_deleted = false)`),
+        fts(sql`${invoicesTable.clientId} in (select id from clients where to_tsvector('simple', coalesce(uci_number, '')) @@ to_tsquery('simple', ${tsQuery}) and is_deleted = false)`),
+        fts(sql`${invoicesTable.vendorId} in (select id from vendors where to_tsvector('simple', name) @@ to_tsquery('simple', ${tsQuery}))`),
+        fts(sql`${invoicesTable.vendorId} in (select id from vendors where to_tsvector('simple', coalesce(alta_vendor_number, '')) @@ to_tsquery('simple', ${tsQuery}) or to_tsvector('simple', coalesce(contact_person, '')) @@ to_tsquery('simple', ${tsQuery}) or to_tsvector('simple', regexp_replace(coalesce(email, ''), '[^a-zA-Z0-9]+', ' ', 'g')) @@ to_tsquery('simple', ${tsQuery}))`),
+        fts(sql`${invoicesTable.id} in (select ili_auth.invoice_id from invoice_line_items ili_auth inner join authorizations a_auth on a_auth.id = ili_auth.authorization_id where to_tsvector('simple', a_auth.auth_number) @@ to_tsquery('simple', ${tsQuery}))`),
+        fts(sql`${invoicesTable.id} in (select ili_auth.invoice_id from invoice_line_items ili_auth inner join authorizations a_auth on a_auth.id = ili_auth.authorization_id where to_tsvector('simple', a_auth.service_code) @@ to_tsquery('simple', ${tsQuery}) or to_tsvector('simple', coalesce(a_auth.activity_description, '')) @@ to_tsquery('simple', ${tsQuery}))`),
+        fts(sql`${invoicesTable.reviewedBy} in (select id from users where to_tsvector('simple', name) @@ to_tsquery('simple', ${tsQuery}))`),
       )!,
     );
   }

@@ -18,21 +18,21 @@ export const auditLogTable = pgTable(
   (t) => [
     index("audit_log_created_at_idx").on(t.createdAt.desc()),
     index("audit_log_user_id_created_at_idx").on(t.userId, t.createdAt.desc()),
-    index("audit_log_action_trgm_idx").using(
+    index("audit_log_action_fts_idx").using(
       "gin",
-      sql`${t.action} gin_trgm_ops`,
+      sql`to_tsvector('simple', ${t.action})`,
     ),
-    index("audit_log_entity_type_trgm_idx").using(
+    index("audit_log_entity_type_fts_idx").using(
       "gin",
-      sql`coalesce(${t.entityType}, '') gin_trgm_ops`,
+      sql`to_tsvector('simple', coalesce(${t.entityType}, ''))`,
     ),
-    index("audit_log_entity_id_trgm_idx").using(
+    index("audit_log_entity_id_fts_idx").using(
       "gin",
-      sql`coalesce(${t.entityId}, '') gin_trgm_ops`,
+      sql`to_tsvector('simple', coalesce(${t.entityId}, ''))`,
     ),
-    index("audit_log_detail_trgm_idx").using(
+    index("audit_log_detail_fts_idx").using(
       "gin",
-      sql`coalesce(${t.detail}, '') gin_trgm_ops`,
+      sql`to_tsvector('simple', coalesce(${t.detail}, ''))`,
     ),
   ],
 );

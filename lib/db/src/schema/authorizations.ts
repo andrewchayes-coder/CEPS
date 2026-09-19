@@ -59,17 +59,17 @@ export const authorizationsTable = pgTable("authorizations", {
   clientAuthNumberUnique: uniqueIndex("authorizations_client_id_auth_number_unique")
     .on(table.clientId, table.authNumber)
     .where(sql`${table.isDeleted} = false`),
-  authNumberTrgmIdx: index("authorizations_auth_number_trgm_idx").using(
+  authNumberFtsIdx: index("authorizations_auth_number_fts_idx").using(
     "gin",
-    sql`${table.authNumber} gin_trgm_ops`,
+    sql`to_tsvector('simple', ${table.authNumber})`,
   ),
-  serviceCodeTrgmIdx: index("authorizations_service_code_trgm_idx").using(
+  serviceCodeFtsIdx: index("authorizations_service_code_fts_idx").using(
     "gin",
-    sql`${table.serviceCode} gin_trgm_ops`,
+    sql`to_tsvector('simple', ${table.serviceCode})`,
   ),
-  activityDescriptionTrgmIdx: index("authorizations_activity_description_trgm_idx").using(
+  activityDescriptionFtsIdx: index("authorizations_activity_description_fts_idx").using(
     "gin",
-    sql`coalesce(${table.activityDescription}, '') gin_trgm_ops`,
+    sql`to_tsvector('simple', coalesce(${table.activityDescription}, ''))`,
   ),
 }));
 

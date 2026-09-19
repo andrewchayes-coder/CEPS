@@ -1,6 +1,6 @@
 {
-  "id": "c55b6ea6-d547-4c59-b5e3-86ba1d095ea4",
-  "prevId": "fc24a8aa-9620-43fa-86a7-20e3b2e8865f",
+  "id": "226d8bd5-0e8b-4d0c-b531-ff3768dbe425",
+  "prevId": "c55b6ea6-d547-4c59-b5e3-86ba1d095ea4",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -280,7 +280,7 @@
           "name": "users_email_fts_idx",
           "columns": [
             {
-              "expression": "to_tsvector('simple', \"email\")",
+              "expression": "to_tsvector('simple', regexp_replace(\"email\", '[^a-zA-Z0-9]+', ' ', 'g'))",
               "asc": true,
               "isExpression": true,
               "nulls": "last"
@@ -973,7 +973,7 @@
           "name": "vendors_email_fts_idx",
           "columns": [
             {
-              "expression": "to_tsvector('simple', coalesce(\"email\", ''))",
+              "expression": "to_tsvector('simple', regexp_replace(coalesce(\"email\", ''), '[^a-zA-Z0-9]+', ' ', 'g'))",
               "asc": true,
               "isExpression": true,
               "nulls": "last"
@@ -1221,7 +1221,7 @@
           "name": "referrals_parent_email_fts_idx",
           "columns": [
             {
-              "expression": "to_tsvector('simple', coalesce(\"parent_email\", ''))",
+              "expression": "to_tsvector('simple', regexp_replace(coalesce(\"parent_email\", ''), '[^a-zA-Z0-9]+', ' ', 'g'))",
               "asc": true,
               "isExpression": true,
               "nulls": "last"

@@ -20,6 +20,17 @@ import { sortedOrder } from "../lib/sorting";
 
 const router: IRouter = Router();
 
+function toPrefixTsQuery(term: string): string {
+  return term.trim().split(/\s+/)
+    .flatMap((word) => {
+      const safeWord = word.replace(/[^a-zA-Z0-9@._+/-]/g, "");
+      return safeWord.includes("@") ? safeWord.split(/[^a-zA-Z0-9]+/) : [safeWord];
+    })
+    .filter((word) => /[a-zA-Z0-9]/.test(word))
+    .map((word) => `${word}:*`)
+    .join(" & ");
+}
+
 const nullableVendorFields = [
   "altaVendorNumber", "ein", "billingAddress", "serviceAddress",
   "phone", "email", "contactPerson", "w9DocumentUrl",
@@ -82,23 +93,24 @@ router.get("/vendors", requireAuth, async (req, res): Promise<void> => {
   }
   if (query.data.search) {
     const like = `%${escapeLike(query.data.search)}%`;
+    const tsQuery = toPrefixTsQuery(query.data.search);
     conditions.push(
       or(
-        ilike(vendorsTable.name, like),
-        ilike(sql`coalesce(${vendorsTable.altaVendorNumber}, '')`, like),
+        tsQuery ? sql`to_tsvector('simple', ${vendorsTable.name}) @@ to_tsquery('simple', ${tsQuery})` : sql`false`,
+        tsQuery ? sql`to_tsvector('simple', coalesce(${vendorsTable.altaVendorNumber}, '')) @@ to_tsquery('simple', ${tsQuery})` : sql`false`,
         ilike(sql`coalesce(${vendorsTable.ein}, '')`, like),
         ilike(sql`coalesce(${vendorsTable.billingAddress}, '')`, like),
         ilike(sql`coalesce(${vendorsTable.serviceAddress}, '')`, like),
         ilike(sql`coalesce(${vendorsTable.phone}, '')`, like),
-        ilike(sql`coalesce(${vendorsTable.email}, '')`, like),
-        ilike(sql`coalesce(${vendorsTable.contactPerson}, '')`, like),
+        tsQuery ? sql`to_tsvector('simple', regexp_replace(coalesce(${vendorsTable.email}, ''), '[^a-zA-Z0-9]+', ' ', 'g')) @@ to_tsquery('simple', ${tsQuery})` : sql`false`,
+        tsQuery ? sql`to_tsvector('simple', coalesce(${vendorsTable.contactPerson}, '')) @@ to_tsquery('simple', ${tsQuery})` : sql`false`,
         ilike(sql`replace(${vendorsTable.w9Status}, '_', ' ')`, like),
         ilike(sql`case when ${vendorsTable.active} then 'active' else 'inactive' end`, like),
         ilike(sql`case when ${vendorsTable.preferred} then 'preferred' else 'not preferred' end`, like),
         sql`${vendorsTable.id} in (select vendor_id from authorizations where authorizations.is_deleted = false and (
-            authorizations.auth_number ilike ${like}
-            or coalesce(authorizations.activity_description, '') ilike ${like}
-            or authorizations.service_code ilike ${like}
+            ${tsQuery ? sql`to_tsvector('simple', authorizations.auth_number) @@ to_tsquery('simple', ${tsQuery})` : sql`false`}
+            or ${tsQuery ? sql`to_tsvector('simple', coalesce(authorizations.activity_description, '')) @@ to_tsquery('simple', ${tsQuery})` : sql`false`}
+            or ${tsQuery ? sql`to_tsvector('simple', authorizations.service_code) @@ to_tsquery('simple', ${tsQuery})` : sql`false`}
             or replace(authorizations.status, '_', ' ') ilike ${like}
             or authorizations.max_period_amount::text ilike ${like}
           ))`,

@@ -6,6 +6,7 @@
  * OpenAPI spec version: 0.1.0
  */
 import type { UserInputLinkedRecordType } from './userInputLinkedRecordType';
+import type { UserInputPermissionsItem } from './userInputPermissionsItem';
 import type { UserInputRole } from './userInputRole';
 
 export interface UserInput {
@@ -17,4 +18,5 @@ export interface UserInput {
   password?: string;
   linkedRecordId?: string;
   linkedRecordType?: UserInputLinkedRecordType;
+  permissions?: UserInputPermissionsItem[];
 }

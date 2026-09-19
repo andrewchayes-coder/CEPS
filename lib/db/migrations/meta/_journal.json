@@ -183,6 +183,13 @@
       "when": 1789824009906,
       "tag": "0025_optimal_silver_fox",
       "breakpoints": true
+    },
+    {
+      "idx": 26,
+      "version": "7",
+      "when": 1789825000000,
+      "tag": "0026_staff_permissions",
+      "breakpoints": true
     }
   ]
 }

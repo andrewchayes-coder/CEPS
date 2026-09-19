@@ -67,7 +67,9 @@ import type {
   InviteInput,
   InviteResult,
   Invoice,
+  InvoiceDecisionInput,
   InvoiceInput,
+  InvoiceQueueResponse,
   InvoiceUpdate,
   InvoiceValidationInput,
   InvoiceValidationResult,
@@ -83,6 +85,8 @@ import type {
   ListInvoicesParams,
   ListPayments200,
   ListPaymentsParams,
+  ListReadyForCheckWritingInvoicesParams,
+  ListReadyToApproveInvoicesParams,
   ListReferrals200,
   ListReferralsParams,
   ListRemittances200,
@@ -4550,6 +4554,234 @@ export const useValidateInvoice = <TError = ErrorType<unknown>,
       > => {
       return useMutation(getValidateInvoiceMutationOptions(options));
     }
+
+export const getDecideInvoiceUrl = (id: string,) => {
+
+
+
+
+  return `/api/invoices/${id}/decision`
+}
+
+/**
+ * @summary Approve or reject a validated invoice
+ */
+export const decideInvoice = async (id: string,
+    invoiceDecisionInput: InvoiceDecisionInput, options?: Parameters<typeof customFetch>[1]): Promise<Invoice> => {
+
+  return customFetch<Invoice>(getDecideInvoiceUrl(id),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(invoiceDecisionInput)
+  }
+);}
+
+
+
+
+
+export const getDecideInvoiceMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof decideInvoice>>, TError,{id: string;data: BodyType<InvoiceDecisionInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof decideInvoice>>, TError,{id: string;data: BodyType<InvoiceDecisionInput>}, TContext> => {
+
+const mutationKey = ['decideInvoice'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof decideInvoice>>, {id: string;data: BodyType<InvoiceDecisionInput>}> = (props) => {
+          const {id,data} = props ?? {};
+
+          return  decideInvoice(id,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type DecideInvoiceMutationResult = NonNullable<Awaited<ReturnType<typeof decideInvoice>>>
+    export type DecideInvoiceMutationBody = BodyType<InvoiceDecisionInput>
+    export type DecideInvoiceMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Approve or reject a validated invoice
+ */
+export const useDecideInvoice = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof decideInvoice>>, TError,{id: string;data: BodyType<InvoiceDecisionInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof decideInvoice>>,
+        TError,
+        {id: string;data: BodyType<InvoiceDecisionInput>},
+        TContext
+      > => {
+      return useMutation(getDecideInvoiceMutationOptions(options));
+    }
+
+export const getListReadyToApproveInvoicesUrl = (params?: ListReadyToApproveInvoicesParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/invoices/queues/ready-to-approve?${stringifiedParams}` : `/api/invoices/queues/ready-to-approve`
+}
+
+export const listReadyToApproveInvoices = async (params?: ListReadyToApproveInvoicesParams, options?: Parameters<typeof customFetch>[1]): Promise<InvoiceQueueResponse> => {
+
+  return customFetch<InvoiceQueueResponse>(getListReadyToApproveInvoicesUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListReadyToApproveInvoicesQueryKey = (params?: ListReadyToApproveInvoicesParams,) => {
+    return [
+    `/api/invoices/queues/ready-to-approve`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getListReadyToApproveInvoicesQueryOptions = <TData = Awaited<ReturnType<typeof listReadyToApproveInvoices>>, TError = ErrorType<unknown>>(params?: ListReadyToApproveInvoicesParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listReadyToApproveInvoices>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListReadyToApproveInvoicesQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listReadyToApproveInvoices>>> = ({ signal }) => listReadyToApproveInvoices(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listReadyToApproveInvoices>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListReadyToApproveInvoicesQueryResult = NonNullable<Awaited<ReturnType<typeof listReadyToApproveInvoices>>>
+export type ListReadyToApproveInvoicesQueryError = ErrorType<unknown>
+
+
+
+export function useListReadyToApproveInvoices<TData = Awaited<ReturnType<typeof listReadyToApproveInvoices>>, TError = ErrorType<unknown>>(
+ params?: ListReadyToApproveInvoicesParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listReadyToApproveInvoices>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListReadyToApproveInvoicesQueryOptions(params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getListReadyForCheckWritingInvoicesUrl = (params?: ListReadyForCheckWritingInvoicesParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/invoices/queues/ready-for-check-writing?${stringifiedParams}` : `/api/invoices/queues/ready-for-check-writing`
+}
+
+export const listReadyForCheckWritingInvoices = async (params?: ListReadyForCheckWritingInvoicesParams, options?: Parameters<typeof customFetch>[1]): Promise<InvoiceQueueResponse> => {
+
+  return customFetch<InvoiceQueueResponse>(getListReadyForCheckWritingInvoicesUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListReadyForCheckWritingInvoicesQueryKey = (params?: ListReadyForCheckWritingInvoicesParams,) => {
+    return [
+    `/api/invoices/queues/ready-for-check-writing`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getListReadyForCheckWritingInvoicesQueryOptions = <TData = Awaited<ReturnType<typeof listReadyForCheckWritingInvoices>>, TError = ErrorType<unknown>>(params?: ListReadyForCheckWritingInvoicesParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listReadyForCheckWritingInvoices>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListReadyForCheckWritingInvoicesQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listReadyForCheckWritingInvoices>>> = ({ signal }) => listReadyForCheckWritingInvoices(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listReadyForCheckWritingInvoices>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListReadyForCheckWritingInvoicesQueryResult = NonNullable<Awaited<ReturnType<typeof listReadyForCheckWritingInvoices>>>
+export type ListReadyForCheckWritingInvoicesQueryError = ErrorType<unknown>
+
+
+
+export function useListReadyForCheckWritingInvoices<TData = Awaited<ReturnType<typeof listReadyForCheckWritingInvoices>>, TError = ErrorType<unknown>>(
+ params?: ListReadyForCheckWritingInvoicesParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listReadyForCheckWritingInvoices>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListReadyForCheckWritingInvoicesQueryOptions(params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
 
 export const getListPaymentsUrl = (params?: ListPaymentsParams,) => {
   const normalizedParams = new URLSearchParams();

@@ -13,8 +13,9 @@ import {
   ValidateInvoiceBody,
   ValidateInvoiceResponse,
 } from "@workspace/api-zod";
-import { requireAuth, requireStaff, audit } from "../lib/auth";
-import { invoiceJson, clientNameMap, vendorNameMap, authNumberMap, userNameMap, notDeleted, diffDetail } from "../lib/serializers";
+import { requireAuth, requireStaff, requirePermission, audit, getUserPermissions } from "../lib/auth";
+import { invoiceJson, clientNameMap, vendorNameMap, authNumberMap, userNameMap, notDeleted, diffDetail, authorizationTotalsPaid, effectiveAuthStatus } from "../lib/serializers";
+import type { Request, Response } from "express";
 import { checkDuplicatePayment } from "../lib/paymentDuplicateCheck";
 import { sortedOrder } from "../lib/sorting";
 import { softDeleteInvoice, validateParticipantLinks } from "../lib/participantLinks";
@@ -222,6 +223,9 @@ router.post("/invoices", requireAuth, async (req, res): Promise<void> => {
   res.status(201).json(CreateInvoiceResponse.parse((await enrich([invoice]))[0]));
 });
 
+router.get("/invoices/queues/ready-to-approve", requirePermission("invoice_approve"), (req, res) => invoiceQueue(req, res, "validated", "invoice_approve"));
+router.get("/invoices/queues/ready-for-check-writing", requirePermission("check_writing"), (req, res) => invoiceQueue(req, res, "approved", "check_writing"));
+
 router.get("/invoices/:id", requireAuth, async (req, res): Promise<void> => {
   const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
   const [invoice] = await db
@@ -260,6 +264,10 @@ router.patch("/invoices/:id", requireStaff, async (req, res): Promise<void> => {
     return;
   }
   const { lineItems, ...invoicePatch } = parsed.data;
+  if (invoicePatch.status === "validated" || invoicePatch.status === "approved" || invoicePatch.status === "rejected" || invoicePatch.status === "duplicate") {
+    res.status(400).json({ error: "Use the invoice validation or decision endpoint to change invoice workflow status" });
+    return;
+  }
   const existingLineItems = lineItems
     ? await db.select().from(invoiceLineItemsTable).where(eq(invoiceLineItemsTable.invoiceId, id))
     : [];
@@ -379,7 +387,82 @@ router.patch("/invoices/:id", requireStaff, async (req, res): Promise<void> => {
   res.json(UpdateInvoiceResponse.parse((await enrich([invoice]))[0]));
 });
 
-router.post("/invoices/:id/validate", requireStaff, async (req, res): Promise<void> => {
+router.post("/invoices/:id/decision", requirePermission("invoice_approve"), async (req, res): Promise<void> => {
+  const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+  const body = req.body as { status?: unknown; notes?: unknown };
+  if (body.status !== "approved" && body.status !== "rejected") {
+    res.status(400).json({ error: "status must be approved or rejected" });
+    return;
+  }
+  const decision = { status: body.status as "approved" | "rejected", notes: typeof body.notes === "string" ? body.notes : undefined };
+  const result = await db.transaction(async (tx) => {
+    const txDb = tx as unknown as typeof db;
+    const [invoice] = await tx.select().from(invoicesTable)
+      .where(and(eq(invoicesTable.id, id), notDeleted(invoicesTable)));
+    if (!invoice) return { error: "Invoice not found", code: 404 as const };
+    if (invoice.status !== "validated") return { error: "Only validated invoices can be approved or rejected", code: 409 as const };
+    if (decision.status === "approved") {
+      const lines = await tx.select().from(invoiceLineItemsTable).where(eq(invoiceLineItemsTable.invoiceId, id));
+      const authIds = [...new Set(lines.map((line) => line.authorizationId))];
+      const auths = authIds.length ? await tx.select().from(authorizationsTable).where(inArray(authorizationsTable.id, authIds)) : [];
+      const totals = await authorizationTotalsPaid(authIds);
+      for (const line of lines) {
+        const auth = auths.find((candidate) => candidate.id === line.authorizationId);
+        const status = auth ? effectiveAuthStatus(auth, totals.get(auth.id) ?? 0) : "missing";
+        if (!auth || status !== "active") {
+          return {
+            error: `Cannot approve line ${line.id} for service month ${line.serviceMonth}: authorization ${auth?.authNumber ?? line.authorizationId} is ${status}`,
+            code: 409 as const,
+          };
+        }
+      }
+    }
+    const [updated] = await tx.update(invoicesTable).set({
+      status: decision.status,
+      reviewedBy: req.user!.id,
+      reviewedAt: new Date(),
+      ...(decision.notes !== undefined ? { notes: decision.notes } : {}),
+    }).where(eq(invoicesTable.id, id)).returning();
+    return { invoice: updated };
+  });
+  if ("error" in result) {
+    res.status((result as { code: number }).code).json({ error: result.error });
+    return;
+  }
+  await audit(req.user!.id, `${decision.status}_invoice`, "invoice", id, decision.notes);
+  res.json(UpdateInvoiceResponse.parse((await enrich([result.invoice]))[0]));
+});
+
+async function invoiceQueue(req: Request, res: Response, status: string, permission: "invoice_log_validate" | "invoice_approve" | "check_writing") {
+  const user = req.user!;
+  if (user.role !== "staff" || !(await getUserPermissions(user.id)).includes(permission)) {
+    res.status(403).json({ error: "Missing required permission", permission });
+    return;
+  }
+  const pagination = ListInvoicesQueryParams.pick({ limit: true, offset: true }).safeParse(req.query);
+  if (!pagination.success) {
+    res.status(400).json({ error: pagination.error.message });
+    return;
+  }
+  const limit = Math.min(Math.max(pagination.data.limit ?? 50, 1), 1000);
+  const offset = Math.max(pagination.data.offset ?? 0, 0);
+  const conditions: SQL[] = [eq(invoicesTable.status, status), notDeleted(invoicesTable)];
+  if (status === "approved") {
+    conditions.push(sql`not exists (
+      select 1 from payments p
+      where p.invoice_id = ${invoicesTable.id} and p.is_deleted = false
+    )`);
+  }
+  const [rows, [{ total }]] = await Promise.all([
+    db.select().from(invoicesTable).where(and(...conditions))
+      .orderBy(sql`coalesce(${invoicesTable.submittedDate}, ${invoicesTable.createdAt}::date) asc`, invoicesTable.createdAt, invoicesTable.id)
+      .limit(limit).offset(offset),
+    db.select({ total: count() }).from(invoicesTable).where(and(...conditions)),
+  ]);
+  res.json({ items: await enrich(rows), total });
+}
+
+router.post("/invoices/:id/validate", requirePermission("invoice_log_validate"), async (req, res): Promise<void> => {
   const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
   const parsed = ValidateInvoiceBody.safeParse(req.body ?? {});
   if (!parsed.success) {

@@ -1,0 +1,76 @@
+In the CEPS app, replace the current single flat invoice list with three
+purpose-built queues matching CEPS's actual paper handoff process: logging
+and validating an invoice, approving it, and writing the check. The
+underlying status values already exist (`pending_review` → `validated` →
+`approved`/`rejected`, plus a `POST /invoices/:id/validate` endpoint and a
+`PATCH` that sets approved/rejected) — this is about staging the UI, gating
+each stage by an assignable permission rather than a named person, and
+adding one missing safety check. It is NOT about rebuilding the state
+machine, and it must NOT hardcode any of this to specific staff members —
+whoever currently does this work should be assignable and reassignable
+without a code change.
+
+1. Today every account with `role = 'staff'` has full access to everything
+   (the admin screen literally labels it "Admin (Full Access)") — there's no
+   way to scope one staff member down to just one stage of this workflow.
+   Add a permission layer on top of the existing staff role rather than
+   replacing it: a new `staff_permissions` table (or a `text[]` column on
+   `users`) holding zero or more of three named permissions —
+   `invoice_log_validate`, `invoice_approve`, `check_writing` — assignable
+   per staff user. A single person can hold more than one permission (e.g.
+   one person might both validate and approve at a smaller organization),
+   so this is a set, not a mutually-exclusive role picker.
+
+2. On the Admin > Users screen (where staff accounts are already managed),
+   add a way to toggle these three permissions for any account with
+   `role = 'staff'` — checkboxes are fine, shown only for staff accounts
+   (service coordinators, vendors, and parent/self accounts don't get this
+   section). To avoid locking everyone out on deploy, backfill every
+   existing `staff` user with all three permissions granted by default;
+   CEPS can narrow individual accounts down afterward.
+
+3. Add a `requirePermission(...)` check (mirroring the existing
+   `requireRole`/`requireStaff` pattern in `lib/auth.ts`) and use it to gate:
+   the invoice validate action (`invoice_log_validate`), the invoice approve
+   action (`invoice_approve`), and the new check-writing queue below
+   (`check_writing`). A staff account without the relevant permission should
+   not see that action/queue in the UI, and the API should reject the action
+   server-side too, not just hide the button.
+
+4. Add a "Ready to Approve" view: invoices with status `validated`, not yet
+   `approved`/`rejected`, sorted oldest-first. Visible to staff with
+   `invoice_approve`.
+
+5. Add a "Ready for Check Writing" view: invoices with status `approved`
+   that don't yet have a payment logged against them (check the correct
+   current link given this morning's Prompt 7 line-items/allocations
+   changes). Sorted oldest-first. This is the queue that replaces the
+   physical box — nothing else should appear in it. Visible to staff with
+   `check_writing`.
+
+6. Add the missing safety check: prevent approving an invoice (moving it to
+   `approved`) when any of its line items' authorizations are currently
+   "exhausted" or "expired" (using the existing effective-status
+   derivation). Block the approval with a clear error naming which line
+   item and which authorization is the problem, rather than silently
+   approving a partial invoice or guessing which line items to drop — leave
+   that judgment call to staff. Apply the same check as a second guard when
+   a payment is actually logged against an approved invoice, in case an
+   authorization's status changed between approval and payment.
+
+7. Keep the existing flat invoices list available for search/audit purposes
+   (any staff may still need to find any invoice regardless of stage), but
+   the two new permission-gated queues are what staff doing this work should
+   actually work from day to day.
+
+Write tests covering: a staff user with `invoice_approve` sees an invoice
+with a validated status in the Ready to Approve queue and it disappears once
+approved or rejected; a staff user WITHOUT `invoice_approve` cannot approve
+via the API even if they guess the endpoint; the same pair of tests for
+`check_writing` and the Ready for Check Writing queue; an approved invoice
+with no payment appears in that queue and disappears once a payment is
+logged against it; attempting to approve an invoice with a line item against
+an exhausted or expired authorization is rejected with an error naming that
+line item; an invoice with all line items against healthy authorizations
+approves normally; and every existing `staff` account is backfilled with all
+three permissions on migration so nobody is locked out.

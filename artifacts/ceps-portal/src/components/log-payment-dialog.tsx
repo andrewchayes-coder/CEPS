@@ -41,6 +41,7 @@ const PAYMENT_TYPES = ['direct_payment', 'reimbursement', 'fee'];
 type Props = {
   onSaved?: () => void;
   defaultClientId?: string;
+  defaultInvoiceId?: string;
 };
 
 const emptyForm = {
@@ -63,12 +64,12 @@ function asDuplicateError(err: unknown): DuplicatePaymentError | null {
   return null;
 }
 
-export function LogPaymentDialog({ onSaved, defaultClientId }: Props) {
+export function LogPaymentDialog({ onSaved, defaultClientId, defaultInvoiceId }: Props) {
   const { toast } = useToast();
   const createPayment = useCreatePayment();
 
   const [open, setOpen] = useState(false);
-  const [form, setForm] = useState({ ...emptyForm, clientId: defaultClientId ?? '' });
+  const [form, setForm] = useState({ ...emptyForm, clientId: defaultClientId ?? '', invoiceId: defaultInvoiceId ?? 'none' });
   const [duplicate, setDuplicate] = useState<Payment[] | null>(null);
   const [justification, setJustification] = useState('');
 
@@ -103,6 +104,12 @@ export function LogPaymentDialog({ onSaved, defaultClientId }: Props) {
     [...(validatedInvoicesData?.items ?? []), ...(approvedInvoicesData?.items ?? [])].map((invoice) => [invoice.id, invoice]),
   ).values()).sort((a, b) => getInvoiceDisplayMonth(a).localeCompare(getInvoiceDisplayMonth(b)));
   const invoicesLoading = validatedInvoicesLoading || approvedInvoicesLoading;
+
+  React.useEffect(() => {
+    if (defaultInvoiceId && invoices.some((invoice) => invoice.id === defaultInvoiceId)) {
+      handleInvoiceChange(defaultInvoiceId);
+    }
+  }, [defaultInvoiceId, invoices.length]);
 
   const [authSearch, setAuthSearch] = useState('');
   const debouncedAuthSearch = useDebounce(authSearch, 300);
@@ -171,7 +178,7 @@ export function LogPaymentDialog({ onSaved, defaultClientId }: Props) {
   const computedTotal = form.allocations.reduce((sum, a) => sum + (parseFloat(a.amount) || 0), 0);
 
   const reset = () => {
-    setForm({ ...emptyForm, clientId: defaultClientId ?? '' });
+    setForm({ ...emptyForm, clientId: defaultClientId ?? '', invoiceId: defaultInvoiceId ?? 'none' });
     setDuplicate(null);
     setJustification('');
   };

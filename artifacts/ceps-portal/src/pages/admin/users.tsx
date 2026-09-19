@@ -38,6 +38,7 @@ const userSchema = z.object({
   phone: z.string().optional(),
   role: z.enum(['staff', 'service_coordinator']),
   password: z.string().min(8, 'Password must be at least 8 characters').optional().or(z.literal('')),
+  permissions: z.array(z.enum(['invoice_log_validate', 'invoice_approve', 'check_writing'])).default(['invoice_log_validate', 'invoice_approve', 'check_writing']),
 });
 
 export default function UsersPage() {
@@ -117,6 +118,7 @@ export default function UsersPage() {
       phone: '',
       role: 'staff',
       password: '',
+      permissions: ['invoice_log_validate', 'invoice_approve', 'check_writing'],
     }
   });
 
@@ -127,7 +129,8 @@ export default function UsersPage() {
         email: data.email,
         phone: data.phone || undefined,
         role: data.role as UserInputRole,
-        password: data.password || undefined
+        password: data.password || undefined,
+        permissions: data.role === 'staff' ? data.permissions : [],
       }
     }, {
       onSuccess: () => {
@@ -196,6 +199,25 @@ export default function UsersPage() {
                     <FormMessage />
                   </FormItem>
                 )} />
+                <FormField control={form.control} name="permissions" render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Invoice permissions</FormLabel>
+                    {form.watch('role') === 'staff' ? (
+                      <div className="space-y-2">
+                        {([
+                          ['invoice_log_validate', 'Log and validate invoices'],
+                          ['invoice_approve', 'Approve or reject invoices'],
+                          ['check_writing', 'Write checks / log payments'],
+                        ] as const).map(([value, label]) => (
+                          <label key={value} className="flex items-center gap-2 text-sm">
+                            <input type="checkbox" data-testid={`checkbox-create-permission-${value}`} checked={field.value.includes(value)} onChange={(e) => field.onChange(e.target.checked ? [...field.value, value] : field.value.filter((p) => p !== value))} />
+                            {label}
+                          </label>
+                        ))}
+                      </div>
+                    ) : <p className="text-sm text-muted-foreground">Permissions apply only to staff accounts.</p>}
+                  </FormItem>
+                )} />
                 <DialogFooter className="pt-4">
                   <Button type="submit" disabled={createUser.isPending}>
                     {createUser.isPending ? 'Creating...' : 'Create User'}
@@ -209,7 +231,7 @@ export default function UsersPage() {
 
       <Card>
         <CardContent className="p-0">
-          <Table>
+         <Table>
             <TableHeader>
               <TableRow>
                 <SortableTableHead sortDirection={sort.key === 'name' ? sort.direction : null} onSort={() => onSort('name')}>Name</SortableTableHead>
@@ -243,7 +265,7 @@ export default function UsersPage() {
                     </TableCell>
                     <TableCell className="text-right">
                       <div className="flex items-center justify-end gap-2">
-                        <EditUserDialog id={u.id} user={{ name: u.name, email: u.email, role: u.role, phone: u.phone }} onSaved={refetch} />
+                         <EditUserDialog id={u.id} user={{ name: u.name, email: u.email, role: u.role, phone: u.phone, permissions: (u as any).permissions }} onSaved={refetch} />
                         {u.active && !isSelf && (
                           <AlertDialog>
                             <AlertDialogTrigger asChild>

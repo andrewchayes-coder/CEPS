@@ -367,7 +367,7 @@ export function vendorJson(v: Vendor) {
   };
 }
 
-export function userJson(u: User) {
+export function userJson(u: User, permissions: string[] = []) {
   return {
     id: u.id,
     name: u.name,
@@ -379,6 +379,7 @@ export function userJson(u: User) {
     active: u.active,
     lastLogin: iso(u.lastLogin),
     createdAt: iso(u.createdAt),
+    permissions,
   };
 }
 

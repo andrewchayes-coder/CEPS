@@ -2,7 +2,7 @@ import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { inArray, eq, and } from "drizzle-orm";
 import {
   db, usersTable, sessionsTable, clientsTable, paymentsTable, feesTable, auditLogTable,
-  authorizationsTable, paymentAllocationsTable, invoicesTable, vendorsTable, remittancesTable,
+  authorizationsTable, paymentAllocationsTable, invoicesTable, invoiceLineItemsTable, vendorsTable, remittancesTable, staffPermissionsTable,
 } from "@workspace/db";
 import request from "supertest";
 import app from "../app";
@@ -25,6 +25,7 @@ beforeAll(async () => {
     .values({ name: "Pay Staff", email: `${nonce}-staff@test.local`, role: "staff" })
     .returning();
   staffId = staff.id;
+  await db.insert(staffPermissionsTable).values({ userId: staffId, permission: "check_writing" });
 
   const [client] = await db
     .insert(clientsTable)
@@ -62,6 +63,7 @@ afterAll(async () => {
   await db.delete(invoicesTable).where(inArray(invoicesTable.clientId, [clientId, otherClientId]));
   await db.delete(authorizationsTable).where(inArray(authorizationsTable.clientId, [clientId, otherClientId]));
   await db.delete(auditLogTable).where(eq(auditLogTable.userId, staffId));
+  await db.delete(staffPermissionsTable).where(eq(staffPermissionsTable.userId, staffId));
   await db.delete(sessionsTable).where(eq(sessionsTable.userId, staffId));
   await db.delete(clientsTable).where(inArray(clientsTable.id, [clientId, otherClientId]));
   await db.delete(vendorsTable).where(inArray(vendorsTable.name, [`${nonce}-valid-vendor`, `${nonce}-other-vendor`, `${nonce}-other-vendor-2`]));
@@ -409,12 +411,18 @@ describe("financial PATCH participant links", () => {
     const [invoice] = await db.insert(invoicesTable).values({
       clientId, authorizationId: auth.id, vendorId: vendor.id, submittedByRole: "staff",
       submittedDate: "2026-01-01", serviceMonth: "2026-01", amountRequested: "100.00",
-      paymentType: "direct_payment", status: "pending_review",
+      paymentType: "direct_payment", status: "approved",
     }).returning();
-    const payment = await createPayment("100.00");
+    await db.insert(invoiceLineItemsTable).values({
+      invoiceId: invoice.id, authorizationId: auth.id, serviceMonth: "2026-01", amount: "100.00",
+    });
+    const [payment] = await db.insert(paymentsTable).values({
+      clientId, qbCheckNumber: `${nonce}-legacy-link-${checkCounter++}`, checkDate: "2026-01-15",
+      paymentMonth: "2026-01", paymentType: "direct_payment", amount: "100.00", source: "manual",
+    } as any).returning();
     const res = await request(app).patch(`/api/payments/${payment.id}`).set("Cookie", cookie)
       .send({ authorizationId: auth.id, invoiceId: invoice.id, vendorId: vendor.id });
-    expect(res.status).toBe(200);
+    expect(res.status, `${res.text} ${JSON.stringify(res.body)}`).toBe(200);
     expect(res.body.authorizationId).toBe(auth.id);
     expect(res.body.invoiceId).toBe(invoice.id);
     expect(res.body.vendorId).toBe(vendor.id);

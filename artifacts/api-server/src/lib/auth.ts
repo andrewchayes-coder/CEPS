@@ -1,7 +1,7 @@
 import { randomBytes, scryptSync, timingSafeEqual } from "node:crypto";
 import type { Request, Response, NextFunction } from "express";
 import { eq, and, gt } from "drizzle-orm";
-import { db, usersTable, sessionsTable, auditLogTable, type User } from "@workspace/db";
+import { db, usersTable, sessionsTable, auditLogTable, staffPermissionsTable, type User, type StaffPermission } from "@workspace/db";
 
 const SESSION_COOKIE = "ceps_session";
 const SESSION_DAYS = 30;
@@ -121,6 +121,28 @@ export function requireRole(...roles: string[]) {
 export const requireStaff = requireRole("staff");
 export const requireStaffOrCoordinator = requireRole("staff", "service_coordinator");
 
+export async function getUserPermissions(userId: string, database: typeof db = db): Promise<StaffPermission[]> {
+  const rows = await database.select({ permission: staffPermissionsTable.permission })
+    .from(staffPermissionsTable).where(eq(staffPermissionsTable.userId, userId));
+  return rows.map((row) => row.permission as StaffPermission);
+}
+
+export function requirePermission(permission: StaffPermission) {
+  return async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    const user = req.user ?? (await getSessionUser(req));
+    if (!user) {
+      res.status(401).json({ error: "Not authenticated" });
+      return;
+    }
+    if (user.role !== "staff" || !(await getUserPermissions(user.id)).includes(permission)) {
+      res.status(403).json({ error: "Missing required permission", permission });
+      return;
+    }
+    req.user = user;
+    next();
+  };
+}
+
 export async function audit(
   userId: string | null,
   action: string,
@@ -132,7 +154,7 @@ export async function audit(
   await database.insert(auditLogTable).values({ userId, action, entityType, entityId, detail });
 }
 
-export function sessionUserJson(user: User) {
+export function sessionUserJson(user: User, permissions: string[] = []) {
   return {
     id: user.id,
     name: user.name,
@@ -140,6 +162,7 @@ export function sessionUserJson(user: User) {
     role: user.role,
     linkedRecordId: user.linkedRecordId,
     linkedRecordType: user.linkedRecordType,
+    permissions,
   };
 }
 

@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { useListInvoices } from '@workspace/api-client-react';
+import React, { useState, useEffect } from 'react';
+import { useListInvoices, useListReadyToApproveInvoices, useListReadyForCheckWritingInvoices } from '@workspace/api-client-react';
 import { Link } from 'wouter';
 import { ClientLink, VendorLink } from '@/components/entity-links';
 import {
@@ -9,16 +9,22 @@ import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Plus, Search, Receipt, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Plus, Search, ChevronLeft, ChevronRight } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useAuth } from '@/components/auth/auth-provider';
 import { DateRangeFilter } from '@/components/date-range-filter';
 import { getInvoiceDisplayMonth } from '@/lib/invoice-utils';
+import { LogPaymentDialog } from '@/components/log-payment-dialog';
 
 const PAGE_SIZE = 50;
 
 export default function InvoicesPage() {
   const { user } = useAuth();
+  const permissions = new Set((user as any)?.permissions ?? []);
+  const canValidate = permissions.has('invoice_log_validate');
+  const canApprove = permissions.has('invoice_approve');
+  const canWriteChecks = permissions.has('check_writing');
+  const [view, setView] = useState<'all' | 'validate' | 'approve' | 'checks'>('all');
   const [search, setSearch] = useState('');
   const [startDate, setStartDate] = useState<string>();
   const [endDate, setEndDate] = useState<string>();
@@ -38,11 +44,20 @@ export default function InvoicesPage() {
     ...(sort.sortBy ? { sortBy: sort.sortBy, sortDirection: sort.sortDirection } : {}),
   };
   const { data, isLoading } = useListInvoices(params, {
-    query: { queryKey: ['invoices', params] },
+    query: { queryKey: ['invoices', params], enabled: view === 'all' },
   });
+  const queueParams = { limit: PAGE_SIZE, offset: page * PAGE_SIZE };
+  const validateQueue = useListInvoices({ status: 'pending_review', ...queueParams }, { query: { enabled: view === 'validate' && canValidate, queryKey: ['invoice-validate-queue', queueParams] } });
+  const approveQueue = useListReadyToApproveInvoices(queueParams, { query: { enabled: view === 'approve' && canApprove, queryKey: ['invoice-approve-queue', queueParams] } });
+  const checkQueue = useListReadyForCheckWritingInvoices(queueParams, { query: { enabled: view === 'checks' && canWriteChecks, queryKey: ['invoice-check-queue', queueParams] } });
+  const queueData = view === 'validate' ? validateQueue.data : view === 'approve' ? approveQueue.data : view === 'checks' ? checkQueue.data : null;
   const invoices = data?.items;
-  const total = data?.total ?? 0;
+  const displayedInvoices = view === 'all' ? invoices : queueData?.items;
+  const total = view === 'all' ? (data?.total ?? 0) : (queueData?.total ?? 0);
   const pageCount = Math.max(1, Math.ceil(total / PAGE_SIZE));
+  useEffect(() => {
+    if (page >= pageCount) setPage(Math.max(0, pageCount - 1));
+  }, [page, pageCount]);
 
   return (
     <div className="space-y-6">
@@ -58,9 +73,15 @@ export default function InvoicesPage() {
           </Link>
         </Button>
       </div>
+      <div className="flex flex-wrap gap-2" role="tablist" aria-label="Invoice queues">
+         <Button variant={view === 'all' ? 'default' : 'outline'} onClick={() => { setView('all'); setPage(0); }} data-testid="tab-invoices-all">All Invoices</Button>
+         {canValidate && <Button variant={view === 'validate' ? 'default' : 'outline'} onClick={() => { setView('validate'); setPage(0); }} data-testid="tab-invoices-validate">Log &amp; Validate</Button>}
+         {canApprove && <Button variant={view === 'approve' ? 'default' : 'outline'} onClick={() => { setView('approve'); setPage(0); }} data-testid="tab-invoices-approve">Ready to Approve</Button>}
+         {canWriteChecks && <Button variant={view === 'checks' ? 'default' : 'outline'} onClick={() => { setView('checks'); setPage(0); }} data-testid="tab-invoices-checks">Ready for Check Writing</Button>}
+      </div>
 
       <Card>
-        <CardHeader className="pb-3 border-b">
+        {view === 'all' && <CardHeader className="pb-3 border-b">
           <div className="flex flex-col sm:flex-row gap-4 items-center justify-between">
             <div className="relative w-full sm:max-w-md">
               <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
@@ -85,7 +106,7 @@ export default function InvoicesPage() {
               />
             </div>
           </div>
-        </CardHeader>
+        </CardHeader>}
         <CardContent className="p-0">
           <Table>
             <TableHeader>
@@ -100,16 +121,16 @@ export default function InvoicesPage() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {isLoading ? (
+              {(view === 'all' ? isLoading : (view === 'validate' ? validateQueue.isLoading : view === 'approve' ? approveQueue.isLoading : checkQueue.isLoading)) ? (
                 <InvoicesTableSkeleton />
-              ) : invoices?.length === 0 ? (
+              ) : displayedInvoices?.length === 0 ? (
                 <TableRow>
                   <TableCell colSpan={7} className="h-24 text-center text-muted-foreground">
                     No invoices found.
                   </TableCell>
                 </TableRow>
               ) : (
-                invoices?.map((invoice) => (
+                displayedInvoices?.map((invoice) => (
                   <TableRow key={invoice.id}>
                     <TableCell className="font-medium whitespace-nowrap">{getInvoiceDisplayMonth(invoice)}</TableCell>
                     <TableCell><VendorLink id={invoice.vendorId} name={invoice.vendorName} /></TableCell>
@@ -134,9 +155,19 @@ export default function InvoicesPage() {
                       <StatusBadge status={invoice.status} />
                     </TableCell>
                     <TableCell className="text-right">
-                      <Button variant="ghost" size="sm" asChild>
-                        <Link href={`/invoices/${invoice.id}`}>View</Link>
-                      </Button>
+                      <div className="flex justify-end gap-2">
+                        <Button variant="ghost" size="sm" asChild>
+                          <Link href={`/invoices/${invoice.id}`}>View</Link>
+                        </Button>
+                         {view === 'checks' && <LogPaymentDialog
+                           defaultClientId={invoice.clientId}
+                           defaultInvoiceId={invoice.id}
+                           onSaved={() => {
+                             setPage((current) => Math.min(current, Math.max(0, Math.ceil(Math.max(0, (checkQueue.data?.total ?? 1) - 1) / PAGE_SIZE) - 1)));
+                             void checkQueue.refetch();
+                           }}
+                         />}
+                      </div>
                     </TableCell>
                   </TableRow>
                 ))

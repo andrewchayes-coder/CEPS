@@ -3,7 +3,7 @@ import { and, eq, inArray } from "drizzle-orm";
 import request from "supertest";
 import {
   auditLogTable, authorizationsTable, clientsTable, db, feesTable, invoicesTable,
-  paymentsTable, paymentAllocationsTable, invoiceLineItemsTable, remittanceAllocationsTable, remittancesTable, sessionsTable, usersTable, vendorsTable,
+  paymentsTable, paymentAllocationsTable, invoiceLineItemsTable, remittanceAllocationsTable, remittancesTable, sessionsTable, usersTable, vendorsTable, staffPermissionsTable,
 } from "@workspace/db";
 import app from "../app";
 import { newToken } from "../lib/auth";
@@ -20,6 +20,7 @@ const paymentBody = (extra: Record<string, unknown> = {}) => ({
 beforeAll(async () => {
   const [staff] = await db.insert(usersTable).values({ name: "Link Staff", email: `${nonce}@test.local`, role: "staff" }).returning();
   staffId = staff.id;
+  await db.insert(staffPermissionsTable).values({ userId: staffId, permission: "check_writing" });
   const clients = await db.insert(clientsTable).values([
     { firstName: "Link", lastName: "A", dateOfBirth: "2000-01-01", uciNumber: `${nonce}-a` },
     { firstName: "Link", lastName: "B", dateOfBirth: "2000-01-01", uciNumber: `${nonce}-b` },
@@ -33,8 +34,8 @@ beforeAll(async () => {
   ]).returning();
   authA = auths[0].id; authB = auths[1].id;
   const invoices = await db.insert(invoicesTable).values([
-    { clientId: clientA, authorizationId: authA, vendorId: vendorA, submittedByRole: "staff", submittedDate: "2026-03-01", serviceMonth: "2026-03", amountRequested: "100.00", paymentType: "direct_payment" },
-    { clientId: clientB, authorizationId: authB, vendorId: vendorB, submittedByRole: "staff", submittedDate: "2026-03-01", serviceMonth: "2026-03", amountRequested: "100.00", paymentType: "direct_payment" },
+    { clientId: clientA, authorizationId: authA, vendorId: vendorA, submittedByRole: "staff", submittedDate: "2026-03-01", serviceMonth: "2026-03", amountRequested: "100.00", paymentType: "direct_payment", status: "approved" },
+    { clientId: clientB, authorizationId: authB, vendorId: vendorB, submittedByRole: "staff", submittedDate: "2026-03-01", serviceMonth: "2026-03", amountRequested: "100.00", paymentType: "direct_payment", status: "approved" },
   ]).returning();
   await db.insert(invoiceLineItemsTable).values([
     { invoiceId: invoices[0].id, authorizationId: authA, serviceMonth: "2026-03", amount: "100.00" },
@@ -59,6 +60,7 @@ afterAll(async () => {
   await db.delete(sessionsTable).where(eq(sessionsTable.userId, staffId));
   await db.delete(clientsTable).where(inArray(clientsTable.id, [clientA, clientB, deletedClientId].filter(Boolean)));
   await db.delete(vendorsTable).where(inArray(vendorsTable.id, [vendorA, vendorB]));
+  await db.delete(staffPermissionsTable).where(eq(staffPermissionsTable.userId, staffId));
   await db.delete(usersTable).where(eq(usersTable.id, staffId));
 });
 

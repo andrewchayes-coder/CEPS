@@ -5,6 +5,7 @@
  * CEPS Portal API — referral intake, authorizations, invoices, payments, remittances, vendors, reporting
  * OpenAPI spec version: 0.1.0
  */
+import type { UserUpdatePermissionsItem } from './userUpdatePermissionsItem';
 import type { UserUpdateRole } from './userUpdateRole';
 
 export interface UserUpdate {
@@ -14,4 +15,5 @@ export interface UserUpdate {
   role?: UserUpdateRole;
   active?: boolean;
   password?: string;
+  permissions?: UserUpdatePermissionsItem[];
 }

@@ -10,6 +10,7 @@ import {
   paymentAllocationsTable,
   feesTable,
   auditLogTable,
+  staffPermissionsTable,
 } from "@workspace/db";
 import request from "supertest";
 import app from "../app";
@@ -33,6 +34,7 @@ beforeAll(async () => {
     .values({ name: "Dup Staff", email: `${nonce}-staff@test.local`, role: "staff" })
     .returning();
   staffId = staff.id;
+  await db.insert(staffPermissionsTable).values({ userId: staffId, permission: "check_writing" });
 
   const [client] = await db
     .insert(clientsTable)
@@ -69,6 +71,7 @@ afterAll(async () => {
   await db.delete(paymentsTable).where(eq(paymentsTable.clientId, clientId));
   await db.delete(authorizationsTable).where(eq(authorizationsTable.clientId, clientId));
   await db.delete(auditLogTable).where(eq(auditLogTable.userId, staffId));
+  await db.delete(staffPermissionsTable).where(eq(staffPermissionsTable.userId, staffId));
   await db.delete(sessionsTable).where(eq(sessionsTable.userId, staffId));
   await db.delete(clientsTable).where(eq(clientsTable.id, clientId));
   await db.delete(usersTable).where(inArray(usersTable.id, [staffId]));

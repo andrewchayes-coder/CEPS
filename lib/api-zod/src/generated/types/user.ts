@@ -6,6 +6,7 @@
  * OpenAPI spec version: 0.1.0
  */
 import type { UserLinkedRecordType } from './userLinkedRecordType';
+import type { UserPermissionsItem } from './userPermissionsItem';
 import type { UserRole } from './userRole';
 
 export interface User {
@@ -24,4 +25,5 @@ export interface User {
   lastLogin?: string | null;
   /** @nullable */
   createdAt?: string | null;
+  permissions?: UserPermissionsItem[];
 }

@@ -82,7 +82,8 @@ export const LoginResponse = zod.object({
   "email": zod.string(),
   "role": zod.enum(['staff', 'service_coordinator', 'parent_guardian', 'self', 'vendor']),
   "linkedRecordId": zod.string().nullish(),
-  "linkedRecordType": zod.union([zod.literal('client'),zod.literal('vendor'),zod.literal(null)]).nullish()
+  "linkedRecordType": zod.union([zod.literal('client'),zod.literal('vendor'),zod.literal(null)]).nullish(),
+  "permissions": zod.array(zod.enum(['invoice_log_validate', 'invoice_approve', 'check_writing'])).optional()
 })
 
 
@@ -103,7 +104,8 @@ export const GetCurrentUserResponse = zod.object({
   "email": zod.string(),
   "role": zod.enum(['staff', 'service_coordinator', 'parent_guardian', 'self', 'vendor']),
   "linkedRecordId": zod.string().nullish(),
-  "linkedRecordType": zod.union([zod.literal('client'),zod.literal('vendor'),zod.literal(null)]).nullish()
+  "linkedRecordType": zod.union([zod.literal('client'),zod.literal('vendor'),zod.literal(null)]).nullish(),
+  "permissions": zod.array(zod.enum(['invoice_log_validate', 'invoice_approve', 'check_writing'])).optional()
 })
 
 
@@ -124,7 +126,8 @@ export const UpdateMeResponse = zod.object({
   "email": zod.string(),
   "role": zod.enum(['staff', 'service_coordinator', 'parent_guardian', 'self', 'vendor']),
   "linkedRecordId": zod.string().nullish(),
-  "linkedRecordType": zod.union([zod.literal('client'),zod.literal('vendor'),zod.literal(null)]).nullish()
+  "linkedRecordType": zod.union([zod.literal('client'),zod.literal('vendor'),zod.literal(null)]).nullish(),
+  "permissions": zod.array(zod.enum(['invoice_log_validate', 'invoice_approve', 'check_writing'])).optional()
 })
 
 
@@ -154,7 +157,8 @@ export const ConsumeMagicLinkResponse = zod.object({
   "email": zod.string(),
   "role": zod.enum(['staff', 'service_coordinator', 'parent_guardian', 'self', 'vendor']),
   "linkedRecordId": zod.string().nullish(),
-  "linkedRecordType": zod.union([zod.literal('client'),zod.literal('vendor'),zod.literal(null)]).nullish()
+  "linkedRecordType": zod.union([zod.literal('client'),zod.literal('vendor'),zod.literal(null)]).nullish(),
+  "permissions": zod.array(zod.enum(['invoice_log_validate', 'invoice_approve', 'check_writing'])).optional()
 })
 
 
@@ -211,7 +215,8 @@ export const AcceptInviteResponse = zod.object({
   "email": zod.string(),
   "role": zod.enum(['staff', 'service_coordinator', 'parent_guardian', 'self', 'vendor']),
   "linkedRecordId": zod.string().nullish(),
-  "linkedRecordType": zod.union([zod.literal('client'),zod.literal('vendor'),zod.literal(null)]).nullish()
+  "linkedRecordType": zod.union([zod.literal('client'),zod.literal('vendor'),zod.literal(null)]).nullish(),
+  "permissions": zod.array(zod.enum(['invoice_log_validate', 'invoice_approve', 'check_writing'])).optional()
 })
 
 
@@ -235,7 +240,8 @@ export const ListUsersResponseItem = zod.object({
   "linkedRecordType": zod.union([zod.literal('client'),zod.literal('vendor'),zod.literal(null)]).nullish(),
   "active": zod.boolean(),
   "lastLogin": zod.string().nullish(),
-  "createdAt": zod.string().nullish()
+  "createdAt": zod.string().nullish(),
+  "permissions": zod.array(zod.enum(['invoice_log_validate', 'invoice_approve', 'check_writing'])).optional()
 })
 export const ListUsersResponse = zod.array(ListUsersResponseItem)
 
@@ -250,7 +256,8 @@ export const CreateUserBody = zod.object({
   "role": zod.enum(['staff', 'service_coordinator', 'parent_guardian', 'self', 'vendor']),
   "password": zod.string().optional().describe('Initial password for staff\/coordinator accounts'),
   "linkedRecordId": zod.string().optional(),
-  "linkedRecordType": zod.enum(['client', 'vendor']).optional()
+  "linkedRecordType": zod.enum(['client', 'vendor']).optional(),
+  "permissions": zod.array(zod.enum(['invoice_log_validate', 'invoice_approve', 'check_writing'])).optional()
 })
 
 export const CreateUserResponse = zod.object({
@@ -263,7 +270,8 @@ export const CreateUserResponse = zod.object({
   "linkedRecordType": zod.union([zod.literal('client'),zod.literal('vendor'),zod.literal(null)]).nullish(),
   "active": zod.boolean(),
   "lastLogin": zod.string().nullish(),
-  "createdAt": zod.string().nullish()
+  "createdAt": zod.string().nullish(),
+  "permissions": zod.array(zod.enum(['invoice_log_validate', 'invoice_approve', 'check_writing'])).optional()
 })
 
 
@@ -280,7 +288,8 @@ export const UpdateUserBody = zod.object({
   "phone": zod.string().optional(),
   "role": zod.enum(['staff', 'service_coordinator', 'parent_guardian', 'self', 'vendor']).optional(),
   "active": zod.boolean().optional(),
-  "password": zod.string().optional()
+  "password": zod.string().optional(),
+  "permissions": zod.array(zod.enum(['invoice_log_validate', 'invoice_approve', 'check_writing'])).optional()
 })
 
 export const UpdateUserResponse = zod.object({
@@ -293,7 +302,8 @@ export const UpdateUserResponse = zod.object({
   "linkedRecordType": zod.union([zod.literal('client'),zod.literal('vendor'),zod.literal(null)]).nullish(),
   "active": zod.boolean(),
   "lastLogin": zod.string().nullish(),
-  "createdAt": zod.string().nullish()
+  "createdAt": zod.string().nullish(),
+  "permissions": zod.array(zod.enum(['invoice_log_validate', 'invoice_approve', 'check_writing'])).optional()
 })
 
 
@@ -2427,6 +2437,155 @@ export const ValidateInvoiceResponse = zod.object({
   "passed": zod.boolean(),
   "message": zod.string()
 }))
+})
+
+
+/**
+ * @summary Approve or reject a validated invoice
+ */
+export const DecideInvoiceParams = zod.object({
+  "id": zod.coerce.string()
+})
+
+export const DecideInvoiceBody = zod.object({
+  "status": zod.enum(['approved', 'rejected']),
+  "notes": zod.string().optional()
+})
+
+export const decideInvoiceResponseLineItemsItemServiceMonthRegExp = new RegExp('^\\d{4}-(0[1-9]|1[0-2])$');
+export const decideInvoiceResponseLineItemsItemAmountRegExp = new RegExp('^\\d+(\\.\\d{1,2})?$');
+
+
+export const DecideInvoiceResponse = zod.object({
+  "id": zod.string(),
+  "clientId": zod.string(),
+  "clientName": zod.string().nullish(),
+  "authorizationId": zod.string().nullish(),
+  "authNumber": zod.string().nullish(),
+  "vendorId": zod.string().nullish(),
+  "vendorName": zod.string().nullish(),
+  "submittedByRole": zod.enum(['vendor', 'parent', 'staff']),
+  "submittedDate": zod.string(),
+  "serviceMonth": zod.string().nullable().describe('Deprecated compatibility value; line item months are authoritative.'),
+  "amountRequested": zod.string(),
+  "paymentType": zod.enum(['direct_payment', 'reimbursement']),
+  "documentUrl": zod.string().nullish(),
+  "status": zod.enum(['pending_review', 'validated', 'approved', 'rejected', 'duplicate']),
+  "reviewedBy": zod.string().nullish(),
+  "reviewedByName": zod.string().nullish(),
+  "reviewedAt": zod.string().nullish(),
+  "notes": zod.string().nullish(),
+  "createdAt": zod.string().nullish(),
+  "lineItems": zod.array(zod.object({
+  "id": zod.string(),
+  "authorizationId": zod.string(),
+  "authNumber": zod.string().nullish(),
+  "serviceMonth": zod.string().regex(decideInvoiceResponseLineItemsItemServiceMonthRegExp),
+  "amount": zod.string().regex(decideInvoiceResponseLineItemsItemAmountRegExp),
+  "documentUrl": zod.string().nullish()
+}))
+})
+
+
+export const listReadyToApproveInvoicesQueryLimitDefault = 50;
+export const listReadyToApproveInvoicesQueryLimitMax = 1000;
+
+export const listReadyToApproveInvoicesQueryOffsetDefault = 0;
+export const listReadyToApproveInvoicesQueryOffsetMin = 0;
+
+
+
+export const ListReadyToApproveInvoicesQueryParams = zod.object({
+  "limit": zod.coerce.number().int().min(1).max(listReadyToApproveInvoicesQueryLimitMax).default(listReadyToApproveInvoicesQueryLimitDefault),
+  "offset": zod.coerce.number().int().min(listReadyToApproveInvoicesQueryOffsetMin).default(listReadyToApproveInvoicesQueryOffsetDefault)
+})
+
+export const listReadyToApproveInvoicesResponseItemsItemLineItemsItemServiceMonthRegExp = new RegExp('^\\d{4}-(0[1-9]|1[0-2])$');
+export const listReadyToApproveInvoicesResponseItemsItemLineItemsItemAmountRegExp = new RegExp('^\\d+(\\.\\d{1,2})?$');
+
+
+export const ListReadyToApproveInvoicesResponse = zod.object({
+  "items": zod.array(zod.object({
+  "id": zod.string(),
+  "clientId": zod.string(),
+  "clientName": zod.string().nullish(),
+  "authorizationId": zod.string().nullish(),
+  "authNumber": zod.string().nullish(),
+  "vendorId": zod.string().nullish(),
+  "vendorName": zod.string().nullish(),
+  "submittedByRole": zod.enum(['vendor', 'parent', 'staff']),
+  "submittedDate": zod.string(),
+  "serviceMonth": zod.string().nullable().describe('Deprecated compatibility value; line item months are authoritative.'),
+  "amountRequested": zod.string(),
+  "paymentType": zod.enum(['direct_payment', 'reimbursement']),
+  "documentUrl": zod.string().nullish(),
+  "status": zod.enum(['pending_review', 'validated', 'approved', 'rejected', 'duplicate']),
+  "reviewedBy": zod.string().nullish(),
+  "reviewedByName": zod.string().nullish(),
+  "reviewedAt": zod.string().nullish(),
+  "notes": zod.string().nullish(),
+  "createdAt": zod.string().nullish(),
+  "lineItems": zod.array(zod.object({
+  "id": zod.string(),
+  "authorizationId": zod.string(),
+  "authNumber": zod.string().nullish(),
+  "serviceMonth": zod.string().regex(listReadyToApproveInvoicesResponseItemsItemLineItemsItemServiceMonthRegExp),
+  "amount": zod.string().regex(listReadyToApproveInvoicesResponseItemsItemLineItemsItemAmountRegExp),
+  "documentUrl": zod.string().nullish()
+}))
+})),
+  "total": zod.int()
+})
+
+
+export const listReadyForCheckWritingInvoicesQueryLimitDefault = 50;
+export const listReadyForCheckWritingInvoicesQueryLimitMax = 1000;
+
+export const listReadyForCheckWritingInvoicesQueryOffsetDefault = 0;
+export const listReadyForCheckWritingInvoicesQueryOffsetMin = 0;
+
+
+
+export const ListReadyForCheckWritingInvoicesQueryParams = zod.object({
+  "limit": zod.coerce.number().int().min(1).max(listReadyForCheckWritingInvoicesQueryLimitMax).default(listReadyForCheckWritingInvoicesQueryLimitDefault),
+  "offset": zod.coerce.number().int().min(listReadyForCheckWritingInvoicesQueryOffsetMin).default(listReadyForCheckWritingInvoicesQueryOffsetDefault)
+})
+
+export const listReadyForCheckWritingInvoicesResponseItemsItemLineItemsItemServiceMonthRegExp = new RegExp('^\\d{4}-(0[1-9]|1[0-2])$');
+export const listReadyForCheckWritingInvoicesResponseItemsItemLineItemsItemAmountRegExp = new RegExp('^\\d+(\\.\\d{1,2})?$');
+
+
+export const ListReadyForCheckWritingInvoicesResponse = zod.object({
+  "items": zod.array(zod.object({
+  "id": zod.string(),
+  "clientId": zod.string(),
+  "clientName": zod.string().nullish(),
+  "authorizationId": zod.string().nullish(),
+  "authNumber": zod.string().nullish(),
+  "vendorId": zod.string().nullish(),
+  "vendorName": zod.string().nullish(),
+  "submittedByRole": zod.enum(['vendor', 'parent', 'staff']),
+  "submittedDate": zod.string(),
+  "serviceMonth": zod.string().nullable().describe('Deprecated compatibility value; line item months are authoritative.'),
+  "amountRequested": zod.string(),
+  "paymentType": zod.enum(['direct_payment', 'reimbursement']),
+  "documentUrl": zod.string().nullish(),
+  "status": zod.enum(['pending_review', 'validated', 'approved', 'rejected', 'duplicate']),
+  "reviewedBy": zod.string().nullish(),
+  "reviewedByName": zod.string().nullish(),
+  "reviewedAt": zod.string().nullish(),
+  "notes": zod.string().nullish(),
+  "createdAt": zod.string().nullish(),
+  "lineItems": zod.array(zod.object({
+  "id": zod.string(),
+  "authorizationId": zod.string(),
+  "authNumber": zod.string().nullish(),
+  "serviceMonth": zod.string().regex(listReadyForCheckWritingInvoicesResponseItemsItemLineItemsItemServiceMonthRegExp),
+  "amount": zod.string().regex(listReadyForCheckWritingInvoicesResponseItemsItemLineItemsItemAmountRegExp),
+  "documentUrl": zod.string().nullish()
+}))
+})),
+  "total": zod.int()
 })
 
 

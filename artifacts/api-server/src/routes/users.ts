@@ -1,6 +1,6 @@
 import { Router, type IRouter } from "express";
 import { eq, desc, and, or, gte, lte, ilike, count, sql, type SQL } from "drizzle-orm";
-import { db, usersTable, auditLogTable } from "@workspace/db";
+import { db, usersTable, auditLogTable, staffPermissionsTable, STAFF_PERMISSIONS } from "@workspace/db";
 import {
   ListUsersQueryParams,
   ListUsersResponse,
@@ -11,7 +11,7 @@ import {
   ListAuditLogQueryParams,
   ListAuditLogResponse,
 } from "@workspace/api-zod";
-import { requireStaff, hashPassword, audit, iso } from "../lib/auth";
+import { requireStaff, hashPassword, audit, iso, getUserPermissions } from "../lib/auth";
 import { userJson, userNameMap, diffDetail } from "../lib/serializers";
 import { sortedOrder } from "../lib/sorting";
 
@@ -47,7 +47,8 @@ router.get("/users", requireStaff, async (req, res): Promise<void> => {
   const users = query.data.limit != null
     ? await usersQuery.limit(Math.min(Math.max(query.data.limit, 1), 100))
     : await usersQuery;
-  res.json(ListUsersResponse.parse(users.map(userJson)));
+  const result = await Promise.all(users.map(async (user) => userJson(user, await getUserPermissions(user.id))));
+  res.json(ListUsersResponse.parse(result));
 });
 
 router.post("/users", requireStaff, async (req, res): Promise<void> => {
@@ -62,9 +63,13 @@ router.post("/users", requireStaff, async (req, res): Promise<void> => {
     res.status(409).json({ error: "A user with this email already exists" });
     return;
   }
-  const [user] = await db
-    .insert(usersTable)
-    .values({
+  const permissions = parsed.data.role === "staff"
+    ? (parsed.data.permissions === undefined ? [...STAFF_PERMISSIONS] : parsed.data.permissions)
+    : [];
+  const user = await db.transaction(async (tx) => {
+    const [created] = await tx
+      .insert(usersTable)
+      .values({
       name: parsed.data.name,
       email,
       phone: parsed.data.phone,
@@ -73,10 +78,13 @@ router.post("/users", requireStaff, async (req, res): Promise<void> => {
       linkedRecordId: parsed.data.linkedRecordId,
       linkedRecordType: parsed.data.linkedRecordType,
       accountCreatedAt: new Date(),
-    })
-    .returning();
+      })
+      .returning();
+    if (permissions.length) await tx.insert(staffPermissionsTable).values(permissions.map((permission) => ({ userId: created.id, permission })));
+    return created;
+  });
   await audit(req.user!.id, "create_user", "user", user.id, `Created ${user.role} account for ${user.email}`);
-  res.status(201).json(CreateUserResponse.parse(userJson(user)));
+  res.status(201).json(CreateUserResponse.parse(userJson(user, permissions)));
 });
 
 router.patch("/users/:id", requireStaff, async (req, res): Promise<void> => {
@@ -86,7 +94,7 @@ router.patch("/users/:id", requireStaff, async (req, res): Promise<void> => {
     res.status(400).json({ error: parsed.error.message });
     return;
   }
-  const { password, ...rest } = parsed.data;
+  const { password, permissions: requestedPermissions, ...rest } = parsed.data;
   const updates: Record<string, unknown> = { ...rest };
   if (password) updates.passwordHash = hashPassword(password);
   const [before] = await db.select().from(usersTable).where(eq(usersTable.id, id));
@@ -110,9 +118,20 @@ router.patch("/users/:id", requireStaff, async (req, res): Promise<void> => {
     delete updates.email;
     delete (rest as Record<string, unknown>).email;
   }
-  const [user] = await db.update(usersTable).set(updates).where(eq(usersTable.id, id)).returning();
+  const effectiveRole = (rest.role as string | undefined) ?? before.role;
+  const permissions = effectiveRole === "staff"
+    ? (requestedPermissions === undefined
+      ? (before.role === "staff" ? await getUserPermissions(before.id) : [...STAFF_PERMISSIONS])
+      : requestedPermissions)
+    : [];
+  const user = await db.transaction(async (tx) => {
+    const [updated] = await tx.update(usersTable).set(updates).where(eq(usersTable.id, id)).returning();
+    await tx.delete(staffPermissionsTable).where(eq(staffPermissionsTable.userId, id));
+    if (permissions.length) await tx.insert(staffPermissionsTable).values(permissions.map((permission) => ({ userId: id, permission })));
+    return updated;
+  });
   await audit(req.user!.id, "update_user", "user", user.id, diffDetail(before, rest, Object.keys(rest)));
-  res.json(UpdateUserResponse.parse(userJson(user)));
+  res.json(UpdateUserResponse.parse(userJson(user, permissions)));
 });
 
 router.delete("/users/:id", requireStaff, async (req, res): Promise<void> => {

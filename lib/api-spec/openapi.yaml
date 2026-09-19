@@ -1353,6 +1353,65 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/InvoiceValidationResult"
+  /invoices/{id}/decision:
+    post:
+      operationId: decideInvoice
+      tags: [invoices]
+      summary: Approve or reject a validated invoice
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/InvoiceDecisionInput"
+      responses:
+        "200":
+          description: Decision applied
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Invoice"
+  /invoices/queues/ready-to-approve:
+    get:
+      operationId: listReadyToApproveInvoices
+      tags: [invoices]
+      parameters:
+        - name: limit
+          in: query
+          schema: { type: integer, minimum: 1, maximum: 1000, default: 50 }
+        - name: offset
+          in: query
+          schema: { type: integer, minimum: 0, default: 0 }
+      responses:
+        "200":
+          description: Validated invoices awaiting approval
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/InvoiceQueueResponse"
+  /invoices/queues/ready-for-check-writing:
+    get:
+      operationId: listReadyForCheckWritingInvoices
+      tags: [invoices]
+      parameters:
+        - name: limit
+          in: query
+          schema: { type: integer, minimum: 1, maximum: 1000, default: 50 }
+        - name: offset
+          in: query
+          schema: { type: integer, minimum: 0, default: 0 }
+      responses:
+        "200":
+          description: Approved invoices awaiting payment
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/InvoiceQueueResponse"
   /payments:
     get:
       operationId: listPayments
@@ -2445,6 +2504,9 @@ components:
           enum: [staff, service_coordinator, parent_guardian, self, vendor]
         linkedRecordId: { type: ["string", "null"] }
         linkedRecordType: { type: ["string", "null"], enum: [client, vendor, null] }
+        permissions:
+          type: array
+          items: { type: string, enum: [invoice_log_validate, invoice_approve, check_writing] }
     UpdateMeInput:
       type: object
       properties:
@@ -2531,6 +2593,9 @@ components:
         active: { type: boolean }
         lastLogin: { type: ["string", "null"] }
         createdAt: { type: ["string", "null"] }
+        permissions:
+          type: array
+          items: { type: string, enum: [invoice_log_validate, invoice_approve, check_writing] }
     UserInput:
       type: object
       required: [name, email, role]
@@ -2544,6 +2609,9 @@ components:
         password: { type: string, description: "Initial password for staff/coordinator accounts" }
         linkedRecordId: { type: string }
         linkedRecordType: { type: string, enum: [client, vendor] }
+        permissions:
+          type: array
+          items: { type: string, enum: [invoice_log_validate, invoice_approve, check_writing] }
     UserUpdate:
       type: object
       properties:
@@ -2555,6 +2623,9 @@ components:
           enum: [staff, service_coordinator, parent_guardian, self, vendor]
         active: { type: boolean }
         password: { type: string }
+        permissions:
+          type: array
+          items: { type: string, enum: [invoice_log_validate, invoice_approve, check_writing] }
     AuditEntry:
       type: object
       required: [id, action, createdAt]
@@ -3189,6 +3260,20 @@ components:
         checks:
           type: array
           items: { $ref: "#/components/schemas/InvoiceValidationCheck" }
+    InvoiceDecisionInput:
+      type: object
+      required: [status]
+      properties:
+        status: { type: string, enum: [approved, rejected] }
+        notes: { type: string }
+    InvoiceQueueResponse:
+      type: object
+      required: [items, total]
+      properties:
+        items:
+          type: array
+          items: { $ref: "#/components/schemas/Invoice" }
+        total: { type: integer }
     Payment:
       type: object
       required: [id, clientId, qbCheckNumber, checkDate, amount, paymentType, source, allocatedAmount, remainingAmount, allocations]

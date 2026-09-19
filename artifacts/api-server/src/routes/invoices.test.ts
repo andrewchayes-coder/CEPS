@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { inArray, eq } from "drizzle-orm";
-import { db, usersTable, sessionsTable, clientsTable, invoicesTable, invoiceLineItemsTable, authorizationsTable, paymentsTable, paymentAllocationsTable, auditLogTable, vendorsTable } from "@workspace/db";
+import { db, usersTable, sessionsTable, clientsTable, invoicesTable, invoiceLineItemsTable, authorizationsTable, paymentsTable, paymentAllocationsTable, auditLogTable, vendorsTable, staffPermissionsTable, STAFF_PERMISSIONS } from "@workspace/db";
 import request from "supertest";
 import app from "../app";
 import { newToken } from "../lib/auth";
@@ -25,6 +25,7 @@ beforeAll(async () => {
     .values({ name: "Other Inv Staff", email: `${nonce}-other-staff@test.local`, role: "staff" })
     .returning();
   otherStaffId = otherStaff.id;
+  await db.insert(staffPermissionsTable).values([staffId, otherStaffId].flatMap((userId) => STAFF_PERMISSIONS.map((permission) => ({ userId, permission }))));
 
   const [client] = await db
     .insert(clientsTable)
@@ -200,15 +201,13 @@ describe("PATCH /invoices/:id status reset on material edit", () => {
     expect(res.body.status).toBe("validated");
   });
 
-  it("honors an explicit status even when a material field changes", async () => {
+  it("rejects approval status in the generic edit endpoint", async () => {
     const inv = await makeInvoice("validated");
     const res = await request(app)
       .patch(`/api/invoices/${inv.id}`)
       .set("Cookie", cookie)
       .send({ amountRequested: "300.00", status: "approved", lineItems: [{ authorizationId: inv.testAuthorizationId, serviceMonth: "2026-01", amount: "300.00" }] });
-    expect(res.status).toBe(200);
-    expect(res.body.status).toBe("approved");
-    expect(res.body.reviewedBy).toBe(staffId);
+    expect(res.status).toBe(400);
   });
 });
 

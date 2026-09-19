@@ -27,6 +27,7 @@ type UserLike = {
   email: string;
   role: string;
   phone?: string | null;
+  permissions?: string[];
 };
 
 type Props = {
@@ -44,6 +45,7 @@ export function EditUserDialog({ id, user, onSaved }: Props) {
     email: user.email,
     role: user.role,
     phone: user.phone ?? '',
+    permissions: user.permissions ?? ['invoice_log_validate', 'invoice_approve', 'check_writing'],
   });
 
   const set = (k: string, v: string) => setForm((p) => ({ ...p, [k]: v }));
@@ -57,6 +59,7 @@ export function EditUserDialog({ id, user, onSaved }: Props) {
           email: form.email,
           role: form.role as UserUpdateRole,
           phone: form.phone || undefined,
+          permissions: form.role === 'staff' ? form.permissions : [],
         } as any,
       },
       {
@@ -92,6 +95,21 @@ export function EditUserDialog({ id, user, onSaved }: Props) {
             <Label>Full Name</Label>
             <Input value={form.name} onChange={(e) => set('name', e.target.value)} data-testid="input-edit-user-name" />
           </div>
+          {form.role === 'staff' && (
+            <div className="space-y-2">
+              <Label>Invoice permissions</Label>
+              {([
+                ['invoice_log_validate', 'Log and validate invoices'],
+                ['invoice_approve', 'Approve or reject invoices'],
+                ['check_writing', 'Write checks / log payments'],
+              ] as const).map(([value, label]) => (
+                <label key={value} className="flex items-center gap-2 text-sm">
+                  <input type="checkbox" data-testid={`checkbox-edit-permission-${value}`} checked={form.permissions.includes(value)} onChange={(e) => setForm((p) => ({ ...p, permissions: e.target.checked ? [...p.permissions, value] : p.permissions.filter((permission) => permission !== value) }))} />
+                  {label}
+                </label>
+              ))}
+            </div>
+          )}
           <div className="space-y-2">
             <Label>Email</Label>
             <Input type="email" value={form.email} onChange={(e) => set('email', e.target.value)} data-testid="input-edit-user-email" />

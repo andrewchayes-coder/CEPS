@@ -1,7 +1,7 @@
 import { Router, type IRouter } from "express";
 import { randomUUID } from "node:crypto";
 import { eq, and, desc, ilike, or, count, sql, inArray, gte, lte, isNull, type SQL } from "drizzle-orm";
-import { db, paymentsTable, paymentAllocationsTable, clientsTable, remittancesTable, remittanceAllocationsTable, feesTable, authorizationsTable } from "@workspace/db";
+import { db, paymentsTable, paymentAllocationsTable, clientsTable, remittancesTable, remittanceAllocationsTable, feesTable, authorizationsTable, invoicesTable, invoiceLineItemsTable } from "@workspace/db";
 import {
   ListPaymentsQueryParams,
   ListPaymentsResponse,
@@ -27,8 +27,8 @@ import {
   RepairMonthlyFeesBody,
   RepairMonthlyFeesResponse,
 } from "@workspace/api-zod";
-import { requireAuth, requireStaff, audit } from "../lib/auth";
-import { paymentJson, remittanceJson, clientNameMap, vendorNameMap, authNumberMap, notDeleted, diffDetail } from "../lib/serializers";
+import { requireAuth, requireStaff, requirePermission, audit } from "../lib/auth";
+import { paymentJson, remittanceJson, clientNameMap, vendorNameMap, authNumberMap, notDeleted, diffDetail, effectiveAuthStatus } from "../lib/serializers";
 import { checkDuplicatePayment, checkDuplicatePaymentAllocations, lockDuplicatePaymentKey } from "../lib/paymentDuplicateCheck";
 import { money } from "../lib/money";
 import { parseAltaRemittanceCsv, altaRowFingerprint } from "../lib/altaRemittanceParser";
@@ -42,6 +42,74 @@ class DuplicateFingerprint extends Error {}
 
 const MONTHLY_FEE_RULE = "flat_160_per_client_month";
 const QUALIFYING_FEE_PAYMENT_TYPES = ["direct_payment", "reimbursement"] as const;
+
+/**
+ * The single payment authorization gate. This deliberately runs against the
+ * transaction passed by the caller so invoice/payment rows and allocations are
+ * checked against one consistent snapshot before any write occurs.
+ */
+async function assertInvoicePayable(
+  tx: typeof db,
+  invoiceId: string | null,
+  incoming: Map<string, ReturnType<typeof money>> = new Map(),
+  excludePaymentId?: string,
+  allocationAuthorizationIds: string[] = [],
+): Promise<string | null> {
+  if (!invoiceId) return null;
+  const [invoice] = await tx.select().from(invoicesTable).where(and(eq(invoicesTable.id, invoiceId), notDeleted(invoicesTable)));
+  if (!invoice) return `Invoice ${invoiceId} was not found or is deleted`;
+  if (invoice.status !== "approved") return `Invoice ${invoiceId} must be approved before payment`;
+  const lines = await tx.select().from(invoiceLineItemsTable)
+    .where(eq(invoiceLineItemsTable.invoiceId, invoiceId));
+  const authIds = [...new Set(lines.map((line) => line.authorizationId))];
+  const lineAuthIds = new Set(authIds);
+  for (const allocationAuthId of allocationAuthorizationIds) {
+    if (!lineAuthIds.has(allocationAuthId)) {
+      return `Allocation authorization ${allocationAuthId} does not belong to invoice ${invoiceId}`;
+    }
+  }
+  const auths = authIds.length ? await tx.select().from(authorizationsTable).where(inArray(authorizationsTable.id, authIds)) : [];
+  for (const line of lines) {
+    const auth = auths.find((candidate) => candidate.id === line.authorizationId);
+    if (!auth) return `Cannot pay line ${line.id}: authorization ${line.authorizationId} is missing`;
+    const paid = await tx.select({ total: sql<string>`coalesce(sum(${paymentAllocationsTable.amount}), 0)` })
+      .from(paymentAllocationsTable)
+      .innerJoin(paymentsTable, eq(paymentsTable.id, paymentAllocationsTable.paymentId))
+      .where(and(
+        eq(paymentAllocationsTable.authorizationId, auth.id),
+        notDeleted(paymentsTable),
+        ...(excludePaymentId ? [sql`${paymentsTable.id} <> ${excludePaymentId}`] : []),
+      ));
+    const current = money(paid[0]?.total ?? 0);
+    const status = effectiveAuthStatus(auth, current);
+    if (status !== "active") {
+      return `Cannot pay line ${line.id}: authorization ${auth.authNumber} is ${status}`;
+    }
+    const next = current.plus(incoming.get(auth.id) ?? money(0));
+    if (next.greaterThan(money(auth.maxPeriodAmount))) {
+      return `Cannot pay line ${line.id}: authorization ${auth.authNumber} would exceed its remaining capacity`;
+    }
+  }
+  for (const allocationAuthId of new Set(allocationAuthorizationIds)) {
+    const auth = auths.find((candidate) => candidate.id === allocationAuthId);
+    if (!auth) return `Allocation authorization ${allocationAuthId} is missing for invoice ${invoiceId}`;
+    const paid = await tx.select({ total: sql<string>`coalesce(sum(${paymentAllocationsTable.amount}), 0)` })
+      .from(paymentAllocationsTable)
+      .innerJoin(paymentsTable, eq(paymentsTable.id, paymentAllocationsTable.paymentId))
+      .where(and(
+        eq(paymentAllocationsTable.authorizationId, auth.id),
+        notDeleted(paymentsTable),
+        ...(excludePaymentId ? [sql`${paymentsTable.id} <> ${excludePaymentId}`] : []),
+      ));
+    const current = money(paid[0]?.total ?? 0);
+    const status = effectiveAuthStatus(auth, current);
+    if (status !== "active") return `Allocation authorization ${auth.authNumber} is ${status} for invoice ${invoiceId}`;
+    if (current.plus(incoming.get(auth.id) ?? money(0)).greaterThan(money(auth.maxPeriodAmount))) {
+      return `Allocation authorization ${auth.authNumber} would exceed its remaining capacity for invoice ${invoiceId}`;
+    }
+  }
+  return null;
+}
 
 async function collectFeeForPayment(
   paymentId: string,
@@ -559,7 +627,7 @@ router.post("/payments/monthly-fees/repair", requireStaff, async (req, res): Pro
   res.json(RepairMonthlyFeesResponse.parse(result));
 });
 
-router.post("/payments", requireStaff, async (req, res): Promise<void> => {
+router.post("/payments", requirePermission("check_writing"), async (req, res): Promise<void> => {
   const parsed = CreatePaymentBody.safeParse(req.body);
   if (!parsed.success) {
     res.status(400).json({ error: parsed.error.message });
@@ -621,6 +689,15 @@ router.post("/payments", requireStaff, async (req, res): Promise<void> => {
       })).error;
       if (relationshipError) return null;
     }
+    const invoiceIds = values.invoiceId ? [values.invoiceId as string] : [];
+    const incoming = new Map<string, ReturnType<typeof money>>();
+    for (const allocation of allocations) {
+      incoming.set(allocation.authorizationId, (incoming.get(allocation.authorizationId) ?? money(0)).plus(money(allocation.amount)));
+    }
+    for (const invoiceId of [...new Set(invoiceIds)]) {
+      relationshipError = (await assertInvoicePayable(txDb, invoiceId, incoming, undefined, allocations.map((allocation) => allocation.authorizationId))) ?? undefined;
+      if (relationshipError) return null;
+    }
     if (runDupCheck) {
       for (const authorizationId of allocationAuthorizationIds.sort()) {
         await lockDuplicatePaymentKey(txDb, { clientId: dupClientId, authorizationId, paymentMonth: dupPaymentMonth! });
@@ -668,7 +745,7 @@ router.post("/payments", requireStaff, async (req, res): Promise<void> => {
   res.status(201).json(CreatePaymentResponse.parse((await enrichPayments([payment]))[0]));
 });
 
-router.post("/payments/import", requireStaff, async (req, res): Promise<void> => {
+router.post("/payments/import", requirePermission("check_writing"), async (req, res): Promise<void> => {
   const parsed = ImportAltaFmsPaymentsBody.safeParse(req.body);
   if (!parsed.success) {
     res.status(400).json({ error: parsed.error.message });
@@ -864,7 +941,7 @@ router.get("/payments/:id", requireAuth, async (req, res): Promise<void> => {
   res.json(GetPaymentResponse.parse((await enrichPayments([payment]))[0]));
 });
 
-router.patch("/payments/:id", requireStaff, async (req, res): Promise<void> => {
+router.patch("/payments/:id", requirePermission("check_writing"), async (req, res): Promise<void> => {
   const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
   const parsed = UpdatePaymentBody.safeParse(req.body);
   if (!parsed.success) {
@@ -942,6 +1019,17 @@ router.patch("/payments/:id", requireStaff, async (req, res): Promise<void> => {
     if (relationshipError) {
       return { payment: null as typeof paymentsTable.$inferSelect | null };
     }
+    const incoming = new Map<string, ReturnType<typeof money>>();
+    const paymentAllocations = allocations ?? await tx.select()
+      .from(paymentAllocationsTable).where(eq(paymentAllocationsTable.paymentId, id));
+    for (const allocation of paymentAllocations) {
+      incoming.set(allocation.authorizationId, (incoming.get(allocation.authorizationId) ?? money(0)).plus(money(allocation.amount)));
+    }
+    const effectiveAllocationAuthorizationIdsForInvoice = paymentAllocations.length
+      ? paymentAllocations.map((allocation) => allocation.authorizationId)
+      : (effAuthorizationId ? [effAuthorizationId] : []);
+    relationshipError = (await assertInvoicePayable(txDb, effInvoiceId, incoming, id, effectiveAllocationAuthorizationIdsForInvoice)) ?? undefined;
+    if (relationshipError) return { payment: null as typeof paymentsTable.$inferSelect | null };
     if ("amount" in updateData && !allocations) {
       const existingAllocations = await tx.select({ amount: paymentAllocationsTable.amount })
         .from(paymentAllocationsTable).where(eq(paymentAllocationsTable.paymentId, id));
@@ -1041,7 +1129,7 @@ router.patch("/payments/:id", requireStaff, async (req, res): Promise<void> => {
   res.json(UpdatePaymentResponse.parse((await enrichPayments([payment]))[0]));
 });
 
-router.delete("/payments/:id", requireStaff, async (req, res): Promise<void> => {
+router.delete("/payments/:id", requirePermission("check_writing"), async (req, res): Promise<void> => {
   const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
   const deletedAt = new Date();
   const deletedBy = req.user!.id;
@@ -1285,7 +1373,7 @@ router.get("/remittances", requireAuth, async (req, res): Promise<void> => {
   res.json(ListRemittancesResponse.parse({ items: await enrichRemittances(rows), total }));
 });
 
-router.post("/remittances", requireStaff, async (req, res): Promise<void> => {
+router.post("/remittances", requirePermission("check_writing"), async (req, res): Promise<void> => {
   const parsed = CreateRemittanceBody.safeParse(req.body);
   if (!parsed.success) {
     res.status(400).json({ error: parsed.error.message });
@@ -1369,7 +1457,7 @@ router.post("/remittances", requireStaff, async (req, res): Promise<void> => {
   res.status(201).json(CreateRemittanceResponse.parse((await enrichRemittances([remittance]))[0]));
 });
 
-router.post("/remittances/:id/match", requireStaff, async (req, res): Promise<void> => {
+router.post("/remittances/:id/match", requirePermission("check_writing"), async (req, res): Promise<void> => {
   const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
   const parsed = MatchRemittanceBody.safeParse(req.body);
   if (!parsed.success) {
@@ -1444,7 +1532,7 @@ router.post("/remittances/:id/match", requireStaff, async (req, res): Promise<vo
 // guessed. After insert, each row runs the SAME auto-match logic as manual
 // entry (findMatchingPayment) so imported remittances match Payments like
 // manual ones. CSV parsing is isolated in src/lib/altaRemittanceParser.ts.
-router.post("/remittances/import", requireStaff, async (req, res): Promise<void> => {
+router.post("/remittances/import", requirePermission("check_writing"), async (req, res): Promise<void> => {
   const parsed = ImportAltaRemittancesBody.safeParse(req.body);
   if (!parsed.success) {
     res.status(400).json({ error: parsed.error.message });
@@ -1723,7 +1811,7 @@ router.get("/remittances/:id", requireAuth, async (req, res): Promise<void> => {
   res.json(GetRemittanceResponse.parse((await enrichRemittances([remittance]))[0]));
 });
 
-router.patch("/remittances/:id", requireStaff, async (req, res): Promise<void> => {
+router.patch("/remittances/:id", requirePermission("check_writing"), async (req, res): Promise<void> => {
   const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
   const parsed = UpdateRemittanceBody.safeParse(req.body);
   if (!parsed.success) {
@@ -1774,7 +1862,7 @@ router.patch("/remittances/:id", requireStaff, async (req, res): Promise<void> =
   res.json(UpdateRemittanceResponse.parse((await enrichRemittances([remittance]))[0]));
 });
 
-router.delete("/remittances/:id", requireStaff, async (req, res): Promise<void> => {
+router.delete("/remittances/:id", requirePermission("check_writing"), async (req, res): Promise<void> => {
   const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
   const remittance = await db.transaction(async (tx) => {
     await tx.execute(sql`select id from remittances where id = ${id} for update`);

@@ -9,9 +9,11 @@ import {
   authorizationsTable,
   referralsTable,
   paymentsTable,
+  paymentAllocationsTable,
   remittancesTable,
   feesTable,
   auditLogTable,
+  staffPermissionsTable,
 } from "@workspace/db";
 import request from "supertest";
 import app from "../app";
@@ -40,6 +42,7 @@ beforeAll(async () => {
     .values({ name: "Imp Staff", email: `${nonce}-staff@test.local`, role: "staff" })
     .returning();
   staffId = staff.id;
+  await db.insert(staffPermissionsTable).values({ userId: staffId, permission: "check_writing" });
   const [coord] = await db
     .insert(usersTable)
     .values({ name: "Imp Coord", email: coordEmail, role: "service_coordinator" })
@@ -97,6 +100,7 @@ afterAll(async () => {
     await db.delete(clientsTable).where(inArray(clientsTable.id, importedClientIds));
   }
   await db.delete(vendorsTable).where(inArray(vendorsTable.name, [vendorAName, `${nonce} New Vendor`]));
+  await db.delete(staffPermissionsTable).where(eq(staffPermissionsTable.userId, staffId));
   await db.delete(usersTable).where(inArray(usersTable.id, [staffId, coordId]));
 });
 
@@ -266,7 +270,9 @@ describe("POST /payments/import", () => {
     const payments = await db.select().from(paymentsTable).where(eq(paymentsTable.qbCheckNumber, `${nonce}-HIST`));
     expect(payments).toHaveLength(2);
     expect(payments.map((payment) => payment.paymentMonth).sort()).toEqual(["2026-03", "2026-04"]);
-    expect(payments.every((payment) => payment.authorizationId === authAId && payment.source === "historical_import")).toBe(true);
+    expect(payments.every((payment) => payment.authorizationId === null && payment.source === "historical_import")).toBe(true);
+    const allocations = await db.select().from(paymentAllocationsTable).where(inArray(paymentAllocationsTable.paymentId, payments.map((payment) => payment.id)));
+    expect(allocations.every((allocation) => allocation.authorizationId === authAId)).toBe(true);
     const feeRows = await db.select().from(feesTable).where(inArray(feesTable.paymentId, payments.map((payment) => payment.id)));
     expect(feeRows).toHaveLength(0);
 

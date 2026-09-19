@@ -146,6 +146,15 @@ export const SessionUserLinkedRecordType = {
   vendor: 'vendor',
 } as const;
 
+export type SessionUserPermissionsItem = typeof SessionUserPermissionsItem[keyof typeof SessionUserPermissionsItem];
+
+
+export const SessionUserPermissionsItem = {
+  invoice_log_validate: 'invoice_log_validate',
+  invoice_approve: 'invoice_approve',
+  check_writing: 'check_writing',
+} as const;
+
 export interface SessionUser {
   id: string;
   name: string;
@@ -155,6 +164,7 @@ export interface SessionUser {
   linkedRecordId?: string | null;
   /** @nullable */
   linkedRecordType?: SessionUserLinkedRecordType;
+  permissions?: SessionUserPermissionsItem[];
 }
 
 export interface UpdateMeInput {
@@ -312,6 +322,15 @@ export const UserLinkedRecordType = {
   vendor: 'vendor',
 } as const;
 
+export type UserPermissionsItem = typeof UserPermissionsItem[keyof typeof UserPermissionsItem];
+
+
+export const UserPermissionsItem = {
+  invoice_log_validate: 'invoice_log_validate',
+  invoice_approve: 'invoice_approve',
+  check_writing: 'check_writing',
+} as const;
+
 export interface User {
   id: string;
   name: string;
@@ -328,6 +347,7 @@ export interface User {
   lastLogin?: string | null;
   /** @nullable */
   createdAt?: string | null;
+  permissions?: UserPermissionsItem[];
 }
 
 export type UserInputRole = typeof UserInputRole[keyof typeof UserInputRole];
@@ -349,6 +369,15 @@ export const UserInputLinkedRecordType = {
   vendor: 'vendor',
 } as const;
 
+export type UserInputPermissionsItem = typeof UserInputPermissionsItem[keyof typeof UserInputPermissionsItem];
+
+
+export const UserInputPermissionsItem = {
+  invoice_log_validate: 'invoice_log_validate',
+  invoice_approve: 'invoice_approve',
+  check_writing: 'check_writing',
+} as const;
+
 export interface UserInput {
   name: string;
   email: string;
@@ -358,6 +387,7 @@ export interface UserInput {
   password?: string;
   linkedRecordId?: string;
   linkedRecordType?: UserInputLinkedRecordType;
+  permissions?: UserInputPermissionsItem[];
 }
 
 export type UserUpdateRole = typeof UserUpdateRole[keyof typeof UserUpdateRole];
@@ -371,6 +401,15 @@ export const UserUpdateRole = {
   vendor: 'vendor',
 } as const;
 
+export type UserUpdatePermissionsItem = typeof UserUpdatePermissionsItem[keyof typeof UserUpdatePermissionsItem];
+
+
+export const UserUpdatePermissionsItem = {
+  invoice_log_validate: 'invoice_log_validate',
+  invoice_approve: 'invoice_approve',
+  check_writing: 'check_writing',
+} as const;
+
 export interface UserUpdate {
   name?: string;
   email?: string;
@@ -378,6 +417,7 @@ export interface UserUpdate {
   role?: UserUpdateRole;
   active?: boolean;
   password?: string;
+  permissions?: UserUpdatePermissionsItem[];
 }
 
 export interface AuditEntry {
@@ -1719,6 +1759,24 @@ export interface InvoiceValidationResult {
   checks: InvoiceValidationCheck[];
 }
 
+export type InvoiceDecisionInputStatus = typeof InvoiceDecisionInputStatus[keyof typeof InvoiceDecisionInputStatus];
+
+
+export const InvoiceDecisionInputStatus = {
+  approved: 'approved',
+  rejected: 'rejected',
+} as const;
+
+export interface InvoiceDecisionInput {
+  status: InvoiceDecisionInputStatus;
+  notes?: string;
+}
+
+export interface InvoiceQueueResponse {
+  items: Invoice[];
+  total: number;
+}
+
 export type PaymentInputPaymentType = typeof PaymentInputPaymentType[keyof typeof PaymentInputPaymentType];
 
 
@@ -2610,6 +2668,30 @@ export const ListInvoicesSortDirection = {
 export type ListInvoices200 = {
   items: Invoice[];
   total: number;
+};
+
+export type ListReadyToApproveInvoicesParams = {
+/**
+ * @minimum 1
+ * @maximum 1000
+ */
+limit?: number;
+/**
+ * @minimum 0
+ */
+offset?: number;
+};
+
+export type ListReadyForCheckWritingInvoicesParams = {
+/**
+ * @minimum 1
+ * @maximum 1000
+ */
+limit?: number;
+/**
+ * @minimum 0
+ */
+offset?: number;
 };
 
 export type ListPaymentsParams = {

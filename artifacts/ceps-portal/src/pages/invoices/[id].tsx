@@ -1,6 +1,6 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { useLocation, useParams } from 'wouter';
-import { useGetInvoice, useValidateInvoice, useUpdateInvoice, useDeleteInvoice, InvoiceValidationResult } from '@workspace/api-client-react';
+import { useGetInvoice, useValidateInvoice, useDecideInvoice, useUpdateInvoice, useDeleteInvoice, InvoiceValidationResult } from '@workspace/api-client-react';
 import { useAuth } from '@/components/auth/auth-provider';
 import { EditInvoiceDialog } from '@/components/edit-invoice-dialog';
 import { DeleteEntityButton } from '@/components/delete-entity-button';
@@ -21,6 +21,9 @@ export default function InvoiceDetailPage() {
   const [, navigate] = useLocation();
   const { user } = useAuth();
   const isStaff = user?.role === 'staff';
+  const permissions = new Set((user as any)?.permissions ?? []);
+  const canValidate = permissions.has('invoice_log_validate');
+  const canApprove = permissions.has('invoice_approve');
   const { toast } = useToast();
   const [justification, setJustification] = useState('');
   const deleteInvoice = useDeleteInvoice();
@@ -31,20 +34,20 @@ export default function InvoiceDetailPage() {
 
   const [validation, setValidation] = useState<InvoiceValidationResult | null>(null);
   const validateInvoiceMutation = useValidateInvoice();
+  const decideInvoice = useDecideInvoice();
   const validating = validateInvoiceMutation.isPending;
 
   const runValidation = () => {
     if (id) {
+      if (!canValidate) return;
       validateInvoiceMutation.mutate({ id }, {
-        onSuccess: (data) => setValidation(data),
+        onSuccess: (data) => {
+          setValidation(data);
+          void refetch();
+        },
       });
     }
   };
-
-  useEffect(() => {
-    runValidation();
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [id]);
 
   const updateInvoice = useUpdateInvoice();
 
@@ -64,7 +67,7 @@ export default function InvoiceDetailPage() {
   if (isLoading) return <div className="p-8 text-center">Loading invoice...</div>;
   if (!invoice) return <div className="p-8 text-center">Invoice not found.</div>;
 
-  const needsOverride = validation?.checks.some(c => !c.passed && c.check === 'No duplicate payments');
+  const needsOverride = validation?.checks.some(c => !c.passed && c.check === 'no_duplicate_payment');
 
   const handleAction = (status: 'approved' | 'rejected', overrideDuplicate?: boolean) => {
     if (overrideDuplicate && !justification) {
@@ -72,14 +75,13 @@ export default function InvoiceDetailPage() {
       return;
     }
 
-    updateInvoice.mutate({
+    decideInvoice.mutate({
       id,
       data: { status, notes: justification ? `OVERRIDE: ${justification}` : undefined }
     }, {
       onSuccess: () => {
         toast({ title: `Invoice ${status === 'approved' ? 'Approved' : 'Rejected'}` });
         refetch();
-        runValidation();
       }
     });
   };
@@ -99,7 +101,7 @@ export default function InvoiceDetailPage() {
           <Badge className="text-base px-3 py-1 uppercase">{invoice.status.replace('_', ' ')}</Badge>
           {isStaff && (
             <>
-              <EditInvoiceDialog id={id} invoice={invoice} onSaved={() => { refetch(); runValidation(); }} />
+              <EditInvoiceDialog id={id} invoice={invoice} onSaved={() => { refetch(); }} />
               <DeleteEntityButton
                 entityLabel="Invoice"
                 testId="button-delete-invoice"
@@ -216,7 +218,14 @@ export default function InvoiceDetailPage() {
               </ul>
             )}
 
-            {invoice.status === 'pending_review' && (
+             {invoice.status === 'pending_review' && canValidate && (
+               <div className="pt-4 border-t">
+                 <Button className="w-full" onClick={runValidation} disabled={validating} data-testid="button-validate-invoice">
+                   {validating ? 'Validating…' : 'Validate invoice'}
+                 </Button>
+               </div>
+             )}
+             {invoice.status === 'validated' && canApprove && (
               <div className="pt-4 border-t space-y-4">
                 {needsOverride && (
                   <div className="space-y-3 bg-destructive/10 p-3 rounded-md border border-destructive/20">
@@ -235,7 +244,7 @@ export default function InvoiceDetailPage() {
                 <div className="flex gap-2">
                   <Button
                     className="w-full bg-chart-5 hover:bg-chart-5/90 text-white"
-                    disabled={updateInvoice.isPending || (needsOverride && !justification) || (!validation?.valid && !needsOverride)}
+                     disabled={decideInvoice.isPending || (needsOverride && !justification) || !canApprove}
                     onClick={() => handleAction('approved', needsOverride)}
                   >
                     Approve
@@ -243,7 +252,7 @@ export default function InvoiceDetailPage() {
                   <Button
                     className="w-full"
                     variant="destructive"
-                    disabled={updateInvoice.isPending}
+                    disabled={decideInvoice.isPending || !canApprove}
                     onClick={() => handleAction('rejected')}
                   >
                     Reject

@@ -6,6 +6,7 @@
  * OpenAPI spec version: 0.1.0
  */
 import type { SessionUserLinkedRecordType } from './sessionUserLinkedRecordType';
+import type { SessionUserPermissionsItem } from './sessionUserPermissionsItem';
 import type { SessionUserRole } from './sessionUserRole';
 
 export interface SessionUser {
@@ -17,4 +18,5 @@ export interface SessionUser {
   linkedRecordId?: string | null;
   /** @nullable */
   linkedRecordType?: SessionUserLinkedRecordType;
+  permissions?: SessionUserPermissionsItem[];
 }

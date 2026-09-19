@@ -1817,6 +1817,50 @@ export interface PaymentInput {
   allocations: PaymentAllocationInput[];
 }
 
+export interface CheckRunReconciliationInput {
+  /** @minLength 1 */
+  csv: string;
+  /** @pattern ^\d{4}-\d{2}-\d{2}$ */
+  startDate: string;
+  /** @pattern ^\d{4}-\d{2}-\d{2}$ */
+  endDate: string;
+}
+
+export interface CheckRunPayment {
+  id: string;
+  vendorName: string;
+  /** @nullable */
+  address: string | null;
+  amount: string;
+  checkNumber: string;
+  checkDate: string;
+}
+
+export interface CheckRunCheck {
+  rowNumber: number;
+  vendorName: string;
+  address: string;
+  amount: string;
+  checkNumber: string;
+  checkDate: string;
+}
+
+export interface CheckRunReconciliationRow {
+  payment: CheckRunPayment | null;
+  check: CheckRunCheck | null;
+  addressMatch: boolean;
+}
+
+export interface CheckRunReconciliationResponse {
+  parsedCount: number;
+  errorCount: number;
+  errors: string[];
+  matched: CheckRunReconciliationRow[];
+  paymentsWithoutChecks: CheckRunReconciliationRow[];
+  checksWithoutPayments: CheckRunReconciliationRow[];
+  amountMismatches: CheckRunReconciliationRow[];
+}
+
 export type DuplicatePaymentErrorCode = typeof DuplicatePaymentErrorCode[keyof typeof DuplicatePaymentErrorCode];
 
 

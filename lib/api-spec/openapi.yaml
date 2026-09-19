@@ -1498,6 +1498,26 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/DuplicatePaymentError"
+  /payments/check-run/reconcile:
+    post:
+      operationId: reconcileCheckRun
+      tags: [payments]
+      summary: Reconcile a pasted or uploaded check run against approved payments without writing data
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CheckRunReconciliationInput"
+      responses:
+        "200":
+          description: Read-only check-run reconciliation report
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CheckRunReconciliationResponse"
+        "400": { description: Invalid date range or CSV }
+        "403": { description: Missing check-writing permission }
   /payments/monthly-fees/audit:
     get:
       operationId: auditMonthlyFees
@@ -3333,6 +3353,57 @@ components:
       properties:
         authorizationId: { type: string }
         amount: { type: string, pattern: '^\d+(\.\d{1,2})?$' }
+    CheckRunReconciliationInput:
+      type: object
+      required: [csv, startDate, endDate]
+      properties:
+        csv: { type: string, minLength: 1 }
+        startDate: { type: string, pattern: '^\d{4}-\d{2}-\d{2}$' }
+        endDate: { type: string, pattern: '^\d{4}-\d{2}-\d{2}$' }
+    CheckRunReconciliationRow:
+      type: object
+      required: [payment, check, addressMatch]
+      properties:
+        payment:
+          oneOf:
+            - $ref: "#/components/schemas/CheckRunPayment"
+            - type: "null"
+        check:
+          oneOf:
+            - $ref: "#/components/schemas/CheckRunCheck"
+            - type: "null"
+        addressMatch: { type: boolean }
+    CheckRunPayment:
+      type: object
+      required: [id, vendorName, address, amount, checkNumber, checkDate]
+      properties:
+        id: { type: string }
+        vendorName: { type: string }
+        address: { type: ["string", "null"] }
+        amount: { type: string }
+        checkNumber: { type: string }
+        checkDate: { type: string }
+    CheckRunCheck:
+      type: object
+      required: [rowNumber, vendorName, address, amount, checkNumber, checkDate]
+      properties:
+        rowNumber: { type: integer }
+        vendorName: { type: string }
+        address: { type: string }
+        amount: { type: string }
+        checkNumber: { type: string }
+        checkDate: { type: string }
+    CheckRunReconciliationResponse:
+      type: object
+      required: [parsedCount, errorCount, errors, matched, paymentsWithoutChecks, checksWithoutPayments, amountMismatches]
+      properties:
+        parsedCount: { type: integer }
+        errorCount: { type: integer }
+        errors: { type: array, items: { type: string } }
+        matched: { type: array, items: { $ref: "#/components/schemas/CheckRunReconciliationRow" } }
+        paymentsWithoutChecks: { type: array, items: { $ref: "#/components/schemas/CheckRunReconciliationRow" } }
+        checksWithoutPayments: { type: array, items: { $ref: "#/components/schemas/CheckRunReconciliationRow" } }
+        amountMismatches: { type: array, items: { $ref: "#/components/schemas/CheckRunReconciliationRow" } }
     DuplicatePaymentError:
       type: object
       required: [error, code, existingPayments]

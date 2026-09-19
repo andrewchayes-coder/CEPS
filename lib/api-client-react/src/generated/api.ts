@@ -33,6 +33,8 @@ import type {
   AuthorizationResult,
   AuthorizationUpdate,
   AuthorizationVersion,
+  CheckRunReconciliationInput,
+  CheckRunReconciliationResponse,
   Client,
   ClientCase,
   ClientInput,
@@ -4936,6 +4938,77 @@ export const useCreatePayment = <TError = ErrorType<DuplicatePaymentError>,
         TContext
       > => {
       return useMutation(getCreatePaymentMutationOptions(options));
+    }
+
+export const getReconcileCheckRunUrl = () => {
+
+
+
+
+  return `/api/payments/check-run/reconcile`
+}
+
+/**
+ * @summary Reconcile a pasted or uploaded check run against approved payments without writing data
+ */
+export const reconcileCheckRun = async (checkRunReconciliationInput: CheckRunReconciliationInput, options?: Parameters<typeof customFetch>[1]): Promise<CheckRunReconciliationResponse> => {
+
+  return customFetch<CheckRunReconciliationResponse>(getReconcileCheckRunUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(checkRunReconciliationInput)
+  }
+);}
+
+
+
+
+
+export const getReconcileCheckRunMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof reconcileCheckRun>>, TError,{data: BodyType<CheckRunReconciliationInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof reconcileCheckRun>>, TError,{data: BodyType<CheckRunReconciliationInput>}, TContext> => {
+
+const mutationKey = ['reconcileCheckRun'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof reconcileCheckRun>>, {data: BodyType<CheckRunReconciliationInput>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  reconcileCheckRun(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type ReconcileCheckRunMutationResult = NonNullable<Awaited<ReturnType<typeof reconcileCheckRun>>>
+    export type ReconcileCheckRunMutationBody = BodyType<CheckRunReconciliationInput>
+    export type ReconcileCheckRunMutationError = ErrorType<void>
+
+    /**
+ * @summary Reconcile a pasted or uploaded check run against approved payments without writing data
+ */
+export const useReconcileCheckRun = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof reconcileCheckRun>>, TError,{data: BodyType<CheckRunReconciliationInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof reconcileCheckRun>>,
+        TError,
+        {data: BodyType<CheckRunReconciliationInput>},
+        TContext
+      > => {
+      return useMutation(getReconcileCheckRunMutationOptions(options));
     }
 
 export const getAuditMonthlyFeesUrl = (params?: AuditMonthlyFeesParams,) => {

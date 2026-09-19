@@ -1,7 +1,7 @@
 import { Router, type IRouter } from "express";
 import { randomUUID } from "node:crypto";
 import { eq, and, desc, ilike, or, count, sql, inArray, gte, lte, isNull, type SQL } from "drizzle-orm";
-import { db, paymentsTable, paymentAllocationsTable, clientsTable, remittancesTable, remittanceAllocationsTable, feesTable, authorizationsTable, invoicesTable, invoiceLineItemsTable } from "@workspace/db";
+import { db, paymentsTable, paymentAllocationsTable, clientsTable, remittancesTable, remittanceAllocationsTable, feesTable, authorizationsTable, invoicesTable, invoiceLineItemsTable, vendorsTable } from "@workspace/db";
 import {
   ListPaymentsQueryParams,
   ListPaymentsResponse,
@@ -26,6 +26,8 @@ import {
   AuditMonthlyFeesResponse,
   RepairMonthlyFeesBody,
   RepairMonthlyFeesResponse,
+  ReconcileCheckRunBody,
+  ReconcileCheckRunResponse,
 } from "@workspace/api-zod";
 import { requireAuth, requireStaff, requirePermission, audit } from "../lib/auth";
 import { paymentJson, remittanceJson, clientNameMap, vendorNameMap, authNumberMap, notDeleted, diffDetail, effectiveAuthStatus } from "../lib/serializers";
@@ -35,6 +37,7 @@ import { parseAltaRemittanceCsv, altaRowFingerprint } from "../lib/altaRemittanc
 import { altaFmsPaymentRowFingerprint, parseAltaFmsPaymentWorksheet } from "../lib/altaFmsPaymentParser";
 import { sortedOrder } from "../lib/sorting";
 import { validateParticipantLinks } from "../lib/participantLinks";
+import { isValidIsoDate, parseCheckRunCsv, reconcileCheckRun } from "../lib/checkRunReconciliation";
 
 const router: IRouter = Router();
 
@@ -625,6 +628,54 @@ router.post("/payments/monthly-fees/repair", requireStaff, async (req, res): Pro
   });
 
   res.json(RepairMonthlyFeesResponse.parse(result));
+});
+
+router.post("/payments/check-run/reconcile", requirePermission("check_writing"), async (req, res): Promise<void> => {
+  const parsed = ReconcileCheckRunBody.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: parsed.error.message });
+    return;
+  }
+  const { csv, startDate, endDate } = parsed.data;
+  if (!isValidIsoDate(startDate) || !isValidIsoDate(endDate) || startDate > endDate) {
+    res.status(400).json({ error: "startDate must be on or before endDate" });
+    return;
+  }
+  const parsedCsv = parseCheckRunCsv(csv, startDate, endDate);
+  const payments = await db
+    .select({
+      id: paymentsTable.id,
+      vendorName: vendorsTable.name,
+      address: vendorsTable.billingAddress,
+      amount: paymentsTable.amount,
+      checkNumber: paymentsTable.qbCheckNumber,
+      checkDate: paymentsTable.checkDate,
+    })
+    .from(paymentsTable)
+    .innerJoin(invoicesTable, eq(invoicesTable.id, paymentsTable.invoiceId))
+    .leftJoin(vendorsTable, eq(vendorsTable.id, paymentsTable.vendorId))
+    .where(and(
+      notDeleted(paymentsTable),
+      notDeleted(invoicesTable),
+      eq(invoicesTable.status, "approved"),
+      gte(paymentsTable.checkDate, startDate),
+      lte(paymentsTable.checkDate, endDate),
+    ))
+    .orderBy(paymentsTable.checkDate, paymentsTable.qbCheckNumber, paymentsTable.id);
+  const report = reconcileCheckRun(
+    payments.map((payment) => ({
+      ...payment,
+      vendorName: payment.vendorName ?? "Unknown vendor",
+      vendorKey: payment.vendorName ? undefined : "",
+    })),
+    parsedCsv.rows,
+  );
+  res.json(ReconcileCheckRunResponse.parse({
+    parsedCount: parsedCsv.parsedCount,
+    errorCount: parsedCsv.errors.length,
+    errors: parsedCsv.errors,
+    ...report,
+  }));
 });
 
 router.post("/payments", requirePermission("check_writing"), async (req, res): Promise<void> => {

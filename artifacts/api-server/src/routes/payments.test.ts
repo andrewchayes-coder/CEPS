@@ -66,7 +66,7 @@ afterAll(async () => {
   await db.delete(staffPermissionsTable).where(eq(staffPermissionsTable.userId, staffId));
   await db.delete(sessionsTable).where(eq(sessionsTable.userId, staffId));
   await db.delete(clientsTable).where(inArray(clientsTable.id, [clientId, otherClientId]));
-  await db.delete(vendorsTable).where(inArray(vendorsTable.name, [`${nonce}-valid-vendor`, `${nonce}-other-vendor`, `${nonce}-other-vendor-2`]));
+  await db.delete(vendorsTable).where(inArray(vendorsTable.name, [`${nonce}-valid-vendor`, `${nonce}-other-vendor`, `${nonce}-other-vendor-2`, `${nonce}-reconcile-vendor`]));
   await db.delete(usersTable).where(inArray(usersTable.id, [staffId]));
 });
 
@@ -490,5 +490,115 @@ describe("financial PATCH participant links", () => {
     const [unchanged] = await db.select().from(remittancesTable).where(eq(remittancesTable.id, remittance.id));
     expect(unchanged.authorizationId).toBe(ownAuth.id);
     expect(unchanged.amount).toBe("100.00");
+  });
+
+  it("reconciles only approved invoice payments without writing any rows", async () => {
+    const vendor = await db.insert(vendorsTable).values({ name: `${nonce}-reconcile-vendor`, billingAddress: "10 Check Street" }).returning().then((rows) => rows[0]);
+    const auth = await makeAuthorization(clientId, vendor.id);
+    const invoice = await db.insert(invoicesTable).values({
+      clientId, vendorId: vendor.id, authorizationId: auth.id, submittedByRole: "staff",
+      submittedDate: "2099-01-10", serviceMonth: "2099-01", amountRequested: "100.00",
+      paymentType: "direct_payment", status: "approved",
+    }).returning().then((rows) => rows[0]);
+    await db.insert(invoiceLineItemsTable).values({ invoiceId: invoice.id, authorizationId: auth.id, serviceMonth: "2099-01", amount: "100.00" });
+    const payment = await db.insert(paymentsTable).values({
+      clientId, vendorId: vendor.id, invoiceId: invoice.id, qbCheckNumber: `${nonce}-reconcile-check`,
+      checkDate: "2099-01-15", amount: "100.00", paymentType: "direct_payment", source: "manual",
+    }).returning().then((rows) => rows[0]);
+    const excludedStatuses = ["pending_review", "validated", "rejected"] as const;
+    for (const status of excludedStatuses) {
+      const excludedInvoice = await db.insert(invoicesTable).values({
+        clientId, vendorId: vendor.id, authorizationId: auth.id, submittedByRole: "staff",
+        submittedDate: "2099-01-10", serviceMonth: "2099-01", amountRequested: "100.00",
+        paymentType: "direct_payment", status,
+      }).returning().then((rows) => rows[0]);
+      await db.insert(paymentsTable).values({
+        clientId, vendorId: vendor.id, invoiceId: excludedInvoice.id, qbCheckNumber: `${nonce}-${status}`,
+        checkDate: "2099-01-15", amount: "100.00", paymentType: "direct_payment", source: "manual",
+      });
+    }
+    const outOfRangeInvoice = await db.insert(invoicesTable).values({
+      clientId, vendorId: vendor.id, authorizationId: auth.id, submittedByRole: "staff",
+      submittedDate: "2099-01-10", serviceMonth: "2099-01", amountRequested: "100.00",
+      paymentType: "direct_payment", status: "approved",
+    }).returning().then((rows) => rows[0]);
+    await db.insert(paymentsTable).values({
+      clientId, vendorId: vendor.id, invoiceId: outOfRangeInvoice.id, qbCheckNumber: `${nonce}-before`,
+      checkDate: "2098-12-31", amount: "100.00", paymentType: "direct_payment", source: "manual",
+    });
+    const deletedPaymentInvoice = await db.insert(invoicesTable).values({
+      clientId, vendorId: vendor.id, authorizationId: auth.id, submittedByRole: "staff",
+      submittedDate: "2099-01-10", serviceMonth: "2099-01", amountRequested: "100.00",
+      paymentType: "direct_payment", status: "approved", isDeleted: true,
+    }).returning().then((rows) => rows[0]);
+    // The database trigger disallows creating an active payment against a deleted invoice;
+    // create it while active, then soft-delete the parent to exercise reconciliation filtering.
+    await db.update(invoicesTable).set({ isDeleted: false }).where(eq(invoicesTable.id, deletedPaymentInvoice.id));
+    await db.insert(paymentsTable).values({
+      clientId, vendorId: vendor.id, invoiceId: deletedPaymentInvoice.id, qbCheckNumber: `${nonce}-deleted-invoice`,
+      checkDate: "2099-01-15", amount: "100.00", paymentType: "direct_payment", source: "manual", isDeleted: true,
+    });
+    await db.update(invoicesTable).set({ isDeleted: true }).where(eq(invoicesTable.id, deletedPaymentInvoice.id));
+    await db.insert(paymentsTable).values({
+      clientId, vendorId: vendor.id, invoiceId: invoice.id, qbCheckNumber: `${nonce}-deleted-payment`,
+      checkDate: "2099-01-15", amount: "100.00", paymentType: "direct_payment", source: "manual", isDeleted: true,
+    });
+    const unknownInvoice = await db.insert(invoicesTable).values({
+      clientId, authorizationId: auth.id, submittedByRole: "staff", submittedDate: "2099-01-10",
+      serviceMonth: "2099-01", amountRequested: "75.00", paymentType: "direct_payment", status: "approved",
+    }).returning().then((rows) => rows[0]);
+    await db.insert(paymentsTable).values({
+      clientId, invoiceId: unknownInvoice.id, qbCheckNumber: `${nonce}-unknown-vendor`,
+      checkDate: "2099-01-15", amount: "75.00", paymentType: "direct_payment", source: "manual",
+    });
+    const beforePayments = (await db.select().from(paymentsTable).where(eq(paymentsTable.id, payment.id))).length;
+    const beforeInvoices = (await db.select().from(invoicesTable).where(eq(invoicesTable.id, invoice.id))).length;
+    const beforePaymentRows = await db.select().from(paymentsTable).where(eq(paymentsTable.clientId, clientId));
+    const beforeInvoiceRows = await db.select().from(invoicesTable).where(eq(invoicesTable.clientId, clientId));
+    const beforeVendorRows = await db.select().from(vendorsTable).where(eq(vendorsTable.id, vendor.id));
+    const beforeAllocationRows = await db.select().from(paymentAllocationsTable).where(eq(paymentAllocationsTable.paymentId, payment.id));
+    const beforeAuditRows = await db.select().from(auditLogTable).where(eq(auditLogTable.userId, staffId));
+    const res = await request(app).post("/api/payments/check-run/reconcile").set("Cookie", cookie).send({
+      csv: "Vendor Name,Address,Amount,Check Number,Check Date\n" +
+        `${vendor.name},10 Check Street,100.00,${payment.qbCheckNumber},2099-01-15`,
+      startDate: "2099-01-01",
+      endDate: "2099-01-31",
+    });
+    expect(res.status).toBe(200);
+    expect(res.body.matched).toHaveLength(1);
+    expect(res.body.paymentsWithoutChecks).toHaveLength(1);
+    expect(res.body.paymentsWithoutChecks[0].payment.vendorName).toBe("Unknown vendor");
+    expect(res.body.checksWithoutPayments).toHaveLength(0);
+    expect(res.body.matched[0].addressMatch).toBe(true);
+    expect(res.body.matched[0].payment.address).toBe("10 Check Street");
+    const reversed = await request(app).post("/api/payments/check-run/reconcile").set("Cookie", cookie).send({
+      csv: "Vendor,Address,Amount,Check Number,Date\nV,Address,1,C,2099-01-15", startDate: "2099-02-01", endDate: "2099-01-01",
+    });
+    expect(reversed.status).toBe(400);
+    const malformedDate = await request(app).post("/api/payments/check-run/reconcile").set("Cookie", cookie).send({
+      csv: "Vendor,Address,Amount,Check Number,Date\nV,Address,1,C,2099-01-15", startDate: "not-a-date", endDate: "2099-01-31",
+    });
+    expect(malformedDate.status).toBe(400);
+    const malformedCsv = await request(app).post("/api/payments/check-run/reconcile").set("Cookie", cookie).send({
+      csv: "not the required headers", startDate: "2099-01-01", endDate: "2099-01-31",
+    });
+    expect(malformedCsv.status).toBe(200);
+    expect(malformedCsv.body.errors[0]).toContain("Missing required column");
+    expect((await db.select().from(paymentsTable).where(eq(paymentsTable.id, payment.id))).length).toBe(beforePayments);
+    expect((await db.select().from(invoicesTable).where(eq(invoicesTable.id, invoice.id))).length).toBe(beforeInvoices);
+    expect(await db.select().from(paymentsTable).where(eq(paymentsTable.clientId, clientId))).toEqual(beforePaymentRows);
+    expect(await db.select().from(invoicesTable).where(eq(invoicesTable.clientId, clientId))).toEqual(beforeInvoiceRows);
+    expect(await db.select().from(vendorsTable).where(eq(vendorsTable.id, vendor.id))).toEqual(beforeVendorRows);
+    expect(await db.select().from(paymentAllocationsTable).where(eq(paymentAllocationsTable.paymentId, payment.id))).toEqual(beforeAllocationRows);
+    expect(await db.select().from(auditLogTable).where(eq(auditLogTable.userId, staffId))).toEqual(beforeAuditRows);
+    for (const role of ["staff", "participant"] as const) {
+      const deniedUser = await db.insert(usersTable).values({ name: `Denied ${role}`, email: `${nonce}-${role}-denied@test.local`, role }).returning().then((rows) => rows[0]);
+      const deniedToken = newToken();
+      await db.insert(sessionsTable).values({ userId: deniedUser.id, token: deniedToken, expiresAt: new Date(Date.now() + 60 * 60 * 1000) });
+      const denied = await request(app).post("/api/payments/check-run/reconcile").set("Cookie", `ceps_session=${deniedToken}`).send({ csv: "", startDate: "2099-01-01", endDate: "2099-01-31" });
+      expect(denied.status).toBe(403);
+      await db.delete(sessionsTable).where(eq(sessionsTable.userId, deniedUser.id));
+      await db.delete(usersTable).where(eq(usersTable.id, deniedUser.id));
+    }
   });
 });

@@ -15,6 +15,7 @@ import { format } from 'date-fns';
 import { Search, CheckCircle2, ChevronLeft, ChevronRight } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
 import { DateRangeFilter } from '@/components/date-range-filter';
+import { CheckRunReconciliationDialog } from '@/components/check-run-reconciliation-dialog';
 
 const PAGE_SIZE = 50;
 
@@ -30,6 +31,7 @@ export default function PaymentsPage() {
   };
   const { user } = useAuth();
   const isStaff = user?.role === 'staff';
+  const canReconcile = isStaff && (user?.permissions ?? []).includes('check_writing');
   const deletePayment = useDeletePayment();
 
   // Server-driven broad search (check number, vendor, or participant) + pagination.
@@ -64,6 +66,7 @@ export default function PaymentsPage() {
         {user?.role === 'staff' && (
           <div className="flex items-center gap-2">
             <LogPaymentDialog onSaved={() => refetch()} />
+            {canReconcile && <CheckRunReconciliationDialog canReconcile />}
             <AltaFmsPaymentImport onImported={() => refetch()} />
           </div>
         )}

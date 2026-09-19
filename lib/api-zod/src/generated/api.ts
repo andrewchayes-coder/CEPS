@@ -2702,6 +2702,103 @@ export const CreatePaymentResponse = zod.object({
 
 
 /**
+ * @summary Reconcile a pasted or uploaded check run against approved payments without writing data
+ */
+
+export const reconcileCheckRunBodyStartDateRegExp = new RegExp('^\\d{4}-\\d{2}-\\d{2}$');
+export const reconcileCheckRunBodyEndDateRegExp = new RegExp('^\\d{4}-\\d{2}-\\d{2}$');
+
+
+export const ReconcileCheckRunBody = zod.object({
+  "csv": zod.string().min(1),
+  "startDate": zod.string().regex(reconcileCheckRunBodyStartDateRegExp),
+  "endDate": zod.string().regex(reconcileCheckRunBodyEndDateRegExp)
+})
+
+export const ReconcileCheckRunResponse = zod.object({
+  "parsedCount": zod.int(),
+  "errorCount": zod.int(),
+  "errors": zod.array(zod.string()),
+  "matched": zod.array(zod.object({
+  "payment": zod.union([zod.object({
+  "id": zod.string(),
+  "vendorName": zod.string(),
+  "address": zod.string().nullable(),
+  "amount": zod.string(),
+  "checkNumber": zod.string(),
+  "checkDate": zod.string()
+}),zod.null()]),
+  "check": zod.union([zod.object({
+  "rowNumber": zod.int(),
+  "vendorName": zod.string(),
+  "address": zod.string(),
+  "amount": zod.string(),
+  "checkNumber": zod.string(),
+  "checkDate": zod.string()
+}),zod.null()]),
+  "addressMatch": zod.boolean()
+})),
+  "paymentsWithoutChecks": zod.array(zod.object({
+  "payment": zod.union([zod.object({
+  "id": zod.string(),
+  "vendorName": zod.string(),
+  "address": zod.string().nullable(),
+  "amount": zod.string(),
+  "checkNumber": zod.string(),
+  "checkDate": zod.string()
+}),zod.null()]),
+  "check": zod.union([zod.object({
+  "rowNumber": zod.int(),
+  "vendorName": zod.string(),
+  "address": zod.string(),
+  "amount": zod.string(),
+  "checkNumber": zod.string(),
+  "checkDate": zod.string()
+}),zod.null()]),
+  "addressMatch": zod.boolean()
+})),
+  "checksWithoutPayments": zod.array(zod.object({
+  "payment": zod.union([zod.object({
+  "id": zod.string(),
+  "vendorName": zod.string(),
+  "address": zod.string().nullable(),
+  "amount": zod.string(),
+  "checkNumber": zod.string(),
+  "checkDate": zod.string()
+}),zod.null()]),
+  "check": zod.union([zod.object({
+  "rowNumber": zod.int(),
+  "vendorName": zod.string(),
+  "address": zod.string(),
+  "amount": zod.string(),
+  "checkNumber": zod.string(),
+  "checkDate": zod.string()
+}),zod.null()]),
+  "addressMatch": zod.boolean()
+})),
+  "amountMismatches": zod.array(zod.object({
+  "payment": zod.union([zod.object({
+  "id": zod.string(),
+  "vendorName": zod.string(),
+  "address": zod.string().nullable(),
+  "amount": zod.string(),
+  "checkNumber": zod.string(),
+  "checkDate": zod.string()
+}),zod.null()]),
+  "check": zod.union([zod.object({
+  "rowNumber": zod.int(),
+  "vendorName": zod.string(),
+  "address": zod.string(),
+  "amount": zod.string(),
+  "checkNumber": zod.string(),
+  "checkDate": zod.string()
+}),zod.null()]),
+  "addressMatch": zod.boolean()
+}))
+})
+
+
+/**
  * @summary Report participant-months that do not match the confirmed flat monthly fee rule (staff)
  */
 export const AuditMonthlyFeesQueryParams = zod.object({

@@ -21,3 +21,4 @@
 - [Unmatched POS lifecycle](unmatched-pos-lifecycle.md) — UCI-first matching and durable PDF-backed queue completion must remain server-validated and transactional.
 - [Invoice and payment child rows](invoice-payment-child-rows.md) — financial truth lives in invoice line items and payment allocations; validation and remittance capacity must honor every child.
 - [POS amendment invariants](pos-amendment-invariants.md) — exact pair checks must match DB uniqueness; amendments snapshot once, preserve status, and never reuse stale PDF uploads.
+- [Check-run reconciliation](check-run-reconciliation.md) — consume exact vendor-and-amount matches before pairing same-vendor amount mismatches; unknown vendors never match.

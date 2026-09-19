@@ -48,6 +48,7 @@ Thumbs.db
 # Replit
 .cache/
 .local/
+attached_assets/
 
 # Opt-in generated release reports (reviewed reports may be committed explicitly)
 /release-reports/generated/

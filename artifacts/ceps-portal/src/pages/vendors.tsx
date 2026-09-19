@@ -12,12 +12,14 @@ import { Plus, Search, AlertTriangle, CheckCircle2, ChevronLeft, ChevronRight } 
 import { Skeleton } from '@/components/ui/skeleton';
 import { useAuth } from '@/components/auth/auth-provider';
 import { DateRangeFilter } from '@/components/date-range-filter';
+import { useDebounce } from '@/hooks/use-debounce';
 
 const PAGE_SIZE = 50;
 
 export default function VendorsPage() {
   const { user } = useAuth();
   const [search, setSearch] = useState('');
+  const debouncedSearch = useDebounce(search, 300);
   const [startDate, setStartDate] = useState<string>();
   const [endDate, setEndDate] = useState<string>();
   const [page, setPage] = useState(0);
@@ -29,7 +31,7 @@ export default function VendorsPage() {
 
   // Server-driven broad search (name, contact details) + pagination.
   const params = {
-    ...(search ? { search } : {}),
+    ...(debouncedSearch ? { search: debouncedSearch } : {}),
     ...(startDate ? { startDate } : {}),
     ...(endDate ? { endDate } : {}),
     limit: PAGE_SIZE,

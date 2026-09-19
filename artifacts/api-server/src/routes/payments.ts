@@ -425,7 +425,7 @@ async function enrichPayments(payments: (typeof paymentsTable.$inferSelect)[]) {
 }
 
 router.get("/payments", requireAuth, async (req, res): Promise<void> => {
-  const query = ListPaymentsQueryParams.safeParse(req.query);
+  const query = ListRemittancesQueryParams.safeParse(req.query);
   if (!query.success) {
     res.status(400).json({ error: query.error.message });
     return;
@@ -434,24 +434,17 @@ router.get("/payments", requireAuth, async (req, res): Promise<void> => {
     res.status(400).json({ error: "startDate must be on or before endDate" });
     return;
   }
-  const escapeLike = (s: string) => s.replace(/[\\%_]/g, (c) => `\\${c}`);
+    const escapeLike = (s: string) => s.replace(/[\\%_]/g, (c) => `\\${c}`);
   const conditions: SQL[] = [
-    notDeleted(paymentsTable),
-    // Exclude payments belonging to soft-deleted clients regardless of how the
-    // query is filtered (check number search, clientId filter, unfiltered list).
-    // This mirrors the invoices/authorizations pattern and ensures a client's
-    // payments are invisible the moment the client is soft-deleted.
-    sql`${paymentsTable.clientId} in (select id from clients where is_deleted = false)`,
-    // NOTE: no vendor-active filter here. Historical payments must remain visible
-    // in the Payments Log regardless of whether their vendor is later
-    // deactivated (active = false). This mirrors the client case-record payments
-    // query, which has no vendor-active filter either. Only soft-delete filters
-    // and role scoping restrict visibility.
+    notDeleted(remittancesTable),
+    // Exclude remittances belonging to soft-deleted clients — mirrors the
+    // payments route pattern so a client's remittances vanish the moment the
+    // client is soft-deleted, regardless of which query-string filter is used.
+    sql`${remittancesTable.clientId} in (select id from clients where is_deleted = false)`,
   ];
-  // Role scoping — mirrors the invoices/audit-log SQL-WHERE pattern:
-  // vendors see only their own payments; parent/self only their linked client's;
-  // service coordinators only payments for clients in their caseload
-  // (clients.assignedCoordinatorId = their user id).
+  // Role scoping — mirrors the payments/invoices SQL-WHERE pattern:
+  // parent/self see only their linked client's remittances; service
+  // coordinators only remittances for clients in their caseload; vendors see none.
   const u = req.user!;
   if (u.role === "vendor" && u.linkedRecordType === "vendor") {
     conditions.push(eq(paymentsTable.vendorId, u.linkedRecordId ?? ""));
@@ -484,25 +477,29 @@ router.get("/payments", requireAuth, async (req, res): Promise<void> => {
     const numericLike = `%${escapeLike(normalizedSearch)}%`;
     conditions.push(
       or(
-        ilike(paymentsTable.qbCheckNumber, like),
-        sql`${paymentsTable.clientId} in (select id from clients where (first_name || ' ' || last_name) ilike ${like} and is_deleted = false)`,
-        sql`${paymentsTable.vendorId} in (select id from vendors where name ilike ${like})`,
-        sql`replace(lower(${paymentsTable.paymentType}), '_', ' ') ilike ${like}`,
-        sql`case when ${paymentsTable.remitted} then 'remitted' else 'unremitted' end ilike ${like}`,
-        sql`case when ${paymentsTable.remitted} then 'allocated' else 'remaining' end ilike ${like}`,
-        ilike(paymentsTable.paymentMonth, like),
-        sql`to_char(${paymentsTable.checkDate}, 'Mon FMDD, YYYY') ilike ${like}`,
-        sql`cast(${paymentsTable.checkDate} as text) ilike ${like}`,
-        normalizedSearch ? sql`cast(${paymentsTable.amount} as text) ilike ${numericLike}` : sql`false`,
+        sql`${remittancesTable.clientId} in (select id from clients where (first_name || ' ' || last_name) ilike ${like} and is_deleted = false)`,
+        ilike(remittancesTable.altaReference, like),
+        ilike(remittancesTable.reportReference, like),
+        ilike(remittancesTable.remittanceBatchId, like),
+        sql`replace(lower(${remittancesTable.status}), '_', ' ') ilike ${like}`,
+        sql`case when ${remittancesTable.status} = 'matched' then 'allocated' else 'remaining' end ilike ${like}`,
+        sql`replace(lower(${remittancesTable.source}), '_', ' ') ilike ${like}`,
+        ilike(remittancesTable.paymentMonth, like),
+        ilike(remittancesTable.reviewReason, like),
+        sql`case when ${remittancesTable.autoMatched} then 'auto matched' else 'unmatched' end ilike ${like}`,
+        sql`to_char(${remittancesTable.remittanceDate}, 'Mon FMDD, YYYY') ilike ${like}`,
+        sql`cast(${remittancesTable.remittanceDate} as text) ilike ${like}`,
+        normalizedSearch ? sql`cast(${remittancesTable.amount} as text) ilike ${numericLike}` : sql`false`,
+        normalizedSearch ? sql`cast(${remittancesTable.expectedAmount} as text) ilike ${numericLike}` : sql`false`,
         normalizedSearch ? sql`cast(coalesce(
-          (select sum(ra.amount) from remittance_allocations ra where ra.payment_id = ${paymentsTable.id}),
-          case when ${paymentsTable.remitted} then ${paymentsTable.amount} else 0 end
+          (select sum(ra.amount) from remittance_allocations ra where ra.remittance_id = ${remittancesTable.id}),
+          case when ${remittancesTable.matchedPaymentId} is not null then ${remittancesTable.amount} else 0 end
         ) as text) ilike ${numericLike}` : sql`false`,
-        normalizedSearch ? sql`cast(${paymentsTable.amount} - coalesce(
-          (select sum(ra.amount) from remittance_allocations ra where ra.payment_id = ${paymentsTable.id}),
-          case when ${paymentsTable.remitted} then ${paymentsTable.amount} else 0 end
+        normalizedSearch ? sql`cast(${remittancesTable.amount} - coalesce(
+          (select sum(ra.amount) from remittance_allocations ra where ra.remittance_id = ${remittancesTable.id}),
+          case when ${remittancesTable.matchedPaymentId} is not null then ${remittancesTable.amount} else 0 end
         ) as text) ilike ${numericLike}` : sql`false`,
-        sql`exists (select 1 from payment_allocations pa_search inner join authorizations a_search on a_search.id = pa_search.authorization_id where pa_search.payment_id = ${paymentsTable.id} and (a_search.auth_number ilike ${like} or a_search.service_code ilike ${like} or replace(lower(a_search.status), '_', ' ') ilike ${like} or to_char(a_search.service_period_start, 'Mon FMDD, YYYY') ilike ${like} or to_char(a_search.service_period_end, 'Mon FMDD, YYYY') ilike ${like}) and a_search.is_deleted = false)`,
+        sql`${remittancesTable.authorizationId} in (select id from authorizations where auth_number ilike ${like} and is_deleted = false)`,
       )!,
     );
   }
@@ -513,17 +510,17 @@ router.get("/payments", requireAuth, async (req, res): Promise<void> => {
     query.data.sortBy,
     query.data.sortDirection,
     {
-      checkDate: sql`${paymentsTable.checkDate}`,
-      qbCheckNumber: sql`lower(${paymentsTable.qbCheckNumber})`,
-      vendorName: sql`lower((select name from vendors where id = ${paymentsTable.vendorId}))`,
-      clientName: sql`lower((select last_name || ', ' || first_name from clients where id = ${paymentsTable.clientId}))`,
-      amount: sql`${paymentsTable.amount}`,
-      remitted: sql`${paymentsTable.remitted}`,
-      paymentType: sql`lower(${paymentsTable.paymentType})`,
-      createdAt: sql`${paymentsTable.createdAt}`,
+      remittanceDate: sql`${remittancesTable.remittanceDate}`,
+      altaReference: sql`lower(${remittancesTable.altaReference})`,
+      remittanceBatchId: sql`lower(${remittancesTable.remittanceBatchId})`,
+      clientName: sql`lower((select last_name || ', ' || first_name from clients where id = ${remittancesTable.clientId}))`,
+      authNumber: sql`lower((select auth_number from authorizations where id = ${remittancesTable.authorizationId}))`,
+      amount: sql`${remittancesTable.amount}`,
+      status: sql`lower(${remittancesTable.status})`,
+      createdAt: sql`${remittancesTable.createdAt}`,
     },
-    sql`${paymentsTable.id}`,
-    [desc(paymentsTable.checkDate), desc(paymentsTable.id)],
+    sql`${remittancesTable.id}`,
+    [desc(remittancesTable.createdAt), desc(remittancesTable.id)],
   );
   const [[{ total }], payments] = await Promise.all([
     db.select({ total: count() }).from(paymentsTable).where(where),
@@ -544,94 +541,42 @@ router.get("/payments/monthly-fees/audit", requireStaff, async (req, res): Promi
 });
 
 router.post("/payments/monthly-fees/repair", requireStaff, async (req, res): Promise<void> => {
-  const parsed = RepairMonthlyFeesBody.safeParse(req.body);
-  if (!parsed.success || parsed.data.confirm !== true) {
-    res.status(400).json({ error: "Review the monthly fee audit and set confirm to true before repairing." });
+  const parsed = UpdateRemittanceBody.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: parsed.error.message });
     return;
   }
-
   const result = await db.transaction(async (tx) => {
     const txDb = tx as unknown as typeof db;
-    await tx.execute(sql`select pg_advisory_xact_lock(hashtext('monthly-fee-audit-repair'))`);
-    const before = await monthlyFeeAudit(txDb, parsed.data.clientIds);
-    let created = 0;
-    let reversed = 0;
-    let replaced = 0;
-
-    for (const item of before.items) {
-      if (item.repairAction === "none") continue;
-      if (item.repairAction === "create") {
-        const outcome = await reconcileMonthlyFee(item.clientId, item.feeMonth, req.user!.id, txDb);
-        if (outcome === "created") created++;
-        continue;
-      }
-
-      const lockKey = `${item.clientId}:${item.feeMonth}`;
-      await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${lockKey}))`);
-      const [fee] = await tx
-        .select()
-        .from(feesTable)
-        .where(and(
-          eq(feesTable.id, item.feeId!),
-          notDeleted(feesTable),
-        ))
-        .limit(1);
-      if (!fee || !isUntouchedAutomaticFee(fee)) continue;
-
-      const deletedAt = new Date();
-      const [removed] = await tx
-        .update(feesTable)
-        .set({ isDeleted: true, deletedAt, deletedBy: req.user!.id })
-        .where(and(
-          eq(feesTable.id, fee.id),
-          eq(feesTable.status, "pending"),
-          isNull(feesTable.notes),
-          isNull(feesTable.createdBy),
-          notDeleted(feesTable),
-        ))
-        .returning();
-      if (!removed) continue;
-      await audit(
-        req.user!.id,
-        "repair_reverse_obsolete_fee",
-        "fee",
-        removed.id,
-        `Monthly fee repair reversed ${removed.amount} (${removed.ruleApplied ?? "no rule"}) for client month ${item.feeMonth}.`,
-        txDb,
-      );
-      if (item.repairAction === "replace") {
-        const outcome = await reconcileMonthlyFee(item.clientId, item.feeMonth, req.user!.id, txDb);
-        if (outcome === "created") replaced++;
-        else reversed++;
-      } else {
-        reversed++;
-      }
+    await tx.execute(sql`select id from remittances where id = ${id} for update`);
+    const [before] = await tx.select().from(remittancesTable).where(and(eq(remittancesTable.id, id), notDeleted(remittancesTable)));
+    if (!before) return { error: "Remittance not found", status: 404 } as const;
+    const effectiveAuthId = ("authorizationId" in updates ? updates.authorizationId : before.authorizationId) as string | null;
+    const validation = await validateParticipantLinks(txDb, before.clientId, { authorizationId: effectiveAuthId });
+    if (validation.error) return { error: validation.error, status: 400 } as const;
+    const reconciliationChanged = ["authorizationId", "amount", "paymentMonth"].some((key) => key in updates);
+    const [allocation] = await tx.select({ id: remittanceAllocationsTable.id }).from(remittanceAllocationsTable).where(eq(remittanceAllocationsTable.remittanceId, id)).limit(1);
+    if ((before.matchedPaymentId || allocation) && reconciliationChanged) {
+      return { error: "Authorization, amount, and service month cannot be changed after matching", status: 409 } as const;
     }
-
-    const after = await monthlyFeeAudit(txDb, parsed.data.clientIds);
-    await audit(
-      req.user!.id,
-      "repair_monthly_fees",
-      "fee",
-      undefined,
-      `${created} created, ${reversed} reversed, ${replaced} replaced, ${after.protectedIssues} protected, ${after.totalIssues} remaining.`,
-      txDb,
-    );
-    return {
-      created,
-      reversed,
-      replaced,
-      protected: after.protectedIssues,
-      remainingIssues: after.totalIssues,
-      report: after,
-    };
+    const auth = validation.authorization ?? null;
+    const next = { ...updates } as Record<string, unknown>;
+    if (!before.matchedPaymentId && !allocation && reconciliationChanged) {
+      const amount = ("amount" in next ? next.amount : before.amount) as string;
+      const review = reviewForMatch(auth, amount, false);
+      next.reviewReason = review.reviewReason;
+      next.expectedAmount = review.expectedAmount;
+    }
+    const [remittance] = await tx.update(remittancesTable).set(next)
+      .where(and(eq(remittancesTable.id, id), notDeleted(remittancesTable))).returning();
+    return { before, remittance, updates: next } as const;
   });
 
   res.json(RepairMonthlyFeesResponse.parse(result));
 });
 
 router.post("/payments/check-run/reconcile", requirePermission("check_writing"), async (req, res): Promise<void> => {
-  const parsed = ReconcileCheckRunBody.safeParse(req.body);
+  const parsed = UpdateRemittanceBody.safeParse(req.body);
   if (!parsed.success) {
     res.status(400).json({ error: parsed.error.message });
     return;
@@ -679,7 +624,7 @@ router.post("/payments/check-run/reconcile", requirePermission("check_writing"),
 });
 
 router.post("/payments", requirePermission("check_writing"), async (req, res): Promise<void> => {
-  const parsed = CreatePaymentBody.safeParse(req.body);
+  const parsed = UpdateRemittanceBody.safeParse(req.body);
   if (!parsed.success) {
     res.status(400).json({ error: parsed.error.message });
     return;
@@ -693,7 +638,7 @@ router.post("/payments", requirePermission("check_writing"), async (req, res): P
     return;
   }
   // Normalize empty strings from the form to null for optional/nullable FK columns
-  const values = { ...paymentData, source: "manual", loggedBy: req.user!.id } as Record<string, unknown>;
+  const values = { ...parsed.data } as Record<string, unknown>;
   for (const k of ["authorizationId", "vendorId", "invoiceId", "paymentMonth"] as const) {
     if (values[k] === "") values[k] = null;
   }
@@ -714,7 +659,7 @@ router.post("/payments", requirePermission("check_writing"), async (req, res): P
   // present (mirrors invoice validation, which skips the check without an auth);
   // payments genuinely without an authorization skip the check by definition.
   const allocationAuthorizationIds = [...new Set(allocations.map((allocation) => allocation.authorizationId))];
-  const runDupCheck = allocationAuthorizationIds.length > 0 && !!dupPaymentMonth;
+  const runDupCheck = dupFieldChanged && effectiveAllocationAuthorizationIds.length > 0 && !!effPaymentMonth;
   const justification = overrideJustification?.trim();
 
   // Persist the payment and its auto-generated Fee atomically so a payment can
@@ -797,7 +742,7 @@ router.post("/payments", requirePermission("check_writing"), async (req, res): P
 });
 
 router.post("/payments/import", requirePermission("check_writing"), async (req, res): Promise<void> => {
-  const parsed = ImportAltaFmsPaymentsBody.safeParse(req.body);
+  const parsed = UpdateRemittanceBody.safeParse(req.body);
   if (!parsed.success) {
     res.status(400).json({ error: parsed.error.message });
     return;
@@ -819,28 +764,23 @@ router.post("/payments/import", requirePermission("check_writing"), async (req, 
     for (let index = 0; index < values.length; index += size) result.push(values.slice(index, index + size));
     return result;
   };
-  const clients: (typeof clientsTable.$inferSelect)[] = [];
+  const clients = uciNeedles.length
+    ? await db.select().from(clientsTable).where(and(inArray(clientsTable.uciNumber, uciNeedles), notDeleted(clientsTable)))
+    : [];
   for (const uciChunk of chunks(uciNumbers)) {
     clients.push(...await db.select().from(clientsTable).where(and(
       inArray(clientsTable.uciNumber, uciChunk),
       notDeleted(clientsTable),
     )));
   }
-  const clientByUci = new Map(clients.map((client) => [client.uciNumber, client]));
-  const clientIds = clients.map((client) => client.id);
-  const auths: (typeof authorizationsTable.$inferSelect)[] = [];
-  // Each authorization query has two IN clauses, so keep each side below half
-  // the overall lookup budget.
-  for (const clientIdChunk of chunks(clientIds, LOOKUP_CHUNK_SIZE / 2)) {
-    for (const authNumberChunk of chunks(authNumbers, LOOKUP_CHUNK_SIZE / 2)) {
-      auths.push(...await db.select().from(authorizationsTable).where(and(
-        inArray(authorizationsTable.clientId, clientIdChunk),
-        inArray(authorizationsTable.authNumber, authNumberChunk),
-        notDeleted(authorizationsTable),
-      )));
-    }
-  }
-  const authByClientAndNumber = new Map(auths.map((auth) => [`${auth.clientId}::${auth.authNumber}`, auth]));
+  const clientByUci = new Map(clients.map((c) => [c.uciNumber, c] as const));
+  const clientIds = clients.map((c) => c.id);
+  const auths = clientIds.length
+    ? await db.select().from(authorizationsTable).where(and(inArray(authorizationsTable.clientId, clientIds), notDeleted(authorizationsTable)))
+    : [];
+  // Key authorizations by clientId + authNumber so an auth number is only ever
+  // resolved within its own client's scope.
+  const authByClientAndNumber = new Map(auths.map((a) => [`${a.clientId}::${a.authNumber}`, a] as const));
   const fingerprints = new Set<string>();
   for (const fingerprintChunk of chunks(rowFingerprints)) {
     const existingFingerprints = await db
@@ -854,24 +794,38 @@ router.post("/payments/import", requirePermission("check_writing"), async (req, 
       if (row.fingerprint) fingerprints.add(row.fingerprint);
     }
   }
-  const results: { rowNumber: number; uciNumber?: string | null; outcome: "imported" | "skipped_duplicate" | "flagged_duplicate" | "errored"; message?: string | null; paymentId?: string | null }[] = [];
+  const results: {
+    rowNumber: number;
+    uciNumber?: string | null;
+    outcome: "auto_matched" | "needs_manual_match" | "skipped_duplicate" | "errored";
+    message?: string | null;
+    remittanceId?: string | null;
+    matchedPaymentId?: string | null;
+  }[] = [];
   let imported = 0;
   let skippedDuplicate = 0;
   let flaggedDuplicate = 0;
-  let errored = source.problems.length;
+  let errored = 0;
   for (const problem of source.problems) {
     const rowNumber = Number(problem.match(/^Row (\d+):/)?.[1]);
     if (rowNumber) results.push({ rowNumber, outcome: "errored", message: problem });
   }
 
   for (const row of source.rows) {
-    const fingerprint = altaFmsPaymentRowFingerprint(row);
+    const fingerprint = altaRowFingerprint({
+      uciNumber: row.uciNumber,
+      authNumber: row.authNumber,
+      serviceMonth: row.serviceMonth,
+      amount: row.amount,
+      checkNumber: row.checkNumber,
+      remittanceDate: row.remittanceDate,
+    });
     if (fingerprints.has(fingerprint)) {
       skippedDuplicate++;
       results.push({ rowNumber: row.rowNumber, uciNumber: row.uciNumber, outcome: "skipped_duplicate", message: "This Alta FMS line was already imported (matched by source-row fingerprint)." });
       continue;
     }
-    const client = clientByUci.get(row.uciNumber);
+    const client = clientByUci.get(uci);
     if (!client) {
       errored++;
       results.push({ rowNumber: row.rowNumber, uciNumber: row.uciNumber, outcome: "errored", message: `No client found for UCI "${row.uciNumber}".` });
@@ -963,23 +917,20 @@ router.get("/payments/:id", requireAuth, async (req, res): Promise<void> => {
   const [activeClient] = await db
     .select({ id: clientsTable.id, assignedCoordinatorId: clientsTable.assignedCoordinatorId })
     .from(clientsTable)
-    .where(and(eq(clientsTable.id, payment.clientId), eq(clientsTable.isDeleted, false)));
+    .where(and(eq(clientsTable.id, remittance.clientId), eq(clientsTable.isDeleted, false)));
   if (!activeClient) {
-    res.status(404).json({ error: "Payment not found" });
+    res.status(404).json({ error: "Remittance not found" });
     return;
   }
-  // Per-role ownership, mirroring the GET /payments list scoping:
-  // staff see all; coordinators only payments for clients in their caseload;
-  // parent/self only their linked client's payments; vendors only their own
-  // vendor's payments.
+  // Per-role ownership, mirroring the GET /remittances list scoping:
+  // staff see all; coordinators only remittances for clients in their caseload;
+  // parent/self only their linked client's; vendors have no visibility.
   const u = req.user!;
-  if (u.role === "vendor" && u.linkedRecordType === "vendor") {
-    if (payment.vendorId !== u.linkedRecordId) {
-      res.status(403).json({ error: "Forbidden" });
-      return;
-    }
+  if (u.role === "vendor") {
+    res.status(403).json({ error: "Forbidden" });
+    return;
   } else if ((u.role === "parent_guardian" || u.role === "self") && u.linkedRecordType === "client") {
-    if (payment.clientId !== u.linkedRecordId) {
+    if (remittance.clientId !== u.linkedRecordId) {
       res.status(403).json({ error: "Forbidden" });
       return;
     }
@@ -989,12 +940,12 @@ router.get("/payments/:id", requireAuth, async (req, res): Promise<void> => {
       return;
     }
   }
-  res.json(GetPaymentResponse.parse((await enrichPayments([payment]))[0]));
+  res.json(GetRemittanceResponse.parse((await enrichRemittances([remittance]))[0]));
 });
 
-router.patch("/payments/:id", requirePermission("check_writing"), async (req, res): Promise<void> => {
+router.patch("/remittances/:id", requirePermission("check_writing"), async (req, res): Promise<void> => {
   const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
-  const parsed = UpdatePaymentBody.safeParse(req.body);
+  const parsed = UpdateRemittanceBody.safeParse(req.body);
   if (!parsed.success) {
     res.status(400).json({ error: parsed.error.message });
     return;
@@ -1011,7 +962,7 @@ router.patch("/payments/:id", requirePermission("check_writing"), async (req, re
     }
     if (!("amount" in updateData)) updateData.amount = total;
   }
-  const updates = { ...updateData } as Record<string, unknown>;
+  const updates = { ...parsed.data } as Record<string, unknown>;
   for (const k of ["authorizationId", "vendorId", "invoiceId", "paymentMonth"] as const) {
     if (updates[k] === "") updates[k] = null;
   }
@@ -1425,7 +1376,7 @@ router.get("/remittances", requireAuth, async (req, res): Promise<void> => {
 });
 
 router.post("/remittances", requirePermission("check_writing"), async (req, res): Promise<void> => {
-  const parsed = CreateRemittanceBody.safeParse(req.body);
+  const parsed = UpdateRemittanceBody.safeParse(req.body);
   if (!parsed.success) {
     res.status(400).json({ error: parsed.error.message });
     return;
@@ -1436,69 +1387,39 @@ router.post("/remittances", requirePermission("check_writing"), async (req, res)
   }
   let relationshipError: string | undefined;
   const remittance = await db.transaction(async (tx) => {
-    const txDb = tx as unknown as typeof db;
-    const authorizationId = values.authorizationId as string | null;
-    if (!authorizationId) {
-      relationshipError = "authorizationId is required";
-      return null;
+    await tx.execute(sql`select id from remittances where id = ${id} for update`);
+    const [before] = await tx.select().from(remittancesTable)
+      .where(and(eq(remittancesTable.id, id), notDeleted(remittancesTable)));
+    if (!before) return undefined;
+
+    const allocations = await tx.select().from(remittanceAllocationsTable)
+      .where(eq(remittanceAllocationsTable.remittanceId, before.id));
+    const paymentIds = [...new Set(allocations.map((allocation) => allocation.paymentId))].sort();
+    if (paymentIds.length) {
+      await tx.execute(sql`
+        select id from payments
+        where id in (${sql.join(paymentIds.map((paymentId) => sql`${paymentId}`), sql`, `)})
+        order by id
+        for update
+      `);
     }
-    const validation = await validateParticipantLinks(txDb, parsed.data.clientId, { authorizationId });
-    relationshipError = validation.error;
-    if (relationshipError) return null;
-    const auth = validation.authorization;
-    if (!auth) {
-      relationshipError = "authorizationId must reference a non-deleted authorization";
-      return null;
+    await tx.delete(remittanceAllocationsTable).where(eq(remittanceAllocationsTable.remittanceId, before.id));
+    for (const allocation of allocations) {
+      const [totals] = await tx.select({ total: sql<string>`coalesce(sum(${remittanceAllocationsTable.amount}), 0)` }).from(remittanceAllocationsTable).where(eq(remittanceAllocationsTable.paymentId, allocation.paymentId));
+      const [payment] = await tx.select().from(paymentsTable).where(eq(paymentsTable.id, allocation.paymentId));
+      if (payment) await tx.update(paymentsTable).set({ remitted: money(totals.total).greaterThanOrEqualTo(payment.amount) }).where(eq(paymentsTable.id, payment.id));
     }
-    const expected = authorizationExpectedAmount(auth);
-    const mismatch = !!(expected && !money(expected).equals(money(parsed.data.amount)));
-    const candidate = mismatch ? undefined : await findMatchingPayment({ clientId: parsed.data.clientId, authorizationId, amount: parsed.data.amount, paymentMonth: values.paymentMonth as string | null }, txDb);
-    let match: typeof paymentsTable.$inferSelect | undefined;
-    if (candidate) {
-      // Candidate discovery is necessarily a snapshot. Lock and re-read the
-      // payment before claiming it so concurrent automatic remittances cannot
-      // both consume the same payment/allocation capacity.
-      const [lockedCandidate] = await tx.select().from(paymentsTable)
-        .where(and(eq(paymentsTable.id, candidate.id), notDeleted(paymentsTable)))
-        .for("update");
-      if (!lockedCandidate || lockedCandidate.remitted) {
-        match = undefined;
-      } else {
-      const [authAllocation] = await tx.select({ total: sql<string>`coalesce(sum(${paymentAllocationsTable.amount}), 0)` })
-        .from(paymentAllocationsTable).where(and(
-          eq(paymentAllocationsTable.paymentId, candidate.id),
-          eq(paymentAllocationsTable.authorizationId, authorizationId),
-        ));
-      const [assigned] = await tx.select({ total: sql<string>`coalesce(sum(${remittanceAllocationsTable.amount}), 0)` })
-        .from(remittanceAllocationsTable).innerJoin(remittancesTable, eq(remittancesTable.id, remittanceAllocationsTable.remittanceId))
-        .where(and(eq(remittanceAllocationsTable.paymentId, candidate.id), eq(remittancesTable.authorizationId, authorizationId)));
-      const remaining = money(authAllocation?.total).minus(money(assigned?.total));
-      if (remaining.greaterThanOrEqualTo(money(parsed.data.amount))) {
-        const [paymentAssigned] = await tx.select({ total: sql<string>`coalesce(sum(${remittanceAllocationsTable.amount}), 0)` })
-          .from(remittanceAllocationsTable).where(eq(remittanceAllocationsTable.paymentId, lockedCandidate.id));
-        if (money(lockedCandidate.amount).minus(money(paymentAssigned.total)).greaterThanOrEqualTo(money(parsed.data.amount))) {
-          match = lockedCandidate;
-        }
-      }
+
+    const [row] = await tx.update(remittancesTable)
+      .set({ isDeleted: true, deletedAt: new Date(), deletedBy: req.user!.id })
+      .where(and(eq(remittancesTable.id, id), notDeleted(remittancesTable))).returning();
+    if (row) {
+      if (row.matchedPaymentId) {
+        await tx.update(paymentsTable).set({ remitted: false })
+          .where(and(eq(paymentsTable.id, row.matchedPaymentId), eq(paymentsTable.remitted, true)));
       }
     }
-    const review = reviewForMatch(auth, parsed.data.amount, !!match);
-    const [created] = await tx.insert(remittancesTable).values({
-      ...values, source: "manual", status: match ? "matched" : "received",
-      matchedPaymentId: match?.id ?? null, autoMatched: !!match,
-      reviewReason: review.reviewReason, expectedAmount: review.expectedAmount,
-    } as typeof remittancesTable.$inferInsert).returning();
-    if (match) {
-       await tx.insert(remittanceAllocationsTable).values({
-        remittanceId: created.id, paymentId: match.id, amount: created.amount, autoMatched: true,
-      });
-       const [total] = await tx.select({ total: sql<string>`coalesce(sum(${remittanceAllocationsTable.amount}), 0)` })
-         .from(remittanceAllocationsTable).where(eq(remittanceAllocationsTable.paymentId, match.id));
-       const complete = money(total.total).equals(money(match.amount));
-       await tx.update(paymentsTable).set({ remitted: complete }).where(eq(paymentsTable.id, match.id));
-       if (complete) await collectFeeForPayment(match.id, req.user!.id, txDb);
-    }
-    return created;
+    return row;
   });
   if (!remittance) {
     res.status(400).json({ error: relationshipError! });
@@ -1510,61 +1431,35 @@ router.post("/remittances", requirePermission("check_writing"), async (req, res)
 
 router.post("/remittances/:id/match", requirePermission("check_writing"), async (req, res): Promise<void> => {
   const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
-  const parsed = MatchRemittanceBody.safeParse(req.body);
+  const parsed = UpdateRemittanceBody.safeParse(req.body);
   if (!parsed.success) {
     res.status(400).json({ error: parsed.error.message });
     return;
   }
   const result = await db.transaction(async (tx) => {
-    // Lock both rows before validating and conditionally claiming them.
+    const txDb = tx as unknown as typeof db;
     await tx.execute(sql`select id from remittances where id = ${id} for update`);
-    await tx.execute(sql`select id from payments where id = ${parsed.data.paymentId} for update`);
-    const [remittance] = await tx.select().from(remittancesTable).where(eq(remittancesTable.id, id));
-    if (!remittance || remittance.isDeleted) return { error: "Remittance not found", status: 404 } as const;
-    const [payment] = await tx.select().from(paymentsTable).where(eq(paymentsTable.id, parsed.data.paymentId));
-    if (!payment || payment.isDeleted) return { error: "Payment not found", status: 404 } as const;
-    const [client] = await tx.select().from(clientsTable).where(eq(clientsTable.id, payment.clientId));
-    if (!client || client.isDeleted) return { error: "Payment client not found or deleted", status: 400 } as const;
-    if (payment.clientId !== remittance.clientId) return { error: "Payment belongs to a different client", status: 400 } as const;
-    if (remittance.authorizationId) {
-      const [allocation] = await tx.select({ id: paymentAllocationsTable.id }).from(paymentAllocationsTable)
-        .where(and(eq(paymentAllocationsTable.paymentId, payment.id), eq(paymentAllocationsTable.authorizationId, remittance.authorizationId))).limit(1);
-      if (!allocation && payment.authorizationId !== remittance.authorizationId) return { error: "Payment belongs to a different authorization", status: 400 } as const;
+    const [before] = await tx.select().from(remittancesTable).where(and(eq(remittancesTable.id, id), notDeleted(remittancesTable)));
+    if (!before) return { error: "Remittance not found", status: 404 } as const;
+    const effectiveAuthId = ("authorizationId" in updates ? updates.authorizationId : before.authorizationId) as string | null;
+    const validation = await validateParticipantLinks(txDb, before.clientId, { authorizationId: effectiveAuthId });
+    if (validation.error) return { error: validation.error, status: 400 } as const;
+    const reconciliationChanged = ["authorizationId", "amount", "paymentMonth"].some((key) => key in updates);
+    const [allocation] = await tx.select({ id: remittanceAllocationsTable.id }).from(remittanceAllocationsTable).where(eq(remittanceAllocationsTable.remittanceId, id)).limit(1);
+    if ((before.matchedPaymentId || allocation) && reconciliationChanged) {
+      return { error: "Authorization, amount, and service month cannot be changed after matching", status: 409 } as const;
     }
-    if (remittance.paymentMonth && payment.paymentMonth !== remittance.paymentMonth) return { error: "Payment is for a different service month", status: 400 } as const;
-    const allocationAmount = money(parsed.data.amount);
-    if (!allocationAmount.isPositive()) return { error: "Allocation amount must be greater than zero", status: 400 } as const;
-    const [paymentTotals] = await tx.select({ total: sql<string>`coalesce(sum(${remittanceAllocationsTable.amount}), 0)` }).from(remittanceAllocationsTable).where(eq(remittanceAllocationsTable.paymentId, payment.id));
-    const [remittanceTotals] = await tx.select({ total: sql<string>`coalesce(sum(${remittanceAllocationsTable.amount}), 0)` }).from(remittanceAllocationsTable).where(eq(remittanceAllocationsTable.remittanceId, remittance.id));
-    if (payment.remitted && money(paymentTotals.total).isZero()) {
-      return { error: "Payment has already been remitted", status: 409 } as const;
+    const auth = validation.authorization ?? null;
+    const next = { ...updates } as Record<string, unknown>;
+    if (!before.matchedPaymentId && !allocation && reconciliationChanged) {
+      const amount = ("amount" in next ? next.amount : before.amount) as string;
+      const review = reviewForMatch(auth, amount, false);
+      next.reviewReason = review.reviewReason;
+      next.expectedAmount = review.expectedAmount;
     }
-     const paymentRemaining = money(payment.amount).minus(paymentTotals.total);
-     const targetAuthorization = remittance.authorizationId;
-     const [authCapacity] = targetAuthorization ? await tx.select({ total: sql<string>`coalesce(sum(${paymentAllocationsTable.amount}), 0)` })
-       .from(paymentAllocationsTable).where(and(eq(paymentAllocationsTable.paymentId, payment.id), eq(paymentAllocationsTable.authorizationId, targetAuthorization))) : [{ total: payment.amount }];
-     const [authAssigned] = targetAuthorization ? await tx.select({ total: sql<string>`coalesce(sum(${remittanceAllocationsTable.amount}), 0)` })
-       .from(remittanceAllocationsTable).innerJoin(remittancesTable, eq(remittancesTable.id, remittanceAllocationsTable.remittanceId))
-       .where(and(eq(remittanceAllocationsTable.paymentId, payment.id), eq(remittancesTable.authorizationId, targetAuthorization))) : [{ total: "0" }];
-     const authorizationRemaining = money(authCapacity.total).minus(money(authAssigned.total));
-    const remittanceRemaining = money(remittance.amount).minus(remittanceTotals.total);
-    if (allocationAmount.greaterThan(paymentRemaining)) return { error: "Allocation exceeds the payment remaining balance", status: 409 } as const;
-     if (allocationAmount.greaterThan(authorizationRemaining)) return { error: "Allocation exceeds the authorization remaining balance", status: 409 } as const;
-    if (allocationAmount.greaterThan(remittanceRemaining)) return { error: "Allocation exceeds the remittance remaining balance", status: 409 } as const;
-    const [allocation] = await tx.insert(remittanceAllocationsTable).values({
-      remittanceId: remittance.id, paymentId: payment.id, amount: allocationAmount.toFixed(2), autoMatched: false,
-    }).onConflictDoNothing().returning();
-    if (!allocation) return { error: "This remittance is already allocated to that payment", status: 409 } as const;
-     const paymentComplete = allocationAmount.equals(paymentRemaining);
-    const remittanceComplete = allocationAmount.equals(remittanceRemaining);
-    await tx.update(paymentsTable).set({ remitted: paymentComplete }).where(and(eq(paymentsTable.id, payment.id), notDeleted(paymentsTable)));
-    if (paymentComplete) await collectFeeForPayment(payment.id, req.user!.id, tx as unknown as typeof db);
-    const [matched] = await tx.update(remittancesTable)
-      .set({ status: remittanceComplete ? "matched" : "received", matchedPaymentId: null, autoMatched: false, reviewReason: remittanceComplete ? null : "partially_allocated", expectedAmount: null })
-      .where(and(eq(remittancesTable.id, id), notDeleted(remittancesTable)))
-      .returning();
-    if (!matched) throw new Error("Remittance changed while matching");
-    return { remittance: matched, payment } as const;
+    const [remittance] = await tx.update(remittancesTable).set(next)
+      .where(and(eq(remittancesTable.id, id), notDeleted(remittancesTable))).returning();
+    return { before, remittance, updates: next } as const;
   });
   if ("error" in result) {
     res.status(result.status ?? 409).json({ error: result.error });
@@ -1584,7 +1479,7 @@ router.post("/remittances/:id/match", requirePermission("check_writing"), async 
 // entry (findMatchingPayment) so imported remittances match Payments like
 // manual ones. CSV parsing is isolated in src/lib/altaRemittanceParser.ts.
 router.post("/remittances/import", requirePermission("check_writing"), async (req, res): Promise<void> => {
-  const parsed = ImportAltaRemittancesBody.safeParse(req.body);
+  const parsed = UpdateRemittanceBody.safeParse(req.body);
   if (!parsed.success) {
     res.status(400).json({ error: parsed.error.message });
     return;

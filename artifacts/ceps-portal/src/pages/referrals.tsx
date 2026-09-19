@@ -22,6 +22,7 @@ import { Plus, Search, Filter, ChevronLeft, ChevronRight } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
 import { ClientLink } from '@/components/entity-links';
 import { DateRangeFilter } from '@/components/date-range-filter';
+import { useDebounce } from '@/hooks/use-debounce';
 
 const PAGE_SIZE = 50;
 
@@ -29,6 +30,7 @@ export default function ReferralsPage() {
   const { user } = useAuth();
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [search, setSearch] = useState('');
+  const debouncedSearch = useDebounce(search, 300);
   const [startDate, setStartDate] = useState<string>();
   const [endDate, setEndDate] = useState<string>();
   const [page, setPage] = useState(0);
@@ -41,7 +43,7 @@ export default function ReferralsPage() {
   // Server-driven status filter, search, and pagination.
   const params = {
     ...(statusFilter !== 'all' ? { status: statusFilter } : {}),
-    ...(search ? { search } : {}),
+    ...(debouncedSearch ? { search: debouncedSearch } : {}),
     ...(startDate ? { startDate } : {}),
     ...(endDate ? { endDate } : {}),
     limit: PAGE_SIZE,

@@ -17,6 +17,7 @@ import { format } from 'date-fns';
 import { ChevronLeft, ChevronRight, X, AlertTriangle, Search } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
 import { DateRangeFilter } from '@/components/date-range-filter';
+import { useDebounce } from '@/hooks/use-debounce';
 
 const PAGE_SIZE = 50;
 
@@ -36,6 +37,7 @@ type RemittanceTab = 'all' | 'needs_manual_match';
 export default function RemittancesPage() {
   const [page, setPage] = useState(0);
   const [search, setSearch] = useState('');
+  const debouncedSearch = useDebounce(search, 300);
   const [batchFilter, setBatchFilter] = useState<string>('');
   const [startDate, setStartDate] = useState<string>();
   const [endDate, setEndDate] = useState<string>();
@@ -53,7 +55,7 @@ export default function RemittancesPage() {
   const params = {
     limit: PAGE_SIZE,
     offset: page * PAGE_SIZE,
-    ...(search ? { search } : {}),
+    ...(debouncedSearch ? { search: debouncedSearch } : {}),
     ...(batchFilter ? { remittanceBatchId: batchFilter } : {}),
     ...(startDate ? { startDate } : {}),
     ...(endDate ? { endDate } : {}),

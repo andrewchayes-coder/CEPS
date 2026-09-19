@@ -101,8 +101,20 @@ for (const scenario of scenarios) {
     await expect(page.getByText('Page 2 of 2')).toBeVisible();
     await expect.poll(() => requests.at(-1)?.searchParams.get('offset')).toBe('50');
 
+    // Simulate rapid typing: each edit updates the control immediately, but
+    // the request should wait for the debounce window and use only the final
+    // value.
+    await search.fill('b');
+    await search.fill('br');
     await search.fill('broad-term');
     await expect(page.getByText('Page 1 of 2')).toBeVisible();
+    await expect.poll(() => requests.filter((request) => request.searchParams.get('search') === 'broad-term').length, {
+      timeout: 2_000,
+    }).toBe(1);
+    await page.waitForTimeout(400);
+    expect(requests.filter((request) => request.searchParams.get('search') === 'b')).toHaveLength(0);
+    expect(requests.filter((request) => request.searchParams.get('search') === 'br')).toHaveLength(0);
+    expect(requests.filter((request) => request.searchParams.get('search') === 'broad-term')).toHaveLength(1);
     await expect.poll(() => {
       const request = requests.at(-1);
       return {

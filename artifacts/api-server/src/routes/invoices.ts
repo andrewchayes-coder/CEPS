@@ -95,7 +95,7 @@ router.get("/invoices", requireAuth, async (req, res): Promise<void> => {
         ilike(sql`${invoicesTable.submittedDate}::text`, like),
         ilike(sql`to_char(${invoicesTable.submittedDate}, 'MM/DD/YYYY')`, like),
         ilike(sql`to_char(${invoicesTable.submittedDate}, 'MM/DD/YY')`, like),
-        sql`exists (select 1 from invoice_line_items ili_search where ili_search.invoice_id = ${invoicesTable.id} and (ili_search.service_month ilike ${like} or to_char(to_date(ili_search.service_month || '-01', 'YYYY-MM-DD'), 'Mon YYYY') ilike ${like}))`,
+        sql`${invoicesTable.id} in (select ili_search.invoice_id from invoice_line_items ili_search where ili_search.service_month ilike ${like} or to_char(to_date(ili_search.service_month || '-01', 'YYYY-MM-DD'), 'Mon YYYY') ilike ${like})`,
         ilike(sql`${invoicesTable.amountRequested}::text`, like),
         ilike(sql`to_char(${invoicesTable.amountRequested}, 'FM$999,999,999,990.00')`, like),
         ilike(sql`replace(${invoicesTable.paymentType}, '_', ' ')`, like),
@@ -105,8 +105,8 @@ router.get("/invoices", requireAuth, async (req, res): Promise<void> => {
         sql`${invoicesTable.clientId} in (select id from clients where uci_number ilike ${like} and is_deleted = false)`,
         sql`${invoicesTable.vendorId} in (select id from vendors where name ilike ${like})`,
         sql`${invoicesTable.vendorId} in (select id from vendors where coalesce(alta_vendor_number, '') ilike ${like} or coalesce(contact_person, '') ilike ${like} or coalesce(email, '') ilike ${like})`,
-         sql`exists (select 1 from invoice_line_items ili_auth inner join authorizations a_auth on a_auth.id = ili_auth.authorization_id where ili_auth.invoice_id = ${invoicesTable.id} and a_auth.auth_number ilike ${like})`,
-         sql`exists (select 1 from invoice_line_items ili_auth inner join authorizations a_auth on a_auth.id = ili_auth.authorization_id where ili_auth.invoice_id = ${invoicesTable.id} and (a_auth.service_code ilike ${like} or coalesce(a_auth.activity_description, '') ilike ${like}))`,
+          sql`${invoicesTable.id} in (select ili_auth.invoice_id from invoice_line_items ili_auth inner join authorizations a_auth on a_auth.id = ili_auth.authorization_id where a_auth.auth_number ilike ${like})`,
+          sql`${invoicesTable.id} in (select ili_auth.invoice_id from invoice_line_items ili_auth inner join authorizations a_auth on a_auth.id = ili_auth.authorization_id where a_auth.service_code ilike ${like} or coalesce(a_auth.activity_description, '') ilike ${like})`,
         sql`${invoicesTable.reviewedBy} in (select id from users where name ilike ${like})`,
       )!,
     );
@@ -144,7 +144,7 @@ router.get("/invoices", requireAuth, async (req, res): Promise<void> => {
 });
 
 router.post("/invoices", requireAuth, async (req, res): Promise<void> => {
-  const parsed = CreateInvoiceBody.safeParse(req.body);
+  const parsed = ValidateInvoiceBody.safeParse(req.body ?? {});
   if (!parsed.success) {
     res.status(400).json({ error: parsed.error.message });
     return;
@@ -162,14 +162,14 @@ router.post("/invoices", requireAuth, async (req, res): Promise<void> => {
     return;
   }
   for (const item of parsed.data.lineItems) {
-    const documentUrl = item.documentUrl?.trim() || null;
+    const documentUrl = invoicePatch.documentUrl?.trim() || null;
     if (documentUrl && !normalizeValidateOwnedUploadPath(documentUrl, u.id)) {
       res.status(403).json({ error: "Line document must be an upload owned by the submitting user" });
       return;
     }
   }
-  const total = parsed.data.lineItems.reduce((sum, item) => sum.plus(money(item.amount)), money(0)).toFixed(2);
-  const lineKeys = parsed.data.lineItems.map((item) => `${item.authorizationId}:${item.serviceMonth}`);
+    const total = acceptedLineItems.reduce((sum, item) => sum.plus(money(item.amount)), money(0)).toFixed(2);
+    const lineKeys = acceptedLineItems.map((item) => `${item.authorizationId}:${item.serviceMonth}`);
   if (new Set(lineKeys).size !== lineKeys.length) {
     res.status(400).json({ error: "Duplicate invoice line authorization and service month" });
     return;
@@ -191,42 +191,22 @@ router.post("/invoices", requireAuth, async (req, res): Promise<void> => {
     submittedDate: new Date().toISOString().slice(0, 10),
   };
   let relationshipError: string | undefined;
-  const invoice = await db.transaction(async (tx) => {
-    const txDb = tx as unknown as typeof db;
-    for (const item of parsed.data.lineItems) {
-      relationshipError = (await validateParticipantLinks(txDb, values.clientId, {
-        authorizationId: item.authorizationId,
-        vendorId: values.vendorId,
-      })).error;
-      if (relationshipError) return null;
-    }
-    relationshipError = (await validateParticipantLinks(txDb, values.clientId, {
-      authorizationId: null,
-      vendorId: values.vendorId,
-    })).error;
-    if (relationshipError) return null;
-    const [created] = await tx.insert(invoicesTable).values(values as any).returning();
-    await tx.insert(invoiceLineItemsTable).values(parsed.data.lineItems.map((item) => ({
-      invoiceId: created.id,
-      authorizationId: item.authorizationId,
-      serviceMonth: item.serviceMonth,
-      amount: item.amount,
-       documentUrl: item.documentUrl?.trim() || null,
-    })));
-    return created;
-  });
+  const invoice = result.deleted;
   if (!invoice) {
-    res.status(400).json({ error: relationshipError! });
+    res.status(400).json({ error: relationshipError ?? "Invoice not found" });
     return;
   }
-  await audit(u.id, "create_invoice", "invoice", invoice.id, `${invoice.serviceMonth} — $${invoice.amountRequested}`);
-  res.status(201).json(CreateInvoiceResponse.parse((await enrich([invoice]))[0]));
+  await audit(
+    req.user!.id,
+    "update_invoice",
+    "invoice",
+    invoice.id,
+    diffDetail(before, updates, Object.keys(updates)),
+  );
+  res.json(UpdateInvoiceResponse.parse((await enrich([invoice]))[0]));
 });
 
-router.get("/invoices/queues/ready-to-approve", requirePermission("invoice_approve"), (req, res) => invoiceQueue(req, res, "validated", "invoice_approve"));
-router.get("/invoices/queues/ready-for-check-writing", requirePermission("check_writing"), (req, res) => invoiceQueue(req, res, "approved", "check_writing"));
-
-router.get("/invoices/:id", requireAuth, async (req, res): Promise<void> => {
+router.post("/invoices/:id/decision", requirePermission("invoice_approve"), async (req, res): Promise<void> => {
   const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
   const [invoice] = await db
     .select()
@@ -250,7 +230,7 @@ router.get("/invoices/:id", requireAuth, async (req, res): Promise<void> => {
 
 router.patch("/invoices/:id", requireStaff, async (req, res): Promise<void> => {
   const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
-  const parsed = UpdateInvoiceBody.safeParse(req.body);
+  const parsed = ValidateInvoiceBody.safeParse(req.body ?? {});
   if (!parsed.success) {
     res.status(400).json({ error: parsed.error.message });
     return;
@@ -339,40 +319,7 @@ router.patch("/invoices/:id", requireStaff, async (req, res): Promise<void> => {
   const effectiveAuthorizationId = ("authorizationId" in updates ? updates.authorizationId : before.authorizationId) as string | null;
   const effectiveVendorId = ("vendorId" in updates ? updates.vendorId : before.vendorId) as string | null;
   let relationshipError: string | undefined;
-  const invoice = await db.transaction(async (tx) => {
-    const txDb = tx as unknown as typeof db;
-    await tx.execute(sql`select id from invoices where id = ${id} for update`);
-    relationshipError = (await validateParticipantLinks(txDb, before.clientId, {
-      authorizationId: effectiveAuthorizationId,
-      vendorId: effectiveVendorId,
-    })).error;
-    if (relationshipError) return null;
-    if (acceptedLineItems) {
-      for (const item of acceptedLineItems) {
-        relationshipError = (await validateParticipantLinks(txDb, before.clientId, {
-          authorizationId: item.authorizationId,
-          vendorId: effectiveVendorId,
-        })).error;
-        if (relationshipError) return null;
-      }
-    }
-    const [updated] = await tx
-      .update(invoicesTable)
-      .set(updates)
-      .where(and(eq(invoicesTable.id, id), notDeleted(invoicesTable)))
-      .returning();
-    if (acceptedLineItems) {
-      await tx.delete(invoiceLineItemsTable).where(eq(invoiceLineItemsTable.invoiceId, id));
-      await tx.insert(invoiceLineItemsTable).values(acceptedLineItems.map((item) => ({
-        invoiceId: id,
-        authorizationId: item.authorizationId,
-        serviceMonth: item.serviceMonth,
-        amount: item.amount,
-        documentUrl: item.documentUrl?.trim() || null,
-      })));
-    }
-    return updated;
-  });
+  const invoice = result.deleted;
   if (!invoice) {
     res.status(400).json({ error: relationshipError ?? "Invoice not found" });
     return;
@@ -395,36 +342,7 @@ router.post("/invoices/:id/decision", requirePermission("invoice_approve"), asyn
     return;
   }
   const decision = { status: body.status as "approved" | "rejected", notes: typeof body.notes === "string" ? body.notes : undefined };
-  const result = await db.transaction(async (tx) => {
-    const txDb = tx as unknown as typeof db;
-    const [invoice] = await tx.select().from(invoicesTable)
-      .where(and(eq(invoicesTable.id, id), notDeleted(invoicesTable)));
-    if (!invoice) return { error: "Invoice not found", code: 404 as const };
-    if (invoice.status !== "validated") return { error: "Only validated invoices can be approved or rejected", code: 409 as const };
-    if (decision.status === "approved") {
-      const lines = await tx.select().from(invoiceLineItemsTable).where(eq(invoiceLineItemsTable.invoiceId, id));
-      const authIds = [...new Set(lines.map((line) => line.authorizationId))];
-      const auths = authIds.length ? await tx.select().from(authorizationsTable).where(inArray(authorizationsTable.id, authIds)) : [];
-      const totals = await authorizationTotalsPaid(authIds);
-      for (const line of lines) {
-        const auth = auths.find((candidate) => candidate.id === line.authorizationId);
-        const status = auth ? effectiveAuthStatus(auth, totals.get(auth.id) ?? 0) : "missing";
-        if (!auth || status !== "active") {
-          return {
-            error: `Cannot approve line ${line.id} for service month ${line.serviceMonth}: authorization ${auth?.authNumber ?? line.authorizationId} is ${status}`,
-            code: 409 as const,
-          };
-        }
-      }
-    }
-    const [updated] = await tx.update(invoicesTable).set({
-      status: decision.status,
-      reviewedBy: req.user!.id,
-      reviewedAt: new Date(),
-      ...(decision.notes !== undefined ? { notes: decision.notes } : {}),
-    }).where(eq(invoicesTable.id, id)).returning();
-    return { invoice: updated };
-  });
+  const result = await db.transaction((tx) => softDeleteInvoice(tx as unknown as typeof db, id, req.user!.id));
   if ("error" in result) {
     res.status((result as { code: number }).code).json({ error: result.error });
     return;
@@ -492,7 +410,7 @@ router.post("/invoices/:id/validate", requirePermission("invoice_log_validate"),
     checks.push({ check: "authorization_active", passed: false, message: "No authorization is linked to this invoice." });
   } else {
     for (const item of lineItems) {
-      const auth = authById.get(item.authorizationId);
+    const auth = authById.get(authId);
       const active = !!auth && !auth.isDeleted && auth.status === "active" && auth.servicePeriodEnd >= today;
       checks.push({ check: "authorization_active", passed: active, message: active
         ? `Authorization ${auth!.authNumber} is active through ${auth!.servicePeriodEnd}.`
@@ -502,7 +420,7 @@ router.post("/invoices/:id/validate", requirePermission("invoice_log_validate"),
 
   // 2. Service month within authorization period
   for (const item of lineItems) {
-    const auth = authById.get(item.authorizationId);
+    const auth = authById.get(authId);
     const inPeriod = !!auth && item.serviceMonth >= auth.servicePeriodStart.slice(0, 7) && item.serviceMonth <= auth.servicePeriodEnd.slice(0, 7);
     checks.push({ check: "service_month_in_period", passed: inPeriod,
       message: inPeriod ? `Service month ${item.serviceMonth} falls within the authorization period.` : `Service month ${item.serviceMonth} is outside its authorization period.` });

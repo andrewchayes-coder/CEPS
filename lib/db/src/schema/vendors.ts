@@ -37,6 +37,10 @@ export const vendorsTable = pgTable("vendors", {
   // Case-insensitive (lower(name)) — mirrors the case-insensitive name matching
   // the import's FK resolver uses.
   nameLowerUnique: uniqueIndex("vendors_name_lower_unique").on(sql`lower(${table.name})`),
+  nameTrgmIdx: index("vendors_name_trgm_idx").using("gin", sql`${table.name} gin_trgm_ops`),
+  altaVendorNumberTrgmIdx: index("vendors_alta_vendor_number_trgm_idx").using("gin", sql`coalesce(${table.altaVendorNumber}, '') gin_trgm_ops`),
+  contactPersonTrgmIdx: index("vendors_contact_person_trgm_idx").using("gin", sql`coalesce(${table.contactPerson}, '') gin_trgm_ops`),
+  emailTrgmIdx: index("vendors_email_trgm_idx").using("gin", sql`coalesce(${table.email}, '') gin_trgm_ops`),
 }));
 
 export type Vendor = typeof vendorsTable.$inferSelect;

@@ -59,6 +59,9 @@ export const authorizationsTable = pgTable("authorizations", {
   clientAuthNumberUnique: uniqueIndex("authorizations_client_id_auth_number_unique")
     .on(table.clientId, table.authNumber)
     .where(sql`${table.isDeleted} = false`),
+  authNumberTrgmIdx: index("authorizations_auth_number_trgm_idx").using("gin", sql`${table.authNumber} gin_trgm_ops`),
+  serviceCodeTrgmIdx: index("authorizations_service_code_trgm_idx").using("gin", sql`${table.serviceCode} gin_trgm_ops`),
+  activityDescriptionTrgmIdx: index("authorizations_activity_description_trgm_idx").using("gin", sql`coalesce(${table.activityDescription}, '') gin_trgm_ops`),
 }));
 
 export type Authorization = typeof authorizationsTable.$inferSelect;

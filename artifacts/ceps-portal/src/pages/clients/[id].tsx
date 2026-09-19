@@ -309,6 +309,10 @@ export default function ClientDetailPage() {
                   <span className="col-span-2">{client.email || '-'}</span>
                   <span className="text-muted-foreground">Address:</span>
                   <span className="col-span-2">{client.address || '-'}</span>
+                  <span className="text-muted-foreground">Preferred Language:</span>
+                  <span className="col-span-2" data-testid="client-preferred-language">
+                    {client.preferredLanguage || 'English'}
+                  </span>
                 </div>
                 <div className="pt-4 border-t mt-4">
                   <FamilyRepresentativesSection clientId={client.id} />

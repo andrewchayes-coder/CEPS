@@ -89,6 +89,40 @@ test('key staff pages use Participant wording while preserving client record rou
   await expect(page.getByText(/\bClients?\b/)).toHaveCount(0);
 });
 
+test('participant detail displays the preferred language and defaults to English when unset', async ({ page }) => {
+  await mockSession(page, 'staff');
+  let preferredLanguage: string | null = 'Spanish';
+  await page.route(`**/api/clients/${participantId}/case`, (route) =>
+    route.fulfill({
+      json: {
+        client: {
+          id: participantId,
+          firstName: 'Jordan',
+          lastName: 'Rivera',
+          uciNumber: 'UCI-100',
+          dateOfBirth: '2000-01-01',
+          status: 'active',
+          preferredLanguage,
+        },
+        referrals: [],
+        authorizations: [],
+        invoices: [],
+        payments: [],
+        remittances: [],
+        documents: [],
+      },
+    }),
+  );
+  await page.route('**/api/fees?*', (route) => route.fulfill({ json: [] }));
+
+  await page.goto(`/clients/${participantId}`);
+  await expect(page.getByTestId('client-preferred-language')).toHaveText('Spanish');
+
+  preferredLanguage = null;
+  await page.reload();
+  await expect(page.getByTestId('client-preferred-language')).toHaveText('English');
+});
+
 test('referral list and detail participant names link to the existing client record', async ({ page }) => {
   await mockSession(page, 'staff');
   await mockReferralList(page);

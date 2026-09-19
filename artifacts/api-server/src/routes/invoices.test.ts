@@ -8,9 +8,11 @@ import { newToken } from "../lib/auth";
 const nonce = `inv${Date.now().toString(36)}`;
 
 let staffId: string;
+let otherStaffId: string;
 let clientId: string;
 let otherClientId: string;
 let cookie: string;
+let otherCookie: string;
 
 beforeAll(async () => {
   const [staff] = await db
@@ -18,6 +20,11 @@ beforeAll(async () => {
     .values({ name: "Inv Staff", email: `${nonce}-staff@test.local`, role: "staff" })
     .returning();
   staffId = staff.id;
+  const [otherStaff] = await db
+    .insert(usersTable)
+    .values({ name: "Other Inv Staff", email: `${nonce}-other-staff@test.local`, role: "staff" })
+    .returning();
+  otherStaffId = otherStaff.id;
 
   const [client] = await db
     .insert(clientsTable)
@@ -37,6 +44,13 @@ beforeAll(async () => {
     expiresAt: new Date(Date.now() + 60 * 60 * 1000),
   });
   cookie = `ceps_session=${token}`;
+  otherCookie = `ceps_session=${await newToken()}`;
+  const otherToken = otherCookie.slice("ceps_session=".length);
+  await db.insert(sessionsTable).values({
+    userId: otherStaffId,
+    token: otherToken,
+    expiresAt: new Date(Date.now() + 60 * 60 * 1000),
+  });
 });
 
 const vendorIds: string[] = [];
@@ -45,12 +59,12 @@ afterAll(async () => {
   await db.delete(paymentsTable).where(eq(paymentsTable.clientId, clientId));
   await db.delete(invoicesTable).where(eq(invoicesTable.clientId, clientId));
   await db.delete(authorizationsTable).where(inArray(authorizationsTable.clientId, [clientId, otherClientId]));
-  await db.delete(auditLogTable).where(eq(auditLogTable.userId, staffId));
-  await db.delete(sessionsTable).where(eq(sessionsTable.userId, staffId));
+  await db.delete(auditLogTable).where(inArray(auditLogTable.userId, [staffId, otherStaffId]));
+  await db.delete(sessionsTable).where(inArray(sessionsTable.userId, [staffId, otherStaffId]));
   if (vendorIds.length) await db.delete(vendorsTable).where(inArray(vendorsTable.id, vendorIds));
   await db.delete(clientsTable).where(eq(clientsTable.id, clientId));
   await db.delete(clientsTable).where(eq(clientsTable.id, otherClientId));
-  await db.delete(usersTable).where(inArray(usersTable.id, [staffId]));
+  await db.delete(usersTable).where(inArray(usersTable.id, [staffId, otherStaffId]));
 });
 
 async function makeVendor(active: boolean) {
@@ -195,6 +209,102 @@ describe("PATCH /invoices/:id status reset on material edit", () => {
     expect(res.status).toBe(200);
     expect(res.body.status).toBe("approved");
     expect(res.body.reviewedBy).toBe(staffId);
+  });
+});
+
+describe("invoice line-item document attachments", () => {
+  it("requires canonical owner-bound upload paths before creating an invoice", async () => {
+    const auth = await makeAuth({ maxPeriodAmount: "1000.00" });
+    const base = {
+      clientId,
+      paymentType: "direct_payment",
+      lineItems: [{ authorizationId: auth.id, serviceMonth: "2026-06", amount: "10.00" }],
+    };
+    const crossUser = await request(app).post("/api/invoices").set("Cookie", otherCookie).send({
+      ...base,
+      documentUrl: `/objects/uploads/${staffId}/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa`,
+    });
+    expect(crossUser.status).toBe(403);
+    const malformed = await request(app).post("/api/invoices").set("Cookie", otherCookie).send({
+      ...base,
+      lineItems: [{ ...base.lineItems[0], documentUrl: "https://attacker.example/file.pdf" }],
+    });
+    expect(malformed.status).toBe(403);
+    const own = await request(app).post("/api/invoices").set("Cookie", otherCookie).send({
+      ...base,
+      documentUrl: `/objects/uploads/${otherStaffId}/bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb`,
+      lineItems: [{ ...base.lineItems[0], documentUrl: `/objects/uploads/${otherStaffId}/cccccccc-cccc-4ccc-8ccc-cccccccccccc` }],
+    });
+    expect(own.status).toBe(201);
+    expect(own.body.documentUrl).toContain(`/objects/uploads/${otherStaffId}/`);
+  });
+
+  it("persists independent documents per line and reloads them by authorization", async () => {
+    const first = await makeAuth({ maxPeriodAmount: "1000.00" });
+    const second = await makeAuth({ maxPeriodAmount: "1000.00" });
+    const response = await request(app).post("/api/invoices").set("Cookie", cookie).send({
+      clientId,
+      paymentType: "direct_payment",
+      documentUrl: `/objects/uploads/${staffId}/11111111-1111-4111-8111-111111111111`,
+      amountRequested: "150.00",
+      lineItems: [
+        { authorizationId: first.id, serviceMonth: "2026-03", amount: "100.00", documentUrl: `  /objects/uploads/${staffId}/22222222-2222-4222-8222-222222222222  ` },
+        { authorizationId: second.id, serviceMonth: "2026-03", amount: "50.00", documentUrl: `/objects/uploads/${staffId}/33333333-3333-4333-8333-333333333333` },
+      ],
+    });
+    expect(response.status).toBe(201);
+    expect(response.body.documentUrl).toBe(`/objects/uploads/${staffId}/11111111-1111-4111-8111-111111111111`);
+    expect(response.body.lineItems).toEqual(expect.arrayContaining([
+      expect.objectContaining({ authorizationId: first.id, documentUrl: `/objects/uploads/${staffId}/22222222-2222-4222-8222-222222222222` }),
+      expect.objectContaining({ authorizationId: second.id, documentUrl: `/objects/uploads/${staffId}/33333333-3333-4333-8333-333333333333` }),
+    ]));
+
+    const reloaded = await request(app).get(`/api/invoices/${response.body.id}`).set("Cookie", cookie);
+    expect(reloaded.status).toBe(200);
+    expect(reloaded.body.lineItems.find((item: { authorizationId: string }) => item.authorizationId === first.id).documentUrl)
+       .toBe(`/objects/uploads/${staffId}/22222222-2222-4222-8222-222222222222`);
+    expect(reloaded.body.lineItems.find((item: { authorizationId: string }) => item.authorizationId === second.id).documentUrl)
+       .toBe(`/objects/uploads/${staffId}/33333333-3333-4333-8333-333333333333`);
+  });
+
+  it("keeps invoice-level-only attachments and normalizes empty line documents", async () => {
+    const first = await makeAuth({ maxPeriodAmount: "1000.00" });
+    const response = await request(app).post("/api/invoices").set("Cookie", cookie).send({
+      clientId,
+      paymentType: "direct_payment",
+      documentUrl: `/objects/uploads/${staffId}/44444444-4444-4444-8444-444444444444`,
+      lineItems: [{ authorizationId: first.id, serviceMonth: "2026-04", amount: "25.00", documentUrl: "" }],
+    });
+    expect(response.status).toBe(201);
+    expect(response.body.documentUrl).toBe(`/objects/uploads/${staffId}/44444444-4444-4444-8444-444444444444`);
+    expect(response.body.lineItems[0].documentUrl).toBeNull();
+  });
+
+  it("replaces line documents independently without erasing invoice document", async () => {
+    const first = await makeAuth({ maxPeriodAmount: "1000.00" });
+    const second = await makeAuth({ maxPeriodAmount: "1000.00" });
+    const created = await request(app).post("/api/invoices").set("Cookie", cookie).send({
+      clientId,
+      paymentType: "direct_payment",
+      documentUrl: `/objects/uploads/${staffId}/55555555-5555-4555-8555-555555555555`,
+      lineItems: [
+        { authorizationId: first.id, serviceMonth: "2026-05", amount: "10.00", documentUrl: `/objects/uploads/${staffId}/66666666-6666-4666-8666-666666666666` },
+        { authorizationId: second.id, serviceMonth: "2026-05", amount: "20.00", documentUrl: `/objects/uploads/${staffId}/77777777-7777-4777-8777-777777777777` },
+      ],
+    });
+    const patched = await request(app).patch(`/api/invoices/${created.body.id}`).set("Cookie", cookie).send({
+      amountRequested: "30.00",
+      lineItems: [
+        { authorizationId: first.id, serviceMonth: "2026-05", amount: "10.00", documentUrl: `/objects/uploads/${staffId}/88888888-8888-4888-8888-888888888888` },
+        { authorizationId: second.id, serviceMonth: "2026-05", amount: "20.00" },
+      ],
+    });
+    expect(patched.status).toBe(200);
+    expect(patched.body.documentUrl).toBe(`/objects/uploads/${staffId}/55555555-5555-4555-8555-555555555555`);
+    expect(patched.body.lineItems.find((item: { authorizationId: string }) => item.authorizationId === first.id).documentUrl)
+       .toBe(`/objects/uploads/${staffId}/88888888-8888-4888-8888-888888888888`);
+    expect(patched.body.lineItems.find((item: { authorizationId: string }) => item.authorizationId === second.id).documentUrl)
+      .toBeNull();
   });
 });
 

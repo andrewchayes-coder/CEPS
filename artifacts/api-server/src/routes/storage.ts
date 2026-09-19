@@ -12,6 +12,7 @@ import {
   authorizationsTable,
   clientsTable,
   invoicesTable,
+  invoiceLineItemsTable,
 } from '@workspace/db';
 
 import {
@@ -53,7 +54,19 @@ async function canAccessPrivateObject(
           notDeleted(invoicesTable),
         ),
       );
-    return invoiceDocs.some((r) => r.documentUrl === objectPath);
+    if (invoiceDocs.some((r) => r.documentUrl === objectPath)) return true;
+    const [lineDoc] = await db
+      .select({ documentUrl: invoiceLineItemsTable.documentUrl })
+      .from(invoiceLineItemsTable)
+      .innerJoin(invoicesTable, eq(invoiceLineItemsTable.invoiceId, invoicesTable.id))
+      .where(and(
+        eq(invoicesTable.vendorId, user.linkedRecordId),
+        eq(invoiceLineItemsTable.documentUrl, objectPath),
+        isNotNull(invoiceLineItemsTable.documentUrl),
+        notDeleted(invoicesTable),
+      ))
+      .limit(1);
+    return !!lineDoc;
   }
 
   if (
@@ -82,7 +95,19 @@ async function canAccessPrivateObject(
           notDeleted(invoicesTable),
         ),
       );
-    return invoiceDocs.some((r) => r.documentUrl === objectPath);
+    if (invoiceDocs.some((r) => r.documentUrl === objectPath)) return true;
+    const [lineDoc] = await db
+      .select({ documentUrl: invoiceLineItemsTable.documentUrl })
+      .from(invoiceLineItemsTable)
+      .innerJoin(invoicesTable, eq(invoiceLineItemsTable.invoiceId, invoicesTable.id))
+      .where(and(
+        eq(invoicesTable.clientId, user.linkedRecordId),
+        eq(invoiceLineItemsTable.documentUrl, objectPath),
+        isNotNull(invoiceLineItemsTable.documentUrl),
+        notDeleted(invoicesTable),
+      ))
+      .limit(1);
+    return !!lineDoc;
   }
 
   if (user.role === 'service_coordinator') {
@@ -113,7 +138,19 @@ async function canAccessPrivateObject(
           notDeleted(invoicesTable),
         ),
       );
-    return invoiceDocs.some((r) => r.documentUrl === objectPath);
+    if (invoiceDocs.some((r) => r.documentUrl === objectPath)) return true;
+    const [lineDoc] = await db
+      .select({ documentUrl: invoiceLineItemsTable.documentUrl })
+      .from(invoiceLineItemsTable)
+      .innerJoin(invoicesTable, eq(invoiceLineItemsTable.invoiceId, invoicesTable.id))
+      .where(and(
+        inArray(invoicesTable.clientId, clientIds),
+        eq(invoiceLineItemsTable.documentUrl, objectPath),
+        isNotNull(invoiceLineItemsTable.documentUrl),
+        notDeleted(invoicesTable),
+      ))
+      .limit(1);
+    return !!lineDoc;
   }
 
   return false;
@@ -159,7 +196,7 @@ router.post(
         return;
       }
 
-      const uploadURL = await objectStorageService.getObjectEntityUploadURL();
+      const uploadURL = await objectStorageService.getObjectEntityUploadURL(req.user!.id);
       const objectPath =
         objectStorageService.normalizeObjectEntityPath(uploadURL);
 

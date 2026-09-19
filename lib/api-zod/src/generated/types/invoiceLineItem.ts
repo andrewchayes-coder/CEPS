@@ -15,4 +15,6 @@ export interface InvoiceLineItem {
   serviceMonth: string;
   /** @pattern ^\d+(\.\d{1,2})?$ */
   amount: string;
+  /** @nullable */
+  documentUrl?: string | null;
 }

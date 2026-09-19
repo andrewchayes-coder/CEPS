@@ -176,6 +176,13 @@
       "when": 1789823334560,
       "tag": "0024_curious_magneto",
       "breakpoints": true
+    },
+    {
+      "idx": 25,
+      "version": "7",
+      "when": 1789824009906,
+      "tag": "0025_optimal_silver_fox",
+      "breakpoints": true
     }
   ]
 }

@@ -18,6 +18,7 @@ import { invoiceJson, clientNameMap, vendorNameMap, authNumberMap, userNameMap, 
 import { checkDuplicatePayment } from "../lib/paymentDuplicateCheck";
 import { sortedOrder } from "../lib/sorting";
 import { softDeleteInvoice, validateParticipantLinks } from "../lib/participantLinks";
+import { normalizeValidateOwnedUploadPath } from "../lib/upload-paths";
 
 const router: IRouter = Router();
 
@@ -44,6 +45,7 @@ async function enrich(invoices: (typeof invoicesTable.$inferSelect)[]) {
         authNumber: itemAuths.get(item.authorizationId) ?? null,
         serviceMonth: item.serviceMonth,
         amount: item.amount,
+        documentUrl: item.documentUrl ?? null,
       })),
     }),
   );
@@ -153,6 +155,18 @@ router.post("/invoices", requireAuth, async (req, res): Promise<void> => {
     res.status(403).json({ error: "You can only submit invoices for your own client record" });
     return;
   }
+  const submittedDocument = parsed.data.documentUrl?.trim() || null;
+  if (submittedDocument && !normalizeValidateOwnedUploadPath(submittedDocument, u.id)) {
+    res.status(403).json({ error: "Document must be an upload owned by the submitting user" });
+    return;
+  }
+  for (const item of parsed.data.lineItems) {
+    const documentUrl = item.documentUrl?.trim() || null;
+    if (documentUrl && !normalizeValidateOwnedUploadPath(documentUrl, u.id)) {
+      res.status(403).json({ error: "Line document must be an upload owned by the submitting user" });
+      return;
+    }
+  }
   const total = parsed.data.lineItems.reduce((sum, item) => sum.plus(money(item.amount)), money(0)).toFixed(2);
   const lineKeys = parsed.data.lineItems.map((item) => `${item.authorizationId}:${item.serviceMonth}`);
   if (new Set(lineKeys).size !== lineKeys.length) {
@@ -167,7 +181,7 @@ router.post("/invoices", requireAuth, async (req, res): Promise<void> => {
     clientId: parsed.data.clientId,
     amountRequested: total,
     paymentType: parsed.data.paymentType,
-    documentUrl: parsed.data.documentUrl,
+    documentUrl: submittedDocument,
     notes: parsed.data.notes,
     // Deprecated relationship columns are intentionally left null.
     authorizationId: null,
@@ -196,6 +210,7 @@ router.post("/invoices", requireAuth, async (req, res): Promise<void> => {
       authorizationId: item.authorizationId,
       serviceMonth: item.serviceMonth,
       amount: item.amount,
+       documentUrl: item.documentUrl?.trim() || null,
     })));
     return created;
   });
@@ -245,19 +260,49 @@ router.patch("/invoices/:id", requireStaff, async (req, res): Promise<void> => {
     return;
   }
   const { lineItems, ...invoicePatch } = parsed.data;
+  const existingLineItems = lineItems
+    ? await db.select().from(invoiceLineItemsTable).where(eq(invoiceLineItemsTable.invoiceId, id))
+    : [];
+  const normalizedLineItems = lineItems?.map((item) => {
+    const documentUrl = item.documentUrl?.trim() || null;
+    if (!documentUrl) return { ...item, documentUrl: null };
+    const unchanged = existingLineItems.some((existing) =>
+      existing.authorizationId === item.authorizationId &&
+      existing.serviceMonth === item.serviceMonth &&
+      existing.documentUrl === documentUrl,
+    );
+    if (unchanged || normalizeValidateOwnedUploadPath(documentUrl, req.user!.id)) {
+      return { ...item, documentUrl };
+    }
+    return null;
+  });
+  if (normalizedLineItems?.some((item) => item === null)) {
+    res.status(403).json({ error: "Document must be an upload owned by the submitting user or unchanged on this invoice" });
+    return;
+  }
+  const acceptedLineItems = normalizedLineItems as typeof lineItems | undefined;
+  if (invoicePatch.documentUrl !== undefined) {
+    const documentUrl = invoicePatch.documentUrl?.trim() || null;
+    const unchanged = documentUrl === before.documentUrl;
+    if (documentUrl && !unchanged && !normalizeValidateOwnedUploadPath(documentUrl, req.user!.id)) {
+      res.status(403).json({ error: "Document must be an upload owned by the submitting user or unchanged on this invoice" });
+      return;
+    }
+    invoicePatch.documentUrl = documentUrl;
+  }
   if (parsed.data.amountRequested !== undefined && !lineItems &&
       !money(parsed.data.amountRequested).equals(money(before.amountRequested))) {
     res.status(400).json({ error: "lineItems are required when changing amountRequested" });
     return;
   }
   const updates: Record<string, unknown> = { ...invoicePatch };
-  if (lineItems) {
-    const lineKeys = lineItems.map((item) => `${item.authorizationId}:${item.serviceMonth}`);
+  if (acceptedLineItems) {
+    const lineKeys = acceptedLineItems.map((item) => `${item.authorizationId}:${item.serviceMonth}`);
     if (new Set(lineKeys).size !== lineKeys.length) {
       res.status(400).json({ error: "Duplicate invoice line authorization and service month" });
       return;
     }
-    const total = lineItems.reduce((sum, item) => sum.plus(money(item.amount)), money(0)).toFixed(2);
+    const total = acceptedLineItems.reduce((sum, item) => sum.plus(money(item.amount)), money(0)).toFixed(2);
     if (parsed.data.amountRequested !== undefined && !money(parsed.data.amountRequested).equals(money(total))) {
       res.status(400).json({ error: "amountRequested must equal the sum of line item amounts" });
       return;
@@ -275,7 +320,7 @@ router.patch("/invoices/:id", requireStaff, async (req, res): Promise<void> => {
   // stale "validated"/"duplicate" badge — unless the request explicitly sets a
   // status of its own (in which case honor the caller's intent).
   const materialFields = ["amountRequested", "serviceMonth", "authorizationId"] as const;
-  const materiallyChanged = !!lineItems || materialFields.some(
+  const materiallyChanged = !!acceptedLineItems || materialFields.some(
     (f) => f in parsed.data && String((before as Record<string, unknown>)[f] ?? null) !== String((parsed.data as Record<string, unknown>)[f] ?? null),
   );
   // Treat a status equal to the current one as "not explicitly changed" — the
@@ -294,8 +339,8 @@ router.patch("/invoices/:id", requireStaff, async (req, res): Promise<void> => {
       vendorId: effectiveVendorId,
     })).error;
     if (relationshipError) return null;
-    if (lineItems) {
-      for (const item of lineItems) {
+    if (acceptedLineItems) {
+      for (const item of acceptedLineItems) {
         relationshipError = (await validateParticipantLinks(txDb, before.clientId, {
           authorizationId: item.authorizationId,
           vendorId: effectiveVendorId,
@@ -308,13 +353,14 @@ router.patch("/invoices/:id", requireStaff, async (req, res): Promise<void> => {
       .set(updates)
       .where(and(eq(invoicesTable.id, id), notDeleted(invoicesTable)))
       .returning();
-    if (lineItems) {
+    if (acceptedLineItems) {
       await tx.delete(invoiceLineItemsTable).where(eq(invoiceLineItemsTable.invoiceId, id));
-      await tx.insert(invoiceLineItemsTable).values(lineItems.map((item) => ({
+      await tx.insert(invoiceLineItemsTable).values(acceptedLineItems.map((item) => ({
         invoiceId: id,
         authorizationId: item.authorizationId,
         serviceMonth: item.serviceMonth,
         amount: item.amount,
+        documentUrl: item.documentUrl?.trim() || null,
       })));
     }
     return updated;

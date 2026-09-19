@@ -141,6 +141,18 @@ export default function InvoiceDetailPage() {
                         <span className="italic">None</span>
                       )}
                     </div>
+                    {line.documentUrl && (
+                      <a
+                        href={`/api/storage${line.documentUrl}`}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="inline-flex items-center gap-1 text-primary hover:underline"
+                        data-testid={`link-line-item-${index}-document`}
+                        aria-label={`View document for line item ${index + 1}`}
+                      >
+                        <FileText className="h-3.5 w-3.5" /> View line document
+                      </a>
+                    )}
                   </div>
                 ))}
               </div>

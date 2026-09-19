@@ -713,7 +713,8 @@ export const GetClientCaseResponse = zod.object({
   "authorizationId": zod.string(),
   "authNumber": zod.string().nullish(),
   "serviceMonth": zod.string().regex(getClientCaseResponseInvoicesItemLineItemsItemServiceMonthRegExp),
-  "amount": zod.string().regex(getClientCaseResponseInvoicesItemLineItemsItemAmountRegExp)
+  "amount": zod.string().regex(getClientCaseResponseInvoicesItemLineItemsItemAmountRegExp),
+  "documentUrl": zod.string().nullish()
 }))
 })),
   "payments": zod.array(zod.object({
@@ -2220,7 +2221,8 @@ export const ListInvoicesResponse = zod.object({
   "authorizationId": zod.string(),
   "authNumber": zod.string().nullish(),
   "serviceMonth": zod.string().regex(listInvoicesResponseItemsItemLineItemsItemServiceMonthRegExp),
-  "amount": zod.string().regex(listInvoicesResponseItemsItemLineItemsItemAmountRegExp)
+  "amount": zod.string().regex(listInvoicesResponseItemsItemLineItemsItemAmountRegExp),
+  "documentUrl": zod.string().nullish()
 }))
 })),
   "total": zod.int()
@@ -2247,7 +2249,8 @@ export const CreateInvoiceBody = zod.object({
   "lineItems": zod.array(zod.object({
   "authorizationId": zod.string(),
   "serviceMonth": zod.string().regex(createInvoiceBodyLineItemsItemServiceMonthRegExp),
-  "amount": zod.string().regex(createInvoiceBodyLineItemsItemAmountRegExp)
+  "amount": zod.string().regex(createInvoiceBodyLineItemsItemAmountRegExp),
+  "documentUrl": zod.string().nullish()
 })).min(1)
 })
 
@@ -2280,7 +2283,8 @@ export const CreateInvoiceResponse = zod.object({
   "authorizationId": zod.string(),
   "authNumber": zod.string().nullish(),
   "serviceMonth": zod.string().regex(createInvoiceResponseLineItemsItemServiceMonthRegExp),
-  "amount": zod.string().regex(createInvoiceResponseLineItemsItemAmountRegExp)
+  "amount": zod.string().regex(createInvoiceResponseLineItemsItemAmountRegExp),
+  "documentUrl": zod.string().nullish()
 }))
 })
 
@@ -2321,7 +2325,8 @@ export const GetInvoiceResponse = zod.object({
   "authorizationId": zod.string(),
   "authNumber": zod.string().nullish(),
   "serviceMonth": zod.string().regex(getInvoiceResponseLineItemsItemServiceMonthRegExp),
-  "amount": zod.string().regex(getInvoiceResponseLineItemsItemAmountRegExp)
+  "amount": zod.string().regex(getInvoiceResponseLineItemsItemAmountRegExp),
+  "documentUrl": zod.string().nullish()
 }))
 })
 
@@ -2350,7 +2355,8 @@ export const UpdateInvoiceBody = zod.object({
   "lineItems": zod.array(zod.object({
   "authorizationId": zod.string(),
   "serviceMonth": zod.string().regex(updateInvoiceBodyLineItemsItemServiceMonthRegExp),
-  "amount": zod.string().regex(updateInvoiceBodyLineItemsItemAmountRegExp)
+  "amount": zod.string().regex(updateInvoiceBodyLineItemsItemAmountRegExp),
+  "documentUrl": zod.string().nullish()
 })).min(1).optional()
 })
 
@@ -2383,7 +2389,8 @@ export const UpdateInvoiceResponse = zod.object({
   "authorizationId": zod.string(),
   "authNumber": zod.string().nullish(),
   "serviceMonth": zod.string().regex(updateInvoiceResponseLineItemsItemServiceMonthRegExp),
-  "amount": zod.string().regex(updateInvoiceResponseLineItemsItemAmountRegExp)
+  "amount": zod.string().regex(updateInvoiceResponseLineItemsItemAmountRegExp),
+  "documentUrl": zod.string().nullish()
 }))
 })
 

@@ -9,6 +9,7 @@ export const invoiceLineItemsTable = pgTable("invoice_line_items", {
   authorizationId: uuid("authorization_id").notNull().references(() => authorizationsTable.id, { onDelete: "cascade" }),
   serviceMonth: text("service_month").notNull(),
   amount: numeric("amount", { precision: 12, scale: 2 }).notNull(),
+  documentUrl: text("document_url"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 }, (table) => ({
   invoiceIdx: index("invoice_line_items_invoice_id_idx").on(table.invoiceId),

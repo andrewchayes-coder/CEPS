@@ -6,6 +6,7 @@ import {
   clientsTable,
   db,
   invoicesTable,
+  invoiceLineItemsTable,
   referralsTable,
   sessionsTable,
   usersTable,
@@ -118,6 +119,13 @@ beforeAll(async () => {
     })
     .returning();
   invoiceId = invoice.id;
+  await db.insert(invoiceLineItemsTable).values({
+    invoiceId,
+    authorizationId,
+    serviceMonth: "2026-09",
+    amount: "100.00",
+    documentUrl: "/objects/uploads/invoice-line-source",
+  });
 
   staffCookie = await session(staffId);
   parentCookie = await session(parentId);
@@ -178,5 +186,28 @@ describe("GET /clients/:id/case document rollup", () => {
 
     expect(response.status).toBe(200);
     expect(response.body.documents).toEqual([]);
+  });
+});
+
+describe("GET /storage/objects invoice line documents", () => {
+  it("allows staff and the linked participant to resolve a line document path", async () => {
+    const staffResponse = await request(app)
+      .get("/api/storage/objects/uploads/invoice-line-source")
+      .set("Cookie", staffCookie);
+    const parentResponse = await request(app)
+      .get("/api/storage/objects/uploads/invoice-line-source")
+      .set("Cookie", parentCookie);
+
+    // The fixture object is not present in object storage; 404 proves both
+    // requests passed authorization (unauthorized requests return 403).
+    expect(staffResponse.status).toBe(404);
+    expect(parentResponse.status).toBe(404);
+  });
+
+  it("denies a linked participant an unknown line-document path", async () => {
+    const response = await request(app)
+      .get("/api/storage/objects/uploads/not-an-invoice-line-document")
+      .set("Cookie", parentCookie);
+    expect(response.status).toBe(403);
   });
 });

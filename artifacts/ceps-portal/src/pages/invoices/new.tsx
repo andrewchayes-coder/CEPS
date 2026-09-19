@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useRef } from 'react';
 import { useForm, useFieldArray } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
@@ -30,6 +30,7 @@ const formSchema = z.object({
     authorizationId: z.string().min(1, 'Required'),
     serviceMonth: z.string().regex(/^\d{4}-\d{2}$/, 'Must be YYYY-MM'),
     amount: z.string().min(1, 'Required').regex(/^\d+(\.\d{1,2})?$/, 'Invalid format'),
+    documentUrl: z.string().nullable().optional(),
   })).min(1, 'At least one line item is required'),
 });
 
@@ -55,6 +56,15 @@ export default function InvoiceNewPage() {
     control: form.control,
     name: "lineItems"
   });
+  const lineFieldIndexes = useRef(new Map<string, number>());
+  lineFieldIndexes.current.clear();
+  fields.forEach((field, index) => lineFieldIndexes.current.set(field.id, index));
+  const setLineDocument = (fieldId: string, objectPath: string) => {
+    const currentIndex = lineFieldIndexes.current.get(fieldId);
+    if (currentIndex !== undefined) {
+      form.setValue(`lineItems.${currentIndex}.documentUrl`, objectPath);
+    }
+  };
 
   const selectedClientId = form.watch('clientId');
   const lineItems = form.watch('lineItems');
@@ -261,8 +271,27 @@ export default function InvoiceNewPage() {
                         </FormItem>
                       )} />
                     </div>
+                    <div className="col-span-11 space-y-2">
+                      <Label className="text-xs">Line Document (Optional)</Label>
+                      {form.watch(`lineItems.${index}.documentUrl`) ? (
+                        <div className="flex items-center justify-between rounded-md border p-2 text-xs" data-testid={`text-line-${index}-document-attached`}>
+                          <a className="text-primary hover:underline truncate" href={`/api/storage${form.watch(`lineItems.${index}.documentUrl`)}`} target="_blank" rel="noreferrer">
+                            {form.watch(`lineItems.${index}.documentUrl`)}
+                          </a>
+                          <Button type="button" variant="ghost" size="sm" onClick={() => form.setValue(`lineItems.${index}.documentUrl`, null)} data-testid={`button-remove-line-${index}-document`}>Remove</Button>
+                        </div>
+                      ) : (
+                        <div data-testid={`upload-line-${index}-document`}>
+                          <FileUpload
+                            label="Attach documentation for this authorization"
+                            onUploaded={(r) => setLineDocument(field.id, r.objectPath)}
+                            className="[&>div]:p-3"
+                          />
+                        </div>
+                      )}
+                    </div>
                     <div className="col-span-1 pt-6 text-right">
-                      <Button
+                    <Button
                         type="button"
                         variant="ghost"
                         size="icon"
@@ -277,11 +306,11 @@ export default function InvoiceNewPage() {
                   </div>
                 ))}
 
-                <Button
+                  <Button
                   type="button"
                   variant="outline"
                   size="sm"
-                  onClick={() => append({ authorizationId: '', serviceMonth: new Date().toISOString().substring(0, 7), amount: '' })}
+                  onClick={() => append({ authorizationId: '', serviceMonth: new Date().toISOString().substring(0, 7), amount: '', documentUrl: null })}
                   data-testid="button-add-line-item"
                 >
                   <Plus className="w-4 h-4 mr-2" /> Add Line Item
@@ -314,10 +343,12 @@ export default function InvoiceNewPage() {
                     </Button>
                   </div>
                 ) : (
-                  <FileUpload
-                    label="Drag & drop the invoice document here, or click to browse"
-                    onUploaded={(r) => setDocumentUrl(r.objectPath)}
-                  />
+                  <div data-testid="upload-invoice-document">
+                    <FileUpload
+                      label="Drag & drop the invoice document here, or click to browse"
+                      onUploaded={(r) => setDocumentUrl(r.objectPath)}
+                    />
+                  </div>
                 )}
               </div>
 

@@ -1,6 +1,6 @@
 import { and, eq } from "drizzle-orm";
 import {
-  authorizationsTable, clientsTable, db, feesTable, invoicesTable, invoiceLineItemsTable, paymentsTable, paymentAllocationsTable, remittancesTable, vendorsTable,
+  authorizationsTable, clientsTable, db, feesTable, invoicesTable, invoiceLineItemsTable, paymentsTable, paymentAllocationsTable, remittancesTable, vendorsTable, unmatchedPosDocumentsTable,
 } from "@workspace/db";
 import { notDeleted } from "./serializers";
 
@@ -130,6 +130,9 @@ export async function softDeleteClient(
     blocker("remittance", "Remittances", remittances.map((row) => ({ id: row.id, label: row.reference ? `Remittance ${row.reference}` : "Remittance record", href: `/remittances/${row.id}` }))),
   ]);
   if (blockers.length) return { conflict: "Participant cannot be deleted while active financial records reference them", blockers };
+  await tx.update(unmatchedPosDocumentsTable)
+    .set({ suggestedClientId: null, suggestionMethod: null, suggestedAt: null })
+    .where(eq(unmatchedPosDocumentsTable.suggestedClientId, id));
 
   const [deleted] = await tx.update(clientsTable)
     .set({ isDeleted: true, deletedAt: new Date(), deletedBy })

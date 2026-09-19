@@ -2010,6 +2010,10 @@ export const ListUnmatchedPosResponse = zod.object({
   "maxPeriodAmount": zod.string().nullish(),
   "caseworkerName": zod.string().nullish(),
   "posNotes": zod.string().nullish(),
+  "suggestedClientId": zod.string().nullish(),
+  "suggestionMethod": zod.union([zod.literal('uci'),zod.literal('name'),zod.literal(null)]).nullish(),
+  "suggestedAt": zod.coerce.date().nullish(),
+  "suggestedClientName": zod.string().nullish(),
   "createdBy": zod.string(),
   "createdAt": zod.coerce.date(),
   "updatedAt": zod.coerce.date()
@@ -2062,6 +2066,10 @@ export const SaveUnmatchedPosResponse = zod.object({
   "maxPeriodAmount": zod.string().nullish(),
   "caseworkerName": zod.string().nullish(),
   "posNotes": zod.string().nullish(),
+  "suggestedClientId": zod.string().nullish(),
+  "suggestionMethod": zod.union([zod.literal('uci'),zod.literal('name'),zod.literal(null)]).nullish(),
+  "suggestedAt": zod.coerce.date().nullish(),
+  "suggestedClientName": zod.string().nullish(),
   "createdBy": zod.string(),
   "createdAt": zod.coerce.date(),
   "updatedAt": zod.coerce.date()
@@ -2112,6 +2120,10 @@ export const GetUnmatchedPosResponse = zod.object({
   "maxPeriodAmount": zod.string().nullish(),
   "caseworkerName": zod.string().nullish(),
   "posNotes": zod.string().nullish(),
+  "suggestedClientId": zod.string().nullish(),
+  "suggestionMethod": zod.union([zod.literal('uci'),zod.literal('name'),zod.literal(null)]).nullish(),
+  "suggestedAt": zod.coerce.date().nullish(),
+  "suggestedClientName": zod.string().nullish(),
   "createdBy": zod.string(),
   "createdAt": zod.coerce.date(),
   "updatedAt": zod.coerce.date()
@@ -3461,10 +3473,11 @@ export const GetDashboardSummaryResponse = zod.object({
   "pendingInvoices": zod.int(),
   "vendorsMissingW9": zod.int(),
   "paymentsThisMonth": zod.string().nullish(),
-  "unmatchedRemittances": zod.int().optional()
+  "unmatchedRemittances": zod.int().optional(),
+  "unmatchedPosDocuments": zod.int().optional()
 }),
   "alerts": zod.array(zod.object({
-  "kind": zod.enum(['expiring_authorization', 'missing_document', 'pending_w9', 'unmatched_remittance', 'authorization_exhausted_active', 'pending_signature', 'recently_completed', 'family_updated_participant']),
+  "kind": zod.enum(['expiring_authorization', 'missing_document', 'pending_w9', 'unmatched_remittance', 'authorization_exhausted_active', 'unmatched_pos', 'unmatched_pos_possible_match', 'pending_signature', 'recently_completed', 'family_updated_participant']),
   "message": zod.string(),
   "entityType": zod.string().nullish(),
   "entityId": zod.string().nullish()

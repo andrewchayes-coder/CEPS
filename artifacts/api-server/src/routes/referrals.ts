@@ -38,6 +38,14 @@ import {
 import { referralJson, clientNameMap, userNameMap, userContactMap } from "../lib/serializers";
 import { sortedOrder } from "../lib/sorting";
 import { logger } from "../lib/logger";
+import { suggestUnmatchedPosForClient } from "../lib/posMatching";
+
+class DeletedParticipantError extends Error {
+  constructor() {
+    super("This participant is deleted and must be restored before creating a referral.");
+    this.name = "DeletedParticipantError";
+  }
+}
 
 const router: IRouter = Router();
 
@@ -347,12 +355,15 @@ router.post("/referrals", requireStaffOrCoordinator, async (req, res): Promise<v
     email: clean(f.contactEmail),
     address: clean(address),
   };
-  const result = await db.transaction(async (tx) => {
+  let result;
+  try {
+    result = await db.transaction(async (tx) => {
     // Lock an existing UCI row so contact and representative reconciliation is
     // atomic with referral creation. A concurrent new-UCI insert is still
     // guarded by the database unique constraint.
     let [client] = await tx.select().from(clientsTable)
       .where(eq(clientsTable.uciNumber, clientUci)).for("update");
+    if (client?.isDeleted) throw new DeletedParticipantError();
     const contactIsFamily = f.clientIsMinor === true;
     if (!client) {
       const [createdClient] = await tx
@@ -486,9 +497,25 @@ router.post("/referrals", requireStaffOrCoordinator, async (req, res): Promise<v
       .returning();
 
     await audit(req.user!.id, "create_referral", "referral", referral.id, `Referral for ${client.firstName} ${client.lastName}`, tx as unknown as typeof db);
-    return { client, referral, familyRepresentative };
-  });
+      return { client, referral, familyRepresentative };
+    });
+  } catch (error) {
+    if (error instanceof DeletedParticipantError) {
+      res.status(409).json({ error: error.message });
+      return;
+    }
+    throw error;
+  }
   const { client, referral, familyRepresentative } = result;
+  // Referral creation has already committed. Suggestions are deliberately
+  // best-effort and never auto-resolve a queue row or roll back the referral.
+  try {
+    await db.transaction(async (tx) => {
+      await suggestUnmatchedPosForClient(tx as unknown as typeof db, client.id);
+    });
+  } catch (error) {
+    logger.error({ error, clientId: client.id, referralId: referral.id }, "Unable to suggest unmatched POS matches after referral creation");
+  }
   const coordNames = await userNameMap([referral.serviceCoordinatorId]);
   res.status(201).json(
     CreateReferralResponse.parse(

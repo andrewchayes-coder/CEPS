@@ -45,6 +45,7 @@ import {
 import { sortedOrder } from "../lib/sorting";
 import { softDeleteAuthorization, validateParticipantLinks } from "../lib/participantLinks";
 import { advanceReferralForAuthorization } from "../lib/advanceReferralForAuthorization";
+import { findPosClient } from "../lib/posMatching";
 
 const router: IRouter = Router();
 
@@ -80,35 +81,12 @@ function maxAmountWarning(data: {
   return null;
 }
 
-function normalizeMatchValue(value: string | null | undefined): string {
-  return (value ?? "").trim().replace(/\s+/g, " ").toLocaleLowerCase();
-}
-
-async function findPosClient(fields: { uciNumber?: string | null; clientName?: string | null }) {
-  const uci = normalizeMatchValue(fields.uciNumber);
-  if (uci) {
-    const [match] = await db.select().from(clientsTable).where(and(
-      sql`lower(trim(${clientsTable.uciNumber})) = ${uci}`,
-      eq(clientsTable.isDeleted, false),
-    )).limit(1);
-    if (match) return { method: "uci" as const, client: match };
-  }
-  const name = normalizeMatchValue(fields.clientName);
-  if (name) {
-    const [match] = await db.select().from(clientsTable).where(and(
-      sql`lower(trim(${clientsTable.firstName} || ' ' || ${clientsTable.lastName})) = ${name}`,
-      eq(clientsTable.isDeleted, false),
-    )).limit(1);
-    if (match) return { method: "name" as const, client: match };
-  }
-  return { method: "none" as const, client: null };
-}
-
-function unmatchedPosJson(row: typeof unmatchedPosDocumentsTable.$inferSelect) {
+function unmatchedPosJson(row: typeof unmatchedPosDocumentsTable.$inferSelect, suggestedClientName?: string | null) {
   return {
     ...row,
     createdAt: row.createdAt.toISOString(),
     updatedAt: row.updatedAt.toISOString(),
+    suggestedClientName: suggestedClientName ?? null,
   };
 }
 
@@ -692,7 +670,8 @@ router.get("/unmatched-pos", requireStaff, async (req, res): Promise<void> => {
       .orderBy(desc(unmatchedPosDocumentsTable.createdAt), desc(unmatchedPosDocumentsTable.id))
       .limit(limit).offset(offset),
   ]);
-  res.json(ListUnmatchedPosResponse.parse({ items: rows.map(unmatchedPosJson), total }));
+  const suggestedNames = await clientNameMap(rows.map((row) => row.suggestedClientId));
+  res.json(ListUnmatchedPosResponse.parse({ items: rows.map((row) => unmatchedPosJson(row, row.suggestedClientId ? suggestedNames.get(row.suggestedClientId) : null)), total }));
 });
 
 router.post("/unmatched-pos/match", requireStaff, async (req, res): Promise<void> => {
@@ -743,7 +722,8 @@ router.get("/unmatched-pos/:id", requireStaff, async (req, res): Promise<void> =
     res.status(404).json({ error: "Unmatched POS not found" });
     return;
   }
-  res.json(GetUnmatchedPosResponse.parse(unmatchedPosJson(row)));
+  const suggestedNames = row.suggestedClientId ? await clientNameMap([row.suggestedClientId]) : new Map<string, string>();
+  res.json(GetUnmatchedPosResponse.parse(unmatchedPosJson(row, row.suggestedClientId ? suggestedNames.get(row.suggestedClientId) : null)));
 });
 
 router.post("/unmatched-pos/:id/complete", requireStaff, async (req, res): Promise<void> => {

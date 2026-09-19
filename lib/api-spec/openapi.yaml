@@ -3033,6 +3033,10 @@ components:
         maxPeriodAmount: { type: ["string", "null"] }
         caseworkerName: { type: ["string", "null"] }
         posNotes: { type: ["string", "null"] }
+        suggestedClientId: { type: ["string", "null"] }
+        suggestionMethod: { type: ["string", "null"], enum: [uci, name, null] }
+        suggestedAt: { type: ["string", "null"], format: date-time }
+        suggestedClientName: { type: ["string", "null"] }
         createdBy: { type: string }
         createdAt: { type: string, format: date-time }
         updatedAt: { type: string, format: date-time }
@@ -3654,13 +3658,14 @@ components:
             vendorsMissingW9: { type: integer }
             paymentsThisMonth: { type: ["string", "null"] }
             unmatchedRemittances: { type: integer }
+            unmatchedPosDocuments: { type: integer }
         alerts:
           type: array
           items:
             type: object
             required: [kind, message]
             properties:
-              kind: { type: string, enum: [expiring_authorization, missing_document, pending_w9, unmatched_remittance, authorization_exhausted_active, pending_signature, recently_completed, family_updated_participant] }
+              kind: { type: string, enum: [expiring_authorization, missing_document, pending_w9, unmatched_remittance, authorization_exhausted_active, unmatched_pos, unmatched_pos_possible_match, pending_signature, recently_completed, family_updated_participant] }
               message: { type: string }
               entityType: { type: ["string", "null"] }
               entityId: { type: ["string", "null"] }

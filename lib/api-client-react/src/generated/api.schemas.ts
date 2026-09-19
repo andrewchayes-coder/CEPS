@@ -1482,6 +1482,17 @@ export interface PosParseResult {
   fields?: PosParseResultFields;
 }
 
+/**
+ * @nullable
+ */
+export type UnmatchedPosDocumentSuggestionMethod = typeof UnmatchedPosDocumentSuggestionMethod[keyof typeof UnmatchedPosDocumentSuggestionMethod] | null;
+
+
+export const UnmatchedPosDocumentSuggestionMethod = {
+  uci: 'uci',
+  name: 'name',
+} as const;
+
 export interface UnmatchedPosDocument {
   id: string;
   posPdfUrl: string;
@@ -1514,6 +1525,14 @@ export interface UnmatchedPosDocument {
   caseworkerName?: string | null;
   /** @nullable */
   posNotes?: string | null;
+  /** @nullable */
+  suggestedClientId?: string | null;
+  /** @nullable */
+  suggestionMethod?: UnmatchedPosDocumentSuggestionMethod;
+  /** @nullable */
+  suggestedAt?: string | null;
+  /** @nullable */
+  suggestedClientName?: string | null;
   createdBy: string;
   createdAt: string;
   updatedAt: string;
@@ -2244,6 +2263,7 @@ export type DashboardSummaryTotals = {
   /** @nullable */
   paymentsThisMonth?: string | null;
   unmatchedRemittances?: number;
+  unmatchedPosDocuments?: number;
 };
 
 export type DashboardSummaryAlertsItemKind = typeof DashboardSummaryAlertsItemKind[keyof typeof DashboardSummaryAlertsItemKind];
@@ -2255,6 +2275,8 @@ export const DashboardSummaryAlertsItemKind = {
   pending_w9: 'pending_w9',
   unmatched_remittance: 'unmatched_remittance',
   authorization_exhausted_active: 'authorization_exhausted_active',
+  unmatched_pos: 'unmatched_pos',
+  unmatched_pos_possible_match: 'unmatched_pos_possible_match',
   pending_signature: 'pending_signature',
   recently_completed: 'recently_completed',
   family_updated_participant: 'family_updated_participant',

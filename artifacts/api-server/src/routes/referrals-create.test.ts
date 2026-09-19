@@ -10,6 +10,7 @@ import {
   referralsTable,
   auditLogTable,
   familyRepresentativesTable,
+  unmatchedPosDocumentsTable,
 } from "@workspace/db";
 import app from "../app";
 import { newToken } from "../lib/auth";
@@ -22,6 +23,7 @@ let staffCookie: string;
 const createdReferralIds: string[] = [];
 const createdClientUcis: string[] = [];
 const createdVendorNames: string[] = [];
+const createdQueueIds: string[] = [];
 
 async function session(userId: string) {
   const token = newToken();
@@ -78,6 +80,9 @@ beforeAll(async () => {
 });
 
 afterAll(async () => {
+  if (createdQueueIds.length) {
+    await db.delete(unmatchedPosDocumentsTable).where(inArray(unmatchedPosDocumentsTable.id, createdQueueIds));
+  }
   if (createdReferralIds.length) {
     await db.delete(referralsTable).where(inArray(referralsTable.id, createdReferralIds));
   }
@@ -105,6 +110,34 @@ afterAll(async () => {
 });
 
 describe("POST /referrals supporting documents", () => {
+  it("suggests eligible POS rows with normalized UCI before falling back to normalized name", async () => {
+    const uci = `${nonce}-suggest  uci`;
+    const vendorName = `${nonce} Suggest Vendor`;
+    createdClientUcis.push(uci);
+    createdVendorNames.push(vendorName);
+    const [uciRow] = await db.insert(unmatchedPosDocumentsTable).values({
+      posPdfUrl: `/objects/${nonce}-uci.pdf`, sourceFileName: `${nonce}-uci.pdf`,
+      uciNumber: `  ${uci.replace("  ", "     ")} `, clientName: "Different Person", createdBy: staffId,
+    }).returning();
+    const [nameRow] = await db.insert(unmatchedPosDocumentsTable).values({
+      posPdfUrl: `/objects/${nonce}-name.pdf`, sourceFileName: `${nonce}-name.pdf`,
+      clientName: "Create   Tester", createdBy: staffId,
+    }).returning();
+    createdQueueIds.push(uciRow.id, nameRow.id);
+    const res = await request(app).post("/api/referrals").set("Cookie", staffCookie).send({
+      submittedVia: "staff_manual_entry", intakeFields: baseIntake(uci, vendorName),
+    });
+    expect(res.status).toBe(201);
+    const rows = await db.select().from(unmatchedPosDocumentsTable)
+      .where(inArray(unmatchedPosDocumentsTable.id, [uciRow.id, nameRow.id]));
+    expect(rows.find((row) => row.id === uciRow.id)).toMatchObject({
+      suggestedClientId: res.body.clientId, suggestionMethod: "uci",
+    });
+    expect(rows.find((row) => row.id === nameRow.id)).toMatchObject({
+      suggestedClientId: res.body.clientId, suggestionMethod: "name",
+    });
+  });
+
   it("round-trips supportingDocumentUrl and does not expose deprecated fields", async () => {
     const uci = `${nonce}-uci1`;
     const vendorName = `${nonce} Vendor1`;

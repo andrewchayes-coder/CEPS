@@ -230,6 +230,7 @@ export * from './signedAgreementSnapshot';
 export * from './signedAgreementSnapshotSignerRelationship';
 export * from './statusCount';
 export * from './unmatchedPosDocument';
+export * from './unmatchedPosDocumentSuggestionMethod';
 export * from './unmatchedPosInput';
 export * from './unmatchedPosList';
 export * from './updateMeInput';

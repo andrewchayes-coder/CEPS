@@ -11,6 +11,7 @@ import {
   vendorsTable,
   auditLogTable,
   usersTable,
+  unmatchedPosDocumentsTable,
 } from "@workspace/db";
 import {
   GetDashboardSummaryResponse,
@@ -54,6 +55,9 @@ router.get("/dashboard/summary", requireAuth, async (req, res): Promise<void> =>
     db.select().from(remittancesTable).where(notDeleted(remittancesTable)),
     db.select().from(vendorsTable),
   ]);
+  const unmatchedPosRows = u.role === "staff"
+    ? await db.select().from(unmatchedPosDocumentsTable)
+    : [];
 
   // Role scoping
   if (u.role === "service_coordinator") {
@@ -169,6 +173,24 @@ router.get("/dashboard/summary", requireAuth, async (req, res): Promise<void> =>
     if (u.role === "staff") for (const r of unmatchedRemits) {
       alerts.push({ kind: "unmatched_remittance", message: `An Alta remittance of $${r.amount} has no matching payment.`, entityType: "remittance", entityId: r.id });
     }
+    if (u.role === "staff" && unmatchedPosRows.length > 0) {
+      alerts.push({
+        kind: "unmatched_pos",
+        message: `${unmatchedPosRows.length} unmatched POS document${unmatchedPosRows.length === 1 ? "" : "s"} awaiting participant matching.`,
+        entityType: "unmatched_pos_document",
+        entityId: null,
+      });
+      const suggestedRows = unmatchedPosRows.filter((row) => row.suggestedClientId);
+      const suggestedNames = await clientNameMap(suggestedRows.map((row) => row.suggestedClientId));
+      for (const row of suggestedRows) {
+        alerts.push({
+          kind: "unmatched_pos_possible_match",
+          message: `POS ${row.authNumber ?? row.sourceFileName} may match ${suggestedNames.get(row.suggestedClientId!) ?? "a participant"} — confirm the suggested match.`,
+          entityType: "unmatched_pos_document",
+          entityId: row.id,
+        });
+      }
+    }
     if (u.role === "staff") {
       const exhaustedActive = withStatus.filter(
         ({ a, status }) => status === "exhausted" && a.servicePeriodEnd >= today,
@@ -218,11 +240,13 @@ router.get("/dashboard/summary", requireAuth, async (req, res): Promise<void> =>
         vendorsMissingW9: missingW9.length,
         paymentsThisMonth: paymentsThisMonth.toFixed(2),
         unmatchedRemittances: unmatchedRemits.length,
+        unmatchedPosDocuments: unmatchedPosRows.length,
       },
       // Keep the existing cap for general alerts while ensuring every
       // exhausted-active authorization remains visible for staff review.
       alerts: [
-        ...alerts.slice(0, 25),
+        ...alerts.filter((alert) => alert.kind === "unmatched_pos" || alert.kind === "unmatched_pos_possible_match"),
+        ...alerts.filter((alert) => alert.kind !== "unmatched_pos" && alert.kind !== "unmatched_pos_possible_match").slice(0, 25),
         ...exhaustedActiveAlerts,
       ],
       recentActivity,

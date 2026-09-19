@@ -64,7 +64,7 @@ export default function DashboardPage() {
       {/* Alerts Section (High Priority) */}
       {summary.alerts && summary.alerts.length > 0 && (
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-          {groupAlerts(summary.alerts).map((group) => group.kind === 'authorization_exhausted_active' ? (
+          {groupAlerts(summary.alerts).map((group) => group.kind === 'authorization_exhausted_active' || group.kind === 'unmatched_pos_possible_match' ? (
             <Card
               key={group.kind}
               className={`border-l-4 ${getAlertBorderColor(group.kind)} h-full`}
@@ -76,15 +76,21 @@ export default function DashboardPage() {
                 </div>
                 <div className="flex-1 min-w-0">
                   <p className="text-sm font-semibold">
-                    {getExhaustedAlertTitle(group.alerts.length)}
+                     {group.kind === 'authorization_exhausted_active'
+                       ? getExhaustedAlertTitle(group.alerts.length)
+                       : `${group.alerts.length} possible POS participant matches`}
                   </p>
                   <ul className="mt-1.5 max-h-48 space-y-1 overflow-y-auto">
                     {group.alerts.map((alert, i) => (
                       <li key={alert.entityId ?? i} className="text-xs truncate">
                         <Link
-                          href={`/authorizations/${alert.entityId}`}
+                           href={group.kind === 'authorization_exhausted_active'
+                             ? `/authorizations/${alert.entityId}`
+                             : `/authorizations/unmatched?id=${alert.entityId}`}
                           className="text-primary hover:underline"
-                          data-testid={`link-alert-authorization-${alert.entityId ?? i}`}
+                           data-testid={group.kind === 'authorization_exhausted_active'
+                             ? `link-alert-authorization-${alert.entityId ?? i}`
+                             : `link-alert-${group.kind}-${alert.entityId ?? i}`}
                         >
                           {alert.message}
                         </Link>
@@ -227,6 +233,20 @@ export default function DashboardPage() {
             </p>
           </CardContent>
         </Card>
+        {user?.role === 'staff' && (
+          <Card className="cursor-pointer transition-colors hover:bg-accent/50" onClick={() => navigate('/authorizations/unmatched')} data-testid="card-kpi-unmatched-pos">
+            <CardHeader className="flex flex-row items-center justify-between pb-2 space-y-0">
+              <CardTitle className="text-sm font-medium">Unmatched POS</CardTitle>
+              <AlertTriangle className="h-4 w-4 text-muted-foreground" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold">{summary.totals.unmatchedPosDocuments}</div>
+              <Link href="/authorizations/unmatched" onClick={(e) => e.stopPropagation()} className="text-xs text-primary hover:underline mt-1 inline-block" data-testid="link-tile-unmatched-pos">
+                Review queue →
+              </Link>
+            </CardContent>
+          </Card>
+        )}
       </div>
 
       <div className="grid gap-6 md:grid-cols-2">
@@ -381,6 +401,8 @@ function getAlertGroupTitle(type: string) {
     case 'pending_w9': return 'vendors missing a W-9 — payments blocked';
     case 'pending_signature': return 'referrals awaiting signature';
     case 'unmatched_remittance': return 'remittances with no matching payment';
+    case 'unmatched_pos': return 'unmatched POS documents awaiting review';
+    case 'unmatched_pos_possible_match': return 'possible POS participant matches';
     case 'authorization_exhausted_active': return 'authorizations needing review';
     case 'recently_completed': return 'recently completed intakes';
     default: return 'alerts';
@@ -399,6 +421,8 @@ function getAlertBorderColor(type: string) {
     case 'missing_document': return 'border-destructive';
     case 'pending_w9': return 'border-destructive';
     case 'unmatched_remittance': return 'border-chart-2';
+    case 'unmatched_pos': return 'border-chart-2';
+    case 'unmatched_pos_possible_match': return 'border-primary';
     case 'authorization_exhausted_active': return 'border-destructive';
     case 'pending_signature': return 'border-chart-4';
     case 'recently_completed': return 'border-chart-5';
@@ -412,6 +436,8 @@ function getAlertIconColor(type: string) {
     case 'missing_document': return 'text-destructive';
     case 'pending_w9': return 'text-destructive';
     case 'unmatched_remittance': return 'text-chart-2';
+    case 'unmatched_pos': return 'text-chart-2';
+    case 'unmatched_pos_possible_match': return 'text-primary';
     case 'authorization_exhausted_active': return 'text-destructive';
     case 'pending_signature': return 'text-chart-4';
     case 'recently_completed': return 'text-chart-5';
@@ -429,6 +455,8 @@ function getAlertLink(group: { kind: string; alerts: DashboardAlert[] }) {
     case 'pending_w9': return '/reports?tab=missing-docs&docType=w9';
     case 'pending_signature': return '/reports?tab=missing-docs&docType=signature';
     case 'unmatched_remittance': return '/remittances';
+    case 'unmatched_pos': return '/authorizations/unmatched';
+    case 'unmatched_pos_possible_match': return group.alerts[0]?.entityId ? `/authorizations/unmatched?id=${group.alerts[0].entityId}` : '/authorizations/unmatched';
     case 'authorization_exhausted_active': return group.alerts[0]?.entityId ? `/authorizations/${group.alerts[0].entityId}` : '/authorizations';
     case 'recently_completed': return '/referrals';
     default: return '/';

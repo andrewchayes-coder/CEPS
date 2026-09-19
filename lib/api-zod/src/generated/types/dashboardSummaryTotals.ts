@@ -14,4 +14,5 @@ export type DashboardSummaryTotals = {
   /** @nullable */
   paymentsThisMonth?: string | null;
   unmatchedRemittances?: number;
+  unmatchedPosDocuments?: number;
 };

@@ -1,6 +1,8 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
     useListUnmatchedPos,
+    useGetUnmatchedPos,
+    getGetUnmatchedPosQueryKey,
     useCompleteUnmatchedPos,
     useListClients,
     useListVendors,
@@ -33,6 +35,14 @@ export default function AuthorizationsUnmatchedPage() {
         { query: { enabled: user?.role === 'staff', queryKey: getListUnmatchedPosQueryKey({ search: debouncedQueueSearch }) } },
     );
     const items = data?.items ?? [];
+    const requestedId = typeof window !== 'undefined' ? new URLSearchParams(window.location.search).get('id') : null;
+    const { data: requestedItem } = useGetUnmatchedPos(requestedId ?? '', { query: { enabled: !!requestedId, queryKey: getGetUnmatchedPosQueryKey(requestedId ?? '') } });
+    const renderedItems = requestedItem && !items.some((item) => item.id === requestedItem.id)
+        ? [requestedItem, ...items] : items;
+    useEffect(() => {
+        if (!requestedId || !renderedItems.some((item) => item.id === requestedId)) return;
+        document.getElementById(`card-unmatched-${requestedId}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }, [requestedId, renderedItems]);
 
     if (authLoading) {
         return (
@@ -77,7 +87,7 @@ export default function AuthorizationsUnmatchedPage() {
                     <Loader2 className="w-8 h-8 animate-spin text-muted-foreground" />
                     <p className="text-muted-foreground animate-pulse">Loading queue...</p>
                 </div>
-            ) : items.length === 0 ? (
+             ) : renderedItems.length === 0 ? (
                 <Card>
                     <CardContent className="py-12 text-center">
                         <CheckCircle className="w-12 h-12 text-muted-foreground/30 mx-auto mb-4" />
@@ -90,11 +100,11 @@ export default function AuthorizationsUnmatchedPage() {
             ) : (
                 <div className="space-y-4">
                     <div className="text-sm text-muted-foreground">
-                        Showing {items.length} of {data?.total ?? items.length} {data?.total === 1 ? 'item' : 'items'}
+                         Showing {renderedItems.length} of {data?.total ?? renderedItems.length} {data?.total === 1 ? 'item' : 'items'}
                     </div>
                     <div className="grid gap-6">
-                        {items.map(item => (
-                            <UnmatchedPosCard key={item.id} item={item} />
+                         {renderedItems.map(item => (
+                            <UnmatchedPosCard key={item.id} item={item} highlighted={item.id === requestedId} />
                         ))}
                     </div>
                 </div>
@@ -103,8 +113,8 @@ export default function AuthorizationsUnmatchedPage() {
     );
 }
 
-function UnmatchedPosCard({ item }: { item: UnmatchedPosDocument }) {
-    const [clientId, setClientId] = useState<string>('');
+function UnmatchedPosCard({ item, highlighted = false }: { item: UnmatchedPosDocument; highlighted?: boolean }) {
+    const [clientId, setClientId] = useState<string>(item.suggestedClientId ?? '');
     const [vendorId, setVendorId] = useState<string>('');
     const [paymentType, setPaymentType] = useState<CompleteUnmatchedPosInputPaymentType>(
         item.serviceCode === '459' ? 'direct_payment' :
@@ -116,6 +126,9 @@ function UnmatchedPosCard({ item }: { item: UnmatchedPosDocument }) {
     const debouncedClientSearch = useDebounce(clientSearch, 300);
     const { data: clientsData, isLoading: clientsLoading } = useListClients({ search: debouncedClientSearch, limit: 50 });
     const clients = clientsData?.items ?? [];
+    const clientOptions = item.suggestedClientId && !clients.some((client) => client.id === item.suggestedClientId)
+        ? [...clients, { id: item.suggestedClientId, firstName: item.suggestedClientName?.split(' ')[0] ?? 'Suggested', lastName: item.suggestedClientName?.split(' ').slice(1).join(' ') ?? 'Participant', uciNumber: '' }]
+        : clients;
 
     const [vendorSearch, setVendorSearch] = useState('');
     const debouncedVendorSearch = useDebounce(vendorSearch, 300);
@@ -167,7 +180,7 @@ function UnmatchedPosCard({ item }: { item: UnmatchedPosDocument }) {
     };
 
     return (
-        <Card data-testid={`card-unmatched-${item.id}`}>
+        <Card data-testid={`card-unmatched-${item.id}`} data-highlighted={highlighted ? 'true' : 'false'} className={highlighted ? 'ring-2 ring-primary' : undefined}>
             <CardHeader className="flex flex-row items-start justify-between bg-muted/30 pb-4">
                 <div>
                     <CardTitle className="text-lg">Unmatched POS: {item.authNumber || 'No Auth #'}</CardTitle>
@@ -180,6 +193,14 @@ function UnmatchedPosCard({ item }: { item: UnmatchedPosDocument }) {
                 </Button>
             </CardHeader>
             <CardContent className="pt-6">
+                {item.suggestedClientId && (
+                    <Alert className="mb-6 border-primary/30 bg-primary/5">
+                        <AlertTitle>Suggested match — confirm before completing</AlertTitle>
+                        <AlertDescription>
+                            {item.suggestedClientName ? `${item.suggestedClientName} was suggested by ${item.suggestionMethod === 'uci' ? 'UCI' : 'name'} match.` : 'A participant was suggested for this document.'}
+                        </AlertDescription>
+                    </Alert>
+                )}
                 {warnings.length > 0 && (
                     <Alert variant="destructive" className="mb-6 bg-destructive/10 border-destructive/20 text-destructive">
                         <AlertTriangle className="h-4 w-4" />
@@ -231,7 +252,7 @@ function UnmatchedPosCard({ item }: { item: UnmatchedPosDocument }) {
                                 <SearchableSelect
                                     id={`client-select-${item.id}`} value={clientId}
                                     onValueChange={setClientId}
-                                    options={clients.map(c => ({ value: c.id, label: `${c.firstName} ${c.lastName} (${c.uciNumber})` }))}
+                                    options={clientOptions.map(c => ({ value: c.id, label: `${c.firstName} ${c.lastName}${c.uciNumber ? ` (${c.uciNumber})` : ''}` }))}
                                     onSearchChange={setClientSearch}
                                     loading={clientsLoading}
                                     placeholder="Search participant..."

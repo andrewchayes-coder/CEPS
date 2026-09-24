@@ -179,6 +179,7 @@ export default function ReferralNewPage() {
   const clientIsMinor = watch('clientIsMinor');
 
   const nextStep = async () => {
+    if (currentStep >= STEPS.length - 1 || vendorAcceptsChecks === false) return;
     let fieldsToValidate: any[] = [];
     if (currentStep === 0) fieldsToValidate = Object.keys(coordinatorSchema.shape);
     if (currentStep === 1) fieldsToValidate = Object.keys(vendorSchemaBase);
@@ -263,7 +264,15 @@ export default function ReferralNewPage() {
       </div>
 
       <Form {...form}>
-        <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
+        <form
+          onSubmit={(e) => e.preventDefault()}
+          onKeyDown={(e) => {
+            if (e.key !== 'Enter' || !(e.target instanceof HTMLInputElement)) return;
+            e.preventDefault();
+            if (!e.repeat && currentStep < STEPS.length - 1) void nextStep();
+          }}
+          className="space-y-6"
+        >
           
           {/* STEP 0: Coordinator */}
           {currentStep === 0 && (
@@ -659,7 +668,7 @@ export default function ReferralNewPage() {
                 <Alert className="bg-primary/5 border-primary/20">
                   <AlertTitle className="text-primary">Next Steps</AlertTitle>
                   <AlertDescription>
-                    Upon submission, an email will immediately be sent to <strong>{watch('contactEmail')}</strong> with a secure link to digitally sign the intake packet.
+                    After saving the referral, choose the agreement recipient on the referral page to send the signature link to <strong>{watch('contactEmail')}</strong> or another recipient.
                   </AlertDescription>
                 </Alert>
 
@@ -680,6 +689,7 @@ export default function ReferralNewPage() {
             
             {currentStep < STEPS.length - 1 ? (
               <Button 
+                key="next"
                 type="button" 
                 onClick={nextStep}
                 disabled={vendorAcceptsChecks === false}
@@ -688,11 +698,13 @@ export default function ReferralNewPage() {
               </Button>
             ) : (
               <Button 
-                type="submit" 
+                key="submit"
+                type="button"
+                onClick={form.handleSubmit(onSubmit)}
                 disabled={createReferral.isPending}
                 className="bg-chart-5 hover:bg-chart-5/90 text-white"
               >
-                {createReferral.isPending ? 'Submitting...' : 'Submit Referral & Send Signature Link'}
+                {createReferral.isPending ? 'Submitting...' : 'Submit Referral'}
               </Button>
             )}
           </div>

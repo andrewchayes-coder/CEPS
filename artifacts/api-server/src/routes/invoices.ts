@@ -157,6 +157,10 @@ router.post("/invoices", requireAuth, async (req, res): Promise<void> => {
     return;
   }
   const submittedDocument = parsed.data.documentUrl?.trim() || null;
+  if ((u.role === "staff" || u.role === "service_coordinator") && !submittedDocument) {
+    res.status(400).json({ error: "An invoice document is required" });
+    return;
+  }
   if (submittedDocument && !normalizeValidateOwnedUploadPath(submittedDocument, u.id)) {
     res.status(403).json({ error: "Document must be an upload owned by the submitting user" });
     return;
@@ -272,13 +276,17 @@ router.patch("/invoices/:id", requireStaff, async (req, res): Promise<void> => {
     ? await db.select().from(invoiceLineItemsTable).where(eq(invoiceLineItemsTable.invoiceId, id))
     : [];
   const normalizedLineItems = lineItems?.map((item) => {
-    const documentUrl = item.documentUrl?.trim() || null;
+    const existing = item.id
+      ? existingLineItems.find((line) => line.id === item.id)
+      : existingLineItems.find((line) =>
+        line.authorizationId === item.authorizationId && line.serviceMonth === item.serviceMonth,
+      );
+    if (item.id && !existing) return null;
+    const documentUrl = item.documentUrl === undefined
+      ? existing?.documentUrl ?? null
+      : item.documentUrl?.trim() || null;
     if (!documentUrl) return { ...item, documentUrl: null };
-    const unchanged = existingLineItems.some((existing) =>
-      existing.authorizationId === item.authorizationId &&
-      existing.serviceMonth === item.serviceMonth &&
-      existing.documentUrl === documentUrl,
-    );
+    const unchanged = existing?.documentUrl === documentUrl;
     if (unchanged || normalizeValidateOwnedUploadPath(documentUrl, req.user!.id)) {
       return { ...item, documentUrl };
     }

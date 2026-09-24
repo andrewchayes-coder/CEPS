@@ -7,6 +7,8 @@
  */
 
 export interface InvoiceLineItemInput {
+  /** Existing line ID, used when editing to retain its document */
+  id?: string;
   authorizationId: string;
   /** @pattern ^\d{4}-(0[1-9]|1[0-2])$ */
   serviceMonth: string;

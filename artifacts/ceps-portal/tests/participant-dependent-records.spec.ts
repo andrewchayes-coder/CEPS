@@ -80,6 +80,10 @@ test('invoice submission keeps authorization and vendor scoped to the selected p
 
   await mockStaffSession(page);
   await mockParticipantDependencies(page, requests);
+  await page.route('**/api/storage/uploads/request-url', (route) => route.fulfill({
+    json: { uploadURL: '/test-upload/invoice', objectPath: '/objects/uploads/test-staff/11111111-1111-4111-8111-111111111111' },
+  }));
+  await page.route('**/test-upload/**', (route) => route.fulfill({ status: 200, body: '' }));
   await page.route('**/api/invoices', async (route) => {
     if (route.request().method() !== 'POST') return route.continue();
     createPayload = route.request().postDataJSON();
@@ -112,6 +116,10 @@ test('invoice submission keeps authorization and vendor scoped to the selected p
 
   await selectOption(page, 'select-line-0-authorization', 'AUTH-200');
   await page.getByPlaceholder('0.00').fill('225.00');
+  await page.getByTestId('input-file-upload').setInputFiles({
+    name: 'invoice.pdf', mimeType: 'application/pdf', buffer: Buffer.from('%PDF-1.4 invoice'),
+  });
+  await expect(page.getByTestId('text-invoice-document-attached')).toBeVisible();
   await page.getByRole('button', { name: 'Submit Invoice' }).click();
 
   await expect.poll(() => createPayload).toMatchObject({

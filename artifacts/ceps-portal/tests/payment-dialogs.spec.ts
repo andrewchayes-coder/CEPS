@@ -136,6 +136,10 @@ test('3-line invoice editor across 2 auths and 2 months computes totals and subm
   await page.route('**/api/clients?*', (route) => route.fulfill({ json: { total: 1, items: [client] } }));
   await page.route('**/api/vendors?*', (route) => route.fulfill({ json: { total: 0, items: [] } }));
   await page.route('**/api/authorizations?*', (route) => route.fulfill({ json: { total: 2, items: authorizations } }));
+  await page.route('**/api/storage/uploads/request-url', (route) => route.fulfill({
+    json: { uploadURL: '/test-upload/invoice', objectPath: '/objects/uploads/staff/11111111-1111-4111-8111-111111111111' },
+  }));
+  await page.route('**/test-upload/**', (route) => route.fulfill({ status: 200, body: '' }));
 
   let createPayload: any = null;
   await page.route('**/api/invoices', (route) => {
@@ -174,6 +178,10 @@ test('3-line invoice editor across 2 auths and 2 months computes totals and subm
   await page.getByTestId('input-line-2-amount').fill('25.00');
 
   // Submit
+  await page.getByTestId('input-file-upload').setInputFiles({
+    name: 'invoice.pdf', mimeType: 'application/pdf', buffer: Buffer.from('%PDF-1.4 invoice'),
+  });
+  await expect(page.getByTestId('text-invoice-document-attached')).toBeVisible();
   await page.getByRole('button', { name: 'Submit Invoice' }).click();
 
   await expect.poll(() => createPayload).toMatchObject({

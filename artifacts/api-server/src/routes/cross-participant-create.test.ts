@@ -66,7 +66,7 @@ afterAll(async () => {
 
 describe("cross-participant create validation", () => {
   it("rejects mismatched invoice links and accepts established same-client links", async () => {
-    const base = { clientId: clientA, serviceMonth: "2026-04", amountRequested: "100.00", paymentType: "direct_payment", lineItems: [{ authorizationId: authA, serviceMonth: "2026-04", amount: "100.00" }] };
+    const base = { clientId: clientA, serviceMonth: "2026-04", amountRequested: "100.00", paymentType: "direct_payment", documentUrl: `/objects/uploads/${staffId}/11111111-1111-4111-8111-111111111111`, lineItems: [{ authorizationId: authA, serviceMonth: "2026-04", amount: "100.00" }] };
     const wrongAuth = await request(app).post("/api/invoices").set("Cookie", cookie).send({ ...base, authorizationId: authB, vendorId: vendorA, lineItems: [{ authorizationId: authB, serviceMonth: "2026-04", amount: "100.00" }] });
     expect(wrongAuth.status).toBe(400); expect(wrongAuth.body.error).toContain("authorizationId");
     const wrongVendor = await request(app).post("/api/invoices").set("Cookie", cookie).send({ ...base, vendorId: vendorB });
@@ -127,11 +127,13 @@ describe("cross-participant create validation", () => {
     };
     const invoiceDeletedAuth = await request(app).post("/api/invoices").set("Cookie", cookie).send({
       clientId: clientA, authorizationId: deletedAuth.id, vendorId: vendorA, serviceMonth: "2026-06", amountRequested: "100.00", paymentType: "direct_payment",
+      documentUrl: `/objects/uploads/${staffId}/11111111-1111-4111-8111-111111111111`,
       lineItems: [{ authorizationId: deletedAuth.id, serviceMonth: "2026-06", amount: "100.00" }],
     });
     expect(invoiceDeletedAuth.status).toBe(400); expect(invoiceDeletedAuth.body.error).toContain("authorizationId");
     const deletedClientResult = await request(app).post("/api/invoices").set("Cookie", cookie).send({
       clientId: deletedClient.id, serviceMonth: "2026-06", amountRequested: "100.00", paymentType: "direct_payment",
+      documentUrl: `/objects/uploads/${staffId}/11111111-1111-4111-8111-111111111111`,
       lineItems: [{ authorizationId: authA, serviceMonth: "2026-06", amount: "100.00" }],
     });
     expect(deletedClientResult.status).toBe(400); expect(deletedClientResult.body.error).toContain("clientId");

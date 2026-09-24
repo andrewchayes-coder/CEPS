@@ -212,6 +212,41 @@ describe("PATCH /invoices/:id status reset on material edit", () => {
 });
 
 describe("invoice line-item document attachments", () => {
+  it("requires an invoice document for staff and coordinators, but not a linked parent", async () => {
+    const auth = await makeAuth({ maxPeriodAmount: "1000.00" });
+    const body = { clientId, paymentType: "direct_payment", lineItems: [{ authorizationId: auth.id, serviceMonth: "2026-07", amount: "10.00" }] };
+    for (const documentUrl of [undefined, "", "   "]) {
+      const response = await request(app).post("/api/invoices").set("Cookie", cookie).send({ ...body, documentUrl });
+      expect(response.status).toBe(400);
+      expect(response.body.error).toBe("An invoice document is required");
+    }
+
+    const [coordinator, parent] = await db.insert(usersTable).values([
+      { name: "Inv Coordinator", email: `${nonce}-coordinator@test.local`, role: "service_coordinator" },
+      { name: "Inv Parent", email: `${nonce}-parent@test.local`, role: "parent_guardian", linkedRecordType: "client", linkedRecordId: clientId },
+    ]).returning();
+    let parentInvoiceId: string | undefined;
+    const coordinatorToken = newToken();
+    const parentToken = newToken();
+    try {
+      await db.insert(sessionsTable).values([
+        { userId: coordinator.id, token: coordinatorToken, expiresAt: new Date(Date.now() + 3600000) },
+        { userId: parent.id, token: parentToken, expiresAt: new Date(Date.now() + 3600000) },
+      ]);
+      const restricted = await request(app).post("/api/invoices").set("Cookie", `ceps_session=${coordinatorToken}`).send(body);
+      expect(restricted.status).toBe(400);
+      expect(restricted.body.error).toBe("An invoice document is required");
+      const allowed = await request(app).post("/api/invoices").set("Cookie", `ceps_session=${parentToken}`).send(body);
+      expect(allowed.status).toBe(201);
+      parentInvoiceId = allowed.body.id;
+    } finally {
+      if (parentInvoiceId) await db.delete(invoicesTable).where(eq(invoicesTable.id, parentInvoiceId));
+      await db.delete(auditLogTable).where(inArray(auditLogTable.userId, [coordinator.id, parent.id]));
+      await db.delete(sessionsTable).where(inArray(sessionsTable.userId, [coordinator.id, parent.id]));
+      await db.delete(usersTable).where(inArray(usersTable.id, [coordinator.id, parent.id]));
+    }
+  });
+
   it("requires canonical owner-bound upload paths before creating an invoice", async () => {
     const auth = await makeAuth({ maxPeriodAmount: "1000.00" });
     const base = {
@@ -226,6 +261,7 @@ describe("invoice line-item document attachments", () => {
     expect(crossUser.status).toBe(403);
     const malformed = await request(app).post("/api/invoices").set("Cookie", otherCookie).send({
       ...base,
+      documentUrl: `/objects/uploads/${otherStaffId}/dddddddd-dddd-4ddd-8ddd-dddddddddddd`,
       lineItems: [{ ...base.lineItems[0], documentUrl: "https://attacker.example/file.pdf" }],
     });
     expect(malformed.status).toBe(403);
@@ -279,7 +315,7 @@ describe("invoice line-item document attachments", () => {
     expect(response.body.lineItems[0].documentUrl).toBeNull();
   });
 
-  it("replaces line documents independently without erasing invoice document", async () => {
+  it("keeps an existing line document when omitted on edit and allows explicit replacement", async () => {
     const first = await makeAuth({ maxPeriodAmount: "1000.00" });
     const second = await makeAuth({ maxPeriodAmount: "1000.00" });
     const created = await request(app).post("/api/invoices").set("Cookie", cookie).send({
@@ -295,7 +331,7 @@ describe("invoice line-item document attachments", () => {
       amountRequested: "30.00",
       lineItems: [
         { authorizationId: first.id, serviceMonth: "2026-05", amount: "10.00", documentUrl: `/objects/uploads/${staffId}/88888888-8888-4888-8888-888888888888` },
-        { authorizationId: second.id, serviceMonth: "2026-05", amount: "20.00" },
+        { id: created.body.lineItems.find((item: { authorizationId: string }) => item.authorizationId === second.id).id, authorizationId: second.id, serviceMonth: "2026-06", amount: "20.00" },
       ],
     });
     expect(patched.status).toBe(200);
@@ -303,7 +339,9 @@ describe("invoice line-item document attachments", () => {
     expect(patched.body.lineItems.find((item: { authorizationId: string }) => item.authorizationId === first.id).documentUrl)
        .toBe(`/objects/uploads/${staffId}/88888888-8888-4888-8888-888888888888`);
     expect(patched.body.lineItems.find((item: { authorizationId: string }) => item.authorizationId === second.id).documentUrl)
-      .toBeNull();
+      .toBe(`/objects/uploads/${staffId}/77777777-7777-4777-8777-777777777777`);
+    expect(patched.body.lineItems.find((item: { authorizationId: string }) => item.authorizationId === second.id).serviceMonth)
+      .toBe("2026-06");
   });
 });
 

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useForm, useFieldArray } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
@@ -30,7 +30,6 @@ import { Pencil, Plus, Trash2 } from 'lucide-react';
 import { SearchableSelect } from '@/components/searchable-select';
 import { MonthYearInput } from '@/components/month-year-input';
 import { useDebounce } from '@/hooks/use-debounce';
-import { FileUpload } from '@/components/file-upload';
 import { Badge } from '@/components/ui/badge';
 import { apiErrorMessage } from '@/lib/api-error';
 
@@ -43,7 +42,6 @@ const formSchema = z.object({
     authorizationId: z.string().min(1, 'Required'),
     serviceMonth: z.string().regex(/^\d{4}-\d{2}$/, 'Must be YYYY-MM format'),
     amount: z.string().min(1, 'Required').regex(/^\d+(\.\d{1,2})?$/, 'Invalid format'),
-    documentUrl: z.string().nullable().optional(),
   })).min(1, 'At least one line item is required'),
 });
 
@@ -76,8 +74,8 @@ export function EditInvoiceDialog({ id, invoice, onSaved }: Props) {
       paymentType: invoice.paymentType,
       notes: invoice.notes ?? '',
       lineItems: invoice.lineItems.length > 0
-        ? invoice.lineItems.map(l => ({ authorizationId: l.authorizationId, serviceMonth: l.serviceMonth, amount: l.amount, documentUrl: l.documentUrl ?? null }))
-        : [{ authorizationId: '', serviceMonth: new Date().toISOString().substring(0, 7), amount: '', documentUrl: null }]
+        ? invoice.lineItems.map(l => ({ id: l.id, authorizationId: l.authorizationId, serviceMonth: l.serviceMonth, amount: l.amount }))
+        : [{ authorizationId: '', serviceMonth: new Date().toISOString().substring(0, 7), amount: '' }]
     },
   });
 
@@ -85,16 +83,6 @@ export function EditInvoiceDialog({ id, invoice, onSaved }: Props) {
     control: form.control,
     name: "lineItems"
   });
-  const lineFieldIndexes = useRef(new Map<string, number>());
-  lineFieldIndexes.current.clear();
-  fields.forEach((field, index) => lineFieldIndexes.current.set(field.id, index));
-  const setLineDocument = (fieldId: string, objectPath: string) => {
-    const currentIndex = lineFieldIndexes.current.get(fieldId);
-    if (currentIndex !== undefined) {
-      form.setValue(`lineItems.${currentIndex}.documentUrl`, objectPath);
-    }
-  };
-
   const lineItems = form.watch('lineItems');
   const totalAmount = lineItems.reduce((sum, item) => sum + (parseFloat(item.amount) || 0), 0);
 
@@ -121,8 +109,8 @@ export function EditInvoiceDialog({ id, invoice, onSaved }: Props) {
         paymentType: invoice.paymentType,
         notes: invoice.notes ?? '',
         lineItems: invoice.lineItems.length > 0
-          ? invoice.lineItems.map(l => ({ authorizationId: l.authorizationId, serviceMonth: l.serviceMonth, amount: l.amount, documentUrl: l.documentUrl ?? null }))
-          : [{ authorizationId: '', serviceMonth: new Date().toISOString().substring(0, 7), amount: '', documentUrl: null }]
+          ? invoice.lineItems.map(l => ({ id: l.id, authorizationId: l.authorizationId, serviceMonth: l.serviceMonth, amount: l.amount }))
+          : [{ authorizationId: '', serviceMonth: new Date().toISOString().substring(0, 7), amount: '' }]
       });
     }
   }, [open, invoice, form]);
@@ -164,7 +152,7 @@ export function EditInvoiceDialog({ id, invoice, onSaved }: Props) {
           <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4 py-2">
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2 col-span-2">
-                <Label htmlFor="edit-invoice-participant">Participant</Label>
+                 <Label htmlFor="edit-invoice-participant">Participant</Label>
                 <Input id="edit-invoice-participant" value={invoice.clientName ?? invoice.clientId} disabled />
               </div>
               <FormField control={form.control} name="vendorId" render={({ field }) => (
@@ -202,7 +190,7 @@ export function EditInvoiceDialog({ id, invoice, onSaved }: Props) {
                 </FormItem>
               )} />
               <div className="space-y-2 col-span-2">
-                <Label>Status</Label>
+                 <Label>Status</Label>
                 <div><Badge variant="secondary" className="capitalize">{invoice.status.replace(/_/g, ' ')}</Badge></div>
                 <p className="text-xs text-muted-foreground">Use Validate / Approve / Reject on the invoice page to change status.</p>
               </div>
@@ -241,7 +229,7 @@ export function EditInvoiceDialog({ id, invoice, onSaved }: Props) {
                       <FormItem>
                         <FormLabel className="text-xs" htmlFor={`edit-line-${index}-month`}>Service Month</FormLabel>
                         <FormControl>
-                          <MonthYearInput id={`edit-line-${index}-month`} value={fField.value} onChange={fField.onChange} />
+                          <MonthYearInput id={`edit-line-${index}-month`} label={null} value={fField.value} onChange={fField.onChange} />
                         </FormControl>
                         <FormMessage />
                       </FormItem>
@@ -260,21 +248,6 @@ export function EditInvoiceDialog({ id, invoice, onSaved }: Props) {
                         <FormMessage />
                       </FormItem>
                     )} />
-                  </div>
-                  <div className="col-span-11 space-y-2">
-                    <Label className="text-xs">Line Document (Optional)</Label>
-                    {form.watch(`lineItems.${index}.documentUrl`) ? (
-                      <div className="flex items-center justify-between rounded-md border p-2 text-xs" data-testid={`text-edit-line-${index}-document-attached`}>
-                        <a className="text-primary hover:underline truncate" href={`/api/storage${form.watch(`lineItems.${index}.documentUrl`)}`} target="_blank" rel="noreferrer">
-                          {form.watch(`lineItems.${index}.documentUrl`)}
-                        </a>
-                        <Button type="button" variant="ghost" size="sm" onClick={() => form.setValue(`lineItems.${index}.documentUrl`, null)} data-testid={`button-edit-remove-line-${index}-document`}>Remove</Button>
-                      </div>
-                    ) : (
-                      <div data-testid={`upload-edit-line-${index}-document`}>
-                        <FileUpload label="Attach documentation for this authorization" onUploaded={(r) => setLineDocument(field.id, r.objectPath)} />
-                      </div>
-                    )}
                   </div>
                   <div className="col-span-1 pt-6 text-right">
                     <Button
@@ -296,7 +269,7 @@ export function EditInvoiceDialog({ id, invoice, onSaved }: Props) {
                 type="button"
                 variant="outline"
                 size="sm"
-                 onClick={() => append({ authorizationId: '', serviceMonth: new Date().toISOString().substring(0, 7), amount: '', documentUrl: null })}
+                 onClick={() => append({ authorizationId: '', serviceMonth: new Date().toISOString().substring(0, 7), amount: '' })}
                 data-testid="button-add-line-item"
               >
                 <Plus className="w-4 h-4 mr-2" /> Add Line Item

@@ -43,6 +43,7 @@ describe("Prompt 7 financial child rows (database)", () => {
     ]);
     const created = await request(app).post("/api/invoices").set("Cookie", `ceps_session=${token}`).send({
       clientId: client.id, paymentType: "direct_payment",
+      documentUrl: `/objects/uploads/${staff.id}/11111111-1111-4111-8111-111111111111`,
       lineItems: [{ authorizationId: authA.id, serviceMonth: "2025-03", amount: "10.00" }],
     });
     expect(created.status).toBe(201);
@@ -90,6 +91,7 @@ describe("Prompt 7 financial child rows (database)", () => {
 
     const badInvoice = await request(app).post("/api/invoices").set("Cookie", `ceps_session=${token}`).send({
       clientId: client.id, amountRequested: "12.00", paymentType: "direct_payment",
+      documentUrl: `/objects/uploads/${staff.id}/11111111-1111-4111-8111-111111111111`,
       lineItems: [{ authorizationId: a.id, serviceMonth: "2025-03", amount: "11.00" }],
     });
     expect(badInvoice.status).toBe(400);
@@ -115,7 +117,7 @@ describe("Prompt 7 financial child rows (database)", () => {
     const token = newToken();
     await db.insert(sessionsTable).values({ userId: staff.id, token, expiresAt: new Date(Date.now() + 3600000) });
     const crossInvoice = await request(app).post("/api/invoices").set("Cookie", `ceps_session=${token}`).send({
-      clientId: one.id, paymentType: "direct_payment", lineItems: [{ authorizationId: authTwo.id, serviceMonth: "2025-01", amount: "10.00" }],
+      clientId: one.id, paymentType: "direct_payment", documentUrl: `/objects/uploads/${staff.id}/11111111-1111-4111-8111-111111111111`, lineItems: [{ authorizationId: authTwo.id, serviceMonth: "2025-01", amount: "10.00" }],
     });
     expect(crossInvoice.status).toBe(400);
     const crossPayment = await request(app).post("/api/payments").set("Cookie", `ceps_session=${token}`).send({

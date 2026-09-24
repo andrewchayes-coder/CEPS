@@ -13,13 +13,14 @@ type Props = {
   onChange: (value: string) => void;
   disabled?: boolean;
   required?: boolean;
+  label?: string | null;
 };
 
-export function MonthYearInput({ id, value, onChange, disabled, required }: Props) {
+export function MonthYearInput({ id, value, onChange, disabled, required, label = 'Payment Month' }: Props) {
   const invalid = !isValidPaymentMonth(value);
   return (
     <div className="space-y-2">
-      <Label htmlFor={id}>Payment Month</Label>
+      {label !== null && <Label htmlFor={id}>{label}</Label>}
       <Input
         id={id}
         type="month"

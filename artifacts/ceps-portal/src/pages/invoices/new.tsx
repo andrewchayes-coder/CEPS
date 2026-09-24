@@ -1,4 +1,4 @@
-import React, { useRef } from 'react';
+import React from 'react';
 import { useForm, useFieldArray } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
@@ -8,7 +8,6 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
-import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
 import { useToast } from '@/hooks/use-toast';
@@ -26,11 +25,11 @@ const formSchema = z.object({
   vendorId: z.string().optional(),
   paymentType: z.enum(['direct_payment', 'reimbursement']),
   notes: z.string().optional(),
+  documentUrl: z.string().min(1, 'An invoice document is required'),
   lineItems: z.array(z.object({
     authorizationId: z.string().min(1, 'Required'),
     serviceMonth: z.string().regex(/^\d{4}-\d{2}$/, 'Must be YYYY-MM'),
     amount: z.string().min(1, 'Required').regex(/^\d+(\.\d{1,2})?$/, 'Invalid format'),
-    documentUrl: z.string().nullable().optional(),
   })).min(1, 'At least one line item is required'),
 });
 
@@ -39,8 +38,6 @@ export default function InvoiceNewPage() {
   const { toast } = useToast();
   const createInvoice = useCreateInvoice();
   const { user } = useAuth();
-  const [documentUrl, setDocumentUrl] = React.useState<string | undefined>(undefined);
-
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
     defaultValues: {
@@ -48,6 +45,7 @@ export default function InvoiceNewPage() {
       vendorId: '',
       paymentType: 'direct_payment',
       notes: '',
+      documentUrl: '',
       lineItems: [{ authorizationId: '', serviceMonth: new Date().toISOString().substring(0, 7), amount: '' }]
     }
   });
@@ -56,16 +54,6 @@ export default function InvoiceNewPage() {
     control: form.control,
     name: "lineItems"
   });
-  const lineFieldIndexes = useRef(new Map<string, number>());
-  lineFieldIndexes.current.clear();
-  fields.forEach((field, index) => lineFieldIndexes.current.set(field.id, index));
-  const setLineDocument = (fieldId: string, objectPath: string) => {
-    const currentIndex = lineFieldIndexes.current.get(fieldId);
-    if (currentIndex !== undefined) {
-      form.setValue(`lineItems.${currentIndex}.documentUrl`, objectPath);
-    }
-  };
-
   const selectedClientId = form.watch('clientId');
   const lineItems = form.watch('lineItems');
   const totalAmount = lineItems.reduce((sum, item) => sum + (parseFloat(item.amount) || 0), 0);
@@ -116,7 +104,7 @@ export default function InvoiceNewPage() {
         ...data,
         vendorId: data.vendorId === 'none' || data.vendorId === '' ? undefined : data.vendorId,
         paymentType: data.paymentType as InvoiceInputPaymentType,
-        documentUrl: documentUrl || undefined,
+        documentUrl: data.documentUrl,
         amountRequested: totalAmount.toFixed(2)
       }
     }, {
@@ -156,6 +144,36 @@ export default function InvoiceNewPage() {
         <CardContent>
           <Form {...form}>
             <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
+
+              <FormField control={form.control} name="documentUrl" render={({ field }) => (
+                <FormItem className="space-y-2">
+                  <FormLabel>Invoice document</FormLabel>
+                  {field.value ? (
+                    <div className="flex items-center justify-between rounded-md border p-3 text-sm" data-testid="text-invoice-document-attached">
+                      <span className="flex items-center gap-2">
+                        <FileText className="w-4 h-4 text-muted-foreground" /> Document attached
+                      </span>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => form.setValue('documentUrl', '', { shouldValidate: true })}
+                        data-testid="button-remove-invoice-document"
+                      >
+                        Remove
+                      </Button>
+                    </div>
+                  ) : (
+                    <div data-testid="upload-invoice-document">
+                      <FileUpload
+                        label="Drag & drop the invoice document here, or click to browse"
+                        onUploaded={(r) => form.setValue('documentUrl', r.objectPath, { shouldValidate: true })}
+                      />
+                    </div>
+                  )}
+                  {!field.value && <p className="text-sm text-destructive" role="alert">An invoice document is required</p>}
+                </FormItem>
+              )} />
 
               <div className="grid grid-cols-2 gap-4">
                 <FormField control={form.control} name="clientId" render={({ field }) => (
@@ -251,7 +269,7 @@ export default function InvoiceNewPage() {
                         <FormItem>
                           <FormLabel className="text-xs" htmlFor={`line-${index}-month`}>Service Month</FormLabel>
                           <FormControl>
-                            <MonthYearInput id={`line-${index}-month`} value={field.value} onChange={field.onChange} />
+                            <MonthYearInput id={`line-${index}-month`} label={null} value={field.value} onChange={field.onChange} />
                           </FormControl>
                           <FormMessage />
                         </FormItem>
@@ -270,25 +288,6 @@ export default function InvoiceNewPage() {
                           <FormMessage />
                         </FormItem>
                       )} />
-                    </div>
-                    <div className="col-span-11 space-y-2">
-                      <Label className="text-xs">Line Document (Optional)</Label>
-                      {form.watch(`lineItems.${index}.documentUrl`) ? (
-                        <div className="flex items-center justify-between rounded-md border p-2 text-xs" data-testid={`text-line-${index}-document-attached`}>
-                          <a className="text-primary hover:underline truncate" href={`/api/storage${form.watch(`lineItems.${index}.documentUrl`)}`} target="_blank" rel="noreferrer">
-                            {form.watch(`lineItems.${index}.documentUrl`)}
-                          </a>
-                          <Button type="button" variant="ghost" size="sm" onClick={() => form.setValue(`lineItems.${index}.documentUrl`, null)} data-testid={`button-remove-line-${index}-document`}>Remove</Button>
-                        </div>
-                      ) : (
-                        <div data-testid={`upload-line-${index}-document`}>
-                          <FileUpload
-                            label="Attach documentation for this authorization"
-                            onUploaded={(r) => setLineDocument(field.id, r.objectPath)}
-                            className="[&>div]:p-3"
-                          />
-                        </div>
-                      )}
                     </div>
                     <div className="col-span-1 pt-6 text-right">
                     <Button
@@ -310,7 +309,7 @@ export default function InvoiceNewPage() {
                   type="button"
                   variant="outline"
                   size="sm"
-                  onClick={() => append({ authorizationId: '', serviceMonth: new Date().toISOString().substring(0, 7), amount: '', documentUrl: null })}
+                  onClick={() => append({ authorizationId: '', serviceMonth: new Date().toISOString().substring(0, 7), amount: '' })}
                   data-testid="button-add-line-item"
                 >
                   <Plus className="w-4 h-4 mr-2" /> Add Line Item
@@ -325,34 +324,7 @@ export default function InvoiceNewPage() {
                 </FormItem>
               )} />
 
-              <div className="space-y-2">
-                <Label>Attach Document (Optional)</Label>
-                {documentUrl ? (
-                  <div className="flex items-center justify-between rounded-md border p-3 text-sm" data-testid="text-invoice-document-attached">
-                    <span className="flex items-center gap-2">
-                      <FileText className="w-4 h-4 text-muted-foreground" /> Document attached
-                    </span>
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => setDocumentUrl(undefined)}
-                      data-testid="button-remove-invoice-document"
-                    >
-                      Remove
-                    </Button>
-                  </div>
-                ) : (
-                  <div data-testid="upload-invoice-document">
-                    <FileUpload
-                      label="Drag & drop the invoice document here, or click to browse"
-                      onUploaded={(r) => setDocumentUrl(r.objectPath)}
-                    />
-                  </div>
-                )}
-              </div>
-
-              <Button type="submit" className="w-full" disabled={createInvoice.isPending}>
+              <Button type="submit" className="w-full" disabled={createInvoice.isPending || !form.watch('documentUrl')}>
                 <Save className="w-4 h-4 mr-2" />
                 {createInvoice.isPending ? 'Submitting...' : 'Submit Invoice'}
               </Button>

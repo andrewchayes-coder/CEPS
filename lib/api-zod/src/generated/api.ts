@@ -2257,6 +2257,7 @@ export const CreateInvoiceBody = zod.object({
   "documentUrl": zod.string().optional(),
   "notes": zod.string().optional(),
   "lineItems": zod.array(zod.object({
+  "id": zod.uuid().optional().describe('Existing line ID, used when editing to retain its document'),
   "authorizationId": zod.string(),
   "serviceMonth": zod.string().regex(createInvoiceBodyLineItemsItemServiceMonthRegExp),
   "amount": zod.string().regex(createInvoiceBodyLineItemsItemAmountRegExp),
@@ -2363,6 +2364,7 @@ export const UpdateInvoiceBody = zod.object({
   "notes": zod.string().optional(),
   "documentUrl": zod.string().nullish(),
   "lineItems": zod.array(zod.object({
+  "id": zod.uuid().optional().describe('Existing line ID, used when editing to retain its document'),
   "authorizationId": zod.string(),
   "serviceMonth": zod.string().regex(updateInvoiceBodyLineItemsItemServiceMonthRegExp),
   "amount": zod.string().regex(updateInvoiceBodyLineItemsItemAmountRegExp),

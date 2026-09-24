@@ -1,6 +1,6 @@
 {
-  "id": "ec07a4fe-a51e-47de-afc0-79cad0b27b80",
-  "prevId": "616cabc1-80a4-4858-8448-5e58634fe05b",
+  "id": "abdafcce-9bc9-47b5-b353-beeeb43901f9",
+  "prevId": "ec07a4fe-a51e-47de-afc0-79cad0b27b80",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -85,8 +85,8 @@
       },
       "indexes": {},
       "foreignKeys": {
-        "magic_links_family_representative_id_family_representatives_id_fk": {
-          "name": "magic_links_family_representative_id_family_representatives_id_fk",
+        "magic_links_family_rep_fk": {
+          "name": "magic_links_family_rep_fk",
           "tableFrom": "magic_links",
           "tableTo": "family_representatives",
           "columnsFrom": [
@@ -265,10 +265,11 @@
           "name": "users_name_trgm_idx",
           "columns": [
             {
-              "expression": "\"name\" gin_trgm_ops",
+              "expression": "name",
+              "isExpression": false,
               "asc": true,
-              "isExpression": true,
-              "nulls": "last"
+              "nulls": "last",
+              "opclass": "gin_trgm_ops"
             }
           ],
           "isUnique": false,
@@ -280,10 +281,11 @@
           "name": "users_email_trgm_idx",
           "columns": [
             {
-              "expression": "\"email\" gin_trgm_ops",
+              "expression": "email",
+              "isExpression": false,
               "asc": true,
-              "isExpression": true,
-              "nulls": "last"
+              "nulls": "last",
+              "opclass": "gin_trgm_ops"
             }
           ],
           "isUnique": false,
@@ -507,10 +509,11 @@
           "name": "clients_first_name_trgm_idx",
           "columns": [
             {
-              "expression": "\"first_name\" gin_trgm_ops",
+              "expression": "first_name",
+              "isExpression": false,
               "asc": true,
-              "isExpression": true,
-              "nulls": "last"
+              "nulls": "last",
+              "opclass": "gin_trgm_ops"
             }
           ],
           "isUnique": false,
@@ -522,10 +525,11 @@
           "name": "clients_last_name_trgm_idx",
           "columns": [
             {
-              "expression": "\"last_name\" gin_trgm_ops",
+              "expression": "last_name",
+              "isExpression": false,
               "asc": true,
-              "isExpression": true,
-              "nulls": "last"
+              "nulls": "last",
+              "opclass": "gin_trgm_ops"
             }
           ],
           "isUnique": false,
@@ -537,10 +541,11 @@
           "name": "clients_uci_number_trgm_idx",
           "columns": [
             {
-              "expression": "\"uci_number\" gin_trgm_ops",
+              "expression": "uci_number",
+              "isExpression": false,
               "asc": true,
-              "isExpression": true,
-              "nulls": "last"
+              "nulls": "last",
+              "opclass": "gin_trgm_ops"
             }
           ],
           "isUnique": false,
@@ -943,10 +948,11 @@
           "name": "vendors_name_trgm_idx",
           "columns": [
             {
-              "expression": "\"name\" gin_trgm_ops",
+              "expression": "name",
+              "isExpression": false,
               "asc": true,
-              "isExpression": true,
-              "nulls": "last"
+              "nulls": "last",
+              "opclass": "gin_trgm_ops"
             }
           ],
           "isUnique": false,
@@ -1356,8 +1362,8 @@
           "onDelete": "no action",
           "onUpdate": "no action"
         },
-        "referrals_intake_sent_to_family_rep_id_family_representatives_id_fk": {
-          "name": "referrals_intake_sent_to_family_rep_id_family_representatives_id_fk",
+        "referrals_intake_family_rep_fk": {
+          "name": "referrals_intake_family_rep_fk",
           "tableFrom": "referrals",
           "tableTo": "family_representatives",
           "columnsFrom": [
@@ -1611,10 +1617,11 @@
           "name": "authorizations_auth_number_trgm_idx",
           "columns": [
             {
-              "expression": "\"auth_number\" gin_trgm_ops",
+              "expression": "auth_number",
+              "isExpression": false,
               "asc": true,
-              "isExpression": true,
-              "nulls": "last"
+              "nulls": "last",
+              "opclass": "gin_trgm_ops"
             }
           ],
           "isUnique": false,
@@ -1626,10 +1633,11 @@
           "name": "authorizations_service_code_trgm_idx",
           "columns": [
             {
-              "expression": "\"service_code\" gin_trgm_ops",
+              "expression": "service_code",
+              "isExpression": false,
               "asc": true,
-              "isExpression": true,
-              "nulls": "last"
+              "nulls": "last",
+              "opclass": "gin_trgm_ops"
             }
           ],
           "isUnique": false,
@@ -2424,10 +2432,11 @@
           "name": "payments_qb_check_number_trgm_idx",
           "columns": [
             {
-              "expression": "\"qb_check_number\" gin_trgm_ops",
+              "expression": "qb_check_number",
+              "isExpression": false,
               "asc": true,
-              "isExpression": true,
-              "nulls": "last"
+              "nulls": "last",
+              "opclass": "gin_trgm_ops"
             }
           ],
           "isUnique": false,
@@ -3564,10 +3573,11 @@
           "name": "audit_log_action_trgm_idx",
           "columns": [
             {
-              "expression": "\"action\" gin_trgm_ops",
+              "expression": "action",
+              "isExpression": false,
               "asc": true,
-              "isExpression": true,
-              "nulls": "last"
+              "nulls": "last",
+              "opclass": "gin_trgm_ops"
             }
           ],
           "isUnique": false,

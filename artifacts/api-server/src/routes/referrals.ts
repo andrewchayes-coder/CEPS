@@ -372,7 +372,10 @@ router.post("/referrals", requireStaffOrCoordinator, async (req, res): Promise<v
     let [client] = await tx.select().from(clientsTable)
       .where(eq(clientsTable.uciNumber, clientUci)).for("update");
     if (client?.isDeleted) throw new DeletedParticipantError();
-    const contactIsFamily = f.clientIsMinor === true || client?.isMinor === true;
+    // An explicit adult answer corrects an existing minor record; an omitted
+    // answer leaves the existing classification in place.
+    const reclassifyAsAdult = client?.isMinor === true && f.clientIsMinor === false;
+    const contactIsFamily = f.clientIsMinor === true || (client?.isMinor === true && !reclassifyAsAdult);
     if (!client) {
       const [createdClient] = await tx
         .insert(clientsTable)
@@ -398,8 +401,9 @@ router.post("/referrals", requireStaffOrCoordinator, async (req, res): Promise<v
         .returning();
       client = createdClient;
     } else if (!contactIsFamily) {
-      const clientUpdates: Record<string, string> = {};
+      const clientUpdates: Record<string, string | boolean> = {};
       const changes: string[] = [];
+      if (reclassifyAsAdult) clientUpdates.isMinor = false;
       for (const field of ["phone", "email", "address"] as const) {
         const incoming = contact[field];
         if (!incoming) continue;
@@ -412,6 +416,16 @@ router.post("/referrals", requireStaffOrCoordinator, async (req, res): Promise<v
       }
       if (Object.keys(clientUpdates).length) {
         [client] = await tx.update(clientsTable).set(clientUpdates).where(eq(clientsTable.id, client.id)).returning();
+        if (reclassifyAsAdult) {
+          await audit(
+            req.user!.id,
+            "update_client_minor_status_from_referral",
+            "client",
+            client.id,
+            "isMinor: true -> false (explicit adult referral intake)",
+            tx as unknown as typeof db,
+          );
+        }
         if (changes.length) {
           await audit(
             req.user!.id,

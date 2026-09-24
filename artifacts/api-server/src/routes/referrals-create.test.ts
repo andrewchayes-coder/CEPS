@@ -338,6 +338,60 @@ describe("POST /referrals client contact and family representative carryover", (
     expect(reps[0].userId).toBeNull();
   });
 
+  it("reclassifies an existing minor on an explicit adult referral and stores contact on the client", async () => {
+    const uci = `${nonce}-minor-to-adult`;
+    const vendorName = `${nonce} Reclassified Adult Vendor`;
+    createdClientUcis.push(uci);
+    createdVendorNames.push(vendorName);
+    const [client] = await db.insert(clientsTable).values({
+      firstName: "Existing",
+      lastName: "Participant",
+      dateOfBirth: "2000-05-05",
+      uciNumber: uci,
+      isMinor: true,
+      phone: "555-original",
+      email: "original@example.test",
+      address: "Original Lane",
+    }).returning();
+    const [rep] = await db.insert(familyRepresentativesTable).values({
+      clientId: client.id,
+      name: "Existing Guardian",
+      relationship: "guardian",
+      phone: "555-guardian",
+      isPrimary: true,
+      createdBy: staffId,
+    }).returning();
+
+    const response = await request(app).post("/api/referrals").set("Cookie", staffCookie).send({
+      submittedVia: "staff_manual_entry",
+      intakeFields: {
+        ...baseIntake(uci, vendorName),
+        clientIsMinor: false,
+        familyRepName: "",
+        contactPhone: "555-adult",
+        contactEmail: "adult@example.test",
+        contactStreet: "Adult Lane",
+      },
+    });
+    expect(response.status).toBe(201);
+    const [updated] = await db.select().from(clientsTable).where(eq(clientsTable.id, client.id));
+    expect(updated).toMatchObject({
+      isMinor: false,
+      phone: "555-adult",
+      email: "adult@example.test",
+      address: "Adult Lane, Sacramento, CA, 95814",
+    });
+    const reps = await db.select().from(familyRepresentativesTable).where(eq(familyRepresentativesTable.clientId, client.id));
+    expect(reps).toHaveLength(1);
+    expect(reps[0]).toMatchObject({ id: rep.id, phone: "555-guardian", isPrimary: true });
+    const statusAudits = await db.select().from(auditLogTable).where(and(
+      eq(auditLogTable.entityId, client.id),
+      eq(auditLogTable.action, "update_client_minor_status_from_referral"),
+    ));
+    expect(statusAudits).toHaveLength(1);
+    expect(statusAudits[0].detail).toContain("true -> false");
+  });
+
   it("keeps an existing primary when adding a different representative for an existing minor", async () => {
     const uci = `${nonce}-existing-minor-secondary-rep`;
     const vendorName = `${nonce} Existing Minor Secondary Vendor`;

@@ -165,7 +165,12 @@ export default function ClientDetailPage() {
   if (!caseData) return <div className="p-8 text-center">Participant not found.</div>;
 
   const { client, authorizations, invoices, payments, remittances, referrals } = caseData;
-  const primaryRepresentative = client.isMinor ? representatives.find((rep) => rep.isPrimary) : undefined;
+  // The API only returns non-deleted representatives. If none is flagged
+  // primary, show the oldest one rather than falling back to client contact.
+  const primaryRepresentative = client.isMinor
+    ? representatives.find((rep) => rep.isPrimary)
+      ?? [...representatives].sort((a, b) => a.createdAt.localeCompare(b.createdAt) || a.id.localeCompare(b.id))[0]
+    : undefined;
   const remainingRepresentatives = primaryRepresentative
     ? representatives.filter((rep) => rep.id !== primaryRepresentative.id)
     : representatives;

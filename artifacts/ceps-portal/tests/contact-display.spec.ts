@@ -21,6 +21,7 @@ const primary = {
   phone: 'REP-555',
   email: 'mara@example.test',
   address: 'Representative Road',
+  createdAt: '2024-02-01T00:00:00.000Z',
   userId: 'parent-1',
   hasPortalAccount: true,
   portalAccountStatus: 'active',
@@ -81,6 +82,24 @@ test('minor primary is the main contact, editable through the representative end
   await page.getByTestId('button-save-rep').click();
   await expect(page.getByTestId('contact-phone')).toHaveText('NEW-555');
   expect(state.getUpdated()).toMatchObject({ id: primary.id, data: { phone: 'NEW-555' } });
+});
+
+test('minor without a flagged primary shows the earliest-created active representative', async ({ page }) => {
+  const older = { ...primary, id: 'older-rep', isPrimary: false, createdAt: '2022-01-01T00:00:00.000Z' };
+  const newer = { ...secondary, id: 'newer-rep', isPrimary: false, createdAt: '2024-01-01T00:00:00.000Z' };
+  const state = await setup(page, true, [newer, older]);
+  await expect(page.getByTestId('contact-subheader')).toHaveText('Family Representative');
+  await expect(page.getByTestId('contact-name')).toHaveText(older.name);
+  await expect(page.getByTestId('contact-phone')).toHaveText(older.phone);
+  await expect(page.getByTestId('contact-email')).toHaveText(older.email);
+  await expect(page.getByTestId('contact-address')).toHaveText(older.address);
+  await expect(page.getByTestId('rep-row-older-rep')).toHaveCount(0);
+  await expect(page.getByTestId('rep-row-newer-rep')).toBeVisible();
+  await page.getByTestId('card-contact-information').getByTestId('button-edit-rep-older-rep').click();
+  await page.getByTestId('input-rep-phone').fill('UPDATED-OLDER-555');
+  await page.getByTestId('button-save-rep').click();
+  await expect(page.getByTestId('contact-phone')).toHaveText('UPDATED-OLDER-555');
+  expect(state.getUpdated()).toMatchObject({ id: older.id, data: { phone: 'UPDATED-OLDER-555' } });
 });
 
 test('adult uses client contact, with representatives in a separate card only when present', async ({ page }) => {

@@ -10,6 +10,7 @@ export type DashboardSummaryTotals = {
   activeClients: number;
   activeAuthorizations: number;
   pendingInvoices: number;
+  needsEntryInvoices: number;
   vendorsMissingW9: number;
   /** @nullable */
   paymentsThisMonth?: string | null;

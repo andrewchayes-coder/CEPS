@@ -1,6 +1,6 @@
 import { Router, type IRouter } from "express";
 import { eq, and, desc, sql, count, ilike, or, gte, lte, inArray, type SQL } from "drizzle-orm";
-import { db, invoicesTable, invoiceLineItemsTable, authorizationsTable, paymentsTable, paymentAllocationsTable, vendorsTable } from "@workspace/db";
+import { db, invoicesTable, invoiceLineItemsTable, authorizationsTable, paymentsTable, paymentAllocationsTable, vendorsTable, clientsTable } from "@workspace/db";
 import { money } from "../lib/money";
 import {
   ListInvoicesQueryParams,
@@ -150,10 +150,37 @@ router.post("/invoices", requireAuth, async (req, res): Promise<void> => {
     return;
   }
   const u = req.user!;
-  const submittedByRole = u.role === "vendor" ? "vendor" : u.role === "parent_guardian" || u.role === "self" ? "parent" : "staff";
+  const isCoordinator = u.role === "service_coordinator";
+  const submittedByRole = u.role === "vendor" ? "vendor" : u.role === "parent_guardian" || u.role === "self" ? "parent" : isCoordinator ? "service_coordinator" : "staff";
   // Non-staff may only submit for their own linked records
   if (submittedByRole === "parent" && parsed.data.clientId !== u.linkedRecordId) {
     res.status(403).json({ error: "You can only submit invoices for your own client record" });
+    return;
+  }
+  if (isCoordinator) {
+    const [caseloadClient] = await db.select({ id: clientsTable.id })
+      .from(clientsTable)
+      .where(and(
+        eq(clientsTable.id, parsed.data.clientId),
+        eq(clientsTable.assignedCoordinatorId, u.id),
+        notDeleted(clientsTable),
+      ));
+    if (!caseloadClient) {
+      res.status(403).json({ error: "You can only submit invoices for participants in your caseload" });
+      return;
+    }
+    if (parsed.data.lineItems?.length) {
+      res.status(400).json({ error: "Service coordinators cannot submit invoice line items" });
+      return;
+    }
+  }
+  const lineItems = parsed.data.lineItems ?? [];
+  if (lineItems.length === 0 && !isCoordinator) {
+    res.status(400).json({ error: "At least one invoice line item is required" });
+    return;
+  }
+  if (!parsed.data.paymentType && !isCoordinator) {
+    res.status(400).json({ error: "paymentType is required" });
     return;
   }
   const submittedDocument = parsed.data.documentUrl?.trim() || null;
@@ -165,15 +192,15 @@ router.post("/invoices", requireAuth, async (req, res): Promise<void> => {
     res.status(403).json({ error: "Document must be an upload owned by the submitting user" });
     return;
   }
-  for (const item of parsed.data.lineItems) {
+  for (const item of lineItems) {
     const documentUrl = item.documentUrl?.trim() || null;
     if (documentUrl && !normalizeValidateOwnedUploadPath(documentUrl, u.id)) {
       res.status(403).json({ error: "Line document must be an upload owned by the submitting user" });
       return;
     }
   }
-  const total = parsed.data.lineItems.reduce((sum, item) => sum.plus(money(item.amount)), money(0)).toFixed(2);
-  const lineKeys = parsed.data.lineItems.map((item) => `${item.authorizationId}:${item.serviceMonth}`);
+  const total = lineItems.reduce((sum, item) => sum.plus(money(item.amount)), money(0)).toFixed(2);
+  const lineKeys = lineItems.map((item) => `${item.authorizationId}:${item.serviceMonth}`);
   if (new Set(lineKeys).size !== lineKeys.length) {
     res.status(400).json({ error: "Duplicate invoice line authorization and service month" });
     return;
@@ -185,46 +212,71 @@ router.post("/invoices", requireAuth, async (req, res): Promise<void> => {
   const values = {
     clientId: parsed.data.clientId,
     amountRequested: total,
-    paymentType: parsed.data.paymentType,
+    paymentType: parsed.data.paymentType ?? "direct_payment",
     documentUrl: submittedDocument,
     notes: parsed.data.notes,
     // Deprecated relationship columns are intentionally left null.
     authorizationId: null,
     vendorId: (submittedByRole === "vendor" ? u.linkedRecordId : parsed.data.vendorId) || null,
     submittedByRole,
+    status: isCoordinator ? "needs_entry" : "pending_review",
     submittedDate: new Date().toISOString().slice(0, 10),
   };
-  let relationshipError: string | undefined;
-  const invoice = await db.transaction(async (tx) => {
+  const result = await db.transaction(async (tx) => {
+    if (isCoordinator && submittedDocument) {
+      // Serialize submissions for this exact owned upload across processes.
+      // The transaction lock is released automatically at commit/rollback.
+      await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${submittedDocument}, 0))`);
+      const [existing] = await tx.select().from(invoicesTable).where(and(
+        eq(invoicesTable.documentUrl, submittedDocument),
+        eq(invoicesTable.submittedByRole, "service_coordinator"),
+        notDeleted(invoicesTable),
+      )).limit(1);
+      if (existing) {
+        if (existing.clientId !== values.clientId) {
+          return { error: "This uploaded document has already been submitted for a different participant", status: 409 as const };
+        }
+        if (existing.vendorId !== values.vendorId ||
+            existing.notes !== (values.notes ?? null) ||
+            existing.paymentType !== values.paymentType) {
+          return { error: "This uploaded document was already submitted with different invoice details", status: 409 as const };
+        }
+        return { invoice: existing, created: false };
+      }
+    }
     const txDb = tx as unknown as typeof db;
-    for (const item of parsed.data.lineItems) {
-      relationshipError = (await validateParticipantLinks(txDb, values.clientId, {
+    for (const item of lineItems) {
+      const relationshipError = (await validateParticipantLinks(txDb, values.clientId, {
         authorizationId: item.authorizationId,
         vendorId: values.vendorId,
       })).error;
-      if (relationshipError) return null;
+      if (relationshipError) return { error: relationshipError, status: 400 as const };
     }
-    relationshipError = (await validateParticipantLinks(txDb, values.clientId, {
+    const relationshipError = (await validateParticipantLinks(txDb, values.clientId, {
       authorizationId: null,
       vendorId: values.vendorId,
     })).error;
-    if (relationshipError) return null;
+    if (relationshipError) return { error: relationshipError, status: 400 as const };
     const [created] = await tx.insert(invoicesTable).values(values as any).returning();
-    await tx.insert(invoiceLineItemsTable).values(parsed.data.lineItems.map((item) => ({
-      invoiceId: created.id,
-      authorizationId: item.authorizationId,
-      serviceMonth: item.serviceMonth,
-      amount: item.amount,
-       documentUrl: item.documentUrl?.trim() || null,
-    })));
-    return created;
+    if (lineItems.length) {
+      await tx.insert(invoiceLineItemsTable).values(lineItems.map((item) => ({
+        invoiceId: created.id,
+        authorizationId: item.authorizationId,
+        serviceMonth: item.serviceMonth,
+        amount: item.amount,
+        documentUrl: item.documentUrl?.trim() || null,
+      })));
+    }
+    return { invoice: created, created: true };
   });
-  if (!invoice) {
-    res.status(400).json({ error: relationshipError! });
+  if ("error" in result) {
+    res.status(result.status ?? 400).json({ error: result.error });
     return;
   }
-  await audit(u.id, "create_invoice", "invoice", invoice.id, `${invoice.serviceMonth} — $${invoice.amountRequested}`);
-  res.status(201).json(CreateInvoiceResponse.parse((await enrich([invoice]))[0]));
+  if (result.created) {
+    await audit(u.id, "create_invoice", "invoice", result.invoice.id, `${result.invoice.serviceMonth} — $${result.invoice.amountRequested}`);
+  }
+  res.status(result.created ? 201 : 200).json(CreateInvoiceResponse.parse((await enrich([result.invoice]))[0]));
 });
 
 router.get("/invoices/queues/ready-to-approve", requirePermission("invoice_approve"), (req, res) => invoiceQueue(req, res, "validated", "invoice_approve"));
@@ -249,6 +301,19 @@ router.get("/invoices/:id", requireAuth, async (req, res): Promise<void> => {
     res.status(403).json({ error: "Forbidden" });
     return;
   }
+  if (u.role === "service_coordinator") {
+    const [caseloadClient] = await db.select({ id: clientsTable.id })
+      .from(clientsTable)
+      .where(and(
+        eq(clientsTable.id, invoice.clientId),
+        eq(clientsTable.assignedCoordinatorId, u.id),
+        notDeleted(clientsTable),
+      ));
+    if (!caseloadClient) {
+      res.status(403).json({ error: "Forbidden" });
+      return;
+    }
+  }
   res.json(GetInvoiceResponse.parse((await enrich([invoice]))[0]));
 });
 
@@ -270,6 +335,10 @@ router.patch("/invoices/:id", requireStaff, async (req, res): Promise<void> => {
   const { lineItems, ...invoicePatch } = parsed.data;
   if (invoicePatch.status === "validated" || invoicePatch.status === "approved" || invoicePatch.status === "rejected" || invoicePatch.status === "duplicate") {
     res.status(400).json({ error: "Use the invoice validation or decision endpoint to change invoice workflow status" });
+    return;
+  }
+  if (invoicePatch.status === "needs_entry") {
+    res.status(400).json({ error: "Use invoice submission to create an invoice awaiting CEPS entry" });
     return;
   }
   const existingLineItems = lineItems
@@ -297,6 +366,10 @@ router.patch("/invoices/:id", requireStaff, async (req, res): Promise<void> => {
     return;
   }
   const acceptedLineItems = normalizedLineItems as typeof lineItems | undefined;
+  if (before.status === "needs_entry" && invoicePatch.status === "pending_review" && !acceptedLineItems?.length) {
+    res.status(400).json({ error: "At least one valid line item is required to complete CEPS entry" });
+    return;
+  }
   if (invoicePatch.documentUrl !== undefined) {
     const documentUrl = invoicePatch.documentUrl?.trim() || null;
     const unchanged = documentUrl === before.documentUrl;
@@ -341,7 +414,11 @@ router.patch("/invoices/:id", requireStaff, async (req, res): Promise<void> => {
   );
   // Treat a status equal to the current one as "not explicitly changed" — the
   // edit dialog always echoes back the current status.
-  if (materiallyChanged && (parsed.data.status === undefined || parsed.data.status === before.status)) {
+  if (materiallyChanged && (parsed.data.status === undefined || parsed.data.status === before.status) &&
+      (before.status !== "needs_entry" || !!acceptedLineItems?.length)) {
+    updates.status = "pending_review";
+  }
+  if (before.status === "needs_entry" && acceptedLineItems?.length) {
     updates.status = "pending_review";
   }
   const effectiveAuthorizationId = ("authorizationId" in updates ? updates.authorizationId : before.authorizationId) as string | null;
@@ -483,6 +560,11 @@ router.post("/invoices/:id/validate", requirePermission("invoice_log_validate"),
     .where(and(eq(invoicesTable.id, id), notDeleted(invoicesTable)));
   if (!invoice) {
     res.status(404).json({ error: "Invoice not found" });
+    return;
+  }
+
+  if (invoice.status === "needs_entry") {
+    res.status(400).json({ error: "Invoice is awaiting CEPS entry and cannot be validated" });
     return;
   }
 

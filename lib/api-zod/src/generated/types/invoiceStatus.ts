@@ -10,6 +10,7 @@ export type InvoiceStatus = typeof InvoiceStatus[keyof typeof InvoiceStatus];
 
 
 export const InvoiceStatus = {
+  needs_entry: 'needs_entry',
   pending_review: 'pending_review',
   validated: 'validated',
   approved: 'approved',

@@ -63,6 +63,13 @@ router.get("/vendors", requireAuth, async (req, res): Promise<void> => {
   }
   // Query-string filters
   if (query.data.clientId) {
+    const referralAssociations = query.data.invoiceEligible === "true"
+      ? sql``
+      : sql`union
+        select vendor_id
+        from referrals
+        where referrals.client_id = ${query.data.clientId}
+          and referrals.vendor_id is not null`;
     conditions.push(sql`${vendorsTable.id} in (
       select vendor_id
       from authorizations
@@ -78,11 +85,7 @@ router.get("/vendors", requireAuth, async (req, res): Promise<void> => {
       from payments
       where payments.client_id = ${query.data.clientId}
         and payments.is_deleted = false
-      union
-      select vendor_id
-      from referrals
-      where referrals.client_id = ${query.data.clientId}
-        and referrals.vendor_id is not null
+      ${referralAssociations}
     )`);
   }
   if (query.data.search) {

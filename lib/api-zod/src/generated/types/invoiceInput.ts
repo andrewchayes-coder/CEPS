@@ -16,9 +16,9 @@ export interface InvoiceInput {
   vendorId?: string | null;
   serviceMonth?: string;
   amountRequested?: string;
-  paymentType: InvoiceInputPaymentType;
+  paymentType?: InvoiceInputPaymentType;
   documentUrl?: string;
   notes?: string;
   /** @minItems 1 */
-  lineItems: InvoiceLineItemInput[];
+  lineItems?: InvoiceLineItemInput[];
 }

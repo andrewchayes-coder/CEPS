@@ -237,6 +237,7 @@ router.get("/dashboard/summary", requireAuth, async (req, res): Promise<void> =>
         activeClients: clients.filter((c) => c.status === "active").length,
         activeAuthorizations: withStatus.filter((x) => x.status === "active").length,
         pendingInvoices: invoices.filter((i) => i.status === "pending_review" || i.status === "validated").length,
+        needsEntryInvoices: invoices.filter((i) => i.status === "needs_entry").length,
         vendorsMissingW9: missingW9.length,
         paymentsThisMonth: paymentsThisMonth.toFixed(2),
         unmatchedRemittances: unmatchedRemits.length,

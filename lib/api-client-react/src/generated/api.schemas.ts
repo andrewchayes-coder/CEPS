@@ -917,6 +917,7 @@ export const InvoiceSubmittedByRole = {
   vendor: 'vendor',
   parent: 'parent',
   staff: 'staff',
+  service_coordinator: 'service_coordinator',
 } as const;
 
 export type InvoicePaymentType = typeof InvoicePaymentType[keyof typeof InvoicePaymentType];
@@ -931,6 +932,7 @@ export type InvoiceStatus = typeof InvoiceStatus[keyof typeof InvoiceStatus];
 
 
 export const InvoiceStatus = {
+  needs_entry: 'needs_entry',
   pending_review: 'pending_review',
   validated: 'validated',
   approved: 'approved',
@@ -1720,11 +1722,11 @@ export interface InvoiceInput {
   vendorId?: string | null;
   serviceMonth?: string;
   amountRequested?: string;
-  paymentType: InvoiceInputPaymentType;
+  paymentType?: InvoiceInputPaymentType;
   documentUrl?: string;
   notes?: string;
   /** @minItems 1 */
-  lineItems: InvoiceLineItemInput[];
+  lineItems?: InvoiceLineItemInput[];
 }
 
 export type InvoiceUpdatePaymentType = typeof InvoiceUpdatePaymentType[keyof typeof InvoiceUpdatePaymentType];
@@ -1739,6 +1741,7 @@ export type InvoiceUpdateStatus = typeof InvoiceUpdateStatus[keyof typeof Invoic
 
 
 export const InvoiceUpdateStatus = {
+  needs_entry: 'needs_entry',
   pending_review: 'pending_review',
   validated: 'validated',
   approved: 'approved',
@@ -2390,6 +2393,7 @@ export type DashboardSummaryTotals = {
   activeClients: number;
   activeAuthorizations: number;
   pendingInvoices: number;
+  needsEntryInvoices: number;
   vendorsMissingW9: number;
   /** @nullable */
   paymentsThisMonth?: string | null;
@@ -2872,9 +2876,13 @@ export type ListRemittances200 = {
 
 export type ListVendorsParams = {
 /**
- * Return only vendors already linked to the participant through an authorization, invoice, or payment.
+ * Return only vendors already linked to the participant. By default this includes referrals as well as financial links.
  */
 clientId?: string;
+/**
+ * When true with clientId, exclude vendors linked only through a referral; return vendors already linked through an authorization, invoice, or payment.
+ */
+invoiceEligible?: ListVendorsInvoiceEligible;
 search?: string;
 w9Status?: string;
 startDate?: string;
@@ -2885,6 +2893,14 @@ offset?: number;
 sortBy?: ListVendorsSortBy;
 sortDirection?: ListVendorsSortDirection;
 };
+
+export type ListVendorsInvoiceEligible = typeof ListVendorsInvoiceEligible[keyof typeof ListVendorsInvoiceEligible];
+
+
+export const ListVendorsInvoiceEligible = {
+  true: 'true',
+  false: 'false',
+} as const;
 
 export type ListVendorsActive = typeof ListVendorsActive[keyof typeof ListVendorsActive];
 

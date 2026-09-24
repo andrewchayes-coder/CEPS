@@ -163,6 +163,7 @@ export * from './listUnmatchedPosParams';
 export * from './listUsersParams';
 export * from './listVendors200';
 export * from './listVendorsActive';
+export * from './listVendorsInvoiceEligible';
 export * from './listVendorsParams';
 export * from './listVendorsSortBy';
 export * from './listVendorsSortDirection';

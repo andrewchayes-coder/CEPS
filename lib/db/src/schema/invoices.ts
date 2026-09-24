@@ -23,7 +23,7 @@ export const invoicesTable = pgTable("invoices", {
     () => authorizationsTable.id,
   ),
   vendorId: uuid("vendor_id").references(() => vendorsTable.id),
-  submittedByRole: text("submitted_by_role").notNull(), // vendor | parent | staff
+  submittedByRole: text("submitted_by_role").notNull(), // vendor | parent | staff | service_coordinator
   submittedDate: date("submitted_date", { mode: "string" }).notNull(),
   serviceMonth: text("service_month"), // Deprecated compatibility column; use invoice_line_items.service_month.
   amountRequested: numeric("amount_requested", {
@@ -32,7 +32,7 @@ export const invoicesTable = pgTable("invoices", {
   }).notNull(),
   paymentType: text("payment_type").notNull(), // direct_payment | reimbursement
   documentUrl: text("document_url"),
-  // pending_review | validated | approved | rejected | duplicate
+  // needs_entry | pending_review | validated | approved | rejected | duplicate
   status: text("status").notNull().default("pending_review"),
   reviewedBy: uuid("reviewed_by").references(() => usersTable.id),
   reviewedAt: timestamp("reviewed_at", { withTimezone: true }),

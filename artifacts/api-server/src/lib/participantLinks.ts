@@ -183,8 +183,8 @@ export async function validateParticipantLinks(
       .where(eq(vendorsTable.id, links.vendorId)).for("share");
     if (!vendor) return { error: "vendorId must reference an existing vendor" };
 
-    // This order and OR behavior exactly mirror GET /vendors?clientId. Lock the
-    // actual association row rather than relying on an unlocked EXISTS proof.
+    // Match GET /vendors?clientId&invoiceEligible=true and the database guard.
+    // Lock the proof row rather than relying on an unlocked EXISTS check.
     const authProof = await tx.select({ id: authorizationsTable.id }).from(authorizationsTable)
       .where(and(eq(authorizationsTable.vendorId, links.vendorId), eq(authorizationsTable.clientId, clientId), notDeleted(authorizationsTable)))
       .limit(1).for("share");

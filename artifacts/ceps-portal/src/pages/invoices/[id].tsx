@@ -88,7 +88,7 @@ export default function InvoiceDetailPage() {
   };
 
   return (
-    <div className="max-w-4xl mx-auto space-y-6">
+    <div className={`${invoice.status === 'needs_entry' ? 'max-w-6xl' : 'max-w-4xl'} mx-auto space-y-6`}>
       <Button variant="ghost" size="sm" asChild className="-ml-2 text-muted-foreground">
         <Link href="/invoices"><ArrowLeft className="w-4 h-4 mr-2" /> Back</Link>
       </Button>
@@ -99,10 +99,10 @@ export default function InvoiceDetailPage() {
           <p className="text-muted-foreground mt-1">Service Month: {getInvoiceDisplayMonth(invoice)}</p>
         </div>
         <div className="flex items-center gap-2">
-          <Badge className="text-base px-3 py-1 uppercase">{invoice.status.replace('_', ' ')}</Badge>
+          <Badge className="text-base px-3 py-1">{getInvoiceStatusLabel(invoice.status)}</Badge>
           {isStaff && (
             <>
-              <EditInvoiceDialog id={id} invoice={invoice} onSaved={() => { refetch(); }} />
+              {invoice.status !== 'needs_entry' && <EditInvoiceDialog id={id} invoice={invoice} onSaved={() => { refetch(); }} />}
               <DeleteEntityButton
                 entityLabel="Invoice"
                 testId="button-delete-invoice"
@@ -114,7 +114,7 @@ export default function InvoiceDetailPage() {
         </div>
       </div>
 
-      <div className="grid md:grid-cols-2 gap-6">
+      <div className={invoice.status === 'needs_entry' ? 'grid gap-6' : 'grid md:grid-cols-2 gap-6'}>
         <Card>
           <CardHeader>
             <CardTitle>Invoice Details</CardTitle>
@@ -127,6 +127,30 @@ export default function InvoiceDetailPage() {
               <dt className="text-muted-foreground mt-2">Submitted By:</dt><dd className="col-span-2 mt-2 capitalize">{invoice.submittedByRole}</dd>
             </dl>
 
+            {invoice.status === 'needs_entry' ? (
+              <div className="pt-4 border-t mt-4 grid lg:grid-cols-2 gap-5" data-testid="needs-entry-workspace">
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <p className="font-semibold">Invoice Document</p>
+                    {invoice.documentUrl && isStaff && (
+                      <Button variant="ghost" size="sm" onClick={() => handleDocument(null)} disabled={updateInvoice.isPending} className="h-8 text-destructive hover:text-destructive" data-testid="button-remove-invoice-document">
+                        Remove
+                      </Button>
+                    )}
+                  </div>
+                  {invoice.documentUrl
+                    ? <DocumentPreview objectPath={invoice.documentUrl} filename="Invoice.pdf" className="max-h-[600px]" />
+                    : <p className="text-muted-foreground">No document attached.</p>}
+                  {isStaff && <FileUpload label="Drag & drop to replace the document, or click to browse" onUploaded={(r) => handleDocument(r.objectPath)} />}
+                </div>
+                <div className="min-w-0 rounded-md border p-4">
+                  {isStaff
+                    ? <EditInvoiceDialog id={id} invoice={invoice} variant="inline" onSaved={() => { refetch(); }} />
+                    : <p className="text-sm text-muted-foreground">No line items have been entered. CEPS staff will complete entry before review.</p>}
+                </div>
+              </div>
+            ) : (
+            <>
             <div className="pt-4 border-t space-y-3 mt-4">
               <p className="font-semibold">Line Items</p>
               <div className="space-y-2">
@@ -190,6 +214,8 @@ export default function InvoiceDetailPage() {
                 />
               )}
             </div>
+            </>
+            )}
           </CardContent>
         </Card>
 
@@ -200,6 +226,9 @@ export default function InvoiceDetailPage() {
             </CardTitle>
           </CardHeader>
           <CardContent className="pt-4 space-y-4">
+            {invoice.status === 'needs_entry' ? (
+              <p className="text-sm text-muted-foreground">This invoice is awaiting CEPS line-item entry. Validation and approval become available after valid line items are saved.</p>
+            ) : <>
             {validating ? (
               <div className="text-center text-muted-foreground">Running checks...</div>
             ) : (
@@ -267,9 +296,15 @@ export default function InvoiceDetailPage() {
                 </div>
               </div>
             )}
+            </>}
           </CardContent>
         </Card>
       </div>
     </div>
   );
+}
+
+function getInvoiceStatusLabel(status: string) {
+  if (status === 'needs_entry') return 'Awaiting CEPS Entry';
+  return status.split('_').map((word) => word.charAt(0).toUpperCase() + word.slice(1)).join(' ');
 }

@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
-import { inArray, eq } from "drizzle-orm";
-import { db, usersTable, sessionsTable, clientsTable, invoicesTable, invoiceLineItemsTable, authorizationsTable, paymentsTable, paymentAllocationsTable, auditLogTable, vendorsTable, staffPermissionsTable, STAFF_PERMISSIONS } from "@workspace/db";
+import { and, inArray, eq } from "drizzle-orm";
+import { db, usersTable, sessionsTable, clientsTable, invoicesTable, invoiceLineItemsTable, authorizationsTable, paymentsTable, paymentAllocationsTable, auditLogTable, vendorsTable, referralsTable, staffPermissionsTable, STAFF_PERMISSIONS } from "@workspace/db";
 import request from "supertest";
 import app from "../app";
 import { newToken } from "../lib/auth";
@@ -11,8 +11,10 @@ let staffId: string;
 let otherStaffId: string;
 let clientId: string;
 let otherClientId: string;
+let coordinatorId: string;
 let cookie: string;
 let otherCookie: string;
+let coordinatorCookie: string;
 
 beforeAll(async () => {
   const [staff] = await db
@@ -37,6 +39,11 @@ beforeAll(async () => {
     .values({ firstName: "Other", lastName: "Participant", dateOfBirth: "2000-01-01", uciNumber: `${nonce}-other-uci` })
     .returning();
   otherClientId = otherClient.id;
+  const [coordinator] = await db.insert(usersTable)
+    .values({ name: "Inv Coordinator", email: `${nonce}-coordinator@test.local`, role: "service_coordinator" })
+    .returning();
+  coordinatorId = coordinator.id;
+  await db.update(clientsTable).set({ assignedCoordinatorId: coordinatorId }).where(eq(clientsTable.id, clientId));
 
   const token = newToken();
   await db.insert(sessionsTable).values({
@@ -52,20 +59,27 @@ beforeAll(async () => {
     token: otherToken,
     expiresAt: new Date(Date.now() + 60 * 60 * 1000),
   });
+  const coordinatorToken = newToken();
+  coordinatorCookie = `ceps_session=${coordinatorToken}`;
+  await db.insert(sessionsTable).values({
+    userId: coordinatorId,
+    token: coordinatorToken,
+    expiresAt: new Date(Date.now() + 60 * 60 * 1000),
+  });
 });
 
 const vendorIds: string[] = [];
 
 afterAll(async () => {
-  await db.delete(paymentsTable).where(eq(paymentsTable.clientId, clientId));
-  await db.delete(invoicesTable).where(eq(invoicesTable.clientId, clientId));
+  await db.delete(paymentsTable).where(inArray(paymentsTable.clientId, [clientId, otherClientId]));
+  await db.delete(invoicesTable).where(inArray(invoicesTable.clientId, [clientId, otherClientId]));
   await db.delete(authorizationsTable).where(inArray(authorizationsTable.clientId, [clientId, otherClientId]));
-  await db.delete(auditLogTable).where(inArray(auditLogTable.userId, [staffId, otherStaffId]));
-  await db.delete(sessionsTable).where(inArray(sessionsTable.userId, [staffId, otherStaffId]));
+  await db.delete(auditLogTable).where(inArray(auditLogTable.userId, [staffId, otherStaffId, coordinatorId]));
+  await db.delete(sessionsTable).where(inArray(sessionsTable.userId, [staffId, otherStaffId, coordinatorId]));
   if (vendorIds.length) await db.delete(vendorsTable).where(inArray(vendorsTable.id, vendorIds));
   await db.delete(clientsTable).where(eq(clientsTable.id, clientId));
   await db.delete(clientsTable).where(eq(clientsTable.id, otherClientId));
-  await db.delete(usersTable).where(inArray(usersTable.id, [staffId, otherStaffId]));
+  await db.delete(usersTable).where(inArray(usersTable.id, [staffId, otherStaffId, coordinatorId]));
 });
 
 async function makeVendor(active: boolean) {
@@ -211,6 +225,192 @@ describe("PATCH /invoices/:id status reset on material edit", () => {
   });
 });
 
+describe("service coordinator invoice submission and CEPS entry", () => {
+  it("accepts caseload submissions without line items and creates one needs_entry invoice per document", async () => {
+    const vendor = await makeVendor(true);
+    await makeAuth({ maxPeriodAmount: "1000.00", vendorId: vendor.id });
+    const submit = (fileId: string) => request(app).post("/api/invoices")
+      .set("Cookie", coordinatorCookie)
+      .send({
+        clientId,
+        vendorId: vendor.id,
+        notes: "Please process these invoices",
+        documentUrl: `/objects/uploads/${coordinatorId}/${fileId}`,
+      });
+    const dashboard = await request(app).get("/api/dashboard/summary").set("Cookie", coordinatorCookie);
+    const first = await submit("11111111-1111-4111-8111-111111111111");
+    const second = await submit("22222222-2222-4222-8222-222222222222");
+    expect(first.status).toBe(201);
+    expect(second.status).toBe(201);
+    for (const response of [first, second]) {
+      expect(response.body.status).toBe("needs_entry");
+      expect(response.body.submittedByRole).toBe("service_coordinator");
+      expect(response.body.amountRequested).toBe("0.00");
+      expect(response.body.lineItems).toEqual([]);
+      expect(response.body.vendorId).toBe(vendor.id);
+    }
+    expect(dashboard.status).toBe(200);
+    const refreshedDashboard = await request(app).get("/api/dashboard/summary").set("Cookie", coordinatorCookie);
+    expect(refreshedDashboard.body.totals.needsEntryInvoices)
+      .toBe(dashboard.body.totals.needsEntryInvoices + 2);
+
+    const outsideCaseload = await request(app).post("/api/invoices")
+      .set("Cookie", coordinatorCookie)
+      .send({
+        clientId: otherClientId,
+        documentUrl: `/objects/uploads/${coordinatorId}/33333333-3333-4333-8333-333333333333`,
+      });
+    expect(outsideCaseload.status).toBe(403);
+
+    const unrelatedVendor = await makeVendor(true);
+    const vendorNotLinkedToParticipant = await request(app).post("/api/invoices")
+      .set("Cookie", coordinatorCookie)
+      .send({
+        clientId,
+        vendorId: unrelatedVendor.id,
+        documentUrl: `/objects/uploads/${coordinatorId}/44444444-4444-4444-8444-444444444444`,
+      });
+    expect(vendorNotLinkedToParticipant.status).toBe(400);
+    expect(vendorNotLinkedToParticipant.body.error).toContain("associated with clientId");
+
+    const documentNotOwned = await request(app).post("/api/invoices")
+      .set("Cookie", coordinatorCookie)
+      .send({
+        clientId,
+        documentUrl: `/objects/uploads/${staffId}/77777777-7777-4777-8777-777777777777`,
+      });
+    expect(documentNotOwned.status).toBe(403);
+
+    const approvedOnly = await request(app).get("/api/invoices?status=approved").set("Cookie", cookie);
+    expect(approvedOnly.status).toBe(200);
+    expect(approvedOnly.body.items.map((invoice: { id: string }) => invoice.id))
+      .not.toContain(first.body.id);
+    const checkWritingQueue = await request(app).get("/api/invoices/queues/ready-for-check-writing").set("Cookie", cookie);
+    expect(checkWritingQueue.status).toBe(200);
+    expect(checkWritingQueue.body.items.map((invoice: { id: string }) => invoice.id))
+      .not.toContain(first.body.id);
+  });
+
+  it("requires staff line items, allows staff to complete entry, and blocks validation before entry", async () => {
+    const staffWithoutLines = await request(app).post("/api/invoices").set("Cookie", cookie).send({
+      clientId,
+      documentUrl: `/objects/uploads/${staffId}/55555555-5555-4555-8555-555555555555`,
+    });
+    expect(staffWithoutLines.status).toBe(400);
+    expect(staffWithoutLines.body.error).toContain("line item");
+
+    const auth = await makeAuth({ maxPeriodAmount: "1000.00" });
+    const awaitingEntry = await request(app).post("/api/invoices").set("Cookie", coordinatorCookie).send({
+      clientId,
+      documentUrl: `/objects/uploads/${coordinatorId}/66666666-6666-4666-8666-666666666666`,
+    });
+    expect(awaitingEntry.status).toBe(201);
+
+    const validation = await request(app).post(`/api/invoices/${awaitingEntry.body.id}/validate`).set("Cookie", cookie).send({});
+    expect(validation.status).toBe(400);
+
+    const incomplete = await request(app).patch(`/api/invoices/${awaitingEntry.body.id}`).set("Cookie", cookie)
+      .send({ status: "pending_review" });
+    expect(incomplete.status).toBe(400);
+
+    const completed = await request(app).patch(`/api/invoices/${awaitingEntry.body.id}`).set("Cookie", cookie).send({
+      lineItems: [{ authorizationId: auth.id, serviceMonth: "2026-02", amount: "25.00" }],
+    });
+    expect(completed.status).toBe(200);
+    expect(completed.body.status).toBe("pending_review");
+    expect(completed.body.amountRequested).toBe("25.00");
+    expect(completed.body.lineItems).toHaveLength(1);
+  });
+
+  it("returns the original invoice for a retry and rejects retries with changed details", async () => {
+    const documentUrl = `/objects/uploads/${coordinatorId}/88888888-8888-4888-8888-888888888888`;
+    const payload = { clientId, notes: "Original notes", documentUrl };
+    const first = await request(app).post("/api/invoices").set("Cookie", coordinatorCookie).send(payload);
+    const retry = await request(app).post("/api/invoices").set("Cookie", coordinatorCookie).send(payload);
+    expect(first.status).toBe(201);
+    expect(retry.status).toBe(200);
+    expect(retry.body.id).toBe(first.body.id);
+
+    const changedNotes = await request(app).post("/api/invoices").set("Cookie", coordinatorCookie)
+      .send({ ...payload, notes: "Different notes" });
+    expect(changedNotes.status).toBe(409);
+    const changedVendor = await request(app).post("/api/invoices").set("Cookie", coordinatorCookie)
+      .send({ ...payload, vendorId: "00000000-0000-4000-8000-000000000001" });
+    expect(changedVendor.status).toBe(409);
+
+    const audits = await db.select().from(auditLogTable).where(and(
+      eq(auditLogTable.userId, coordinatorId),
+      eq(auditLogTable.action, "create_invoice"),
+      eq(auditLogTable.entityId, first.body.id),
+    ));
+    expect(audits).toHaveLength(1);
+  });
+
+  it("serializes concurrent submissions for the same document path", async () => {
+    const payload = {
+      clientId,
+      notes: "Concurrent retry",
+      documentUrl: `/objects/uploads/${coordinatorId}/99999999-9999-4999-8999-999999999999`,
+    };
+    const [left, right] = await Promise.all([
+      request(app).post("/api/invoices").set("Cookie", coordinatorCookie).send(payload),
+      request(app).post("/api/invoices").set("Cookie", coordinatorCookie).send(payload),
+    ]);
+    expect([left.status, right.status].sort()).toEqual([200, 201]);
+    expect(left.body.id).toBe(right.body.id);
+    const matchingInvoices = await db.select().from(invoicesTable).where(and(
+      eq(invoicesTable.documentUrl, payload.documentUrl),
+      eq(invoicesTable.submittedByRole, "service_coordinator"),
+    ));
+    expect(matchingInvoices).toHaveLength(1);
+  });
+
+  it("rejects reuse of a coordinator document for a different participant", async () => {
+    const documentUrl = `/objects/uploads/${coordinatorId}/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa`;
+    await db.update(clientsTable).set({ assignedCoordinatorId: coordinatorId }).where(eq(clientsTable.id, otherClientId));
+    try {
+      const first = await request(app).post("/api/invoices").set("Cookie", coordinatorCookie)
+        .send({ clientId, documentUrl });
+      expect(first.status).toBe(201);
+      const otherParticipant = await request(app).post("/api/invoices").set("Cookie", coordinatorCookie)
+        .send({ clientId: otherClientId, documentUrl });
+      expect(otherParticipant.status).toBe(409);
+    } finally {
+      await db.update(clientsTable).set({ assignedCoordinatorId: null }).where(eq(clientsTable.id, otherClientId));
+    }
+  });
+
+  it("keeps referral-only vendors in the default list but excludes them for invoice eligibility", async () => {
+    const vendor = await makeVendor(true);
+    const [referral] = await db.insert(referralsTable).values({
+      clientId,
+      vendorId: vendor.id,
+      referralDate: "2026-03-01",
+    }).returning();
+    try {
+      const defaultVendors = await request(app).get("/api/vendors").query({ clientId }).set("Cookie", coordinatorCookie);
+      expect(defaultVendors.status).toBe(200);
+      expect(defaultVendors.body.items.map((item: { id: string }) => item.id)).toContain(vendor.id);
+
+      const invoiceVendors = await request(app).get("/api/vendors")
+        .query({ clientId, invoiceEligible: "true" })
+        .set("Cookie", coordinatorCookie);
+      expect(invoiceVendors.status).toBe(200);
+      expect(invoiceVendors.body.items.map((item: { id: string }) => item.id)).not.toContain(vendor.id);
+
+      const submission = await request(app).post("/api/invoices").set("Cookie", coordinatorCookie).send({
+        clientId,
+        vendorId: vendor.id,
+        documentUrl: `/objects/uploads/${coordinatorId}/bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb`,
+      });
+      expect(submission.status).toBe(400);
+      expect(submission.body.error).toContain("associated with clientId");
+    } finally {
+      await db.delete(referralsTable).where(eq(referralsTable.id, referral.id));
+    }
+  });
+});
+
 describe("invoice line-item document attachments", () => {
   it("requires an invoice document for staff and coordinators, but not a linked parent", async () => {
     const auth = await makeAuth({ maxPeriodAmount: "1000.00" });
@@ -222,18 +422,22 @@ describe("invoice line-item document attachments", () => {
     }
 
     const [coordinator, parent] = await db.insert(usersTable).values([
-      { name: "Inv Coordinator", email: `${nonce}-coordinator@test.local`, role: "service_coordinator" },
+      { name: "Inv Coordinator", email: `${nonce}-document-coordinator@test.local`, role: "service_coordinator" },
       { name: "Inv Parent", email: `${nonce}-parent@test.local`, role: "parent_guardian", linkedRecordType: "client", linkedRecordId: clientId },
     ]).returning();
     let parentInvoiceId: string | undefined;
     const coordinatorToken = newToken();
     const parentToken = newToken();
     try {
+      await db.update(clientsTable).set({ assignedCoordinatorId: coordinator.id }).where(eq(clientsTable.id, clientId));
       await db.insert(sessionsTable).values([
         { userId: coordinator.id, token: coordinatorToken, expiresAt: new Date(Date.now() + 3600000) },
         { userId: parent.id, token: parentToken, expiresAt: new Date(Date.now() + 3600000) },
       ]);
-      const restricted = await request(app).post("/api/invoices").set("Cookie", `ceps_session=${coordinatorToken}`).send(body);
+      const restricted = await request(app).post("/api/invoices").set("Cookie", `ceps_session=${coordinatorToken}`).send({
+        clientId,
+        paymentType: "direct_payment",
+      });
       expect(restricted.status).toBe(400);
       expect(restricted.body.error).toBe("An invoice document is required");
       const allowed = await request(app).post("/api/invoices").set("Cookie", `ceps_session=${parentToken}`).send(body);
@@ -241,6 +445,7 @@ describe("invoice line-item document attachments", () => {
       parentInvoiceId = allowed.body.id;
     } finally {
       if (parentInvoiceId) await db.delete(invoicesTable).where(eq(invoicesTable.id, parentInvoiceId));
+      await db.update(clientsTable).set({ assignedCoordinatorId: coordinatorId }).where(eq(clientsTable.id, clientId));
       await db.delete(auditLogTable).where(inArray(auditLogTable.userId, [coordinator.id, parent.id]));
       await db.delete(sessionsTable).where(inArray(sessionsTable.userId, [coordinator.id, parent.id]));
       await db.delete(usersTable).where(inArray(usersTable.id, [coordinator.id, parent.id]));

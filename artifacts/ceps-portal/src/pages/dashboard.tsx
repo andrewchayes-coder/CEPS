@@ -234,6 +234,22 @@ export default function DashboardPage() {
           </CardContent>
         </Card>
         {user?.role === 'staff' && (
+          <Card
+            className="cursor-pointer transition-colors hover:bg-accent/50"
+            onClick={() => navigate('/invoices')}
+            data-testid="card-kpi-needs-entry-invoices"
+          >
+            <CardHeader className="flex flex-row items-center justify-between pb-2 space-y-0">
+              <CardTitle className="text-sm font-medium">Awaiting CEPS Entry</CardTitle>
+              <Receipt className="h-4 w-4 text-muted-foreground" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold">{summary.totals.needsEntryInvoices}</div>
+              <p className="text-xs text-muted-foreground mt-1">Invoices awaiting line-item entry</p>
+            </CardContent>
+          </Card>
+        )}
+        {user?.role === 'staff' && (
           <Card className="cursor-pointer transition-colors hover:bg-accent/50" onClick={() => navigate('/authorizations/unmatched')} data-testid="card-kpi-unmatched-pos">
             <CardHeader className="flex flex-row items-center justify-between pb-2 space-y-0">
               <CardTitle className="text-sm font-medium">Unmatched POS</CardTitle>

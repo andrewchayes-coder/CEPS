@@ -19,6 +19,7 @@ import { trackAnalyticsEvent } from '@/lib/analytics';
 import { SearchableSelect } from '@/components/searchable-select';
 import { MonthYearInput } from '@/components/month-year-input';
 import { useDebounce } from '@/hooks/use-debounce';
+import { CoordinatorInvoiceSubmit } from '@/components/coordinator-invoice-submit';
 
 const formSchema = z.object({
   clientId: z.string().min(1, 'Participant is required'),
@@ -34,6 +35,13 @@ const formSchema = z.object({
 });
 
 export default function InvoiceNewPage() {
+  const { user } = useAuth();
+  return user?.role === 'service_coordinator'
+    ? <CoordinatorInvoiceSubmit />
+    : <StaffInvoiceNewPage />;
+}
+
+function StaffInvoiceNewPage() {
   const [, setLocation] = useLocation();
   const { toast } = useToast();
   const createInvoice = useCreateInvoice();

@@ -2024,8 +2024,14 @@ paths:
       parameters:
         - name: clientId
           in: query
-          description: Return only vendors already linked to the participant through an authorization, invoice, or payment.
+          description: Return only vendors already linked to the participant. By default this includes referrals as well as financial links.
           schema: { type: string }
+        - name: invoiceEligible
+          in: query
+          description: When true with clientId, exclude vendors linked only through a referral; return vendors already linked through an authorization, invoice, or payment.
+          schema:
+            type: string
+            enum: ['true', 'false']
         - name: search
           in: query
           schema: { type: string }
@@ -3199,13 +3205,13 @@ components:
         authNumber: { type: ["string", "null"] }
         vendorId: { type: ["string", "null"] }
         vendorName: { type: ["string", "null"] }
-        submittedByRole: { type: string, enum: [vendor, parent, staff] }
+        submittedByRole: { type: string, enum: [vendor, parent, staff, service_coordinator] }
         submittedDate: { type: string }
         serviceMonth: { type: ["string", "null"], description: "Deprecated compatibility value; line item months are authoritative." }
         amountRequested: { type: string }
         paymentType: { type: string, enum: [direct_payment, reimbursement] }
         documentUrl: { type: ["string", "null"] }
-        status: { type: string, enum: [pending_review, validated, approved, rejected, duplicate] }
+        status: { type: string, enum: [needs_entry, pending_review, validated, approved, rejected, duplicate] }
         reviewedBy: { type: ["string", "null"] }
         reviewedByName: { type: ["string", "null"] }
         reviewedAt: { type: ["string", "null"] }
@@ -3226,7 +3232,7 @@ components:
         documentUrl: { type: ["string", "null"] }
     InvoiceInput:
       type: object
-      required: [clientId, lineItems, paymentType]
+      required: [clientId]
       properties:
         clientId: { type: string }
         authorizationId: { type: ["string", "null"] }
@@ -3257,7 +3263,7 @@ components:
         serviceMonth: { type: string }
         amountRequested: { type: string }
         paymentType: { type: string, enum: [direct_payment, reimbursement] }
-        status: { type: string, enum: [pending_review, validated, approved, rejected, duplicate] }
+        status: { type: string, enum: [needs_entry, pending_review, validated, approved, rejected, duplicate] }
         notes: { type: string }
         documentUrl: { type: ["string", "null"] }
         lineItems:
@@ -3815,11 +3821,12 @@ components:
           items: { $ref: "#/components/schemas/StatusCount" }
         totals:
           type: object
-          required: [activeClients, activeAuthorizations, pendingInvoices, vendorsMissingW9]
+          required: [activeClients, activeAuthorizations, pendingInvoices, needsEntryInvoices, vendorsMissingW9]
           properties:
             activeClients: { type: integer }
             activeAuthorizations: { type: integer }
             pendingInvoices: { type: integer }
+            needsEntryInvoices: { type: integer }
             vendorsMissingW9: { type: integer }
             paymentsThisMonth: { type: ["string", "null"] }
             unmatchedRemittances: { type: integer }

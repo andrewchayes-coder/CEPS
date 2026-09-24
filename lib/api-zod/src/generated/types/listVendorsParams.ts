@@ -6,14 +6,19 @@
  * OpenAPI spec version: 0.1.0
  */
 import type { ListVendorsActive } from './listVendorsActive';
+import type { ListVendorsInvoiceEligible } from './listVendorsInvoiceEligible';
 import type { ListVendorsSortBy } from './listVendorsSortBy';
 import type { ListVendorsSortDirection } from './listVendorsSortDirection';
 
 export type ListVendorsParams = {
 /**
- * Return only vendors already linked to the participant through an authorization, invoice, or payment.
+ * Return only vendors already linked to the participant. By default this includes referrals as well as financial links.
  */
 clientId?: string;
+/**
+ * When true with clientId, exclude vendors linked only through a referral; return vendors already linked through an authorization, invoice, or payment.
+ */
+invoiceEligible?: ListVendorsInvoiceEligible;
 search?: string;
 w9Status?: string;
 startDate?: string;

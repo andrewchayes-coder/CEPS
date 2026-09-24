@@ -13,4 +13,5 @@ export const InvoiceSubmittedByRole = {
   vendor: 'vendor',
   parent: 'parent',
   staff: 'staff',
+  service_coordinator: 'service_coordinator',
 } as const;

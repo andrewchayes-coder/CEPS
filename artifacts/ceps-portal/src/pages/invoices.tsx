@@ -16,6 +16,7 @@ import { DateRangeFilter } from '@/components/date-range-filter';
 import { useDebounce } from '@/hooks/use-debounce';
 import { getInvoiceDisplayMonth } from '@/lib/invoice-utils';
 import { LogPaymentDialog } from '@/components/log-payment-dialog';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 
 const PAGE_SIZE = 50;
 
@@ -25,9 +26,11 @@ export default function InvoicesPage() {
   const canValidate = permissions.has('invoice_log_validate');
   const canApprove = permissions.has('invoice_approve');
   const canWriteChecks = permissions.has('check_writing');
-  const [view, setView] = useState<'all' | 'validate' | 'approve' | 'checks'>('all');
+  const isStaff = user?.role === 'staff';
+  const [view, setView] = useState<'all' | 'needs_entry' | 'validate' | 'approve' | 'checks'>('all');
   const [search, setSearch] = useState('');
   const debouncedSearch = useDebounce(search, 300);
+  const [statusFilter, setStatusFilter] = useState('all');
   const [startDate, setStartDate] = useState<string>();
   const [endDate, setEndDate] = useState<string>();
   const [page, setPage] = useState(0);
@@ -43,16 +46,21 @@ export default function InvoicesPage() {
     ...(debouncedSearch ? { search: debouncedSearch } : {}),
     ...(startDate ? { startDate } : {}),
     ...(endDate ? { endDate } : {}),
+    ...(statusFilter !== 'all' ? { status: statusFilter } : {}),
     ...(sort.sortBy ? { sortBy: sort.sortBy, sortDirection: sort.sortDirection } : {}),
   };
   const { data, isLoading } = useListInvoices(params, {
     query: { queryKey: ['invoices', params], enabled: view === 'all' },
   });
   const queueParams = { limit: PAGE_SIZE, offset: page * PAGE_SIZE };
+  const needsEntryParams = { status: 'needs_entry', limit: PAGE_SIZE, offset: page * PAGE_SIZE, sortBy: 'createdAt' as const, sortDirection: 'asc' as const };
+  const needsEntryQueue = useListInvoices(needsEntryParams, {
+    query: { enabled: view === 'needs_entry' && isStaff, queryKey: ['invoice-needs-entry-queue', needsEntryParams] },
+  });
   const validateQueue = useListInvoices({ status: 'pending_review', ...queueParams }, { query: { enabled: view === 'validate' && canValidate, queryKey: ['invoice-validate-queue', queueParams] } });
   const approveQueue = useListReadyToApproveInvoices(queueParams, { query: { enabled: view === 'approve' && canApprove, queryKey: ['invoice-approve-queue', queueParams] } });
   const checkQueue = useListReadyForCheckWritingInvoices(queueParams, { query: { enabled: view === 'checks' && canWriteChecks, queryKey: ['invoice-check-queue', queueParams] } });
-  const queueData = view === 'validate' ? validateQueue.data : view === 'approve' ? approveQueue.data : view === 'checks' ? checkQueue.data : null;
+  const queueData = view === 'needs_entry' ? needsEntryQueue.data : view === 'validate' ? validateQueue.data : view === 'approve' ? approveQueue.data : view === 'checks' ? checkQueue.data : null;
   const invoices = data?.items;
   const displayedInvoices = view === 'all' ? invoices : queueData?.items;
   const total = view === 'all' ? (data?.total ?? 0) : (queueData?.total ?? 0);
@@ -78,6 +86,7 @@ export default function InvoicesPage() {
       <div className="flex flex-wrap gap-2" role="tablist" aria-label="Invoice queues">
          <Button variant={view === 'all' ? 'default' : 'outline'} onClick={() => { setView('all'); setPage(0); }} data-testid="tab-invoices-all">All Invoices</Button>
          {canValidate && <Button variant={view === 'validate' ? 'default' : 'outline'} onClick={() => { setView('validate'); setPage(0); }} data-testid="tab-invoices-validate">Log &amp; Validate</Button>}
+          {isStaff && <Button variant={view === 'needs_entry' ? 'default' : 'outline'} onClick={() => { setView('needs_entry'); setPage(0); }} data-testid="tab-invoices-needs-entry">Needs Entry</Button>}
          {canApprove && <Button variant={view === 'approve' ? 'default' : 'outline'} onClick={() => { setView('approve'); setPage(0); }} data-testid="tab-invoices-approve">Ready to Approve</Button>}
          {canWriteChecks && <Button variant={view === 'checks' ? 'default' : 'outline'} onClick={() => { setView('checks'); setPage(0); }} data-testid="tab-invoices-checks">Ready for Check Writing</Button>}
       </div>
@@ -107,6 +116,20 @@ export default function InvoicesPage() {
                 }}
               />
             </div>
+            <Select value={statusFilter} onValueChange={(value) => { setStatusFilter(value); setPage(0); }}>
+              <SelectTrigger className="w-full sm:w-52" aria-label="Filter invoices by status" data-testid="filter-invoice-status">
+                <SelectValue placeholder="Filter by status" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All statuses</SelectItem>
+                <SelectItem value="needs_entry">Awaiting CEPS Entry</SelectItem>
+                <SelectItem value="pending_review">Pending Review</SelectItem>
+                <SelectItem value="validated">Validated</SelectItem>
+                <SelectItem value="approved">Approved</SelectItem>
+                <SelectItem value="rejected">Rejected</SelectItem>
+                <SelectItem value="duplicate">Duplicate</SelectItem>
+              </SelectContent>
+            </Select>
           </div>
         </CardHeader>}
         <CardContent className="p-0">
@@ -123,7 +146,7 @@ export default function InvoicesPage() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {(view === 'all' ? isLoading : (view === 'validate' ? validateQueue.isLoading : view === 'approve' ? approveQueue.isLoading : checkQueue.isLoading)) ? (
+              {(view === 'all' ? isLoading : view === 'needs_entry' ? needsEntryQueue.isLoading : (view === 'validate' ? validateQueue.isLoading : view === 'approve' ? approveQueue.isLoading : checkQueue.isLoading)) ? (
                 <InvoicesTableSkeleton />
               ) : displayedInvoices?.length === 0 ? (
                 <TableRow>
@@ -212,6 +235,8 @@ export default function InvoicesPage() {
 
 function StatusBadge({ status }: { status: string }) {
   switch (status) {
+    case 'needs_entry':
+      return <Badge variant="outline" className="bg-chart-1/10 text-chart-1 border-chart-1/20">Awaiting CEPS Entry</Badge>;
     case 'pending_review':
       return <Badge variant="outline" className="bg-chart-2/10 text-chart-2 border-chart-2/20">Pending Review</Badge>;
     case 'validated':

@@ -8,6 +8,7 @@ import { Badge } from '@/components/ui/badge';
 import { useToast } from '@/hooks/use-toast';
 import { Save, FileText, ExternalLink } from 'lucide-react';
 import { trackAnalyticsEvent } from '@/lib/analytics';
+import { apiErrorMessage } from '@/lib/api-error';
 
 interface ContactFormData {
   contactPerson: string;
@@ -89,8 +90,8 @@ export function VendorBusinessProfile({
           toast({ title: 'Vendor Updated' });
           refetch();
         },
-        onError: () => {
-          toast({ variant: 'destructive', title: 'Error', description: 'Could not save your changes.' });
+        onError: (error: unknown) => {
+          toast({ variant: 'destructive', title: 'Error', description: apiErrorMessage(error, 'Could not save your changes.') });
         },
       },
     );
@@ -205,8 +206,8 @@ export function VendorBusinessProfile({
                     toast({ title: 'W-9 Uploaded', description: 'The W-9 is now on file.' });
                     refetch();
                   },
-                  onError: () => {
-                    toast({ variant: 'destructive', title: 'Error', description: 'Could not attach the W-9.' });
+                  onError: (error: unknown) => {
+                    toast({ variant: 'destructive', title: 'Error', description: apiErrorMessage(error, 'Could not attach the W-9.') });
                   },
                 },
               );

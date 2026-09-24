@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { apiErrorMessage } from '@/lib/api-error';
 import {
   useCreateFamilyRepresentative,
   useUpdateFamilyRepresentative,
@@ -80,7 +81,7 @@ export function ManageFamilyRepDialog({
             queryClient.invalidateQueries({ queryKey: getListFamilyRepresentativesQueryKey({ clientId }) });
             handleOpenChange(false);
           },
-          onError: () => toast({ variant: 'destructive', title: 'Error', description: 'Could not update representative.' }),
+          onError: (error: unknown) => toast({ variant: 'destructive', title: 'Error', description: apiErrorMessage(error, 'Could not update representative.') }),
         }
       );
     } else {
@@ -92,7 +93,7 @@ export function ManageFamilyRepDialog({
             queryClient.invalidateQueries({ queryKey: getListFamilyRepresentativesQueryKey({ clientId }) });
             handleOpenChange(false);
           },
-          onError: () => toast({ variant: 'destructive', title: 'Error', description: 'Could not add representative.' }),
+          onError: (error: unknown) => toast({ variant: 'destructive', title: 'Error', description: apiErrorMessage(error, 'Could not add representative.') }),
         }
       );
     }
@@ -189,7 +190,7 @@ function RemoveFamilyRepDialog({ clientId, rep }: { clientId: string; rep: Famil
           queryClient.invalidateQueries({ queryKey: getListFamilyRepresentativesQueryKey({ clientId }) });
           setOpen(false);
         },
-        onError: () => toast({ variant: 'destructive', title: 'Error', description: 'Could not remove representative.' }),
+        onError: (error: unknown) => toast({ variant: 'destructive', title: 'Error', description: apiErrorMessage(error, 'Could not remove representative.') }),
       }
     );
   };
@@ -247,7 +248,7 @@ function EditMyFamilyRepInfoDialog({ clientId, rep }: { clientId: string; rep: F
           queryClient.invalidateQueries({ queryKey: getListFamilyRepresentativesQueryKey({ clientId }) });
           setOpen(false);
         },
-        onError: () => toast({ variant: 'destructive', title: 'Error', description: 'Could not update contact info.' }),
+        onError: (error: unknown) => toast({ variant: 'destructive', title: 'Error', description: apiErrorMessage(error, 'Could not update contact info.') }),
       }
     );
   };

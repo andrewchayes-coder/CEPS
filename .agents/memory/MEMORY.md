@@ -22,3 +22,4 @@
 - [POS amendment invariants](pos-amendment-invariants.md) — exact pair checks must match DB uniqueness; amendments snapshot once, preserve status, and never reuse stale PDF uploads.
 - [Check-run reconciliation](check-run-reconciliation.md) — consume exact vendor-and-amount matches before pairing same-vendor amount mismatches; unknown vendors never match.
 - [Publish and PostgreSQL extensions](publish-postgres-extensions.md) — verify generated Publish SQL; extension-backed indexes may be diffed without the required extension DDL.
+- [Database migration boundary](db-migrations.md) — dev can use migrate/push; Publish syncs only production schema, so backfills are separate and deploy must not run db:migrate.

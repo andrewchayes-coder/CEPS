@@ -14,6 +14,7 @@ import { CheckCircle2, ShieldCheck } from 'lucide-react';
 import { Separator } from '@/components/ui/separator';
 import { trackAnalyticsEvent } from '@/lib/analytics';
 import { AgreementReview } from '@/components/agreement-review';
+import { apiErrorMessage } from '@/lib/api-error';
 
 type SignerRelationship = 'self' | 'parent' | 'guardian' | 'conservator';
 
@@ -168,11 +169,11 @@ export default function SignaturePage() {
         setAccountCreated(!!result?.accountCreated);
         setSubmitted(true);
       },
-      onError: () => {
+      onError: (error: unknown) => {
         toast({
           variant: "destructive",
           title: "Submission Failed",
-          description: "An error occurred while saving your signature.",
+          description: apiErrorMessage(error, "An error occurred while saving your signature."),
         });
       }
     });

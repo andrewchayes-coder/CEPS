@@ -31,12 +31,11 @@ import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { FileUpload } from '@/components/file-upload';
 import { trackAnalyticsEvent } from '@/lib/analytics';
+import { apiErrorMessage } from '@/lib/api-error';
 import { SearchableSelect } from '@/components/searchable-select';
 import { useDebounce } from '@/hooks/use-debounce';
 import { Textarea } from '@/components/ui/textarea';
 import { Checkbox } from '@/components/ui/checkbox';
-
-type ApiErrorResponse = { data?: { error?: string; message?: string } };
 
 const formSchema = z.object({
   clientId: z.string().min(1, 'Participant is required'),
@@ -317,9 +316,8 @@ export default function AuthorizationNewPage() {
                 if (activeFileIdRef.current !== fileId) return;
                 queueingFileIdRef.current = null;
                 setQueueSaveFailed(true);
-                const apiErr = err as ApiErrorResponse;
                 setParseNote('Failed to save to the unmatched queue. Retry before leaving this page so the POS is not lost.');
-                toast({ variant: 'destructive', title: 'Queue Error', description: apiErr?.data?.error || apiErr?.data?.message || 'Could not save to unmatched queue.' });
+                toast({ variant: 'destructive', title: 'Queue Error', description: apiErrorMessage(err, 'Could not save to unmatched queue.') });
             }
         });
     }
@@ -371,11 +369,10 @@ export default function AuthorizationNewPage() {
           }
         },
         onError: (err: unknown) => {
-          const apiErr = err as ApiErrorResponse;
           toast({
             variant: "destructive",
             title: "Error",
-            description: apiErr?.data?.error || apiErr?.data?.message || "Failed to amend authorization.",
+            description: apiErrorMessage(err, "Failed to amend authorization."),
           });
         }
       });
@@ -413,11 +410,10 @@ export default function AuthorizationNewPage() {
         }
       },
       onError: (err: unknown) => {
-        const apiErr = err as ApiErrorResponse;
         toast({
           variant: "destructive",
           title: "Error",
-          description: apiErr?.data?.error || apiErr?.data?.message || "Failed to create authorization.",
+          description: apiErrorMessage(err, "Failed to create authorization."),
         });
       }
     });

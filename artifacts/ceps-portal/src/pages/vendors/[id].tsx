@@ -14,6 +14,7 @@ import {
 } from '@workspace/api-client-react';
 import { FileUpload } from '@/components/file-upload';
 import { VendorBusinessProfile } from '@/components/vendor-business-profile';
+import { apiErrorMessage } from '@/lib/api-error';
 import { useAuth } from '@/components/auth/auth-provider';
 import { InvitePortalDialog } from '@/components/invite-portal-dialog';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -324,8 +325,8 @@ export default function VendorDetailPage() {
                             toast({ title: 'W-9 Uploaded', description: 'The W-9 is now on file.' });
                             refetch();
                           },
-                          onError: () => {
-                            toast({ variant: 'destructive', title: 'Error', description: 'Could not attach the W-9.' });
+                          onError: (error: unknown) => {
+                            toast({ variant: 'destructive', title: 'Error', description: apiErrorMessage(error, 'Could not attach the W-9.') });
                           },
                         },
                       );

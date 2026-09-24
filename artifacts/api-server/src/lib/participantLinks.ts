@@ -132,7 +132,10 @@ export async function softDeleteClient(
   if (blockers.length) return { conflict: "Participant cannot be deleted while active financial records reference them", blockers };
   await tx.update(unmatchedPosDocumentsTable)
     .set({ suggestedClientId: null, suggestionMethod: null, suggestedAt: null })
-    .where(eq(unmatchedPosDocumentsTable.suggestedClientId, id));
+    .where(and(
+      eq(unmatchedPosDocumentsTable.suggestedClientId, id),
+      eq(unmatchedPosDocumentsTable.reviewStatus, "pending"),
+    ));
 
   const [deleted] = await tx.update(clientsTable)
     .set({ isDeleted: true, deletedAt: new Date(), deletedBy })

@@ -31,7 +31,7 @@ test('coordinator submits each attached file separately and retries only a faile
       firstFailure = false;
       reachedFirstFailure = true;
       await new Promise<void>((resolve) => { releaseFailure = resolve; });
-      return route.fulfill({ status: 500, json: { message: 'Temporary submission failure' } });
+      return route.fulfill({ status: 500, json: { error: 'Temporary submission failure' } });
     }
     await route.fulfill({ status: 201, json: { id: `invoice-${submitted.length}`, ...body, status: 'needs_entry' } });
   });
@@ -54,6 +54,7 @@ test('coordinator submits each attached file separately and retries only a faile
   await expect(page.locator('form button[type="submit"]')).toBeDisabled();
   releaseFailure?.();
   await expect(page.getByRole('button', { name: 'Retry failed invoice submissions' })).toBeVisible();
+  await expect(page.getByRole('list', { name: 'Attached invoice files' }).getByText('Temporary submission failure')).toBeVisible();
   expect(submitted[0].clientId).toBe('client-1');
   expect(submitted[0].amountRequested).toBe('0');
   expect(submitted.every((body) => !('lineItems' in body))).toBe(true);

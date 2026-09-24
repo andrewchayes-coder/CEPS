@@ -84,9 +84,9 @@ export default function DashboardPage() {
                     {group.alerts.map((alert, i) => (
                       <li key={alert.entityId ?? i} className="text-xs truncate">
                         <Link
-                           href={group.kind === 'authorization_exhausted_active'
-                             ? `/authorizations/${alert.entityId}`
-                             : `/authorizations/unmatched?id=${alert.entityId}`}
+                            href={group.kind === 'authorization_exhausted_active'
+                              ? `/authorizations/${alert.entityId}`
+                              : `/authorizations/review?id=${alert.entityId}`}
                           className="text-primary hover:underline"
                            data-testid={group.kind === 'authorization_exhausted_active'
                              ? `link-alert-authorization-${alert.entityId ?? i}`
@@ -250,14 +250,16 @@ export default function DashboardPage() {
           </Card>
         )}
         {user?.role === 'staff' && (
-          <Card className="cursor-pointer transition-colors hover:bg-accent/50" onClick={() => navigate('/authorizations/unmatched')} data-testid="card-kpi-unmatched-pos">
+          <Card className="cursor-pointer transition-colors hover:bg-accent/50" onClick={() => navigate('/authorizations/review')} data-testid="card-kpi-authorizations-review">
             <CardHeader className="flex flex-row items-center justify-between pb-2 space-y-0">
-              <CardTitle className="text-sm font-medium">Unmatched POS</CardTitle>
+              <CardTitle className="text-sm font-medium">Authorizations to Review</CardTitle>
               <AlertTriangle className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">{summary.totals.unmatchedPosDocuments}</div>
-              <Link href="/authorizations/unmatched" onClick={(e) => e.stopPropagation()} className="text-xs text-primary hover:underline mt-1 inline-block" data-testid="link-tile-unmatched-pos">
+              <div className="text-2xl font-bold">{summary.totals.pendingPosReview ?? summary.totals.unmatchedPosDocuments ?? 0}</div>
+              <p className="text-xs text-muted-foreground mt-1">Oldest: {summary.totals.oldestPendingPosDate ? new Date(summary.totals.oldestPendingPosDate).toLocaleDateString() : '—'}</p>
+              <p className="text-xs text-muted-foreground">{summary.totals.pendingPosWithoutClient ?? 0} with no matching participant</p>
+              <Link href="/authorizations/review" onClick={(e) => e.stopPropagation()} className="text-xs text-primary hover:underline mt-1 inline-block" data-testid="link-tile-pos-review">
                 Review queue →
               </Link>
             </CardContent>
@@ -471,8 +473,8 @@ function getAlertLink(group: { kind: string; alerts: DashboardAlert[] }) {
     case 'pending_w9': return '/reports?tab=missing-docs&docType=w9';
     case 'pending_signature': return '/reports?tab=missing-docs&docType=signature';
     case 'unmatched_remittance': return '/remittances';
-    case 'unmatched_pos': return '/authorizations/unmatched';
-    case 'unmatched_pos_possible_match': return group.alerts[0]?.entityId ? `/authorizations/unmatched?id=${group.alerts[0].entityId}` : '/authorizations/unmatched';
+    case 'unmatched_pos': return '/authorizations/review';
+    case 'unmatched_pos_possible_match': return group.alerts[0]?.entityId ? `/authorizations/review?id=${group.alerts[0].entityId}` : '/authorizations/review';
     case 'authorization_exhausted_active': return group.alerts[0]?.entityId ? `/authorizations/${group.alerts[0].entityId}` : '/authorizations';
     case 'recently_completed': return '/referrals';
     default: return '/';

@@ -37,7 +37,7 @@ const navItems: NavItem[] = [
   { title: 'Referrals', href: '/referrals', icon: FileText, roles: ['staff', 'service_coordinator'] },
   { title: 'Participants', href: '/clients', icon: Users, roles: ['staff', 'service_coordinator'] },
   { title: 'Authorizations', href: '/authorizations', icon: FileCheck, roles: ['staff', 'service_coordinator', 'vendor'] },
-  { title: 'Unmatched POS', href: '/authorizations/unmatched', icon: ClipboardList, roles: ['staff'] },
+  { title: 'POS Review Queue', href: '/authorizations/review', icon: ClipboardList, roles: ['staff'] },
   { title: 'Invoices', href: '/invoices', icon: Receipt, roles: ['staff', 'service_coordinator', 'vendor', 'parent_guardian', 'self'] },
   { title: 'Payments', href: '/payments', icon: CreditCard, roles: ['staff', 'vendor', 'parent_guardian', 'self'] },
   { title: 'Remittances', href: '/remittances', icon: FolderSync, roles: ['staff'] },

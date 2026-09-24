@@ -2022,8 +2022,12 @@ export const ParseAuthorizationPdfResponse = zod.object({
 /**
  * @summary List POS documents awaiting participant matching (staff only)
  */
+export const listUnmatchedPosQueryPendingOnlyDefault = true;
+
 export const ListUnmatchedPosQueryParams = zod.object({
   "search": zod.coerce.string().optional(),
+  "batchId": zod.uuid().optional(),
+  "pendingOnly": zod.coerce.boolean().default(listUnmatchedPosQueryPendingOnlyDefault).describe('When true (the default), return only items awaiting review.'),
   "limit": zod.coerce.number().int().optional(),
   "offset": zod.coerce.number().int().optional()
 })
@@ -2051,6 +2055,15 @@ export const ListUnmatchedPosResponse = zod.object({
   "suggestionMethod": zod.union([zod.literal('uci'),zod.literal('name'),zod.literal(null)]).nullish(),
   "suggestedAt": zod.coerce.date().nullish(),
   "suggestedClientName": zod.string().nullish(),
+  "batchId": zod.uuid().nullish(),
+  "parseStatus": zod.enum(['queued', 'parsed', 'failed']),
+  "parseError": zod.string().nullish(),
+  "reviewStatus": zod.enum(['pending', 'confirmed', 'discarded']),
+  "discardReason": zod.string().nullish(),
+  "suggestedAuthorizationId": zod.uuid().nullish(),
+  "reviewedBy": zod.uuid().nullish(),
+  "reviewedAt": zod.coerce.date().nullish(),
+  "resultingAuthorizationId": zod.uuid().nullish(),
   "createdBy": zod.string(),
   "createdAt": zod.coerce.date(),
   "updatedAt": zod.coerce.date()
@@ -2107,9 +2120,129 @@ export const SaveUnmatchedPosResponse = zod.object({
   "suggestionMethod": zod.union([zod.literal('uci'),zod.literal('name'),zod.literal(null)]).nullish(),
   "suggestedAt": zod.coerce.date().nullish(),
   "suggestedClientName": zod.string().nullish(),
+  "batchId": zod.uuid().nullish(),
+  "parseStatus": zod.enum(['queued', 'parsed', 'failed']),
+  "parseError": zod.string().nullish(),
+  "reviewStatus": zod.enum(['pending', 'confirmed', 'discarded']),
+  "discardReason": zod.string().nullish(),
+  "suggestedAuthorizationId": zod.uuid().nullish(),
+  "reviewedBy": zod.uuid().nullish(),
+  "reviewedAt": zod.coerce.date().nullish(),
+  "resultingAuthorizationId": zod.uuid().nullish(),
   "createdBy": zod.string(),
   "createdAt": zod.coerce.date(),
   "updatedAt": zod.coerce.date()
+})
+
+
+/**
+ * @summary Queue POS PDFs for asynchronous parsing and review (staff only)
+ */
+
+
+export const createUnmatchedPosBatchBodyFilesMax = 100;
+
+
+
+export const CreateUnmatchedPosBatchBody = zod.object({
+  "files": zod.array(zod.object({
+  "posPdfUrl": zod.string().min(1),
+  "sourceFileName": zod.string().min(1)
+})).min(1).max(createUnmatchedPosBatchBodyFilesMax)
+})
+
+export const CreateUnmatchedPosBatchResponse = zod.object({
+  "batchId": zod.uuid(),
+  "items": zod.array(zod.object({
+  "id": zod.string(),
+  "posPdfUrl": zod.string(),
+  "sourceFileName": zod.string(),
+  "clientName": zod.string().nullish(),
+  "clientAddress": zod.string().nullish(),
+  "clientPhone": zod.string().nullish(),
+  "uciNumber": zod.string().nullish(),
+  "authNumber": zod.string().nullish(),
+  "serviceCode": zod.string().nullish(),
+  "activityDescription": zod.string().nullish(),
+  "servicePeriodStart": zod.string().nullish(),
+  "servicePeriodEnd": zod.string().nullish(),
+  "units": zod.int().nullish(),
+  "monthlyAmount": zod.string().nullish(),
+  "maxPeriodAmount": zod.string().nullish(),
+  "caseworkerName": zod.string().nullish(),
+  "posNotes": zod.string().nullish(),
+  "suggestedClientId": zod.string().nullish(),
+  "suggestionMethod": zod.union([zod.literal('uci'),zod.literal('name'),zod.literal(null)]).nullish(),
+  "suggestedAt": zod.coerce.date().nullish(),
+  "suggestedClientName": zod.string().nullish(),
+  "batchId": zod.uuid().nullish(),
+  "parseStatus": zod.enum(['queued', 'parsed', 'failed']),
+  "parseError": zod.string().nullish(),
+  "reviewStatus": zod.enum(['pending', 'confirmed', 'discarded']),
+  "discardReason": zod.string().nullish(),
+  "suggestedAuthorizationId": zod.uuid().nullish(),
+  "reviewedBy": zod.uuid().nullish(),
+  "reviewedAt": zod.coerce.date().nullish(),
+  "resultingAuthorizationId": zod.uuid().nullish(),
+  "createdBy": zod.string(),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
+})),
+  "queuedCount": zod.int()
+})
+
+
+/**
+ * @summary Get POS batch parsing and review progress (staff only)
+ */
+export const GetUnmatchedPosBatchParams = zod.object({
+  "batchId": zod.uuid()
+})
+
+export const GetUnmatchedPosBatchResponse = zod.object({
+  "batchId": zod.uuid(),
+  "totalCount": zod.int(),
+  "queuedCount": zod.int(),
+  "parsedCount": zod.int(),
+  "failedCount": zod.int(),
+  "pendingCount": zod.int(),
+  "confirmedCount": zod.int(),
+  "discardedCount": zod.int(),
+  "items": zod.array(zod.object({
+  "id": zod.string(),
+  "posPdfUrl": zod.string(),
+  "sourceFileName": zod.string(),
+  "clientName": zod.string().nullish(),
+  "clientAddress": zod.string().nullish(),
+  "clientPhone": zod.string().nullish(),
+  "uciNumber": zod.string().nullish(),
+  "authNumber": zod.string().nullish(),
+  "serviceCode": zod.string().nullish(),
+  "activityDescription": zod.string().nullish(),
+  "servicePeriodStart": zod.string().nullish(),
+  "servicePeriodEnd": zod.string().nullish(),
+  "units": zod.int().nullish(),
+  "monthlyAmount": zod.string().nullish(),
+  "maxPeriodAmount": zod.string().nullish(),
+  "caseworkerName": zod.string().nullish(),
+  "posNotes": zod.string().nullish(),
+  "suggestedClientId": zod.string().nullish(),
+  "suggestionMethod": zod.union([zod.literal('uci'),zod.literal('name'),zod.literal(null)]).nullish(),
+  "suggestedAt": zod.coerce.date().nullish(),
+  "suggestedClientName": zod.string().nullish(),
+  "batchId": zod.uuid().nullish(),
+  "parseStatus": zod.enum(['queued', 'parsed', 'failed']),
+  "parseError": zod.string().nullish(),
+  "reviewStatus": zod.enum(['pending', 'confirmed', 'discarded']),
+  "discardReason": zod.string().nullish(),
+  "suggestedAuthorizationId": zod.uuid().nullish(),
+  "reviewedBy": zod.uuid().nullish(),
+  "reviewedAt": zod.coerce.date().nullish(),
+  "resultingAuthorizationId": zod.uuid().nullish(),
+  "createdBy": zod.string(),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
+}))
 })
 
 
@@ -2161,6 +2294,15 @@ export const GetUnmatchedPosResponse = zod.object({
   "suggestionMethod": zod.union([zod.literal('uci'),zod.literal('name'),zod.literal(null)]).nullish(),
   "suggestedAt": zod.coerce.date().nullish(),
   "suggestedClientName": zod.string().nullish(),
+  "batchId": zod.uuid().nullish(),
+  "parseStatus": zod.enum(['queued', 'parsed', 'failed']),
+  "parseError": zod.string().nullish(),
+  "reviewStatus": zod.enum(['pending', 'confirmed', 'discarded']),
+  "discardReason": zod.string().nullish(),
+  "suggestedAuthorizationId": zod.uuid().nullish(),
+  "reviewedBy": zod.uuid().nullish(),
+  "reviewedAt": zod.coerce.date().nullish(),
+  "resultingAuthorizationId": zod.uuid().nullish(),
   "createdBy": zod.string(),
   "createdAt": zod.coerce.date(),
   "updatedAt": zod.coerce.date()
@@ -2208,6 +2350,42 @@ export const CompleteUnmatchedPosResponse = zod.object({
   "daysUntilExpiry": zod.int().nullish()
 }).optional(),
   "warnings": zod.array(zod.string()).optional()
+})
+
+
+/**
+ * @summary Confirm, amend, cancel, or discard a POS review item (staff only)
+ */
+export const ReviewUnmatchedPosParams = zod.object({
+  "id": zod.uuid()
+})
+
+export const ReviewUnmatchedPosBody = zod.object({
+  "action": zod.enum(['confirm', 'amend', 'cancel', 'discard']),
+  "clientId": zod.uuid().nullish(),
+  "vendorId": zod.uuid().nullish(),
+  "paymentType": zod.union([zod.literal('direct_payment'),zod.literal('reimbursement'),zod.literal('fee'),zod.literal(null)]).nullish(),
+  "fields": zod.object({
+  "authNumber": zod.string().optional(),
+  "serviceCode": zod.string().optional(),
+  "activityDescription": zod.string().nullish(),
+  "servicePeriodStart": zod.string().optional(),
+  "servicePeriodEnd": zod.string().optional(),
+  "unitAmount": zod.string().nullish(),
+  "monthlyAmount": zod.string().nullish(),
+  "maxPeriodAmount": zod.string().optional(),
+  "units": zod.int().nullish(),
+  "notes": zod.string().nullish()
+}).optional(),
+  "reason": zod.string().optional(),
+  "acceptMaxAmountWarning": zod.boolean().optional()
+})
+
+export const ReviewUnmatchedPosResponse = zod.object({
+  "saved": zod.boolean(),
+  "warnings": zod.array(zod.string()),
+  "reviewStatus": zod.enum(['pending', 'confirmed', 'discarded']),
+  "resultingAuthorizationId": zod.uuid().nullish()
 })
 
 
@@ -3779,7 +3957,10 @@ export const GetDashboardSummaryResponse = zod.object({
   "vendorsMissingW9": zod.int(),
   "paymentsThisMonth": zod.string().nullish(),
   "unmatchedRemittances": zod.int().optional(),
-  "unmatchedPosDocuments": zod.int().optional()
+  "unmatchedPosDocuments": zod.int().optional(),
+  "pendingPosReview": zod.int(),
+  "oldestPendingPosDate": zod.coerce.date().nullable(),
+  "pendingPosWithoutClient": zod.int()
 }),
   "alerts": zod.array(zod.object({
   "kind": zod.enum(['expiring_authorization', 'missing_document', 'pending_w9', 'unmatched_remittance', 'authorization_exhausted_active', 'unmatched_pos', 'unmatched_pos_possible_match', 'pending_signature', 'recently_completed', 'family_updated_participant']),

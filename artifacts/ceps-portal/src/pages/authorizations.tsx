@@ -18,11 +18,13 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { useAuth } from '@/components/auth/auth-provider';
 import { useDebounce } from '@/hooks/use-debounce';
 import { DateRangeFilter } from '@/components/date-range-filter';
+import { PosBatchUpload } from '@/components/pos-batch-upload';
 
 const PAGE_SIZE = 50;
 
 export default function AuthorizationsPage() {
   const { user } = useAuth();
+  const [showBatchUpload, setShowBatchUpload] = useState(false);
   const isStaff = user?.role === 'staff';
   const [search, setSearch] = useState('');
   const debouncedSearch = useDebounce(search, 300);
@@ -58,15 +60,13 @@ export default function AuthorizationsPage() {
           <h1 className="text-3xl font-bold tracking-tight">Authorizations (POS)</h1>
           <p className="text-muted-foreground mt-1">Manage purchase of service authorizations.</p>
         </div>
-        {user?.role === 'staff' && (
-          <Button asChild>
-            <Link href="/authorizations/new">
-              <Plus className="mr-2 h-4 w-4" />
-              Enter POS
-            </Link>
-          </Button>
-        )}
+        {user?.role === 'staff' && <div className="flex flex-wrap gap-2">
+          <Button variant="outline" asChild><Link href="/authorizations/review" data-testid="link-pos-review">POS review queue</Link></Button>
+          <Button variant="outline" asChild><Link href="/authorizations/new"><Plus className="mr-2 h-4 w-4" />Enter POS</Link></Button>
+          <Button onClick={() => setShowBatchUpload(value => !value)} aria-expanded={showBatchUpload} data-testid="button-toggle-pos-batch">Upload POS batch</Button>
+        </div>}
       </div>
+      {isStaff && showBatchUpload && <PosBatchUpload />}
 
       <Card>
         <CardHeader className="pb-3 border-b">

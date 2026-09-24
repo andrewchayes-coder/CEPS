@@ -34,9 +34,12 @@ export async function suggestUnmatchedPosForClient(tx: typeof db, clientId: stri
   const [client] = await tx.select().from(clientsTable)
     .where(and(eq(clientsTable.id, clientId), eq(clientsTable.isDeleted, false))).for("update");
   if (!client) return;
-  const rows = await tx.select().from(unmatchedPosDocumentsTable).where(or(
-    isNull(unmatchedPosDocumentsTable.suggestedClientId),
-    eq(unmatchedPosDocumentsTable.suggestedClientId, clientId),
+  const rows = await tx.select().from(unmatchedPosDocumentsTable).where(and(
+    eq(unmatchedPosDocumentsTable.reviewStatus, "pending"),
+    or(
+      isNull(unmatchedPosDocumentsTable.suggestedClientId),
+      eq(unmatchedPosDocumentsTable.suggestedClientId, clientId),
+    ),
   ));
   for (const row of rows) {
     if (row.suggestedClientId) continue;
@@ -44,6 +47,10 @@ export async function suggestUnmatchedPosForClient(tx: typeof db, clientId: stri
     if (!method) continue;
     await tx.update(unmatchedPosDocumentsTable)
       .set({ suggestedClientId: clientId, suggestionMethod: method, suggestedAt: new Date() })
-      .where(and(eq(unmatchedPosDocumentsTable.id, row.id), isNull(unmatchedPosDocumentsTable.suggestedClientId)));
+      .where(and(
+        eq(unmatchedPosDocumentsTable.id, row.id),
+        eq(unmatchedPosDocumentsTable.reviewStatus, "pending"),
+        isNull(unmatchedPosDocumentsTable.suggestedClientId),
+      ));
   }
 }

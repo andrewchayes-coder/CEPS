@@ -10,6 +10,7 @@ import { SearchableSelect } from '@/components/searchable-select';
 import { Textarea } from '@/components/ui/textarea';
 import { useToast } from '@/hooks/use-toast';
 import { trackAnalyticsEvent } from '@/lib/analytics';
+import { apiErrorMessage } from '@/lib/api-error';
 import { useAuth } from '@/components/auth/auth-provider';
 import { useDebounce } from '@/hooks/use-debounce';
 import { useForm } from 'react-hook-form';
@@ -114,7 +115,7 @@ export function CoordinatorInvoiceSubmit() {
         : item));
       return true;
     } catch (error) {
-      const message = (error as any)?.data?.message ?? (error as Error)?.message ?? 'Invoice submission failed.';
+      const message = apiErrorMessage(error, 'Invoice submission failed.');
       setUploads((current) => current.map((item) => item.id === entry.id
         ? { ...item, status: 'submit_failed', error: message, submissionValues: { ...values } }
         : item));

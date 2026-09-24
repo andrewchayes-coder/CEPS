@@ -139,14 +139,24 @@ describe("referral-driven unmatched POS dashboard suggestions", () => {
       expect(body.alerts.some((a: any) => a.kind === "unmatched_pos" || a.kind === "unmatched_pos_possible_match")).toBe(false);
     }
   });
-  it("H: dashboard open count is derived live after deletion", async () => {
+  it("H: dashboard counts only pending POS review items", async () => {
+    const baseline = await request(app).get("/api/dashboard/summary").set("Cookie", staffCookie);
     const first = await queue({ clientName: `${nonce} live one` });
     const second = await queue({ clientName: `${nonce} live two` });
+    await db.update(unmatchedPosDocumentsTable).set({ reviewStatus: "confirmed" })
+      .where(eq(unmatchedPosDocumentsTable.id, second.id));
     const before = await request(app).get("/api/dashboard/summary").set("Cookie", staffCookie);
-    expect(before.body.totals.unmatchedPosDocuments).toBe(queueIds.length);
+    expect(before.body.totals.unmatchedPosDocuments).toBe(baseline.body.totals.unmatchedPosDocuments + 1);
+    expect(before.body.totals.pendingPosReview).toBe(baseline.body.totals.pendingPosReview + 1);
+    const pendingRows = await db.select().from(unmatchedPosDocumentsTable)
+      .where(eq(unmatchedPosDocumentsTable.reviewStatus, "pending"))
+      .orderBy(unmatchedPosDocumentsTable.createdAt);
+    expect(before.body.totals.pendingPosWithoutClient)
+      .toBe(pendingRows.filter((row) => row.suggestedClientId === null).length);
+    expect(before.body.totals.oldestPendingPosDate).toBe(pendingRows[0]?.createdAt.toISOString() ?? null);
     await db.delete(unmatchedPosDocumentsTable).where(eq(unmatchedPosDocumentsTable.id, first.id));
     const after = await request(app).get("/api/dashboard/summary").set("Cookie", staffCookie);
-    expect(after.body.totals.unmatchedPosDocuments).toBe(queueIds.length - 1);
+    expect(after.body.totals.unmatchedPosDocuments).toBe(baseline.body.totals.unmatchedPosDocuments);
     await db.delete(unmatchedPosDocumentsTable).where(eq(unmatchedPosDocumentsTable.id, second.id));
   });
   it("rejects referral creation for a soft-deleted participant without suggesting rows", async () => {

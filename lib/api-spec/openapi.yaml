@@ -1113,6 +1113,13 @@ paths:
         - name: search
           in: query
           schema: { type: string }
+        - name: batchId
+          in: query
+          schema: { type: string, format: uuid }
+        - name: pendingOnly
+          in: query
+          description: When true (the default), return only items awaiting review.
+          schema: { type: boolean, default: true }
         - name: limit
           in: query
           schema: { type: integer }
@@ -1144,6 +1151,43 @@ paths:
               schema:
                 $ref: "#/components/schemas/UnmatchedPosDocument"
         "409": { description: A participant now matches the parsed POS }
+  /unmatched-pos/batches:
+    post:
+      operationId: createUnmatchedPosBatch
+      tags: [authorizations]
+      summary: Queue POS PDFs for asynchronous parsing and review (staff only)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UnmatchedPosBatchInput"
+      responses:
+        "202":
+          description: POS batch queued
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UnmatchedPosBatchQueued"
+        "400": { description: Invalid batch input; at most 100 files are allowed }
+  /unmatched-pos/batches/{batchId}:
+    get:
+      operationId: getUnmatchedPosBatch
+      tags: [authorizations]
+      summary: Get POS batch parsing and review progress (staff only)
+      parameters:
+        - name: batchId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        "200":
+          description: POS batch progress
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UnmatchedPosBatchProgress"
+        "404": { description: Batch not found }
   /unmatched-pos/match:
     post:
       operationId: matchPosClient
@@ -1198,13 +1242,39 @@ paths:
               $ref: "#/components/schemas/CompleteUnmatchedPosInput"
       responses:
         "201":
-          description: Authorization created and queue item removed
+          description: Authorization created and POS review item marked confirmed
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/AuthorizationResult"
         "404": { description: Queue item or participant not found }
         "409": { description: The authorization already exists or a match is no longer valid }
+  /unmatched-pos/{id}/review:
+    post:
+      operationId: reviewUnmatchedPos
+      tags: [authorizations]
+      summary: Confirm, amend, cancel, or discard a POS review item (staff only)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UnmatchedPosReviewInput"
+      responses:
+        "200":
+          description: POS item reviewed (or warning requires explicit acceptance)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UnmatchedPosReviewResult"
+        "400": { description: Invalid review action or incomplete values }
+        "404": { description: POS review record not found }
+        "409": { description: POS item is no longer pending review }
   /invoices:
     get:
       operationId: listInvoices
@@ -3115,7 +3185,7 @@ components:
             posNotes: { type: ["string", "null"] }
     UnmatchedPosDocument:
       type: object
-      required: [id, posPdfUrl, sourceFileName, createdBy, createdAt, updatedAt]
+      required: [id, posPdfUrl, sourceFileName, createdBy, createdAt, updatedAt, parseStatus, reviewStatus]
       properties:
         id: { type: string }
         posPdfUrl: { type: string }
@@ -3138,6 +3208,15 @@ components:
         suggestionMethod: { type: ["string", "null"], enum: [uci, name, null] }
         suggestedAt: { type: ["string", "null"], format: date-time }
         suggestedClientName: { type: ["string", "null"] }
+        batchId: { type: ["string", "null"], format: uuid }
+        parseStatus: { type: string, enum: [queued, parsed, failed] }
+        parseError: { type: ["string", "null"] }
+        reviewStatus: { type: string, enum: [pending, confirmed, discarded] }
+        discardReason: { type: ["string", "null"] }
+        suggestedAuthorizationId: { type: ["string", "null"], format: uuid }
+        reviewedBy: { type: ["string", "null"], format: uuid }
+        reviewedAt: { type: ["string", "null"], format: date-time }
+        resultingAuthorizationId: { type: ["string", "null"], format: uuid }
         createdBy: { type: string }
         createdAt: { type: string, format: date-time }
         updatedAt: { type: string, format: date-time }
@@ -3194,6 +3273,77 @@ components:
         vendorId: { type: ["string", "null"] }
         paymentType: { type: ["string", "null"], enum: [direct_payment, reimbursement, fee, null] }
         acceptMaxAmountWarning: { type: boolean }
+    UnmatchedPosBatchInput:
+      type: object
+      required: [files]
+      properties:
+        files:
+          type: array
+          minItems: 1
+          maxItems: 100
+          items:
+            type: object
+            required: [posPdfUrl, sourceFileName]
+            properties:
+              posPdfUrl: { type: string, minLength: 1 }
+              sourceFileName: { type: string, minLength: 1 }
+    UnmatchedPosBatchQueued:
+      type: object
+      required: [batchId, items, queuedCount]
+      properties:
+        batchId: { type: string, format: uuid }
+        items:
+          type: array
+          items: { $ref: "#/components/schemas/UnmatchedPosDocument" }
+        queuedCount: { type: integer }
+    UnmatchedPosBatchProgress:
+      type: object
+      required: [batchId, totalCount, queuedCount, parsedCount, failedCount, pendingCount, confirmedCount, discardedCount, items]
+      properties:
+        batchId: { type: string, format: uuid }
+        totalCount: { type: integer }
+        queuedCount: { type: integer }
+        parsedCount: { type: integer }
+        failedCount: { type: integer }
+        pendingCount: { type: integer }
+        confirmedCount: { type: integer }
+        discardedCount: { type: integer }
+        items:
+          type: array
+          items: { $ref: "#/components/schemas/UnmatchedPosDocument" }
+    UnmatchedPosReviewInput:
+      type: object
+      required: [action]
+      properties:
+        action: { type: string, enum: [confirm, amend, cancel, discard] }
+        clientId: { type: ["string", "null"], format: uuid }
+        vendorId: { type: ["string", "null"], format: uuid }
+        paymentType: { type: ["string", "null"], enum: [direct_payment, reimbursement, fee, null] }
+        fields:
+          type: object
+          properties:
+            authNumber: { type: string }
+            serviceCode: { type: string }
+            activityDescription: { type: ["string", "null"] }
+            servicePeriodStart: { type: string }
+            servicePeriodEnd: { type: string }
+            unitAmount: { type: ["string", "null"] }
+            monthlyAmount: { type: ["string", "null"] }
+            maxPeriodAmount: { type: string }
+            units: { type: ["integer", "null"] }
+            notes: { type: ["string", "null"] }
+        reason: { type: string }
+        acceptMaxAmountWarning: { type: boolean }
+    UnmatchedPosReviewResult:
+      type: object
+      required: [saved, warnings, reviewStatus]
+      properties:
+        saved: { type: boolean }
+        warnings:
+          type: array
+          items: { type: string }
+        reviewStatus: { type: string, enum: [pending, confirmed, discarded] }
+        resultingAuthorizationId: { type: ["string", "null"], format: uuid }
     Invoice:
       type: object
       required: [id, clientId, submittedByRole, submittedDate, serviceMonth, amountRequested, paymentType, status, lineItems]
@@ -3821,7 +3971,7 @@ components:
           items: { $ref: "#/components/schemas/StatusCount" }
         totals:
           type: object
-          required: [activeClients, activeAuthorizations, pendingInvoices, needsEntryInvoices, vendorsMissingW9]
+          required: [activeClients, activeAuthorizations, pendingInvoices, needsEntryInvoices, vendorsMissingW9, pendingPosReview, oldestPendingPosDate, pendingPosWithoutClient]
           properties:
             activeClients: { type: integer }
             activeAuthorizations: { type: integer }
@@ -3831,6 +3981,9 @@ components:
             paymentsThisMonth: { type: ["string", "null"] }
             unmatchedRemittances: { type: integer }
             unmatchedPosDocuments: { type: integer }
+            pendingPosReview: { type: integer }
+            oldestPendingPosDate: { type: ["string", "null"], format: date-time }
+            pendingPosWithoutClient: { type: integer }
         alerts:
           type: array
           items:

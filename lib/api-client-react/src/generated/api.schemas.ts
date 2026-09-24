@@ -1556,6 +1556,24 @@ export const UnmatchedPosDocumentSuggestionMethod = {
   name: 'name',
 } as const;
 
+export type UnmatchedPosDocumentParseStatus = typeof UnmatchedPosDocumentParseStatus[keyof typeof UnmatchedPosDocumentParseStatus];
+
+
+export const UnmatchedPosDocumentParseStatus = {
+  queued: 'queued',
+  parsed: 'parsed',
+  failed: 'failed',
+} as const;
+
+export type UnmatchedPosDocumentReviewStatus = typeof UnmatchedPosDocumentReviewStatus[keyof typeof UnmatchedPosDocumentReviewStatus];
+
+
+export const UnmatchedPosDocumentReviewStatus = {
+  pending: 'pending',
+  confirmed: 'confirmed',
+  discarded: 'discarded',
+} as const;
+
 export interface UnmatchedPosDocument {
   id: string;
   posPdfUrl: string;
@@ -1596,6 +1614,22 @@ export interface UnmatchedPosDocument {
   suggestedAt?: string | null;
   /** @nullable */
   suggestedClientName?: string | null;
+  /** @nullable */
+  batchId?: string | null;
+  parseStatus: UnmatchedPosDocumentParseStatus;
+  /** @nullable */
+  parseError?: string | null;
+  reviewStatus: UnmatchedPosDocumentReviewStatus;
+  /** @nullable */
+  discardReason?: string | null;
+  /** @nullable */
+  suggestedAuthorizationId?: string | null;
+  /** @nullable */
+  reviewedBy?: string | null;
+  /** @nullable */
+  reviewedAt?: string | null;
+  /** @nullable */
+  resultingAuthorizationId?: string | null;
   createdBy: string;
   createdAt: string;
   updatedAt: string;
@@ -1692,6 +1726,109 @@ export interface CompleteUnmatchedPosInput {
   /** @nullable */
   paymentType?: CompleteUnmatchedPosInputPaymentType;
   acceptMaxAmountWarning?: boolean;
+}
+
+export type UnmatchedPosBatchInputFilesItem = {
+  /** @minLength 1 */
+  posPdfUrl: string;
+  /** @minLength 1 */
+  sourceFileName: string;
+};
+
+export interface UnmatchedPosBatchInput {
+  /**
+     * @minItems 1
+     * @maxItems 100
+     */
+  files: UnmatchedPosBatchInputFilesItem[];
+}
+
+export interface UnmatchedPosBatchQueued {
+  batchId: string;
+  items: UnmatchedPosDocument[];
+  queuedCount: number;
+}
+
+export interface UnmatchedPosBatchProgress {
+  batchId: string;
+  totalCount: number;
+  queuedCount: number;
+  parsedCount: number;
+  failedCount: number;
+  pendingCount: number;
+  confirmedCount: number;
+  discardedCount: number;
+  items: UnmatchedPosDocument[];
+}
+
+export type UnmatchedPosReviewInputAction = typeof UnmatchedPosReviewInputAction[keyof typeof UnmatchedPosReviewInputAction];
+
+
+export const UnmatchedPosReviewInputAction = {
+  confirm: 'confirm',
+  amend: 'amend',
+  cancel: 'cancel',
+  discard: 'discard',
+} as const;
+
+/**
+ * @nullable
+ */
+export type UnmatchedPosReviewInputPaymentType = typeof UnmatchedPosReviewInputPaymentType[keyof typeof UnmatchedPosReviewInputPaymentType] | null;
+
+
+export const UnmatchedPosReviewInputPaymentType = {
+  direct_payment: 'direct_payment',
+  reimbursement: 'reimbursement',
+  fee: 'fee',
+} as const;
+
+export type UnmatchedPosReviewInputFields = {
+  authNumber?: string;
+  serviceCode?: string;
+  /** @nullable */
+  activityDescription?: string | null;
+  servicePeriodStart?: string;
+  servicePeriodEnd?: string;
+  /** @nullable */
+  unitAmount?: string | null;
+  /** @nullable */
+  monthlyAmount?: string | null;
+  maxPeriodAmount?: string;
+  /** @nullable */
+  units?: number | null;
+  /** @nullable */
+  notes?: string | null;
+};
+
+export interface UnmatchedPosReviewInput {
+  action: UnmatchedPosReviewInputAction;
+  /** @nullable */
+  clientId?: string | null;
+  /** @nullable */
+  vendorId?: string | null;
+  /** @nullable */
+  paymentType?: UnmatchedPosReviewInputPaymentType;
+  fields?: UnmatchedPosReviewInputFields;
+  reason?: string;
+  acceptMaxAmountWarning?: boolean;
+}
+
+export type UnmatchedPosReviewResultReviewStatus = typeof UnmatchedPosReviewResultReviewStatus[keyof typeof UnmatchedPosReviewResultReviewStatus];
+
+
+export const UnmatchedPosReviewResultReviewStatus = {
+  pending: 'pending',
+  confirmed: 'confirmed',
+  discarded: 'discarded',
+} as const;
+
+export interface UnmatchedPosReviewResult {
+  saved: boolean;
+  warnings: string[];
+  reviewStatus: UnmatchedPosReviewResultReviewStatus;
+  /** @nullable */
+  resultingAuthorizationId?: string | null;
 }
 
 export type InvoiceInputPaymentType = typeof InvoiceInputPaymentType[keyof typeof InvoiceInputPaymentType];
@@ -2399,6 +2536,10 @@ export type DashboardSummaryTotals = {
   paymentsThisMonth?: string | null;
   unmatchedRemittances?: number;
   unmatchedPosDocuments?: number;
+  pendingPosReview: number;
+  /** @nullable */
+  oldestPendingPosDate: string | null;
+  pendingPosWithoutClient: number;
 };
 
 export type DashboardSummaryAlertsItemKind = typeof DashboardSummaryAlertsItemKind[keyof typeof DashboardSummaryAlertsItemKind];
@@ -2699,6 +2840,11 @@ authNumber: string;
 
 export type ListUnmatchedPosParams = {
 search?: string;
+batchId?: string;
+/**
+ * When true (the default), return only items awaiting review.
+ */
+pendingOnly?: boolean;
 limit?: number;
 offset?: number;
 };

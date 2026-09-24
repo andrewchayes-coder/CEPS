@@ -16,4 +16,8 @@ export type DashboardSummaryTotals = {
   paymentsThisMonth?: string | null;
   unmatchedRemittances?: number;
   unmatchedPosDocuments?: number;
+  pendingPosReview: number;
+  /** @nullable */
+  oldestPendingPosDate: Date | null;
+  pendingPosWithoutClient: number;
 };

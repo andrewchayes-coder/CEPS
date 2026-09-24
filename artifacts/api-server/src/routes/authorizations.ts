@@ -1,7 +1,7 @@
 import { Router, type IRouter } from "express";
-import { eq, desc, and, count, sql, ilike, or, lte, gte, inArray, type SQL } from "drizzle-orm";
-import { anthropic } from "@workspace/integrations-anthropic-ai";
-import { db, authorizationsTable, authorizationVersionsTable, paymentsTable, paymentAllocationsTable, usersTable, unmatchedPosDocumentsTable, clientsTable } from "@workspace/db";
+import { eq, desc, asc, and, count, sql, ilike, or, lte, gte, inArray, type SQL } from "drizzle-orm";
+import { randomUUID } from "crypto";
+import { db, authorizationsTable, authorizationVersionsTable, paymentsTable, paymentAllocationsTable, usersTable, unmatchedPosDocumentsTable, clientsTable, vendorsTable } from "@workspace/db";
 import {
   ListAuthorizationsQueryParams,
   ListAuthorizationsResponse,
@@ -32,6 +32,13 @@ import {
   CancelAuthorizationParams,
   CancelAuthorizationBody,
   CancelAuthorizationResponse,
+  CreateUnmatchedPosBatchBody,
+  CreateUnmatchedPosBatchResponse,
+  GetUnmatchedPosBatchParams,
+  GetUnmatchedPosBatchResponse,
+  ReviewUnmatchedPosParams,
+  ReviewUnmatchedPosBody,
+  ReviewUnmatchedPosResponse,
 } from "@workspace/api-zod";
 import { requireAuth, requireStaff, audit } from "../lib/auth";
 import {
@@ -46,8 +53,13 @@ import { sortedOrder } from "../lib/sorting";
 import { softDeleteAuthorization, validateParticipantLinks } from "../lib/participantLinks";
 import { advanceReferralForAuthorization } from "../lib/advanceReferralForAuthorization";
 import { findPosClient } from "../lib/posMatching";
+import { parsePosPdf } from "../lib/posPdfParser";
+import { schedulePosBatchProcessing } from "../lib/posBatchWorker";
+import { ObjectStorageService } from "../lib/objectStorage";
+import { PosUploadValidationError, validatePosBatchFiles } from "../lib/posBatchStorage";
 
 const router: IRouter = Router();
+const posBatchStorage = new ObjectStorageService();
 
 // Normalize empty strings from the form to null for optional/numeric columns.
 function cleanAuthFields<T extends Record<string, unknown>>(obj: T): T {
@@ -77,6 +89,54 @@ function maxAmountWarning(data: {
     (end.getUTCFullYear() - start.getUTCFullYear()) * 12 + (end.getUTCMonth() - start.getUTCMonth()) + 1;
   if (months > 1 && Number(data.monthlyAmount) === Number(data.maxPeriodAmount)) {
     return `Possible data-quality issue: the monthly amount ($${data.monthlyAmount}) equals the maximum for the entire ${months}-month period. Verify the POS — the period maximum may be understated.`;
+  }
+  return null;
+}
+
+function validIsoDate(value: string): boolean {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
+  const date = new Date(`${value}T00:00:00.000Z`);
+  return Number.isFinite(date.getTime()) && date.toISOString().slice(0, 10) === value;
+}
+
+function validMoney(value: string): boolean {
+  if (!/^\d{1,10}(?:\.\d{1,2})?$/.test(value)) return false;
+  const amount = Number(value);
+  return Number.isFinite(amount) && amount >= 0;
+}
+
+function reviewFieldValidationError(fields: {
+  authNumber?: string;
+  serviceCode?: string;
+  servicePeriodStart?: string;
+  servicePeriodEnd?: string;
+  unitAmount?: string | null;
+  monthlyAmount?: string | null;
+  maxPeriodAmount?: string;
+  units?: number | null;
+}): string | null {
+  if (fields.authNumber !== undefined && !fields.authNumber.trim()) return "Authorization number must contain a nonblank value.";
+  if (fields.serviceCode !== undefined && !["459", "024", "490"].includes(fields.serviceCode)) {
+    return "Service code must be 459, 024, or 490.";
+  }
+  if (fields.servicePeriodStart !== undefined && !validIsoDate(fields.servicePeriodStart)) {
+    return "Service period start must be a valid YYYY-MM-DD date.";
+  }
+  if (fields.servicePeriodEnd !== undefined && !validIsoDate(fields.servicePeriodEnd)) {
+    return "Service period end must be a valid YYYY-MM-DD date.";
+  }
+  for (const [name, value] of [
+    ["unitAmount", fields.unitAmount],
+    ["monthlyAmount", fields.monthlyAmount],
+    ["maxPeriodAmount", fields.maxPeriodAmount],
+  ] as const) {
+    if (value !== undefined && value !== null && !validMoney(value)) {
+      return `${name} must be a non-negative amount with up to two decimal places.`;
+    }
+  }
+  if (fields.units !== undefined && fields.units !== null &&
+    (!Number.isInteger(fields.units) || fields.units < 0 || fields.units > 2_147_483_647)) {
+    return "Units must be a non-negative whole number.";
   }
   return null;
 }
@@ -645,15 +705,20 @@ router.delete("/authorizations/:id", requireStaff, async (req, res): Promise<voi
 });
 
 router.get("/unmatched-pos", requireStaff, async (req, res): Promise<void> => {
-  const parsed = ListUnmatchedPosQueryParams.safeParse(req.query);
+  const parsed = ListUnmatchedPosQueryParams.safeParse({
+    ...req.query,
+    ...(req.query.pendingOnly === "false" ? { pendingOnly: false } : {}),
+  });
   if (!parsed.success) {
     res.status(400).json({ error: parsed.error.message });
     return;
   }
-  const { search, limit: rawLimit, offset: rawOffset } = parsed.data;
+  const { search, batchId, pendingOnly = true, limit: rawLimit, offset: rawOffset } = parsed.data;
   const limit = Math.min(Math.max(rawLimit ?? 50, 1), 1000);
   const offset = Math.max(rawOffset ?? 0, 0);
   const conditions: SQL[] = [];
+  if (pendingOnly) conditions.push(eq(unmatchedPosDocumentsTable.reviewStatus, "pending"));
+  if (batchId) conditions.push(eq(unmatchedPosDocumentsTable.batchId, batchId));
   if (search?.trim()) {
     const like = `%${search.trim().replace(/[\\%_]/g, (c) => `\\${c}`)}%`;
     conditions.push(or(
@@ -663,11 +728,11 @@ router.get("/unmatched-pos", requireStaff, async (req, res): Promise<void> => {
       ilike(unmatchedPosDocumentsTable.authNumber, like),
     )!);
   }
-  const where = conditions.length ? and(...conditions) : undefined;
+  const where = and(...conditions);
   const [[{ total }], rows] = await Promise.all([
     db.select({ total: count() }).from(unmatchedPosDocumentsTable).where(where),
     db.select().from(unmatchedPosDocumentsTable).where(where)
-      .orderBy(desc(unmatchedPosDocumentsTable.createdAt), desc(unmatchedPosDocumentsTable.id))
+      .orderBy(asc(unmatchedPosDocumentsTable.createdAt), asc(unmatchedPosDocumentsTable.id))
       .limit(limit).offset(offset),
   ]);
   const suggestedNames = await clientNameMap(rows.map((row) => row.suggestedClientId));
@@ -710,6 +775,70 @@ router.post("/unmatched-pos", requireStaff, async (req, res): Promise<void> => {
   res.status(201).json(SaveUnmatchedPosResponse.parse(unmatchedPosJson(created)));
 });
 
+router.post("/unmatched-pos/batches", requireStaff, async (req, res): Promise<void> => {
+  const parsed = CreateUnmatchedPosBatchBody.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: parsed.error.message });
+    return;
+  }
+  let validatedFiles: Awaited<ReturnType<typeof validatePosBatchFiles>>;
+  try {
+    validatedFiles = await validatePosBatchFiles(posBatchStorage, req.user!.id, parsed.data.files);
+  } catch (error) {
+    if (error instanceof PosUploadValidationError) {
+      res.status(error.status).json({ error: error.message });
+      return;
+    }
+    req.log.error({ err: error }, "POS batch upload validation failed");
+    res.status(400).json({ error: "Unable to validate one or more uploaded POS PDFs." });
+    return;
+  }
+  const batchId = randomUUID();
+  const rows = await db.insert(unmatchedPosDocumentsTable).values(validatedFiles.map((file) => ({
+    ...file,
+    batchId,
+    parseStatus: "queued" as const,
+    reviewStatus: "pending" as const,
+    createdBy: req.user!.id,
+  }))).returning();
+  schedulePosBatchProcessing();
+  res.status(202).json(CreateUnmatchedPosBatchResponse.parse({
+    batchId,
+    items: rows.map((row) => unmatchedPosJson(row)),
+    queuedCount: rows.length,
+  }));
+});
+
+router.get("/unmatched-pos/batches/:batchId", requireStaff, async (req, res): Promise<void> => {
+  const parsed = GetUnmatchedPosBatchParams.safeParse(req.params);
+  if (!parsed.success) {
+    res.status(400).json({ error: parsed.error.message });
+    return;
+  }
+  const items = await db.select().from(unmatchedPosDocumentsTable)
+    .where(eq(unmatchedPosDocumentsTable.batchId, parsed.data.batchId))
+    .orderBy(asc(unmatchedPosDocumentsTable.createdAt), asc(unmatchedPosDocumentsTable.id));
+  if (!items.length) {
+    res.status(404).json({ error: "POS batch not found" });
+    return;
+  }
+  const suggestedNames = await clientNameMap(items.map((row) => row.suggestedClientId));
+  res.json(GetUnmatchedPosBatchResponse.parse({
+    batchId: parsed.data.batchId,
+    totalCount: items.length,
+    queuedCount: items.filter((row) => row.parseStatus === "queued").length,
+    parsedCount: items.filter((row) => row.parseStatus === "parsed").length,
+    failedCount: items.filter((row) => row.parseStatus === "failed").length,
+    pendingCount: items.filter((row) => row.reviewStatus === "pending").length,
+    confirmedCount: items.filter((row) => row.reviewStatus === "confirmed").length,
+    discardedCount: items.filter((row) => row.reviewStatus === "discarded").length,
+    items: items.map((row) => unmatchedPosJson(
+      row,
+      row.suggestedClientId ? suggestedNames.get(row.suggestedClientId) : null,
+    )),
+  }));
+});
+
 router.get("/unmatched-pos/:id", requireStaff, async (req, res): Promise<void> => {
   const parsed = GetUnmatchedPosParams.safeParse(req.params);
   if (!parsed.success) {
@@ -744,6 +873,8 @@ router.post("/unmatched-pos/:id/complete", requireStaff, async (req, res): Promi
     const [row] = await tx.select().from(unmatchedPosDocumentsTable)
       .where(eq(unmatchedPosDocumentsTable.id, params.data.id)).for("update");
     if (!row) return { kind: "missing" as const };
+    if (row.parseStatus === "queued") return { kind: "queued" as const };
+    if (row.reviewStatus !== "pending") return { kind: "not-pending" as const };
     const [client] = await tx.select().from(clientsTable)
       .where(and(eq(clientsTable.id, body.data.clientId), eq(clientsTable.isDeleted, false)));
     if (!client) return { kind: "client-missing" as const };
@@ -778,11 +909,28 @@ router.post("/unmatched-pos/:id/complete", requireStaff, async (req, res): Promi
       status: "active",
     }).returning();
     await advanceReferralForAuthorization(txDb, auth, req.user!.id);
-    await tx.delete(unmatchedPosDocumentsTable).where(eq(unmatchedPosDocumentsTable.id, row.id));
+    await tx.update(unmatchedPosDocumentsTable).set({
+      reviewStatus: "confirmed",
+      reviewedBy: req.user!.id,
+      reviewedAt: new Date(),
+      resultingAuthorizationId: auth.id,
+      updatedAt: new Date(),
+    }).where(and(
+      eq(unmatchedPosDocumentsTable.id, row.id),
+      eq(unmatchedPosDocumentsTable.reviewStatus, "pending"),
+    ));
     return { kind: "created" as const, auth };
   });
   if (result.kind === "missing") {
     res.status(404).json({ error: "Unmatched POS not found" });
+    return;
+  }
+  if (result.kind === "not-pending") {
+    res.status(409).json({ error: "POS review item has already been completed." });
+    return;
+  }
+  if (result.kind === "queued") {
+    res.status(409).json({ error: "POS parsing is still in progress; review it after parsing finishes." });
     return;
   }
   if (result.kind === "client-missing") {
@@ -802,6 +950,7 @@ router.post("/unmatched-pos/:id/complete", requireStaff, async (req, res): Promi
     return;
   }
   await audit(req.user!.id, "create_authorization", "authorization", result.auth.id, `Auth ${result.auth.authNumber} from unmatched POS`);
+  await audit(req.user!.id, "confirm_unmatched_pos", "unmatched_pos_document", params.data.id, `Created authorization ${result.auth.id}`);
   const [clientNames, vendorNames] = await Promise.all([
     clientNameMap([result.auth.clientId]),
     vendorNameMap([result.auth.vendorId]),
@@ -817,23 +966,316 @@ router.post("/unmatched-pos/:id/complete", requireStaff, async (req, res): Promi
   }));
 });
 
-const PARSE_PROMPT = `You are extracting fields from a California Regional Center Purchase of Service (POS) authorization PDF. Carefully inspect the entire document, including Alta accounting notes, footer text, adjustment details, and handwritten or appended notes. Extract those notes into posNotes verbatim: preserve the original wording, punctuation, ordering, and line breaks. Do not interpret, summarize, normalize, or paraphrase notes. Return ONLY a JSON object (no markdown fences, no commentary) with these keys (use null when a value is not present):
-{
-  "clientName": string|null,
-  "clientAddress": string|null,
-  "clientPhone": string|null,
-  "uciNumber": string|null,
-  "authNumber": string|null,
-  "serviceCode": string|null,       // usually 459, 024, or 490
-  "activityDescription": string|null,
-  "servicePeriodStart": string|null, // YYYY-MM-DD
-  "servicePeriodEnd": string|null,   // YYYY-MM-DD
-  "units": number|null,
-  "monthlyAmount": string|null,      // decimal string, no $ sign
-  "maxPeriodAmount": string|null,    // decimal string, no $ sign
-  "caseworkerName": string|null,
-  "posNotes": string|null
-}`;
+router.post("/unmatched-pos/:id/review", requireStaff, async (req, res): Promise<void> => {
+  const params = ReviewUnmatchedPosParams.safeParse(req.params);
+  const body = ReviewUnmatchedPosBody.safeParse(req.body);
+  if (!params.success) {
+    res.status(400).json({ error: params.error.message });
+    return;
+  }
+  if (!body.success) {
+    res.status(400).json({ error: body.error.message });
+    return;
+  }
+  const fields = { ...(body.data.fields ?? {}) };
+  if (typeof fields.unitAmount === "string" && !fields.unitAmount.trim()) fields.unitAmount = undefined;
+  if (typeof fields.monthlyAmount === "string" && !fields.monthlyAmount.trim()) fields.monthlyAmount = undefined;
+  const fieldError = body.data.action === "confirm" || body.data.action === "amend"
+    ? reviewFieldValidationError(fields)
+    : null;
+  if (fieldError) {
+    res.status(400).json({ error: fieldError });
+    return;
+  }
+  const action = body.data.action;
+  if ((action === "discard" || action === "cancel") && !body.data.reason?.trim()) {
+    res.status(400).json({ error: `A nonblank ${action} reason is required.` });
+    return;
+  }
+
+  const outcome = await db.transaction(async (tx) => {
+    const [row] = await tx.select().from(unmatchedPosDocumentsTable)
+      .where(eq(unmatchedPosDocumentsTable.id, params.data.id)).for("update");
+    if (!row) return { kind: "missing" as const };
+    if (row.parseStatus === "queued") return { kind: "queued" as const };
+    if (row.reviewStatus !== "pending") return { kind: "not-pending" as const };
+    const now = new Date();
+
+    if (action === "discard") {
+      await tx.update(unmatchedPosDocumentsTable).set({
+        reviewStatus: "discarded",
+        discardReason: body.data.reason!.trim(),
+        reviewedBy: req.user!.id,
+        reviewedAt: now,
+        updatedAt: now,
+      }).where(and(
+        eq(unmatchedPosDocumentsTable.id, row.id),
+        eq(unmatchedPosDocumentsTable.reviewStatus, "pending"),
+      ));
+      return { kind: "reviewed" as const, reviewStatus: "discarded" as const, authorization: null };
+    }
+
+    const clientId = body.data.clientId ?? row.suggestedClientId ?? null;
+    let auth:
+      | typeof authorizationsTable.$inferSelect
+      | undefined;
+
+    if (action === "amend" || action === "cancel") {
+      if (row.suggestedAuthorizationId) {
+        [auth] = await tx.select().from(authorizationsTable)
+          .where(and(eq(authorizationsTable.id, row.suggestedAuthorizationId), notDeleted(authorizationsTable)))
+          .for("update");
+      } else if (clientId && (fields.authNumber ?? row.authNumber)) {
+        [auth] = await tx.select().from(authorizationsTable).where(and(
+          eq(authorizationsTable.clientId, clientId),
+          eq(authorizationsTable.authNumber, fields.authNumber ?? row.authNumber!),
+          notDeleted(authorizationsTable),
+        )).for("update");
+      }
+      if (!auth) return { kind: "authorization-missing" as const };
+      if (clientId && auth.clientId !== clientId) return { kind: "participant-mismatch" as const };
+    }
+
+    if (action === "cancel") {
+      if (auth!.status === "canceled") return { kind: "already-canceled" as const };
+      const [before] = await tx.select().from(authorizationsTable)
+        .where(eq(authorizationsTable.id, auth!.id)).for("update");
+      if (!before || before.status === "canceled") return { kind: "already-canceled" as const };
+      const [updated] = await tx.update(authorizationsTable).set({ status: "canceled" })
+        .where(and(eq(authorizationsTable.id, before.id), notDeleted(authorizationsTable))).returning();
+      if (!updated) return { kind: "authorization-missing" as const };
+      await tx.insert(authorizationVersionsTable).values({
+        authorizationId: before.id, clientId: before.clientId, vendorId: before.vendorId,
+        authNumber: before.authNumber, serviceCode: before.serviceCode, paymentType: before.paymentType,
+        activityDescription: before.activityDescription, servicePeriodStart: before.servicePeriodStart,
+        servicePeriodEnd: before.servicePeriodEnd, monthlyAmount: before.monthlyAmount,
+        oneTimeAmount: before.oneTimeAmount, maxPeriodAmount: before.maxPeriodAmount, units: before.units,
+        status: before.status, posNotes: before.posNotes, posPdfUrl: before.posPdfUrl,
+        receivedDate: before.receivedDate, isDeleted: before.isDeleted, deletedAt: before.deletedAt,
+        deletedBy: before.deletedBy, createdAt: before.createdAt, changedBy: req.user!.id,
+        changedFields: ["status"],
+      });
+      await tx.update(unmatchedPosDocumentsTable).set({
+        reviewStatus: "confirmed", reviewedBy: req.user!.id, reviewedAt: now,
+        resultingAuthorizationId: updated.id, updatedAt: now,
+      }).where(and(
+        eq(unmatchedPosDocumentsTable.id, row.id),
+        eq(unmatchedPosDocumentsTable.reviewStatus, "pending"),
+      ));
+      return { kind: "reviewed" as const, reviewStatus: "confirmed" as const, authorization: updated };
+    }
+
+    if (action === "amend") {
+      const start = fields.servicePeriodStart ?? auth!.servicePeriodStart;
+      const end = fields.servicePeriodEnd ?? auth!.servicePeriodEnd;
+      const monthlyAmount = fields.monthlyAmount !== undefined ? fields.monthlyAmount : auth!.monthlyAmount;
+      const maxPeriodAmount = fields.maxPeriodAmount ?? auth!.maxPeriodAmount;
+      if (!start || !end || start > end || !maxPeriodAmount) return { kind: "incomplete" as const };
+      if (fields.serviceCode !== undefined && fields.serviceCode !== auth!.serviceCode) {
+        return { kind: "unsupported-amendment-field" as const, field: "serviceCode" };
+      }
+      const nextAuthNumber = fields.authNumber?.trim() ?? auth!.authNumber;
+      const [duplicate] = await tx.select({ id: authorizationsTable.id }).from(authorizationsTable).where(and(
+        eq(authorizationsTable.clientId, auth!.clientId),
+        eq(authorizationsTable.authNumber, nextAuthNumber),
+        eq(authorizationsTable.isDeleted, false),
+      )).limit(1);
+      if (duplicate && duplicate.id !== auth!.id) return { kind: "duplicate" as const };
+      const warning = maxAmountWarning({
+        monthlyAmount,
+        maxPeriodAmount,
+        servicePeriodStart: start,
+        servicePeriodEnd: end,
+      });
+      if (warning && !body.data.acceptMaxAmountWarning) return { kind: "warning" as const, warning };
+      const updates = {
+        authNumber: nextAuthNumber,
+        servicePeriodStart: start,
+        servicePeriodEnd: end,
+        monthlyAmount,
+        maxPeriodAmount,
+        ...(fields.unitAmount != null ? { oneTimeAmount: fields.unitAmount } : {}),
+        ...(fields.units !== undefined ? { units: fields.units } : {}),
+        ...(fields.activityDescription !== undefined ? { activityDescription: fields.activityDescription } : {}),
+        ...(fields.notes !== undefined ? { posNotes: fields.notes } : {}),
+        ...(body.data.vendorId !== undefined ? { vendorId: body.data.vendorId } : {}),
+        ...(body.data.paymentType !== undefined && body.data.paymentType !== null
+          ? { paymentType: body.data.paymentType }
+          : {}),
+        posPdfUrl: row.posPdfUrl,
+      };
+      if (body.data.vendorId) {
+        const [vendor] = await tx.select({ id: vendorsTable.id }).from(vendorsTable)
+          .where(eq(vendorsTable.id, body.data.vendorId));
+        if (!vendor) return { kind: "vendor-missing" as const };
+      }
+      const [updated] = await tx.update(authorizationsTable).set(updates)
+        .where(and(eq(authorizationsTable.id, auth!.id), notDeleted(authorizationsTable))).returning();
+      if (!updated) return { kind: "authorization-missing" as const };
+      await tx.insert(authorizationVersionsTable).values({
+        authorizationId: auth!.id, clientId: auth!.clientId, vendorId: auth!.vendorId,
+        authNumber: auth!.authNumber, serviceCode: auth!.serviceCode, paymentType: auth!.paymentType,
+        activityDescription: auth!.activityDescription, servicePeriodStart: auth!.servicePeriodStart,
+        servicePeriodEnd: auth!.servicePeriodEnd, monthlyAmount: auth!.monthlyAmount,
+        oneTimeAmount: auth!.oneTimeAmount, maxPeriodAmount: auth!.maxPeriodAmount, units: auth!.units,
+        status: auth!.status, posNotes: auth!.posNotes, posPdfUrl: auth!.posPdfUrl,
+        receivedDate: auth!.receivedDate, isDeleted: auth!.isDeleted, deletedAt: auth!.deletedAt,
+        deletedBy: auth!.deletedBy, createdAt: auth!.createdAt, changedBy: req.user!.id,
+        changedFields: Object.keys(updates),
+      });
+      await tx.update(unmatchedPosDocumentsTable).set({
+        reviewStatus: "confirmed", reviewedBy: req.user!.id, reviewedAt: now,
+        resultingAuthorizationId: updated.id, updatedAt: now,
+      }).where(and(
+        eq(unmatchedPosDocumentsTable.id, row.id),
+        eq(unmatchedPosDocumentsTable.reviewStatus, "pending"),
+      ));
+      return { kind: "reviewed" as const, reviewStatus: "confirmed" as const, authorization: updated };
+    }
+
+    const selectedClientId = clientId;
+    const authNumber = fields.authNumber ?? row.authNumber;
+    const serviceCode = fields.serviceCode ?? row.serviceCode;
+    const servicePeriodStart = fields.servicePeriodStart ?? row.servicePeriodStart;
+    const servicePeriodEnd = fields.servicePeriodEnd ?? row.servicePeriodEnd;
+    const maxPeriodAmount = fields.maxPeriodAmount ?? row.maxPeriodAmount;
+    if (!selectedClientId || !authNumber?.trim() || !serviceCode || !servicePeriodStart ||
+      !servicePeriodEnd || servicePeriodStart > servicePeriodEnd || !maxPeriodAmount) {
+      return { kind: "incomplete" as const };
+    }
+    if (!["459", "024", "490"].includes(serviceCode)) return { kind: "invalid-service-code" as const };
+    const [client] = await tx.select().from(clientsTable)
+      .where(and(eq(clientsTable.id, selectedClientId), eq(clientsTable.isDeleted, false)));
+    if (!client) return { kind: "client-missing" as const };
+    const relationshipError = (await validateParticipantLinks(tx as unknown as typeof db, selectedClientId, {})).error;
+    if (relationshipError) return { kind: "relationship" as const, relationshipError };
+
+    const monthlyAmount = fields.monthlyAmount !== undefined ? fields.monthlyAmount : row.monthlyAmount;
+    const warning = maxAmountWarning({
+      monthlyAmount,
+      maxPeriodAmount,
+      servicePeriodStart,
+      servicePeriodEnd,
+    });
+    if (warning && !body.data.acceptMaxAmountWarning) return { kind: "warning" as const, warning };
+    const [duplicate] = await tx.select({ id: authorizationsTable.id }).from(authorizationsTable)
+      .where(and(
+        eq(authorizationsTable.clientId, selectedClientId),
+        eq(authorizationsTable.authNumber, authNumber.trim()),
+        notDeleted(authorizationsTable),
+      )).limit(1);
+    if (duplicate) return { kind: "duplicate" as const };
+    const [created] = await tx.insert(authorizationsTable).values({
+      clientId: selectedClientId,
+      vendorId: body.data.vendorId ?? null,
+      authNumber: authNumber.trim(),
+      serviceCode: serviceCode as "459" | "024" | "490",
+      paymentType: body.data.paymentType ?? derivePaymentType(serviceCode),
+      activityDescription: fields.activityDescription !== undefined ? fields.activityDescription : row.activityDescription,
+      servicePeriodStart,
+      servicePeriodEnd,
+      monthlyAmount,
+      oneTimeAmount: fields.unitAmount ?? null,
+      maxPeriodAmount,
+      units: fields.units !== undefined ? fields.units : row.units,
+      posPdfUrl: row.posPdfUrl,
+      posNotes: fields.notes !== undefined ? fields.notes : row.posNotes,
+      status: "active",
+    }).returning();
+    await advanceReferralForAuthorization(tx as unknown as typeof db, created, req.user!.id);
+    await tx.update(unmatchedPosDocumentsTable).set({
+      reviewStatus: "confirmed", reviewedBy: req.user!.id, reviewedAt: now,
+      resultingAuthorizationId: created.id, updatedAt: now,
+    }).where(and(
+      eq(unmatchedPosDocumentsTable.id, row.id),
+      eq(unmatchedPosDocumentsTable.reviewStatus, "pending"),
+    ));
+    return { kind: "reviewed" as const, reviewStatus: "confirmed" as const, authorization: created };
+  });
+
+  if (outcome.kind === "missing") {
+    res.status(404).json({ error: "POS review item not found." });
+    return;
+  }
+  if (outcome.kind === "not-pending") {
+    res.status(409).json({ error: "POS review item has already been completed." });
+    return;
+  }
+  if (outcome.kind === "queued") {
+    res.status(409).json({ error: "POS parsing is still in progress; review it after parsing finishes." });
+    return;
+  }
+  if (outcome.kind === "authorization-missing") {
+    res.status(404).json({ error: "Matching authorization not found." });
+    return;
+  }
+  if (outcome.kind === "client-missing") {
+    res.status(404).json({ error: "Participant not found." });
+    return;
+  }
+  if (outcome.kind === "participant-mismatch") {
+    res.status(400).json({ error: "Selected participant does not own the matching authorization." });
+    return;
+  }
+  if (outcome.kind === "unsupported-amendment-field") {
+    res.status(400).json({ error: `${outcome.field} cannot be changed when amending an existing authorization.` });
+    return;
+  }
+  if (outcome.kind === "vendor-missing") {
+    res.status(404).json({ error: "Vendor not found." });
+    return;
+  }
+  if (outcome.kind === "already-canceled") {
+    res.status(409).json({ error: "Authorization is already canceled." });
+    return;
+  }
+  if (outcome.kind === "incomplete") {
+    res.status(400).json({ error: "The POS is missing required authorization fields." });
+    return;
+  }
+  if (outcome.kind === "invalid-service-code") {
+    res.status(400).json({ error: "Service code must be 459, 024, or 490." });
+    return;
+  }
+  if (outcome.kind === "relationship") {
+    res.status(400).json({ error: outcome.relationshipError });
+    return;
+  }
+  if (outcome.kind === "duplicate") {
+    res.status(409).json({ error: "This participant already has that authorization number; amend the matching authorization instead." });
+    return;
+  }
+  if (outcome.kind === "warning") {
+    res.json(ReviewUnmatchedPosResponse.parse({
+      saved: false,
+      warnings: [outcome.warning],
+      reviewStatus: "pending",
+      resultingAuthorizationId: null,
+    }));
+    return;
+  }
+  const actionLabel = action === "discard" ? "discard" : action;
+  await audit(
+    req.user!.id,
+    `${actionLabel}_unmatched_pos`,
+    "unmatched_pos_document",
+    params.data.id,
+    action === "discard"
+      ? body.data.reason!.trim()
+      : action === "cancel"
+        ? `${body.data.reason!.trim()} · ${outcome.authorization ? `Authorization ${outcome.authorization.authNumber} (${outcome.authorization.id})` : ""}`
+      : outcome.authorization
+        ? `Authorization ${outcome.authorization.authNumber} (${outcome.authorization.id})`
+        : "",
+  );
+  const result = ReviewUnmatchedPosResponse.parse({
+    saved: true,
+    warnings: [],
+    reviewStatus: outcome.reviewStatus,
+    resultingAuthorizationId: outcome.authorization?.id ?? null,
+  });
+  res.json(result);
+});
 
 router.post("/authorizations/parse-pdf", requireStaff, async (req, res): Promise<void> => {
   const parsed = ParseAuthorizationPdfBody.safeParse(req.body);
@@ -842,26 +1284,7 @@ router.post("/authorizations/parse-pdf", requireStaff, async (req, res): Promise
     return;
   }
   try {
-    const message = await anthropic.messages.create({
-      model: "claude-sonnet-4-6",
-      max_tokens: 8192,
-      messages: [
-        {
-          role: "user",
-          content: [
-            {
-              type: "document",
-              source: { type: "base64", media_type: "application/pdf", data: parsed.data.pdfBase64 },
-            },
-            { type: "text", text: PARSE_PROMPT },
-          ],
-        },
-      ],
-    });
-    const block = message.content[0];
-    const text = block?.type === "text" ? block.text : "";
-    const jsonText = text.replace(/^```(?:json)?\s*/m, "").replace(/```\s*$/m, "").trim();
-     const fields = JSON.parse(jsonText);
+    const fields = await parsePosPdf(parsed.data.pdfBase64);
     await audit(req.user!.id, "parse_pos_pdf", "authorization", undefined, parsed.data.fileName);
     res.json(ParseAuthorizationPdfResponse.parse({ success: true, error: null, fields }));
   } catch (err) {

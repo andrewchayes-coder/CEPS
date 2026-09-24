@@ -6,13 +6,9 @@
  * OpenAPI spec version: 0.1.0
  */
 
-export type ListUnmatchedPosParams = {
-search?: string;
-batchId?: string;
-/**
- * When true (the default), return only items awaiting review.
- */
-pendingOnly?: boolean;
-limit?: number;
-offset?: number;
+export type UnmatchedPosBatchInputFilesItem = {
+  /** @minLength 1 */
+  posPdfUrl: string;
+  /** @minLength 1 */
+  sourceFileName: string;
 };

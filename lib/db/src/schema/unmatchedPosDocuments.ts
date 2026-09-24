@@ -7,10 +7,12 @@ import {
   timestamp,
   index,
   check,
+  foreignKey,
 } from "drizzle-orm/pg-core";
 import { sql } from "drizzle-orm";
 import { usersTable } from "./users";
 import { clientsTable } from "./clients";
+import { authorizationsTable } from "./authorizations";
 
 export const unmatchedPosDocumentsTable = pgTable("unmatched_pos_documents", {
   id: uuid("id").primaryKey().defaultRandom(),
@@ -33,12 +35,41 @@ export const unmatchedPosDocumentsTable = pgTable("unmatched_pos_documents", {
   suggestedClientId: uuid("suggested_client_id").references(() => clientsTable.id),
   suggestionMethod: text("suggestion_method"),
   suggestedAt: timestamp("suggested_at", { withTimezone: true }),
+  batchId: uuid("batch_id"),
+  parseStatus: text("parse_status").notNull().default("parsed"),
+  parseError: text("parse_error"),
+  reviewStatus: text("review_status").notNull().default("pending"),
+  discardReason: text("discard_reason"),
+  suggestedAuthorizationId: uuid("suggested_authorization_id"),
+  reviewedBy: uuid("reviewed_by"),
+  reviewedAt: timestamp("reviewed_at", { withTimezone: true }),
+  resultingAuthorizationId: uuid("resulting_authorization_id"),
   createdBy: uuid("created_by").notNull().references(() => usersTable.id),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 }, (table) => ({
   createdAtIdx: index("unmatched_pos_documents_created_at_idx").on(table.createdAt.desc()),
+  reviewCreatedIdx: index("upos_review_created_idx").on(table.reviewStatus, table.createdAt),
   uciNumberIdx: index("unmatched_pos_documents_uci_number_idx").on(table.uciNumber),
+  parseStatusCheck: check("upos_parse_status_check",
+    sql`${table.parseStatus} IN ('queued', 'parsed', 'failed')`),
+  reviewStatusCheck: check("upos_review_status_check",
+    sql`${table.reviewStatus} IN ('pending', 'confirmed', 'discarded')`),
+  suggestedAuthorizationFk: foreignKey({
+    name: "upos_suggested_auth_fk",
+    columns: [table.suggestedAuthorizationId],
+    foreignColumns: [authorizationsTable.id],
+  }),
+  reviewedByFk: foreignKey({
+    name: "upos_reviewed_by_fk",
+    columns: [table.reviewedBy],
+    foreignColumns: [usersTable.id],
+  }),
+  resultingAuthorizationFk: foreignKey({
+    name: "upos_result_auth_fk",
+    columns: [table.resultingAuthorizationId],
+    foreignColumns: [authorizationsTable.id],
+  }),
   suggestionMethodCheck: check("unmatched_pos_documents_suggestion_method_check",
     sql`${table.suggestionMethod} IS NULL OR ${table.suggestionMethod} IN ('uci', 'name')`),
   suggestionFieldsTogetherCheck: check("unmatched_pos_documents_suggestion_fields_together_check",

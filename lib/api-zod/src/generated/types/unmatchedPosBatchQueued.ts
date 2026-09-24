@@ -5,14 +5,10 @@
  * CEPS Portal API — referral intake, authorizations, invoices, payments, remittances, vendors, reporting
  * OpenAPI spec version: 0.1.0
  */
+import type { UnmatchedPosDocument } from './unmatchedPosDocument';
 
-export type ListUnmatchedPosParams = {
-search?: string;
-batchId?: string;
-/**
- * When true (the default), return only items awaiting review.
- */
-pendingOnly?: boolean;
-limit?: number;
-offset?: number;
-};
+export interface UnmatchedPosBatchQueued {
+  batchId: string;
+  items: UnmatchedPosDocument[];
+  queuedCount: number;
+}

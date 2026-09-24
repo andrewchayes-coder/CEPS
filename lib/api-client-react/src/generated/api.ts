@@ -125,9 +125,14 @@ import type {
   SignatureInput,
   SignaturePage,
   SignatureResult,
+  UnmatchedPosBatchInput,
+  UnmatchedPosBatchProgress,
+  UnmatchedPosBatchQueued,
   UnmatchedPosDocument,
   UnmatchedPosInput,
   UnmatchedPosList,
+  UnmatchedPosReviewInput,
+  UnmatchedPosReviewResult,
   UpdateMeInput,
   UploadUrlRequest,
   UploadUrlResponse,
@@ -3890,6 +3895,154 @@ export const useSaveUnmatchedPos = <TError = ErrorType<void>,
       return useMutation(getSaveUnmatchedPosMutationOptions(options));
     }
 
+export const getCreateUnmatchedPosBatchUrl = () => {
+
+
+
+
+  return `/api/unmatched-pos/batches`
+}
+
+/**
+ * @summary Queue POS PDFs for asynchronous parsing and review (staff only)
+ */
+export const createUnmatchedPosBatch = async (unmatchedPosBatchInput: UnmatchedPosBatchInput, options?: Parameters<typeof customFetch>[1]): Promise<UnmatchedPosBatchQueued> => {
+
+  return customFetch<UnmatchedPosBatchQueued>(getCreateUnmatchedPosBatchUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(unmatchedPosBatchInput)
+  }
+);}
+
+
+
+
+
+export const getCreateUnmatchedPosBatchMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createUnmatchedPosBatch>>, TError,{data: BodyType<UnmatchedPosBatchInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof createUnmatchedPosBatch>>, TError,{data: BodyType<UnmatchedPosBatchInput>}, TContext> => {
+
+const mutationKey = ['createUnmatchedPosBatch'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof createUnmatchedPosBatch>>, {data: BodyType<UnmatchedPosBatchInput>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  createUnmatchedPosBatch(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type CreateUnmatchedPosBatchMutationResult = NonNullable<Awaited<ReturnType<typeof createUnmatchedPosBatch>>>
+    export type CreateUnmatchedPosBatchMutationBody = BodyType<UnmatchedPosBatchInput>
+    export type CreateUnmatchedPosBatchMutationError = ErrorType<void>
+
+    /**
+ * @summary Queue POS PDFs for asynchronous parsing and review (staff only)
+ */
+export const useCreateUnmatchedPosBatch = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createUnmatchedPosBatch>>, TError,{data: BodyType<UnmatchedPosBatchInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof createUnmatchedPosBatch>>,
+        TError,
+        {data: BodyType<UnmatchedPosBatchInput>},
+        TContext
+      > => {
+      return useMutation(getCreateUnmatchedPosBatchMutationOptions(options));
+    }
+
+export const getGetUnmatchedPosBatchUrl = (batchId: string,) => {
+
+
+
+
+  return `/api/unmatched-pos/batches/${batchId}`
+}
+
+/**
+ * @summary Get POS batch parsing and review progress (staff only)
+ */
+export const getUnmatchedPosBatch = async (batchId: string, options?: Parameters<typeof customFetch>[1]): Promise<UnmatchedPosBatchProgress> => {
+
+  return customFetch<UnmatchedPosBatchProgress>(getGetUnmatchedPosBatchUrl(batchId),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetUnmatchedPosBatchQueryKey = (batchId: string,) => {
+    return [
+    `/api/unmatched-pos/batches/${batchId}`
+    ] as const;
+    }
+
+
+export const getGetUnmatchedPosBatchQueryOptions = <TData = Awaited<ReturnType<typeof getUnmatchedPosBatch>>, TError = ErrorType<void>>(batchId: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getUnmatchedPosBatch>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetUnmatchedPosBatchQueryKey(batchId);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getUnmatchedPosBatch>>> = ({ signal }) => getUnmatchedPosBatch(batchId, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: batchId !== null && batchId !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getUnmatchedPosBatch>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetUnmatchedPosBatchQueryResult = NonNullable<Awaited<ReturnType<typeof getUnmatchedPosBatch>>>
+export type GetUnmatchedPosBatchQueryError = ErrorType<void>
+
+
+/**
+ * @summary Get POS batch parsing and review progress (staff only)
+ */
+
+export function useGetUnmatchedPosBatch<TData = Awaited<ReturnType<typeof getUnmatchedPosBatch>>, TError = ErrorType<void>>(
+ batchId: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getUnmatchedPosBatch>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetUnmatchedPosBatchQueryOptions(batchId,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
 export const getMatchPosClientUrl = () => {
 
 
@@ -4108,6 +4261,78 @@ export const useCompleteUnmatchedPos = <TError = ErrorType<void>,
         TContext
       > => {
       return useMutation(getCompleteUnmatchedPosMutationOptions(options));
+    }
+
+export const getReviewUnmatchedPosUrl = (id: string,) => {
+
+
+
+
+  return `/api/unmatched-pos/${id}/review`
+}
+
+/**
+ * @summary Confirm, amend, cancel, or discard a POS review item (staff only)
+ */
+export const reviewUnmatchedPos = async (id: string,
+    unmatchedPosReviewInput: UnmatchedPosReviewInput, options?: Parameters<typeof customFetch>[1]): Promise<UnmatchedPosReviewResult> => {
+
+  return customFetch<UnmatchedPosReviewResult>(getReviewUnmatchedPosUrl(id),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(unmatchedPosReviewInput)
+  }
+);}
+
+
+
+
+
+export const getReviewUnmatchedPosMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof reviewUnmatchedPos>>, TError,{id: string;data: BodyType<UnmatchedPosReviewInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof reviewUnmatchedPos>>, TError,{id: string;data: BodyType<UnmatchedPosReviewInput>}, TContext> => {
+
+const mutationKey = ['reviewUnmatchedPos'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof reviewUnmatchedPos>>, {id: string;data: BodyType<UnmatchedPosReviewInput>}> = (props) => {
+          const {id,data} = props ?? {};
+
+          return  reviewUnmatchedPos(id,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type ReviewUnmatchedPosMutationResult = NonNullable<Awaited<ReturnType<typeof reviewUnmatchedPos>>>
+    export type ReviewUnmatchedPosMutationBody = BodyType<UnmatchedPosReviewInput>
+    export type ReviewUnmatchedPosMutationError = ErrorType<void>
+
+    /**
+ * @summary Confirm, amend, cancel, or discard a POS review item (staff only)
+ */
+export const useReviewUnmatchedPos = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof reviewUnmatchedPos>>, TError,{id: string;data: BodyType<UnmatchedPosReviewInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof reviewUnmatchedPos>>,
+        TError,
+        {id: string;data: BodyType<UnmatchedPosReviewInput>},
+        TContext
+      > => {
+      return useMutation(getReviewUnmatchedPosMutationOptions(options));
     }
 
 export const getListInvoicesUrl = (params?: ListInvoicesParams,) => {

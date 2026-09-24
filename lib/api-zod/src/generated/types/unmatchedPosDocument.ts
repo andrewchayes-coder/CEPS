@@ -5,6 +5,8 @@
  * CEPS Portal API — referral intake, authorizations, invoices, payments, remittances, vendors, reporting
  * OpenAPI spec version: 0.1.0
  */
+import type { UnmatchedPosDocumentParseStatus } from './unmatchedPosDocumentParseStatus';
+import type { UnmatchedPosDocumentReviewStatus } from './unmatchedPosDocumentReviewStatus';
 import type { UnmatchedPosDocumentSuggestionMethod } from './unmatchedPosDocumentSuggestionMethod';
 
 export interface UnmatchedPosDocument {
@@ -47,6 +49,22 @@ export interface UnmatchedPosDocument {
   suggestedAt?: Date | null;
   /** @nullable */
   suggestedClientName?: string | null;
+  /** @nullable */
+  batchId?: string | null;
+  parseStatus: UnmatchedPosDocumentParseStatus;
+  /** @nullable */
+  parseError?: string | null;
+  reviewStatus: UnmatchedPosDocumentReviewStatus;
+  /** @nullable */
+  discardReason?: string | null;
+  /** @nullable */
+  suggestedAuthorizationId?: string | null;
+  /** @nullable */
+  reviewedBy?: string | null;
+  /** @nullable */
+  reviewedAt?: Date | null;
+  /** @nullable */
+  resultingAuthorizationId?: string | null;
   createdBy: string;
   createdAt: Date;
   updatedAt: Date;

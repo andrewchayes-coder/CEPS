@@ -57,6 +57,8 @@ router.get("/dashboard/summary", requireAuth, async (req, res): Promise<void> =>
   ]);
   const unmatchedPosRows = u.role === "staff"
     ? await db.select().from(unmatchedPosDocumentsTable)
+        .where(eq(unmatchedPosDocumentsTable.reviewStatus, "pending"))
+        .orderBy(asc(unmatchedPosDocumentsTable.createdAt), asc(unmatchedPosDocumentsTable.id))
     : [];
 
   // Role scoping
@@ -176,7 +178,7 @@ router.get("/dashboard/summary", requireAuth, async (req, res): Promise<void> =>
     if (u.role === "staff" && unmatchedPosRows.length > 0) {
       alerts.push({
         kind: "unmatched_pos",
-        message: `${unmatchedPosRows.length} unmatched POS document${unmatchedPosRows.length === 1 ? "" : "s"} awaiting participant matching.`,
+        message: `${unmatchedPosRows.length} POS document${unmatchedPosRows.length === 1 ? "" : "s"} awaiting review.`,
         entityType: "unmatched_pos_document",
         entityId: null,
       });
@@ -242,6 +244,9 @@ router.get("/dashboard/summary", requireAuth, async (req, res): Promise<void> =>
         paymentsThisMonth: paymentsThisMonth.toFixed(2),
         unmatchedRemittances: unmatchedRemits.length,
         unmatchedPosDocuments: unmatchedPosRows.length,
+        pendingPosReview: unmatchedPosRows.length,
+        oldestPendingPosDate: unmatchedPosRows[0]?.createdAt.toISOString() ?? null,
+        pendingPosWithoutClient: unmatchedPosRows.filter((row) => row.suggestedClientId === null).length,
       },
       // Keep the existing cap for general alerts while ensuring every
       // exhausted-active authorization remains visible for staff review.

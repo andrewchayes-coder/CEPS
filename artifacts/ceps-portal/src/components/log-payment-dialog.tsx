@@ -36,6 +36,8 @@ import { SearchableSelect } from '@/components/searchable-select';
 import { useDebounce } from '@/hooks/use-debounce';
 import { getInvoiceDisplayMonth } from '@/lib/invoice-utils';
 import { apiErrorMessage } from '@/lib/api-error';
+import { MonthYearInput } from '@/components/month-year-input';
+import { getCurrentServiceMonth, getLatestServiceMonth } from '@/lib/payment-utils';
 
 const PAYMENT_TYPES = ['direct_payment', 'reimbursement', 'fee'];
 
@@ -52,7 +54,7 @@ const emptyForm = {
   paymentType: 'direct_payment',
   vendorId: 'none',
   invoiceId: 'none',
-  allocations: [{ authorizationId: 'none', amount: '' }]
+  allocations: [{ authorizationId: 'none', serviceMonth: getCurrentServiceMonth(), amount: '' }]
 };
 
 // The customFetch layer throws an ApiError carrying { status, data }. We read
@@ -130,7 +132,7 @@ export function LogPaymentDialog({ onSaved, defaultClientId, defaultInvoiceId }:
       clientId: v,
       vendorId: 'none',
       invoiceId: 'none',
-      allocations: [{ authorizationId: 'none', amount: '' }],
+      allocations: [{ authorizationId: 'none', serviceMonth: getCurrentServiceMonth(), amount: '' }],
     }));
   };
 
@@ -138,34 +140,32 @@ export function LogPaymentDialog({ onSaved, defaultClientId, defaultInvoiceId }:
     setAllocationError('');
     const inv = invoices.find(i => i.id === invId);
     if (!inv || !inv.lineItems) {
-      setForm(p => ({ ...p, invoiceId: invId, allocations: [{ authorizationId: 'none', amount: '' }] }));
+      setForm(p => ({ ...p, invoiceId: invId, allocations: [{ authorizationId: 'none', serviceMonth: getLatestServiceMonth(p.allocations.map((allocation) => allocation.serviceMonth)), amount: '' }] }));
       return;
     }
 
-    // Group lineItems by authorizationId, summing amount
-    const grouped = inv.lineItems.reduce((acc, line) => {
-      const authId = line.authorizationId || 'none';
-      if (!acc[authId]) acc[authId] = 0;
-      acc[authId] += parseFloat(line.amount) || 0;
-      return acc;
-    }, {} as Record<string, number>);
-
-    const newAllocations = Object.entries(grouped).map(([authId, sum]) => ({
-      authorizationId: authId,
-      amount: sum.toFixed(2),
+    const latestMonth = getLatestServiceMonth(inv.lineItems.map((line) => line.serviceMonth));
+    const newAllocations = inv.lineItems.map((line) => ({
+      authorizationId: line.authorizationId || 'none',
+      serviceMonth: line.serviceMonth || latestMonth,
+      amount: line.amount,
     }));
 
     setForm(p => ({
       ...p,
       invoiceId: invId,
       vendorId: inv.vendorId || 'none',
-      allocations: newAllocations.length > 0 ? newAllocations : [{ authorizationId: 'none', amount: '' }]
+      allocations: newAllocations.length > 0 ? newAllocations : [{ authorizationId: 'none', serviceMonth: latestMonth, amount: '' }]
     }));
   };
 
   const handleAddAllocation = () => {
     setAllocationError('');
-    setForm(p => ({ ...p, allocations: [...p.allocations, { authorizationId: 'none', amount: '' }] }));
+    const selectedInvoice = invoices.find((invoice) => invoice.id === form.invoiceId);
+    const latestMonth = selectedInvoice
+      ? getLatestServiceMonth(selectedInvoice.lineItems.map((line) => line.serviceMonth))
+      : getLatestServiceMonth(form.allocations.map((allocation) => allocation.serviceMonth));
+    setForm(p => ({ ...p, allocations: [...p.allocations, { authorizationId: 'none', serviceMonth: latestMonth, amount: '' }] }));
   };
 
   const handleRemoveAllocation = (index: number) => {
@@ -173,7 +173,7 @@ export function LogPaymentDialog({ onSaved, defaultClientId, defaultInvoiceId }:
     setForm(p => ({ ...p, allocations: p.allocations.filter((_, i) => i !== index) }));
   };
 
-  const handleAllocationChange = (index: number, key: 'authorizationId' | 'amount', value: string) => {
+  const handleAllocationChange = (index: number, key: 'authorizationId' | 'serviceMonth' | 'amount', value: string) => {
     setAllocationError('');
     setForm(p => {
       const newAllocs = [...p.allocations];
@@ -196,8 +196,8 @@ export function LogPaymentDialog({ onSaved, defaultClientId, defaultInvoiceId }:
       toast({ variant: 'destructive', title: 'Participant required', description: 'Choose a participant for this payment.' });
       return;
     }
-    if (form.allocations.some((a) => !a.authorizationId || a.authorizationId === 'none')) {
-      setAllocationError('Select an authorization for every allocation before logging the payment.');
+    if (form.allocations.some((a) => !a.authorizationId || a.authorizationId === 'none' || !/^\d{4}-(0[1-9]|1[0-2])$/.test(a.serviceMonth))) {
+      setAllocationError('Select an authorization and service month for every allocation before logging the payment.');
       return;
     }
     setAllocationError('');
@@ -215,6 +215,7 @@ export function LogPaymentDialog({ onSaved, defaultClientId, defaultInvoiceId }:
       invoiceId: form.invoiceId === 'none' ? null : form.invoiceId,
       allocations: form.allocations.map(a => ({
         authorizationId: a.authorizationId,
+        serviceMonth: a.serviceMonth,
         amount: a.amount
       })),
       ...(override ? { overrideDuplicate: true, overrideJustification: justification.trim() } : {}),
@@ -356,6 +357,15 @@ export function LogPaymentDialog({ onSaved, defaultClientId, defaultInvoiceId }:
                   allowClear
                   clearLabel="None"
                   data-testid={`select-payment-alloc-${index}-auth`}
+                />
+              </div>
+              <div className="w-36 space-y-1">
+                <MonthYearInput
+                  id={`payment-alloc-${index}-month`}
+                  label="Service Month"
+                  value={alloc.serviceMonth}
+                  required
+                  onChange={(value) => handleAllocationChange(index, 'serviceMonth', value)}
                 />
               </div>
               <div className="w-28 space-y-1">

@@ -197,6 +197,13 @@
       "when": 1789838993180,
       "tag": "0027_mighty_shriek",
       "breakpoints": true
+    },
+    {
+      "idx": 28,
+      "version": "7",
+      "when": 1790279088337,
+      "tag": "0028_add_payment_allocation_service_month",
+      "breakpoints": true
     }
   ]
 }

@@ -1455,7 +1455,7 @@ paths:
           in: query
           schema:
             type: string
-            enum: [checkDate, qbCheckNumber, vendorName, clientName, amount, remitted, paymentType, createdAt]
+            enum: [checkDate, qbCheckNumber, vendorName, clientName, amount, remitted, paymentType, serviceMonth, createdAt]
         - name: sortDirection
           in: query
           schema: { type: string, enum: [asc, desc] }
@@ -3310,7 +3310,7 @@ components:
         qbCheckNumber: { type: string }
         checkDate: { type: string }
         amount: { type: string }
-        paymentMonth: { type: ["string", "null"] }
+        paymentMonth: { type: ["string", "null"], description: "Deprecated compatibility field; derived from allocation service months." }
         paymentType: { type: string, enum: [direct_payment, reimbursement, fee] }
         source: { type: string, enum: [quickbooks, manual, historical_import] }
         loggedBy: { type: ["string", "null"] }
@@ -3323,10 +3323,11 @@ components:
           items: { $ref: "#/components/schemas/PaymentAllocation" }
     PaymentAllocation:
       type: object
-      required: [id, authorizationId, amount]
+      required: [id, authorizationId, serviceMonth, amount]
       properties:
         id: { type: string }
         authorizationId: { type: string }
+        serviceMonth: { type: string, pattern: '^\d{4}-(0[1-9]|1[0-2])$' }
         authNumber: { type: ["string", "null"] }
         amount: { type: string, pattern: '^\d+(\.\d{1,2})?$' }
     PaymentInput:
@@ -3340,7 +3341,7 @@ components:
         qbCheckNumber: { type: string }
         checkDate: { type: string }
         amount: { type: string }
-        paymentMonth: { type: ["string", "null"], pattern: '^\d{4}-(0[1-9]|1[0-2])$' }
+        paymentMonth: { type: ["string", "null"], pattern: '^\d{4}-(0[1-9]|1[0-2])$', description: "Deprecated compatibility field; derived from allocation service months." }
         paymentType: { type: string, enum: [direct_payment, reimbursement, fee] }
         overrideDuplicate: { type: boolean, description: "Set true (with a justification) to bypass the duplicate-payment hard stop" }
         overrideJustification: { type: string, description: "Required written justification when overrideDuplicate is true" }
@@ -3350,9 +3351,10 @@ components:
           items: { $ref: "#/components/schemas/PaymentAllocationInput" }
     PaymentAllocationInput:
       type: object
-      required: [authorizationId, amount]
+      required: [authorizationId, serviceMonth, amount]
       properties:
         authorizationId: { type: string }
+        serviceMonth: { type: string, pattern: '^\d{4}-(0[1-9]|1[0-2])$' }
         amount: { type: string, pattern: '^\d+(\.\d{1,2})?$' }
     CheckRunReconciliationInput:
       type: object
@@ -3667,7 +3669,7 @@ components:
         qbCheckNumber: { type: string }
         checkDate: { type: string }
         amount: { type: string }
-        paymentMonth: { type: ["string", "null"], pattern: '^\d{4}-(0[1-9]|1[0-2])$' }
+        paymentMonth: { type: ["string", "null"], pattern: '^\d{4}-(0[1-9]|1[0-2])$', description: "Deprecated compatibility field; derived from allocation service months." }
         paymentType: { type: string, enum: [direct_payment, reimbursement, fee] }
         overrideDuplicate: { type: boolean, description: "Set true (with a justification) to bypass the duplicate-payment hard stop when an update would create a duplicate" }
         overrideJustification: { type: string, description: "Required written justification when overrideDuplicate is true" }

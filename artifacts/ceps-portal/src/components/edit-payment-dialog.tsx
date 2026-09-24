@@ -26,6 +26,8 @@ import { Pencil, Plus, Trash2 } from 'lucide-react';
 import { SearchableSelect } from '@/components/searchable-select';
 import { useDebounce } from '@/hooks/use-debounce';
 import { getInvoiceDisplayMonth } from '@/lib/invoice-utils';
+import { MonthYearInput } from '@/components/month-year-input';
+import { getCurrentServiceMonth, getLatestServiceMonth } from '@/lib/payment-utils';
 
 const PAYMENT_TYPES = ['direct_payment', 'reimbursement', 'fee'];
 
@@ -40,6 +42,7 @@ type PaymentLike = {
   invoiceId?: string | null;
   authorizationId?: string | null;
   authNumber?: string | null;
+  paymentMonth?: string | null;
   allocations?: PaymentAllocation[];
 };
 
@@ -61,10 +64,10 @@ export function EditPaymentDialog({ id, payment, onSaved }: Props) {
     vendorId: payment.vendorId ?? 'none',
     invoiceId: payment.invoiceId ?? 'none',
     allocations: payment.allocations && payment.allocations.length > 0
-      ? payment.allocations.map(a => ({ authorizationId: a.authorizationId, amount: a.amount }))
+      ? payment.allocations.map(a => ({ authorizationId: a.authorizationId, serviceMonth: a.serviceMonth || payment.paymentMonth || getCurrentServiceMonth(), amount: a.amount }))
       : payment.authorizationId
-        ? [{ authorizationId: payment.authorizationId, amount: payment.amount }]
-        : [{ authorizationId: 'none', amount: '' }]
+        ? [{ authorizationId: payment.authorizationId, serviceMonth: payment.paymentMonth || getCurrentServiceMonth(), amount: payment.amount }]
+        : [{ authorizationId: 'none', serviceMonth: payment.paymentMonth || getCurrentServiceMonth(), amount: '' }]
   });
 
   // Re-sync on open
@@ -77,10 +80,10 @@ export function EditPaymentDialog({ id, payment, onSaved }: Props) {
         vendorId: payment.vendorId ?? 'none',
         invoiceId: payment.invoiceId ?? 'none',
         allocations: payment.allocations && payment.allocations.length > 0
-          ? payment.allocations.map(a => ({ authorizationId: a.authorizationId, amount: a.amount }))
+          ? payment.allocations.map(a => ({ authorizationId: a.authorizationId, serviceMonth: a.serviceMonth || payment.paymentMonth || getCurrentServiceMonth(), amount: a.amount }))
           : payment.authorizationId
-            ? [{ authorizationId: payment.authorizationId, amount: payment.amount }]
-            : [{ authorizationId: 'none', amount: '' }]
+            ? [{ authorizationId: payment.authorizationId, serviceMonth: payment.paymentMonth || getCurrentServiceMonth(), amount: payment.amount }]
+            : [{ authorizationId: 'none', serviceMonth: payment.paymentMonth || getCurrentServiceMonth(), amount: '' }]
       });
     }
   }, [open, payment]);
@@ -118,29 +121,31 @@ export function EditPaymentDialog({ id, payment, onSaved }: Props) {
       return;
     }
 
-    const grouped = inv.lineItems.reduce((acc, line) => {
-      const authId = line.authorizationId || 'none';
-      if (!acc[authId]) acc[authId] = 0;
-      acc[authId] += parseFloat(line.amount) || 0;
-      return acc;
-    }, {} as Record<string, number>);
-
-    const newAllocations = Object.entries(grouped).map(([authId, sum]) => ({
-      authorizationId: authId,
-      amount: sum.toFixed(2),
+    const latestMonth = getLatestServiceMonth(inv.lineItems.map((line) => line.serviceMonth));
+    const newAllocations = inv.lineItems.map((line) => ({
+      authorizationId: line.authorizationId || 'none',
+      serviceMonth: line.serviceMonth || latestMonth,
+      amount: line.amount,
     }));
 
     setForm(p => ({
       ...p,
       invoiceId: invId,
       vendorId: inv.vendorId || 'none',
-      allocations: newAllocations.length > 0 ? newAllocations : [{ authorizationId: 'none', amount: '' }]
+      allocations: newAllocations.length > 0 ? newAllocations : [{ authorizationId: 'none', serviceMonth: latestMonth, amount: '' }]
     }));
   };
 
   const computedTotal = form.allocations.reduce((sum, a) => sum + (parseFloat(a.amount) || 0), 0);
 
   const handleSave = () => {
+    if (form.allocations.some((allocation) =>
+      !allocation.authorizationId || allocation.authorizationId === 'none' ||
+      !/^\d{4}-(0[1-9]|1[0-2])$/.test(allocation.serviceMonth),
+    )) {
+      toast({ variant: 'destructive', title: 'Allocation details required', description: 'Select an authorization and service month for every allocation.' });
+      return;
+    }
     const data: PaymentUpdate = {
       qbCheckNumber: form.qbCheckNumber,
       checkDate: form.checkDate || undefined,
@@ -150,6 +155,7 @@ export function EditPaymentDialog({ id, payment, onSaved }: Props) {
       invoiceId: form.invoiceId === 'none' ? null : form.invoiceId,
       allocations: form.allocations.map(a => ({
         authorizationId: a.authorizationId === 'none' ? '' : a.authorizationId,
+        serviceMonth: a.serviceMonth,
         amount: a.amount
       }))
     };
@@ -165,6 +171,11 @@ export function EditPaymentDialog({ id, payment, onSaved }: Props) {
       },
     );
   };
+
+  const selectedInvoice = invoices.find((invoice) => invoice.id === form.invoiceId);
+  const latestAllocationMonth = selectedInvoice
+    ? getLatestServiceMonth(selectedInvoice.lineItems.map((line) => line.serviceMonth))
+    : getLatestServiceMonth(form.allocations.map((allocation) => allocation.serviceMonth));
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
@@ -263,6 +274,19 @@ export function EditPaymentDialog({ id, payment, onSaved }: Props) {
                   data-testid={`select-payment-alloc-${index}-auth`}
                 />
               </div>
+              <div className="w-36 space-y-1">
+                <MonthYearInput
+                  id={`edit-payment-alloc-${index}-month`}
+                  label="Service Month"
+                  value={alloc.serviceMonth}
+                  required
+                  onChange={(value) => {
+                    const newAllocations = [...form.allocations];
+                    newAllocations[index] = { ...newAllocations[index], serviceMonth: value };
+                    set('allocations', newAllocations);
+                  }}
+                />
+              </div>
               <div className="w-28 space-y-1">
                 <Input
                   placeholder="0.00"
@@ -295,7 +319,7 @@ export function EditPaymentDialog({ id, payment, onSaved }: Props) {
             type="button"
             variant="outline"
             size="sm"
-            onClick={() => set('allocations', [...form.allocations, { authorizationId: 'none', amount: '' }])}
+            onClick={() => set('allocations', [...form.allocations, { authorizationId: 'none', serviceMonth: latestAllocationMonth, amount: '' }])}
             data-testid="button-add-payment-allocation"
           >
             <Plus className="w-4 h-4 mr-2" /> Add Allocation

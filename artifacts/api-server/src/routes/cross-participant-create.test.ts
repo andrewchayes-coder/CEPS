@@ -14,7 +14,7 @@ let check = 0;
 const paymentBody = (extra: Record<string, unknown> = {}) => ({
   clientId: clientA, qbCheckNumber: `${nonce}-check-${check++}`, checkDate: "2026-03-15",
   amount: "100.00", paymentMonth: "2026-03", paymentType: "direct_payment",
-  allocations: [{ authorizationId: (extra.authorizationId as string | undefined) ?? authA, amount: "100.00" }], ...extra,
+  allocations: [{ authorizationId: (extra.authorizationId as string | undefined) ?? authA, serviceMonth: "2026-03", amount: "100.00" }], ...extra,
 });
 
 beforeAll(async () => {

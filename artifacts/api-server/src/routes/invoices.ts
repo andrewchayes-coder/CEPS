@@ -541,7 +541,7 @@ router.post("/invoices/:id/validate", requirePermission("invoice_log_validate"),
   // 4. No duplicate payment for client + authorization + month (HARD STOP)
   let duplicatePassed = true;
   for (const { authorizationId: authId, month } of amountsByAuthMonth.values()) {
-    const { isDuplicate } = await checkDuplicatePayment(db, { clientId: invoice.clientId, authorizationId: authId, paymentMonth: month });
+    const { isDuplicate } = await checkDuplicatePayment(db, { clientId: invoice.clientId, authorizationId: authId, serviceMonth: month });
     if (isDuplicate) {
       if (parsed.data.overrideDuplicate && parsed.data.overrideJustification?.trim()) {
         checks.push({

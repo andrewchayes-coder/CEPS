@@ -19,6 +19,7 @@ export interface PaymentUpdate {
   checkDate?: string;
   amount?: string;
   /**
+     * Deprecated compatibility field; derived from allocation service months.
      * @nullable
      * @pattern ^\d{4}-(0[1-9]|1[0-2])$
      */

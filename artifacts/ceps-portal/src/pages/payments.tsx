@@ -17,6 +17,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { DateRangeFilter } from '@/components/date-range-filter';
 import { useDebounce } from '@/hooks/use-debounce';
 import { CheckRunReconciliationDialog } from '@/components/check-run-reconciliation-dialog';
+import { formatPaymentServiceMonths } from '@/lib/payment-utils';
 
 const PAGE_SIZE = 50;
 
@@ -26,7 +27,7 @@ export default function PaymentsPage() {
   const [startDate, setStartDate] = useState<string>();
   const [endDate, setEndDate] = useState<string>();
   const [page, setPage] = useState(0);
-  const sort = useTableSort<'checkDate' | 'qbCheckNumber' | 'vendorName' | 'clientName' | 'amount' | 'remitted'>();
+  const sort = useTableSort<'checkDate' | 'qbCheckNumber' | 'vendorName' | 'clientName' | 'amount' | 'remitted' | 'serviceMonth'>();
   const onSort = (key: Parameters<typeof sort.toggleSort>[0]) => {
     sort.toggleSort(key);
     setPage(0);
@@ -109,6 +110,7 @@ export default function PaymentsPage() {
                 <SortableTableHead label="Check #" sortKey="qbCheckNumber" activeSortBy={sort.sortBy} sortDirection={sort.sortDirection} onSort={onSort} />
                 <SortableTableHead label="Payee (Vendor)" sortKey="vendorName" activeSortBy={sort.sortBy} sortDirection={sort.sortDirection} onSort={onSort} />
                 <SortableTableHead label="Participant" sortKey="clientName" activeSortBy={sort.sortBy} sortDirection={sort.sortDirection} onSort={onSort} />
+                <SortableTableHead label="Service Month" sortKey="serviceMonth" activeSortBy={sort.sortBy} sortDirection={sort.sortDirection} onSort={onSort} />
                 <SortableTableHead label="Amount" sortKey="amount" activeSortBy={sort.sortBy} sortDirection={sort.sortDirection} onSort={onSort} className="text-right" />
                 <SortableTableHead label="Remitted" sortKey="remitted" activeSortBy={sort.sortBy} sortDirection={sort.sortDirection} onSort={onSort} />
                 {isStaff && <TableHead className="text-right">Actions</TableHead>}
@@ -116,9 +118,9 @@ export default function PaymentsPage() {
             </TableHeader>
             <TableBody>
               {isLoading ? (
-                <TableRow><TableCell colSpan={isStaff ? 7 : 6} className="h-24 text-center"><Skeleton className="h-4 w-full max-w-sm mx-auto" /></TableCell></TableRow>
+                <TableRow><TableCell colSpan={isStaff ? 8 : 7} className="h-24 text-center"><Skeleton className="h-4 w-full max-w-sm mx-auto" /></TableCell></TableRow>
               ) : !payments || payments.length === 0 ? (
-                <TableRow><TableCell colSpan={isStaff ? 7 : 6} className="h-24 text-center text-muted-foreground">No payments found.</TableCell></TableRow>
+                <TableRow><TableCell colSpan={isStaff ? 8 : 7} className="h-24 text-center text-muted-foreground">No payments found.</TableCell></TableRow>
               ) : (
                 payments.map(p => (
                   <TableRow key={p.id}>
@@ -130,6 +132,7 @@ export default function PaymentsPage() {
                     </TableCell>
                     <TableCell><VendorLink id={p.vendorId} name={p.vendorName} /></TableCell>
                     <TableCell className="text-muted-foreground"><ClientLink id={p.clientId} name={p.clientName} className="text-muted-foreground hover:underline" /></TableCell>
+                    <TableCell className="whitespace-nowrap" data-testid={`text-payment-service-month-${p.id}`}>{formatPaymentServiceMonths(p)}</TableCell>
                     <TableCell className="text-right font-medium">${parseFloat(p.amount).toFixed(2)}</TableCell>
                     <TableCell>
                       {p.remitted ? <CheckCircle2 className="w-5 h-5 text-chart-5" /> : <span className="text-xs text-muted-foreground">${parseFloat(p.allocatedAmount ?? '0').toFixed(2)} allocated<br />${parseFloat(p.remainingAmount ?? p.amount).toFixed(2)} remaining</span>}

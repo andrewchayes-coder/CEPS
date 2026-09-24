@@ -11,6 +11,7 @@ import { Badge } from '@/components/ui/badge';
 import { ArrowLeft, CheckCircle2 } from 'lucide-react';
 import { format } from 'date-fns';
 import { MetricHelp } from '@/components/metric-help';
+import { formatPaymentServiceMonths } from '@/lib/payment-utils';
 
 export default function PaymentDetailPage() {
   const { id } = useParams<{ id: string }>();
@@ -108,6 +109,7 @@ export default function PaymentDetailPage() {
                     </span>
                     <span>${parseFloat(alloc.amount).toFixed(2)}</span>
                   </div>
+                  <div className="text-xs text-muted-foreground">Service Month: {formatPaymentServiceMonths({ allocations: [alloc], paymentMonth: payment.paymentMonth })}</div>
                 </div>
               )) : (
                 <div className="p-3 bg-muted/30 rounded-md border text-sm text-muted-foreground">

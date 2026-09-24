@@ -9,6 +9,7 @@ import {
   vendorsTable,
   authorizationsTable,
   paymentsTable,
+  paymentAllocationsTable,
   feesTable,
   remittancesTable,
 } from "@workspace/db";
@@ -53,6 +54,7 @@ async function insertPayment(opts: {
   vendorId?: string | null;
   amount?: string;
   checkDate?: string;
+  paymentMonth?: string | null;
 }) {
   const [p] = await db
     .insert(paymentsTable)
@@ -62,6 +64,7 @@ async function insertPayment(opts: {
       qbCheckNumber: nextCheck(),
       checkDate: opts.checkDate ?? "2026-01-15",
       amount: opts.amount ?? "100.00",
+      paymentMonth: opts.paymentMonth ?? null,
       paymentType: "direct_payment",
       source: "manual",
     })
@@ -297,6 +300,54 @@ describe("GET /payments filters", () => {
     expect(vendor.body.total).toBe(1);
     const state = await get(staffCookie, { clientId: clientA, search: "unremitted", limit: 1000 });
     expect(state.body.total).toBe(2);
+  });
+
+  it("filters and searches allocation service months once per payment, with parent fallback only for allocation-free legacy rows", async () => {
+    const [auth] = await db.insert(authorizationsTable).values({
+      clientId: clientA,
+      authNumber: `${nonce}-month-filter-auth`,
+      serviceCode: "459",
+      paymentType: "direct_payment",
+      servicePeriodStart: "2026-01-01",
+      servicePeriodEnd: "2026-12-31",
+      maxPeriodAmount: "1000.00",
+      status: "active",
+    }).returning();
+    const allocationPayment = await insertPayment({
+      clientId: clientA,
+      checkDate: "2026-01-15",
+      paymentMonth: "2026-03",
+    });
+    const legacyPayment = await insertPayment({
+      clientId: clientA,
+      checkDate: "2026-01-20",
+      paymentMonth: "2026-03",
+    });
+    try {
+      await db.insert(paymentAllocationsTable).values([
+        { paymentId: allocationPayment.id, authorizationId: auth.id, serviceMonth: "2026-01", amount: "50.00" },
+        { paymentId: allocationPayment.id, authorizationId: auth.id, serviceMonth: "2026-02", amount: "50.00" },
+      ]);
+
+      const filtered = await get(staffCookie, { clientId: clientA, paymentMonth: "2026-02", limit: 1 });
+      expect(filtered.status).toBe(200);
+      expect(filtered.body.total).toBe(1);
+      expect(filtered.body.items).toHaveLength(1);
+      expect(filtered.body.items[0].id).toBe(allocationPayment.id);
+      expect(filtered.body.items[0].allocations.map((allocation: { serviceMonth: string }) => allocation.serviceMonth).sort())
+        .toEqual(["2026-01", "2026-02"]);
+
+      const monthSearch = await get(staffCookie, { clientId: clientA, search: "2026-02", limit: 10 });
+      expect(monthSearch.body.total).toBe(1);
+      expect(monthSearch.body.items.map((payment: { id: string }) => payment.id)).toEqual([allocationPayment.id]);
+
+      const deprecatedParentMonth = await get(staffCookie, { clientId: clientA, paymentMonth: "2026-03", limit: 10 });
+      expect(deprecatedParentMonth.body.total).toBe(1);
+      expect(deprecatedParentMonth.body.items.map((payment: { id: string }) => payment.id)).toEqual([legacyPayment.id]);
+    } finally {
+      await db.delete(paymentsTable).where(inArray(paymentsTable.id, [allocationPayment.id, legacyPayment.id]));
+      await db.delete(authorizationsTable).where(eq(authorizationsTable.id, auth.id));
+    }
   });
 });
 

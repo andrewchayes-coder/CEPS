@@ -119,7 +119,7 @@ async function collectFeeForPayment(
   userId: string,
   tx: typeof db,
 ): Promise<void> {
-  const [fee] = await tx
+  const collectedFees = await tx
     .update(feesTable)
     .set({ status: "collected" })
     .where(and(
@@ -128,7 +128,7 @@ async function collectFeeForPayment(
       notDeleted(feesTable),
     ))
     .returning();
-  if (fee) {
+  for (const fee of collectedFees) {
     await audit(userId, "collect_fee", "fee", fee.id, `Fee collected when trigger payment ${paymentId} was fully remitted`, tx);
   }
 }
@@ -159,7 +159,6 @@ async function monthlyFeeAudit(database: typeof db = db, clientIds?: string[]) {
   const paymentConditions = [
     inArray(paymentsTable.paymentType, [...QUALIFYING_FEE_PAYMENT_TYPES]),
     sql`${paymentsTable.source} <> 'historical_import'`,
-    sql`${paymentsTable.paymentMonth} is not null`,
     notDeleted(paymentsTable),
   ];
   const feeConditions = [
@@ -175,10 +174,12 @@ async function monthlyFeeAudit(database: typeof db = db, clientIds?: string[]) {
       .select({
         clientId: paymentsTable.clientId,
         clientName: sql<string>`${clientsTable.firstName} || ' ' || ${clientsTable.lastName}`,
-        feeMonth: paymentsTable.paymentMonth,
+        feeMonth: paymentAllocationsTable.serviceMonth,
+        fallbackFeeMonth: paymentsTable.paymentMonth,
         paymentId: paymentsTable.id,
       })
       .from(paymentsTable)
+      .leftJoin(paymentAllocationsTable, eq(paymentAllocationsTable.paymentId, paymentsTable.id))
       .innerJoin(clientsTable, and(
         eq(clientsTable.id, paymentsTable.clientId),
         notDeleted(clientsTable),
@@ -205,15 +206,16 @@ async function monthlyFeeAudit(database: typeof db = db, clientIds?: string[]) {
     fee?: typeof feesTable.$inferSelect;
   }>();
   for (const payment of qualifyingPayments) {
-    if (!payment.feeMonth) continue;
-    const key = `${payment.clientId}:${payment.feeMonth}`;
+    const feeMonth = payment.feeMonth ?? payment.fallbackFeeMonth;
+    if (!feeMonth) continue;
+    const key = `${payment.clientId}:${feeMonth}`;
     const row = months.get(key) ?? {
       clientId: payment.clientId,
       clientName: payment.clientName,
-      feeMonth: payment.feeMonth,
+      feeMonth,
       paymentIds: [],
     };
-    row.paymentIds.push(payment.paymentId);
+    if (!row.paymentIds.includes(payment.paymentId)) row.paymentIds.push(payment.paymentId);
     months.set(key, row);
   }
   for (const { fee, clientName } of activeFees) {
@@ -313,17 +315,20 @@ async function reconcileMonthlyFee(
   const lockKey = `${clientId}:${paymentMonth}`;
   await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${lockKey}))`);
 
-  const qualifyingPayments = await tx
-    .select()
+  const qualifyingRows = await tx
+    .select({ payment: paymentsTable, serviceMonth: paymentAllocationsTable.serviceMonth })
     .from(paymentsTable)
+    .leftJoin(paymentAllocationsTable, eq(paymentAllocationsTable.paymentId, paymentsTable.id))
     .where(and(
       eq(paymentsTable.clientId, clientId),
-      eq(paymentsTable.paymentMonth, paymentMonth),
       inArray(paymentsTable.paymentType, [...QUALIFYING_FEE_PAYMENT_TYPES]),
       sql`${paymentsTable.source} <> 'historical_import'`,
       notDeleted(paymentsTable),
     ))
     .orderBy(paymentsTable.createdAt, paymentsTable.id);
+  const qualifyingPayments = qualifyingRows.filter(({ payment, serviceMonth }) =>
+    (serviceMonth ?? payment.paymentMonth) === paymentMonth,
+  );
 
   const [activeFee] = await tx
     .select()
@@ -337,9 +342,12 @@ async function reconcileMonthlyFee(
 
   if (qualifyingPayments.length > 0) {
     if (activeFee) return "none";
-    const trigger = qualifyingPayments[0];
+    const trigger = qualifyingPayments[0].payment;
     const [triggerAllocation] = await tx.select({ authorizationId: paymentAllocationsTable.authorizationId })
-      .from(paymentAllocationsTable).where(eq(paymentAllocationsTable.paymentId, trigger.id)).limit(1);
+      .from(paymentAllocationsTable).where(and(
+        eq(paymentAllocationsTable.paymentId, trigger.id),
+        sql`coalesce(${paymentAllocationsTable.serviceMonth}, ${trigger.paymentMonth}) = ${paymentMonth}`,
+      )).limit(1);
     const [fee] = await tx
     .insert(feesTable)
     .values({
@@ -418,6 +426,7 @@ async function enrichPayments(payments: (typeof paymentsTable.$inferSelect)[]) {
         id: a.id,
         authorizationId: a.authorizationId,
         authNumber: allocationAuthNums.get(a.authorizationId) ?? null,
+        serviceMonth: a.serviceMonth ?? p.paymentMonth ?? p.checkDate.slice(0, 7),
         amount: a.amount,
       })),
     }),
@@ -466,7 +475,22 @@ router.get("/payments", requireAuth, async (req, res): Promise<void> => {
   if (query.data.clientId) conditions.push(eq(paymentsTable.clientId, query.data.clientId));
   if (query.data.vendorId) conditions.push(eq(paymentsTable.vendorId, query.data.vendorId));
   if (query.data.authorizationId) conditions.push(sql`${paymentsTable.id} in (select pa_filter.payment_id from payment_allocations pa_filter where pa_filter.authorization_id = ${query.data.authorizationId})`);
-  if (query.data.paymentMonth) conditions.push(eq(paymentsTable.paymentMonth, query.data.paymentMonth));
+  if (query.data.paymentMonth) {
+    conditions.push(sql`(
+      exists (
+        select 1 from payment_allocations pa_month_filter
+        where pa_month_filter.payment_id = ${paymentsTable.id}
+          and pa_month_filter.service_month = ${query.data.paymentMonth}
+      )
+      or (
+        not exists (
+          select 1 from payment_allocations pa_legacy_month_filter
+          where pa_legacy_month_filter.payment_id = ${paymentsTable.id}
+        )
+        and ${paymentsTable.paymentMonth} = ${query.data.paymentMonth}
+      )
+    )`);
+  }
   if (query.data.startDate) conditions.push(gte(paymentsTable.checkDate, query.data.startDate));
   if (query.data.endDate) conditions.push(lte(paymentsTable.checkDate, query.data.endDate));
   // zod.coerce.boolean() treats the literal "false" as truthy; inspect the
@@ -490,7 +514,20 @@ router.get("/payments", requireAuth, async (req, res): Promise<void> => {
         sql`replace(lower(${paymentsTable.paymentType}), '_', ' ') ilike ${like}`,
         sql`case when ${paymentsTable.remitted} then 'remitted' else 'unremitted' end ilike ${like}`,
         sql`case when ${paymentsTable.remitted} then 'allocated' else 'remaining' end ilike ${like}`,
-        ilike(paymentsTable.paymentMonth, like),
+        sql`(
+          exists (
+            select 1 from payment_allocations pa_month_search
+            where pa_month_search.payment_id = ${paymentsTable.id}
+              and pa_month_search.service_month ilike ${like}
+          )
+          or (
+            not exists (
+              select 1 from payment_allocations pa_legacy_month_search
+              where pa_legacy_month_search.payment_id = ${paymentsTable.id}
+            )
+            and ${paymentsTable.paymentMonth} ilike ${like}
+          )
+        )`,
         sql`to_char(${paymentsTable.checkDate}, 'Mon FMDD, YYYY') ilike ${like}`,
         sql`cast(${paymentsTable.checkDate} as text) ilike ${like}`,
         normalizedSearch ? sql`cast(${paymentsTable.amount} as text) ilike ${numericLike}` : sql`false`,
@@ -520,6 +557,7 @@ router.get("/payments", requireAuth, async (req, res): Promise<void> => {
       amount: sql`${paymentsTable.amount}`,
       remitted: sql`${paymentsTable.remitted}`,
       paymentType: sql`lower(${paymentsTable.paymentType})`,
+      serviceMonth: sql`(select min(coalesce(pa_sort.service_month, p_sort.payment_month)) from payment_allocations pa_sort inner join payments p_sort on p_sort.id = pa_sort.payment_id where pa_sort.payment_id = ${paymentsTable.id})`,
       createdAt: sql`${paymentsTable.createdAt}`,
     },
     sql`${paymentsTable.id}`,
@@ -692,29 +730,29 @@ router.post("/payments", requirePermission("check_writing"), async (req, res): P
     res.status(400).json({ error: "Allocation total must equal payment amount" });
     return;
   }
+  const allocationKeys = allocations.map((allocation) => `${allocation.authorizationId}:${allocation.serviceMonth}`);
+  if (new Set(allocationKeys).size !== allocationKeys.length) {
+    res.status(400).json({ error: "Duplicate payment allocation authorization and service month" });
+    return;
+  }
   // Normalize empty strings from the form to null for optional/nullable FK columns
   const values = { ...paymentData, source: "manual", loggedBy: req.user!.id } as Record<string, unknown>;
   for (const k of ["authorizationId", "vendorId", "invoiceId", "paymentMonth"] as const) {
     if (values[k] === "") values[k] = null;
   }
-  // Derive the service month server-side from checkDate (YYYY-MM) when it's
-  // missing but a checkDate is present, so the duplicate check can't be skipped
-  // simply by omitting paymentMonth. The derived month is persisted on the row.
   const dupClientId = values.clientId as string;
   // Deprecated parent authorization relationship is never written for new rows.
   values.authorizationId = null;
-  if ((values.paymentMonth == null || values.paymentMonth === "") && typeof values.checkDate === "string" && values.checkDate.length >= 7) {
-    values.paymentMonth = values.checkDate.slice(0, 7);
-  }
-  const dupPaymentMonth = values.paymentMonth as string | null;
+  const allocationMonths = [...new Set(allocations.map((allocation) => allocation.serviceMonth))].sort();
+  // Keep the deprecated payment-level month as a compatibility value only.
+  values.paymentMonth = allocationMonths[0] ?? null;
 
   // Duplicate-payment HARD STOP: no two payments for the same client +
-  // authorization + service month without a written override justification.
-  // The check only applies when both an authorization and a payment month are
-  // present (mirrors invoice validation, which skips the check without an auth);
-  // payments genuinely without an authorization skip the check by definition.
-  const allocationAuthorizationIds = [...new Set(allocations.map((allocation) => allocation.authorizationId))];
-  const runDupCheck = allocationAuthorizationIds.length > 0 && !!dupPaymentMonth;
+  // authorization + allocation service month without a written override justification.
+  const duplicateKeys = [...new Map(allocations.map((allocation) => [
+    `${allocation.authorizationId}:${allocation.serviceMonth}`, allocation,
+  ])).values()];
+  const runDupCheck = duplicateKeys.length > 0;
   const justification = overrideJustification?.trim();
 
   // Persist the payment and its auto-generated Fee atomically so a payment can
@@ -750,11 +788,18 @@ router.post("/payments", requirePermission("check_writing"), async (req, res): P
       if (relationshipError) return null;
     }
     if (runDupCheck) {
-      for (const authorizationId of allocationAuthorizationIds.sort()) {
-        await lockDuplicatePaymentKey(txDb, { clientId: dupClientId, authorizationId, paymentMonth: dupPaymentMonth! });
+      for (const allocation of [...duplicateKeys].sort((a, b) =>
+        `${a.authorizationId}:${a.serviceMonth}`.localeCompare(`${b.authorizationId}:${b.serviceMonth}`),
+      )) {
+        await lockDuplicatePaymentKey(txDb, {
+          clientId: dupClientId,
+          authorizationId: allocation.authorizationId,
+          serviceMonth: allocation.serviceMonth,
+        });
       }
       const { isDuplicate, existingPayments } = await checkDuplicatePaymentAllocations(txDb, {
-        clientId: dupClientId, authorizationIds: allocationAuthorizationIds, paymentMonth: dupPaymentMonth!,
+        clientId: dupClientId,
+        allocations: duplicateKeys,
       });
       if (isDuplicate && !(overrideDuplicate && justification)) {
         duplicateBlocked = await enrichPayments(existingPayments);
@@ -768,10 +813,11 @@ router.post("/payments", requirePermission("check_writing"), async (req, res): P
     await tx.insert(paymentAllocationsTable).values(allocations.map((allocation) => ({
       paymentId: p.id,
       authorizationId: allocation.authorizationId,
+      serviceMonth: allocation.serviceMonth,
       amount: allocation.amount,
     })));
     if (qualifiesForMonthlyFee(p.paymentType)) {
-      await reconcileMonthlyFee(p.clientId, p.paymentMonth, req.user!.id, txDb);
+      for (const month of allocationMonths) await reconcileMonthlyFee(p.clientId, month, req.user!.id, txDb);
     }
     // Record any accepted duplicate override in the same transaction, keyed to
     // the NEW payment's id, so the audit trail can never diverge from the row.
@@ -787,7 +833,7 @@ router.post("/payments", requirePermission("check_writing"), async (req, res): P
       return;
     }
     res.status(409).json({
-      error: `A payment already exists for this client, authorization, and month (${dupPaymentMonth}). This is a hard stop — override requires a written justification.`,
+      error: "A payment already exists for this client, authorization, and service month. This is a hard stop — override requires a written justification.",
       code: "duplicate_payment",
       existingPayments: duplicateBlocked ?? [],
     });
@@ -889,7 +935,7 @@ router.post("/payments/import", requirePermission("check_writing"), async (req, 
         await lockDuplicatePaymentKey(txDb, {
           clientId: client.id,
           authorizationId: authorization.id,
-          paymentMonth: row.serviceMonth,
+          serviceMonth: row.serviceMonth,
         });
         const [existingSourceRow] = await tx
           .select({ id: paymentsTable.id })
@@ -901,7 +947,7 @@ router.post("/payments/import", requirePermission("check_writing"), async (req, 
         const duplicate = await checkDuplicatePayment(txDb, {
           clientId: client.id,
           authorizationId: authorization.id,
-          paymentMonth: row.serviceMonth,
+          serviceMonth: row.serviceMonth,
         });
         if (duplicate.isDuplicate) {
           const existing = duplicate.existingPayments[0];
@@ -918,7 +964,12 @@ router.post("/payments/import", requirePermission("check_writing"), async (req, 
 
         const [inserted] = await tx.insert(paymentsTable).values({ clientId: client.id, authorizationId: null, qbCheckNumber: row.checkNumber, checkDate: row.checkDate, amount: row.amount, paymentMonth: row.serviceMonth, paymentType: row.paymentType, source: "historical_import", loggedBy: req.user!.id, sourceRowFingerprint: fingerprint } as any).onConflictDoNothing().returning();
         if (!inserted) return { kind: "source_duplicate" as const };
-        await tx.insert(paymentAllocationsTable).values({ paymentId: inserted.id, authorizationId: authorization.id, amount: row.amount });
+        await tx.insert(paymentAllocationsTable).values({
+          paymentId: inserted.id,
+          authorizationId: authorization.id,
+          serviceMonth: row.serviceMonth,
+          amount: row.amount,
+        });
         await audit(req.user!.id, "import_alta_fms_payment", "payment", inserted.id, `Alta FMS historical import — check ${inserted.qbCheckNumber}`, tx as unknown as typeof db);
         return { kind: "imported" as const, payment: inserted };
       });
@@ -1023,39 +1074,61 @@ router.patch("/payments/:id", requirePermission("check_writing"), async (req, re
     res.status(404).json({ error: "Payment not found" });
     return;
   }
-  // Derive the service month server-side when checkDate changes but paymentMonth
-  // is not explicitly part of the patch — same rule as POST /payments (a) — so a
-  // month change implied by a new checkDate is folded into the duplicate check
-  // and persisted on the row.
-  const checkDateChanged = "checkDate" in updateData && typeof updates.checkDate === "string";
-  const paymentMonthExplicit = "paymentMonth" in updateData;
-  if (checkDateChanged && !paymentMonthExplicit && typeof updates.checkDate === "string" && updates.checkDate.length >= 7) {
-    updates.paymentMonth = updates.checkDate.slice(0, 7);
-  }
-  // Resolve the effective duplicate-defining triple after the patch. clientId is
-  // immutable via this endpoint, so it always comes from the existing row.
   const effClientId = before.clientId;
-  const beforeAllocations = await db.select({ authorizationId: paymentAllocationsTable.authorizationId })
+  const beforeAllocations = await db.select()
     .from(paymentAllocationsTable).where(eq(paymentAllocationsTable.paymentId, id));
-  const effectiveAllocationAuthorizationIds = allocations
-    ? [...new Set(allocations.map((allocation) => allocation.authorizationId))]
-    : [...new Set(beforeAllocations.map((allocation) => allocation.authorizationId))];
+  // Keep old clients that patch the deprecated paymentMonth field working by
+  // applying it to every allocation. New callers edit serviceMonth per row.
+  const legacyMonthMove = !allocations && "paymentMonth" in updateData && beforeAllocations.length > 0;
+  if (legacyMonthMove && typeof updates.paymentMonth !== "string") {
+    res.status(400).json({ error: "paymentMonth cannot be cleared while payment allocations exist" });
+    return;
+  }
+  const allocationsToPersist = allocations ?? beforeAllocations.map((allocation) => ({
+    authorizationId: allocation.authorizationId,
+    amount: allocation.amount,
+    serviceMonth: legacyMonthMove
+      ? (updates.paymentMonth as string)
+      : allocation.serviceMonth ?? before.paymentMonth ?? before.checkDate.slice(0, 7),
+  }));
+  const allocationKeys = allocationsToPersist.map((allocation) => `${allocation.authorizationId}:${allocation.serviceMonth}`);
+  if (new Set(allocationKeys).size !== allocationKeys.length) {
+    res.status(400).json({ error: "Duplicate payment allocation authorization and service month" });
+    return;
+  }
+  const effectiveMonths = [...new Set(allocationsToPersist.map((allocation) => allocation.serviceMonth))].sort();
+  if (allocationsToPersist.length) updates.paymentMonth = effectiveMonths[0];
+  const effectiveAllocationAuthorizationIds = [...new Set(allocationsToPersist.map((allocation) => allocation.authorizationId))];
   const effAuthorizationId = effectiveAllocationAuthorizationIds[0] ??
     (("authorizationId" in updates ? updates.authorizationId : before.authorizationId) as string | null);
   const effInvoiceId = ("invoiceId" in updates ? updates.invoiceId : before.invoiceId) as string | null;
   const effVendorId = ("vendorId" in updates ? updates.vendorId : before.vendorId) as string | null;
   const effPaymentMonth = ("paymentMonth" in updates ? updates.paymentMonth : before.paymentMonth) as string | null;
-  const dupFieldChanged = allocations !== undefined ||
+  const beforeKeys = beforeAllocations.map((allocation) =>
+    `${allocation.authorizationId}:${allocation.serviceMonth ?? before.paymentMonth ?? before.checkDate.slice(0, 7)}`,
+  ).sort();
+  const nextKeys = allocationsToPersist.map((allocation) =>
+    `${allocation.authorizationId}:${allocation.serviceMonth}`,
+  ).sort();
+  const allocationPairsChanged = beforeKeys.join("|") !== nextKeys.join("|");
+  const dupFieldChanged = allocationPairsChanged ||
     effPaymentMonth !== before.paymentMonth ||
     effAuthorizationId !== before.authorizationId;
-  // Re-run the duplicate hard stop only when the patch changes a
-  // duplicate-defining field and the resulting triple has both an authorization
-  // and a month (mirrors POST /payments). The payment's own row is excluded.
-  const runDupCheck = dupFieldChanged && effectiveAllocationAuthorizationIds.length > 0 && !!effPaymentMonth;
+  const effectiveDuplicatePairs = allocationsToPersist.length
+    ? allocationsToPersist
+    : (effAuthorizationId && effPaymentMonth
+      ? [{ authorizationId: effAuthorizationId, serviceMonth: effPaymentMonth }]
+      : []);
+  const runDupCheck = dupFieldChanged && effectiveDuplicatePairs.length > 0;
   const justification = overrideJustification?.trim();
-  const paymentMonthChanged = effPaymentMonth !== before.paymentMonth;
   const effPaymentType = ("paymentType" in updates ? updates.paymentType : before.paymentType) as string;
   const paymentTypeChanged = effPaymentType !== before.paymentType;
+  const affectedFeeMonths = [...new Set([
+    ...beforeAllocations.map((allocation) => allocation.serviceMonth ?? before.paymentMonth ?? before.checkDate.slice(0, 7)),
+    ...(allocationsToPersist.length
+      ? allocationsToPersist.map((allocation) => allocation.serviceMonth)
+      : [effPaymentMonth].filter((month): month is string => !!month)),
+  ])].sort();
   let duplicateBlocked: Awaited<ReturnType<typeof enrichPayments>> | null = null;
   let allocationBlocked = false;
   let relationshipError: string | undefined;
@@ -1071,8 +1144,7 @@ router.patch("/payments/:id", requirePermission("check_writing"), async (req, re
       return { payment: null as typeof paymentsTable.$inferSelect | null };
     }
     const incoming = new Map<string, ReturnType<typeof money>>();
-    const paymentAllocations = allocations ?? await tx.select()
-      .from(paymentAllocationsTable).where(eq(paymentAllocationsTable.paymentId, id));
+    const paymentAllocations = allocationsToPersist;
     for (const allocation of paymentAllocations) {
       incoming.set(allocation.authorizationId, (incoming.get(allocation.authorizationId) ?? money(0)).plus(money(allocation.amount)));
     }
@@ -1090,8 +1162,8 @@ router.patch("/payments/:id", requirePermission("check_writing"), async (req, re
         return { payment: null as typeof paymentsTable.$inferSelect | null };
       }
     }
-    if (allocations) {
-      for (const allocation of allocations) {
+    if (allocations || legacyMonthMove) {
+      for (const allocation of allocationsToPersist) {
         relationshipError = (await validateParticipantLinks(txDb, effClientId, {
           authorizationId: allocation.authorizationId,
           invoiceId: null,
@@ -1099,7 +1171,7 @@ router.patch("/payments/:id", requirePermission("check_writing"), async (req, re
         })).error;
         if (relationshipError) return { payment: null as typeof paymentsTable.$inferSelect | null };
       }
-      updates.authorizationId = null;
+      if (allocations) updates.authorizationId = null;
     }
     if (("amount" in updateData && String(before.amount) !== String(updates.amount)) || dupFieldChanged) {
       const [allocation] = await tx.select({ id: remittanceAllocationsTable.id })
@@ -1115,12 +1187,19 @@ router.patch("/payments/:id", requirePermission("check_writing"), async (req, re
     // a pg advisory lock so a concurrent write for the same triple can't race
     // past the SELECT-then-UPDATE window.
     if (runDupCheck) {
-      for (const authorizationId of effectiveAllocationAuthorizationIds.sort()) {
-        await lockDuplicatePaymentKey(txDb, { clientId: effClientId, authorizationId, paymentMonth: effPaymentMonth! });
+      for (const allocation of [...effectiveDuplicatePairs].sort((a, b) =>
+        `${a.authorizationId}:${a.serviceMonth}`.localeCompare(`${b.authorizationId}:${b.serviceMonth}`),
+      )) {
+        await lockDuplicatePaymentKey(txDb, {
+          clientId: effClientId,
+          authorizationId: allocation.authorizationId,
+          serviceMonth: allocation.serviceMonth,
+        });
       }
       const { isDuplicate, existingPayments } = await checkDuplicatePaymentAllocations(txDb, {
-        clientId: effClientId, authorizationIds: effectiveAllocationAuthorizationIds,
-        paymentMonth: effPaymentMonth!, excludePaymentId: id,
+        clientId: effClientId,
+        allocations: effectiveDuplicatePairs,
+        excludePaymentId: id,
       });
       if (isDuplicate && !(overrideDuplicate && justification)) {
         duplicateBlocked = await enrichPayments(existingPayments);
@@ -1132,11 +1211,12 @@ router.patch("/payments/:id", requirePermission("check_writing"), async (req, re
       .set(updates)
       .where(and(eq(paymentsTable.id, id), notDeleted(paymentsTable)))
       .returning();
-    if (allocations) {
+    if (allocations || legacyMonthMove) {
       await tx.delete(paymentAllocationsTable).where(eq(paymentAllocationsTable.paymentId, id));
-      await tx.insert(paymentAllocationsTable).values(allocations.map((allocation) => ({
+      await tx.insert(paymentAllocationsTable).values(allocationsToPersist.map((allocation) => ({
         paymentId: id,
         authorizationId: allocation.authorizationId,
+        serviceMonth: allocation.serviceMonth,
         amount: allocation.amount,
       })));
     }
@@ -1145,9 +1225,8 @@ router.patch("/payments/:id", requirePermission("check_writing"), async (req, re
     if (runDupCheck && overrideDuplicate && justification) {
       await audit(req.user!.id, "override_duplicate_payment", "payment", p.id, justification, txDb);
     }
-    if (paymentMonthChanged || paymentTypeChanged) {
-      const affectedMonths = [...new Set([before.paymentMonth, p.paymentMonth].filter((month): month is string => !!month))].sort();
-      for (const month of affectedMonths) {
+    if (allocationPairsChanged || effPaymentMonth !== before.paymentMonth || paymentTypeChanged) {
+      for (const month of affectedFeeMonths) {
         await reconcileMonthlyFee(p.clientId, month, req.user!.id, txDb);
       }
     }
@@ -1186,6 +1265,9 @@ router.delete("/payments/:id", requirePermission("check_writing"), async (req, r
   const deletedBy = req.user!.id;
   const { payment, financialLinkBlocked } = await db.transaction(async (tx) => {
     await tx.execute(sql`select id from payments where id = ${id} for update`);
+    const feeMonths = await tx.select({ serviceMonth: paymentAllocationsTable.serviceMonth })
+      .from(paymentAllocationsTable)
+      .where(eq(paymentAllocationsTable.paymentId, id));
     const [allocation] = await tx.select({ id: remittanceAllocationsTable.id })
       .from(remittanceAllocationsTable)
       .where(eq(remittanceAllocationsTable.paymentId, id))
@@ -1203,7 +1285,12 @@ router.delete("/payments/:id", requirePermission("check_writing"), async (req, r
       .where(and(eq(paymentsTable.id, id), notDeleted(paymentsTable)))
       .returning();
     if (!p) return { payment: undefined, financialLinkBlocked: false };
-    await reconcileMonthlyFee(p.clientId, p.paymentMonth, req.user!.id, tx as unknown as typeof db);
+    const affectedMonths = [...new Set(
+      feeMonths.map((allocation) => allocation.serviceMonth ?? p.paymentMonth ?? p.checkDate.slice(0, 7)),
+    )].sort();
+    for (const month of affectedMonths) {
+      await reconcileMonthlyFee(p.clientId, month, req.user!.id, tx as unknown as typeof db);
+    }
     await audit(req.user!.id, "delete_payment", "payment", p.id, `Check ${p.qbCheckNumber} — $${p.amount}`, tx as unknown as typeof db);
     return { payment: p, financialLinkBlocked: false };
   });
@@ -1227,13 +1314,13 @@ router.delete("/payments/:id", requirePermission("check_writing"), async (req, r
 // Shared auto-match logic (the same rule behind POST /remittances and
 // POST /remittances/:id/match): an unremitted payment for the SAME client whose
 // amount equals the remittance amount, and — when a service month is provided —
-// whose paymentMonth also matches. Extracted so the Alta batch import matches
+// whose allocation serviceMonth also matches. Extracted so the Alta batch import matches
 // imported line items exactly like manually-entered ones (no duplication).
 // Pass a `tx` to run inside a transaction. Payments that already have any
 // allocation are intentionally excluded: automatic matching is exact/full only,
 // while partial payments require an explicit staff allocation.
 async function findMatchingPayment(
-  args: { clientId: string; authorizationId?: string | null; amount: string; paymentMonth?: string | null },
+  args: { clientId: string; authorizationId?: string | null; amount: string; serviceMonth?: string | null },
   database: typeof db = db,
 ): Promise<typeof paymentsTable.$inferSelect | undefined> {
   const pool = await database
@@ -1247,22 +1334,47 @@ async function findMatchingPayment(
   const allocations = await database.select({
     paymentId: paymentAllocationsTable.paymentId,
     authorizationId: paymentAllocationsTable.authorizationId,
+    serviceMonth: paymentAllocationsTable.serviceMonth,
     amount: paymentAllocationsTable.amount,
-  }).from(paymentAllocationsTable).where(inArray(paymentAllocationsTable.paymentId, pool.map((p) => p.id)));
+  }).from(paymentAllocationsTable).where(pool.length
+    ? inArray(paymentAllocationsTable.paymentId, pool.map((p) => p.id))
+    : sql`false`);
   const byPayment = new Map<string, typeof allocations>();
   for (const allocation of allocations) byPayment.set(allocation.paymentId, [...(byPayment.get(allocation.paymentId) ?? []), allocation]);
-  return pool.find(
-    (p) =>
-      p.clientId === args.clientId &&
-      !p.remitted &&
-       (!args.authorizationId || (byPayment.get(p.id)?.some((a) => a.authorizationId === args.authorizationId) ?? p.authorizationId === args.authorizationId)) &&
-       money(
-         args.authorizationId
-           ? (byPayment.get(p.id)?.find((a) => a.authorizationId === args.authorizationId)?.amount ?? p.amount)
-           : p.amount,
-       ).equals(money(args.amount)) &&
-      (!args.paymentMonth || p.paymentMonth === args.paymentMonth),
-  );
+  return pool.find((payment) => {
+    const paymentAllocations = byPayment.get(payment.id) ?? [];
+    let matchedAmount: string;
+
+    if (paymentAllocations.length === 0) {
+      // Legacy parent-only rows can still be matched by their parent auth and
+      // month, but do not use those fields to override an allocation-bearing row.
+      if (args.authorizationId && payment.authorizationId !== args.authorizationId) return false;
+      if (args.serviceMonth && payment.paymentMonth !== args.serviceMonth) return false;
+      matchedAmount = payment.amount;
+    } else if (args.authorizationId) {
+      const matchingAllocations = paymentAllocations.filter((allocation) =>
+        allocation.authorizationId === args.authorizationId &&
+        (!args.serviceMonth || (allocation.serviceMonth ?? payment.paymentMonth) === args.serviceMonth),
+      );
+      // Without a remittance month, multiple allocations for the same
+      // authorization are ambiguous; never silently choose the first month.
+      if (matchingAllocations.length !== 1) return false;
+      matchedAmount = matchingAllocations[0].amount;
+    } else {
+      const allocationMonths = new Set(paymentAllocations.map((allocation) => allocation.serviceMonth ?? payment.paymentMonth));
+      // A remittance without an authorization can only match a full check when
+      // every allocation belongs to its specified service month. If no month
+      // was supplied, all allocations must unambiguously share one known month.
+      if (args.serviceMonth) {
+        if (paymentAllocations.some((allocation) => (allocation.serviceMonth ?? payment.paymentMonth) !== args.serviceMonth)) return false;
+      } else if (allocationMonths.size !== 1 || allocationMonths.has(null)) {
+        return false;
+      }
+      matchedAmount = payment.amount;
+    }
+
+    return money(matchedAmount).equals(money(args.amount));
+  });
 }
 
 function authorizationExpectedAmount(auth: typeof authorizationsTable.$inferSelect | null | undefined): string | null {
@@ -1452,7 +1564,13 @@ router.post("/remittances", requirePermission("check_writing"), async (req, res)
     }
     const expected = authorizationExpectedAmount(auth);
     const mismatch = !!(expected && !money(expected).equals(money(parsed.data.amount)));
-    const candidate = mismatch ? undefined : await findMatchingPayment({ clientId: parsed.data.clientId, authorizationId, amount: parsed.data.amount, paymentMonth: values.paymentMonth as string | null }, txDb);
+    const serviceMonth = values.paymentMonth as string | null;
+    const candidate = mismatch ? undefined : await findMatchingPayment({
+      clientId: parsed.data.clientId,
+      authorizationId,
+      amount: parsed.data.amount,
+      serviceMonth,
+    }, txDb);
     let match: typeof paymentsTable.$inferSelect | undefined;
     if (candidate) {
       // Candidate discovery is necessarily a snapshot. Lock and re-read the
@@ -1468,11 +1586,27 @@ router.post("/remittances", requirePermission("check_writing"), async (req, res)
         .from(paymentAllocationsTable).where(and(
           eq(paymentAllocationsTable.paymentId, candidate.id),
           eq(paymentAllocationsTable.authorizationId, authorizationId),
+          ...(serviceMonth ? [sql`coalesce(${paymentAllocationsTable.serviceMonth}, ${lockedCandidate.paymentMonth}) = ${serviceMonth}`] : []),
         ));
+      const [existingAllocation] = await tx.select({ id: paymentAllocationsTable.id })
+        .from(paymentAllocationsTable)
+        .where(eq(paymentAllocationsTable.paymentId, candidate.id))
+        .limit(1);
+      const authCapacity = existingAllocation ? money(authAllocation?.total) : money(lockedCandidate.amount);
+      const assignedConditions = [
+        eq(remittanceAllocationsTable.paymentId, candidate.id),
+        eq(remittancesTable.authorizationId, authorizationId),
+        ...(serviceMonth ? [
+          or(
+            eq(remittancesTable.paymentMonth, serviceMonth),
+            isNull(remittancesTable.paymentMonth),
+          )!,
+        ] : []),
+      ];
       const [assigned] = await tx.select({ total: sql<string>`coalesce(sum(${remittanceAllocationsTable.amount}), 0)` })
         .from(remittanceAllocationsTable).innerJoin(remittancesTable, eq(remittancesTable.id, remittanceAllocationsTable.remittanceId))
-        .where(and(eq(remittanceAllocationsTable.paymentId, candidate.id), eq(remittancesTable.authorizationId, authorizationId)));
-      const remaining = money(authAllocation?.total).minus(money(assigned?.total));
+        .where(and(...assignedConditions));
+      const remaining = authCapacity.minus(money(assigned?.total));
       if (remaining.greaterThanOrEqualTo(money(parsed.data.amount))) {
         const [paymentAssigned] = await tx.select({ total: sql<string>`coalesce(sum(${remittanceAllocationsTable.amount}), 0)` })
           .from(remittanceAllocationsTable).where(eq(remittanceAllocationsTable.paymentId, lockedCandidate.id));
@@ -1526,12 +1660,37 @@ router.post("/remittances/:id/match", requirePermission("check_writing"), async 
     const [client] = await tx.select().from(clientsTable).where(eq(clientsTable.id, payment.clientId));
     if (!client || client.isDeleted) return { error: "Payment client not found or deleted", status: 400 } as const;
     if (payment.clientId !== remittance.clientId) return { error: "Payment belongs to a different client", status: 400 } as const;
-    if (remittance.authorizationId) {
-      const [allocation] = await tx.select({ id: paymentAllocationsTable.id }).from(paymentAllocationsTable)
-        .where(and(eq(paymentAllocationsTable.paymentId, payment.id), eq(paymentAllocationsTable.authorizationId, remittance.authorizationId))).limit(1);
-      if (!allocation && payment.authorizationId !== remittance.authorizationId) return { error: "Payment belongs to a different authorization", status: 400 } as const;
+    const paymentServiceAllocations = await tx.select({
+      authorizationId: paymentAllocationsTable.authorizationId,
+      serviceMonth: paymentAllocationsTable.serviceMonth,
+      amount: paymentAllocationsTable.amount,
+    }).from(paymentAllocationsTable).where(eq(paymentAllocationsTable.paymentId, payment.id));
+    let applicableAllocations = paymentServiceAllocations;
+    if (paymentServiceAllocations.length) {
+      if (remittance.authorizationId) {
+        applicableAllocations = applicableAllocations.filter((allocation) =>
+          allocation.authorizationId === remittance.authorizationId,
+        );
+        if (!applicableAllocations.length) {
+          return { error: "Payment belongs to a different authorization", status: 400 } as const;
+        }
+      }
+      if (remittance.paymentMonth) {
+        applicableAllocations = applicableAllocations.filter((allocation) =>
+          allocation.serviceMonth === remittance.paymentMonth,
+        );
+        if (!applicableAllocations.length) {
+          return { error: "Payment is for a different service month", status: 400 } as const;
+        }
+      }
+    } else {
+      if (remittance.authorizationId && payment.authorizationId !== remittance.authorizationId) {
+        return { error: "Payment belongs to a different authorization", status: 400 } as const;
+      }
+      if (remittance.paymentMonth && payment.paymentMonth !== remittance.paymentMonth) {
+        return { error: "Payment is for a different service month", status: 400 } as const;
+      }
     }
-    if (remittance.paymentMonth && payment.paymentMonth !== remittance.paymentMonth) return { error: "Payment is for a different service month", status: 400 } as const;
     const allocationAmount = money(parsed.data.amount);
     if (!allocationAmount.isPositive()) return { error: "Allocation amount must be greater than zero", status: 400 } as const;
     const [paymentTotals] = await tx.select({ total: sql<string>`coalesce(sum(${remittanceAllocationsTable.amount}), 0)` }).from(remittanceAllocationsTable).where(eq(remittanceAllocationsTable.paymentId, payment.id));
@@ -1541,12 +1700,27 @@ router.post("/remittances/:id/match", requirePermission("check_writing"), async 
     }
      const paymentRemaining = money(payment.amount).minus(paymentTotals.total);
      const targetAuthorization = remittance.authorizationId;
-     const [authCapacity] = targetAuthorization ? await tx.select({ total: sql<string>`coalesce(sum(${paymentAllocationsTable.amount}), 0)` })
-       .from(paymentAllocationsTable).where(and(eq(paymentAllocationsTable.paymentId, payment.id), eq(paymentAllocationsTable.authorizationId, targetAuthorization))) : [{ total: payment.amount }];
-     const [authAssigned] = targetAuthorization ? await tx.select({ total: sql<string>`coalesce(sum(${remittanceAllocationsTable.amount}), 0)` })
+      const authCapacity = targetAuthorization
+        ? paymentServiceAllocations.length
+          ? applicableAllocations.reduce((total, allocation) => total.plus(money(allocation.amount)), money(0)).toFixed(2)
+          : payment.amount
+        : payment.amount;
+      const authAssignmentConditions = targetAuthorization
+        ? [
+            eq(remittanceAllocationsTable.paymentId, payment.id),
+            eq(remittancesTable.authorizationId, targetAuthorization),
+            ...(remittance.paymentMonth ? [
+              or(
+                eq(remittancesTable.paymentMonth, remittance.paymentMonth),
+                isNull(remittancesTable.paymentMonth),
+              )!,
+            ] : []),
+          ]
+        : [];
+      const [authAssigned] = targetAuthorization ? await tx.select({ total: sql<string>`coalesce(sum(${remittanceAllocationsTable.amount}), 0)` })
        .from(remittanceAllocationsTable).innerJoin(remittancesTable, eq(remittancesTable.id, remittanceAllocationsTable.remittanceId))
-       .where(and(eq(remittanceAllocationsTable.paymentId, payment.id), eq(remittancesTable.authorizationId, targetAuthorization))) : [{ total: "0" }];
-     const authorizationRemaining = money(authCapacity.total).minus(money(authAssigned.total));
+        .where(and(...authAssignmentConditions)) : [{ total: "0" }];
+      const authorizationRemaining = money(authCapacity).minus(money(authAssigned.total));
     const remittanceRemaining = money(remittance.amount).minus(remittanceTotals.total);
     if (allocationAmount.greaterThan(paymentRemaining)) return { error: "Allocation exceeds the payment remaining balance", status: 409 } as const;
      if (allocationAmount.greaterThan(authorizationRemaining)) return { error: "Allocation exceeds the authorization remaining balance", status: 409 } as const;
@@ -1699,7 +1873,7 @@ router.post("/remittances/import", requirePermission("check_writing"), async (re
       const amountMismatch = !!(expectedAmount && !money(expectedAmount).equals(money(row.amount)));
       const candidate = amountMismatch
         ? undefined
-        : await findMatchingPayment({ clientId: client.id, authorizationId, amount: row.amount, paymentMonth }, txDb);
+        : await findMatchingPayment({ clientId: client.id, authorizationId, amount: row.amount, serviceMonth: paymentMonth }, txDb);
       let claimedPayment: typeof paymentsTable.$inferSelect | undefined;
       if (candidate) {
         const [locked] = await tx.select().from(paymentsTable)

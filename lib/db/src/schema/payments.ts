@@ -30,7 +30,7 @@ export const paymentsTable = pgTable("payments", {
   qbCheckNumber: text("qb_check_number").notNull(),
   checkDate: date("check_date", { mode: "string" }).notNull(),
   amount: numeric("amount", { precision: 12, scale: 2 }).notNull(),
-  paymentMonth: text("payment_month"), // YYYY-MM
+  paymentMonth: text("payment_month"), // Deprecated compatibility month: earliest payment-allocation service month.
   paymentType: text("payment_type").notNull(), // direct_payment | reimbursement | fee
   source: text("source").notNull(), // quickbooks | manual
   sourceRowFingerprint: text("source_row_fingerprint"),

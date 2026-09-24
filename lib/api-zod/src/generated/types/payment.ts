@@ -27,7 +27,10 @@ export interface Payment {
   qbCheckNumber: string;
   checkDate: string;
   amount: string;
-  /** @nullable */
+  /**
+     * Deprecated compatibility field; derived from allocation service months.
+     * @nullable
+     */
   paymentMonth?: string | null;
   paymentType: PaymentPaymentType;
   source: PaymentSource;

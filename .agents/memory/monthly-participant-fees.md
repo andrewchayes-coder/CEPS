@@ -3,7 +3,7 @@ name: Monthly participant fees
 description: Confirmed fee-generation and lifecycle rules for participant service months.
 ---
 
-An active participant can have at most one $160 fee for a service month. Direct payments and reimbursements qualify; fee-type payments and historical imports do not. Creation, service-month changes, payment-type changes, and deletion reconcile every affected month. Payment amount changes do not alter the flat fee, and a missing service month must not be guessed.
+An active participant can have at most one $160 fee for a service month. Direct payments and reimbursements qualify; fee-type payments and historical imports do not. For multi-month payments, creation, allocation-month changes, payment-type changes, and deletion reconcile every affected allocation month. Payment amount changes do not alter the flat fee; never use the check date to guess a missing service month.
 
 **Why:** CEPS replaced the interim one-fee-per-payment percentage rule with a flat monthly obligation. Concurrent qualifying payments must not create duplicate fees.
 

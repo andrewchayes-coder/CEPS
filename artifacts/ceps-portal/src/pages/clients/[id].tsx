@@ -23,6 +23,7 @@ import { stableSort, useTableSort } from '@/lib/table-sorting';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { DocumentPreview } from '@/components/document-preview';
 import { getInvoiceDisplayMonth } from '@/lib/invoice-utils';
+import { earliestPaymentServiceMonth, formatPaymentServiceMonths } from '@/lib/payment-utils';
 
 const documentStatusPresentation: Record<string, { label: string; className: string }> = {
   pending: {
@@ -181,6 +182,7 @@ export default function ClientDetailPage() {
     qbCheckNumber: (payment) => payment.qbCheckNumber,
     vendorName: (payment) => payment.vendorName,
     authNumber: (payment) => payment.authNumber,
+    serviceMonth: (payment) => earliestPaymentServiceMonth(payment),
     amount: (payment) => Number(payment.amount),
     remitted: (payment) => payment.remitted,
   });
@@ -483,6 +485,7 @@ export default function ClientDetailPage() {
                     <SortableTableHead sortDirection={paymentsSort.sort.key === 'qbCheckNumber' ? paymentsSort.sort.direction : null} onSort={() => paymentsSort.onSort('qbCheckNumber')}>Check #</SortableTableHead>
                     <SortableTableHead sortDirection={paymentsSort.sort.key === 'vendorName' ? paymentsSort.sort.direction : null} onSort={() => paymentsSort.onSort('vendorName')}>Payee/Vendor</SortableTableHead>
                     <SortableTableHead sortDirection={paymentsSort.sort.key === 'authNumber' ? paymentsSort.sort.direction : null} onSort={() => paymentsSort.onSort('authNumber')}>Auth #</SortableTableHead>
+                    <SortableTableHead sortDirection={paymentsSort.sort.key === 'serviceMonth' ? paymentsSort.sort.direction : null} onSort={() => paymentsSort.onSort('serviceMonth')}>Service Month</SortableTableHead>
                     <SortableTableHead className="text-right" sortDirection={paymentsSort.sort.key === 'amount' ? paymentsSort.sort.direction : null} onSort={() => paymentsSort.onSort('amount')}>Amount</SortableTableHead>
                     <SortableTableHead sortDirection={paymentsSort.sort.key === 'remitted' ? paymentsSort.sort.direction : null} onSort={() => paymentsSort.onSort('remitted')}>Remitted</SortableTableHead>
                   </TableRow>
@@ -512,12 +515,13 @@ export default function ClientDetailPage() {
                           ) : p.authNumber || '-'
                         )}
                       </TableCell>
+                      <TableCell className="whitespace-nowrap" data-testid={`text-client-payment-service-month-${p.id}`}>{formatPaymentServiceMonths(p)}</TableCell>
                       <TableCell className="text-right font-medium">${parseFloat(p.amount).toFixed(2)}</TableCell>
                       <TableCell>{p.remitted ? <CheckCircle2 className="w-4 h-4 text-chart-5" /> : '-'}</TableCell>
                     </TableRow>
                   ))}
                   {payments.length === 0 && (
-                    <TableRow><TableCell colSpan={6} className="text-center py-8 text-muted-foreground">No payments found.</TableCell></TableRow>
+                    <TableRow><TableCell colSpan={7} className="text-center py-8 text-muted-foreground">No payments found.</TableCell></TableRow>
                   )}
                 </TableBody>
               </Table>

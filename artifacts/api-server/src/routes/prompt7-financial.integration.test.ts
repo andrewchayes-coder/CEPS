@@ -97,7 +97,7 @@ describe("Prompt 7 financial child rows (database)", () => {
     expect(badInvoice.status).toBe(400);
     const badPayment = await request(app).post("/api/payments").set("Cookie", `ceps_session=${token}`).send({
       clientId: client.id, qbCheckNumber: `${nonce}-bad`, checkDate: "2025-03-01", amount: "12.00", paymentType: "direct_payment",
-      allocations: [{ authorizationId: a.id, amount: "11.00" }],
+      allocations: [{ authorizationId: a.id, serviceMonth: "2025-03", amount: "11.00" }],
     });
     expect(badPayment.status).toBe(400);
   });
@@ -122,7 +122,7 @@ describe("Prompt 7 financial child rows (database)", () => {
     expect(crossInvoice.status).toBe(400);
     const crossPayment = await request(app).post("/api/payments").set("Cookie", `ceps_session=${token}`).send({
       clientId: one.id, qbCheckNumber: `${nonce}-cross`, checkDate: "2025-01-01", amount: "10.00", paymentType: "direct_payment",
-      allocations: [{ authorizationId: authTwo.id, amount: "10.00" }],
+      allocations: [{ authorizationId: authTwo.id, serviceMonth: "2025-01", amount: "10.00" }],
     });
     expect(crossPayment.status).toBe(400);
     const [invoice] = await db.insert(invoicesTable).values({ clientId: one.id, amountRequested: "30.00", paymentType: "direct_payment", submittedByRole: "staff", submittedDate: "2025-01-01", status: "pending_review" } as any).returning();
@@ -207,10 +207,15 @@ describe("Prompt 7 financial child rows (database)", () => {
     const token = newToken();
     await db.insert(sessionsTable).values({ userId: staff.id, token, expiresAt: new Date(Date.now() + 3600000) });
     const [payment] = await db.insert(paymentsTable).values({
-      clientId: client.id, paymentMonth: "2025-02", qbCheckNumber: `${nonce}-payment`,
+      clientId: client.id, paymentMonth: "2025-01", qbCheckNumber: `${nonce}-payment`,
       checkDate: "2025-02-15", amount: "20.00", paymentType: "direct_payment", source: "manual",
     } as any).returning();
-    await db.insert(paymentAllocationsTable).values({ paymentId: payment.id, authorizationId: auth.id, amount: "20.00" });
+    await db.insert(paymentAllocationsTable).values({
+      paymentId: payment.id,
+      authorizationId: auth.id,
+      serviceMonth: "2025-02",
+      amount: "20.00",
+    });
     const [duplicateInvoice] = await db.insert(invoicesTable).values({
       clientId: client.id, vendorId: vendor.id, amountRequested: "40.00", paymentType: "direct_payment",
       submittedByRole: "staff", submittedDate: "2025-01-01", status: "pending_review",
@@ -254,7 +259,12 @@ describe("Prompt 7 financial child rows (database)", () => {
       clientId: client.id, paymentMonth: "2025-06", qbCheckNumber: `${nonce}-payment`,
       checkDate: "2025-06-15", amount: "10.00", paymentType: "direct_payment", source: "manual",
     } as any).returning();
-    await db.insert(paymentAllocationsTable).values({ paymentId: payment.id, authorizationId: auth.id, amount: "10.00" });
+    await db.insert(paymentAllocationsTable).values({
+      paymentId: payment.id,
+      authorizationId: auth.id,
+      serviceMonth: "2025-06",
+      amount: "10.00",
+    });
     const [first, second] = await db.insert(remittancesTable).values([
       { clientId: client.id, authorizationId: auth.id, altaReference: `${nonce}-1`, remittanceDate: "2025-06-20", amount: "10.00", paymentMonth: "2025-06", status: "received", source: "manual" },
       { clientId: client.id, authorizationId: auth.id, altaReference: `${nonce}-2`, remittanceDate: "2025-06-21", amount: "10.00", paymentMonth: "2025-06", status: "received", source: "manual" },

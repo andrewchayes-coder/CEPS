@@ -280,7 +280,7 @@ async function main() {
       remitted: true,
     })
     .returning();
-  await db.insert(paymentAllocationsTable).values({ paymentId: payment.id, authorizationId: authA.id, amount: "480.00" });
+  await db.insert(paymentAllocationsTable).values({ paymentId: payment.id, authorizationId: authA.id, serviceMonth: "2026-06", amount: "480.00" });
 
   await db.insert(remittancesTable).values([
     {

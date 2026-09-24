@@ -7,6 +7,7 @@ import {
   authorizationsTable,
   invoicesTable,
   paymentsTable,
+  paymentAllocationsTable,
   remittancesTable,
   vendorsTable,
 } from "@workspace/db";
@@ -375,6 +376,11 @@ router.get("/clients/:id/case", requireAuth, async (req, res): Promise<void> => 
     userContactMap([client.assignedCoordinatorId, ...referrals.map((r) => r.serviceCoordinatorId)]),
     authorizationTotalsPaid(authorizations.map((a) => a.id)),
   ]);
+  const paymentAllocations = payments.length
+    ? await db.select().from(paymentAllocationsTable)
+      .where(inArray(paymentAllocationsTable.paymentId, payments.map((payment) => payment.id)))
+    : [];
+  const paymentAllocationAuthNumbers = await authNumberMap(paymentAllocations.map((allocation) => allocation.authorizationId));
   const uniqueVendorIds = [...new Set(vendorIds.filter((vendorId): vendorId is string => !!vendorId))];
   const vendors =
     req.user!.role === "staff" && uniqueVendorIds.length > 0
@@ -502,6 +508,13 @@ router.get("/clients/:id/case", requireAuth, async (req, res): Promise<void> => 
           clientName,
           vendorName: p.vendorId ? vendorNames.get(p.vendorId) : null,
           authNumber: p.authorizationId ? authNums.get(p.authorizationId) : null,
+          allocations: paymentAllocations.filter((allocation) => allocation.paymentId === p.id).map((allocation) => ({
+            id: allocation.id,
+            authorizationId: allocation.authorizationId,
+            authNumber: paymentAllocationAuthNumbers.get(allocation.authorizationId) ?? null,
+            serviceMonth: allocation.serviceMonth ?? p.paymentMonth ?? p.checkDate.slice(0, 7),
+            amount: allocation.amount,
+          })),
         }),
       ),
       remittances: remittances.map((r) =>

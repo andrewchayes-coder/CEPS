@@ -218,13 +218,13 @@ describe("invoice workflow permissions", () => {
     const writer = await makeUser(); await grant(writer.id, ["check_writing"]);
     const expired = await fixture("approved", "2026-11");
     await db.update(authorizationsTable).set({ servicePeriodEnd: "2020-01-01" }).where(eq(authorizationsTable.id, expired.auth.id));
-    const body = { clientId: expired.client.id, invoiceId: expired.invoice.id, qbCheckNumber: `${nonce}-expired`, checkDate: "2026-11-15", paymentMonth: "2026-11", paymentType: "direct_payment", amount: "100.00", allocations: [{ authorizationId: expired.auth.id, amount: "100.00" }] };
+    const body = { clientId: expired.client.id, invoiceId: expired.invoice.id, qbCheckNumber: `${nonce}-expired`, checkDate: "2026-11-15", paymentMonth: "2026-11", paymentType: "direct_payment", amount: "100.00", allocations: [{ authorizationId: expired.auth.id, serviceMonth: "2026-11", amount: "100.00" }] };
     const before = (await db.select().from(paymentsTable).where(eq(paymentsTable.clientId, expired.client.id))).length;
     const denied = await request(app).post("/api/payments").set("Cookie", cookies.get(writer.id)!).send(body);
     expect(denied.status).toBe(400); expect(denied.body.error).toContain(expired.auth.authNumber); expect(denied.body.error).toContain("2026-11");
     expect((await db.select().from(paymentsTable).where(eq(paymentsTable.clientId, expired.client.id))).length).toBe(before);
     const exact = await fixture("approved", "2026-12", "100.00");
-    const ok = await request(app).post("/api/payments").set("Cookie", cookies.get(writer.id)!).send({ ...body, clientId: exact.client.id, invoiceId: exact.invoice.id, qbCheckNumber: `${nonce}-exact`, paymentMonth: "2026-12", checkDate: "2026-12-15", allocations: [{ authorizationId: exact.auth.id, amount: "100.00" }] });
+    const ok = await request(app).post("/api/payments").set("Cookie", cookies.get(writer.id)!).send({ ...body, clientId: exact.client.id, invoiceId: exact.invoice.id, qbCheckNumber: `${nonce}-exact`, paymentMonth: "2026-12", checkDate: "2026-12-15", allocations: [{ authorizationId: exact.auth.id, serviceMonth: "2026-12", amount: "100.00" }] });
     expect(ok.status).toBe(201);
     ids.payments.push(ok.body.id);
   });
@@ -253,7 +253,7 @@ describe("invoice workflow permissions", () => {
     const body = {
       clientId: target.client.id, invoiceId: target.invoice.id, qbCheckNumber: `${nonce}-wrong-auth`,
       checkDate: "2027-03-15", paymentMonth: "2027-03", paymentType: "direct_payment",
-      amount: "100.00", allocations: [{ authorizationId: otherAuth.id, amount: "100.00" }],
+      amount: "100.00", allocations: [{ authorizationId: otherAuth.id, serviceMonth: "2027-03", amount: "100.00" }],
     };
     const rejected = await request(app).post("/api/payments").set("Cookie", cookies.get(writer.id)!).send(body);
     expect(rejected.status).toBe(400);

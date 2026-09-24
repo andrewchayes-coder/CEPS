@@ -545,6 +545,7 @@ export const GetClientCaseParams = zod.object({
 
 export const getClientCaseResponseInvoicesItemLineItemsItemServiceMonthRegExp = new RegExp('^\\d{4}-(0[1-9]|1[0-2])$');
 export const getClientCaseResponseInvoicesItemLineItemsItemAmountRegExp = new RegExp('^\\d+(\\.\\d{1,2})?$');
+export const getClientCaseResponsePaymentsItemAllocationsItemServiceMonthRegExp = new RegExp('^\\d{4}-(0[1-9]|1[0-2])$');
 export const getClientCaseResponsePaymentsItemAllocationsItemAmountRegExp = new RegExp('^\\d+(\\.\\d{1,2})?$');
 
 
@@ -739,7 +740,7 @@ export const GetClientCaseResponse = zod.object({
   "qbCheckNumber": zod.string(),
   "checkDate": zod.string(),
   "amount": zod.string(),
-  "paymentMonth": zod.string().nullish(),
+  "paymentMonth": zod.string().nullish().describe('Deprecated compatibility field; derived from allocation service months.'),
   "paymentType": zod.enum(['direct_payment', 'reimbursement', 'fee']),
   "source": zod.enum(['quickbooks', 'manual', 'historical_import']),
   "loggedBy": zod.string().nullish(),
@@ -750,6 +751,7 @@ export const GetClientCaseResponse = zod.object({
   "allocations": zod.array(zod.object({
   "id": zod.string(),
   "authorizationId": zod.string(),
+  "serviceMonth": zod.string().regex(getClientCaseResponsePaymentsItemAllocationsItemServiceMonthRegExp),
   "authNumber": zod.string().nullish(),
   "amount": zod.string().regex(getClientCaseResponsePaymentsItemAllocationsItemAmountRegExp)
 }))
@@ -2606,10 +2608,11 @@ export const ListPaymentsQueryParams = zod.object({
   "endDate": zod.coerce.string().optional(),
   "limit": zod.coerce.number().int().optional(),
   "offset": zod.coerce.number().int().optional(),
-  "sortBy": zod.enum(['checkDate', 'qbCheckNumber', 'vendorName', 'clientName', 'amount', 'remitted', 'paymentType', 'createdAt']).optional(),
+  "sortBy": zod.enum(['checkDate', 'qbCheckNumber', 'vendorName', 'clientName', 'amount', 'remitted', 'paymentType', 'serviceMonth', 'createdAt']).optional(),
   "sortDirection": zod.enum(['asc', 'desc']).optional()
 })
 
+export const listPaymentsResponseItemsItemAllocationsItemServiceMonthRegExp = new RegExp('^\\d{4}-(0[1-9]|1[0-2])$');
 export const listPaymentsResponseItemsItemAllocationsItemAmountRegExp = new RegExp('^\\d+(\\.\\d{1,2})?$');
 
 
@@ -2626,7 +2629,7 @@ export const ListPaymentsResponse = zod.object({
   "qbCheckNumber": zod.string(),
   "checkDate": zod.string(),
   "amount": zod.string(),
-  "paymentMonth": zod.string().nullish(),
+  "paymentMonth": zod.string().nullish().describe('Deprecated compatibility field; derived from allocation service months.'),
   "paymentType": zod.enum(['direct_payment', 'reimbursement', 'fee']),
   "source": zod.enum(['quickbooks', 'manual', 'historical_import']),
   "loggedBy": zod.string().nullish(),
@@ -2637,6 +2640,7 @@ export const ListPaymentsResponse = zod.object({
   "allocations": zod.array(zod.object({
   "id": zod.string(),
   "authorizationId": zod.string(),
+  "serviceMonth": zod.string().regex(listPaymentsResponseItemsItemAllocationsItemServiceMonthRegExp),
   "authNumber": zod.string().nullish(),
   "amount": zod.string().regex(listPaymentsResponseItemsItemAllocationsItemAmountRegExp)
 }))
@@ -2649,6 +2653,7 @@ export const ListPaymentsResponse = zod.object({
  * @summary Manually log a payment/check (staff)
  */
 export const createPaymentBodyPaymentMonthRegExp = new RegExp('^\\d{4}-(0[1-9]|1[0-2])$');
+export const createPaymentBodyAllocationsItemServiceMonthRegExp = new RegExp('^\\d{4}-(0[1-9]|1[0-2])$');
 export const createPaymentBodyAllocationsItemAmountRegExp = new RegExp('^\\d+(\\.\\d{1,2})?$');
 
 
@@ -2661,16 +2666,18 @@ export const CreatePaymentBody = zod.object({
   "qbCheckNumber": zod.string(),
   "checkDate": zod.string(),
   "amount": zod.string(),
-  "paymentMonth": zod.string().regex(createPaymentBodyPaymentMonthRegExp).nullish(),
+  "paymentMonth": zod.string().regex(createPaymentBodyPaymentMonthRegExp).nullish().describe('Deprecated compatibility field; derived from allocation service months.'),
   "paymentType": zod.enum(['direct_payment', 'reimbursement', 'fee']),
   "overrideDuplicate": zod.boolean().optional().describe('Set true (with a justification) to bypass the duplicate-payment hard stop'),
   "overrideJustification": zod.string().optional().describe('Required written justification when overrideDuplicate is true'),
   "allocations": zod.array(zod.object({
   "authorizationId": zod.string(),
+  "serviceMonth": zod.string().regex(createPaymentBodyAllocationsItemServiceMonthRegExp),
   "amount": zod.string().regex(createPaymentBodyAllocationsItemAmountRegExp)
 })).min(1)
 })
 
+export const createPaymentResponseAllocationsItemServiceMonthRegExp = new RegExp('^\\d{4}-(0[1-9]|1[0-2])$');
 export const createPaymentResponseAllocationsItemAmountRegExp = new RegExp('^\\d+(\\.\\d{1,2})?$');
 
 
@@ -2686,7 +2693,7 @@ export const CreatePaymentResponse = zod.object({
   "qbCheckNumber": zod.string(),
   "checkDate": zod.string(),
   "amount": zod.string(),
-  "paymentMonth": zod.string().nullish(),
+  "paymentMonth": zod.string().nullish().describe('Deprecated compatibility field; derived from allocation service months.'),
   "paymentType": zod.enum(['direct_payment', 'reimbursement', 'fee']),
   "source": zod.enum(['quickbooks', 'manual', 'historical_import']),
   "loggedBy": zod.string().nullish(),
@@ -2697,6 +2704,7 @@ export const CreatePaymentResponse = zod.object({
   "allocations": zod.array(zod.object({
   "id": zod.string(),
   "authorizationId": zod.string(),
+  "serviceMonth": zod.string().regex(createPaymentResponseAllocationsItemServiceMonthRegExp),
   "authNumber": zod.string().nullish(),
   "amount": zod.string().regex(createPaymentResponseAllocationsItemAmountRegExp)
 }))
@@ -2886,6 +2894,7 @@ export const GetPaymentParams = zod.object({
   "id": zod.coerce.string()
 })
 
+export const getPaymentResponseAllocationsItemServiceMonthRegExp = new RegExp('^\\d{4}-(0[1-9]|1[0-2])$');
 export const getPaymentResponseAllocationsItemAmountRegExp = new RegExp('^\\d+(\\.\\d{1,2})?$');
 
 
@@ -2901,7 +2910,7 @@ export const GetPaymentResponse = zod.object({
   "qbCheckNumber": zod.string(),
   "checkDate": zod.string(),
   "amount": zod.string(),
-  "paymentMonth": zod.string().nullish(),
+  "paymentMonth": zod.string().nullish().describe('Deprecated compatibility field; derived from allocation service months.'),
   "paymentType": zod.enum(['direct_payment', 'reimbursement', 'fee']),
   "source": zod.enum(['quickbooks', 'manual', 'historical_import']),
   "loggedBy": zod.string().nullish(),
@@ -2912,6 +2921,7 @@ export const GetPaymentResponse = zod.object({
   "allocations": zod.array(zod.object({
   "id": zod.string(),
   "authorizationId": zod.string(),
+  "serviceMonth": zod.string().regex(getPaymentResponseAllocationsItemServiceMonthRegExp),
   "authNumber": zod.string().nullish(),
   "amount": zod.string().regex(getPaymentResponseAllocationsItemAmountRegExp)
 }))
@@ -2926,6 +2936,7 @@ export const UpdatePaymentParams = zod.object({
 })
 
 export const updatePaymentBodyPaymentMonthRegExp = new RegExp('^\\d{4}-(0[1-9]|1[0-2])$');
+export const updatePaymentBodyAllocationsItemServiceMonthRegExp = new RegExp('^\\d{4}-(0[1-9]|1[0-2])$');
 export const updatePaymentBodyAllocationsItemAmountRegExp = new RegExp('^\\d+(\\.\\d{1,2})?$');
 
 
@@ -2937,16 +2948,18 @@ export const UpdatePaymentBody = zod.object({
   "qbCheckNumber": zod.string().optional(),
   "checkDate": zod.string().optional(),
   "amount": zod.string().optional(),
-  "paymentMonth": zod.string().regex(updatePaymentBodyPaymentMonthRegExp).nullish(),
+  "paymentMonth": zod.string().regex(updatePaymentBodyPaymentMonthRegExp).nullish().describe('Deprecated compatibility field; derived from allocation service months.'),
   "paymentType": zod.enum(['direct_payment', 'reimbursement', 'fee']).optional(),
   "overrideDuplicate": zod.boolean().optional().describe('Set true (with a justification) to bypass the duplicate-payment hard stop when an update would create a duplicate'),
   "overrideJustification": zod.string().optional().describe('Required written justification when overrideDuplicate is true'),
   "allocations": zod.array(zod.object({
   "authorizationId": zod.string(),
+  "serviceMonth": zod.string().regex(updatePaymentBodyAllocationsItemServiceMonthRegExp),
   "amount": zod.string().regex(updatePaymentBodyAllocationsItemAmountRegExp)
 })).min(1).optional()
 })
 
+export const updatePaymentResponseAllocationsItemServiceMonthRegExp = new RegExp('^\\d{4}-(0[1-9]|1[0-2])$');
 export const updatePaymentResponseAllocationsItemAmountRegExp = new RegExp('^\\d+(\\.\\d{1,2})?$');
 
 
@@ -2962,7 +2975,7 @@ export const UpdatePaymentResponse = zod.object({
   "qbCheckNumber": zod.string(),
   "checkDate": zod.string(),
   "amount": zod.string(),
-  "paymentMonth": zod.string().nullish(),
+  "paymentMonth": zod.string().nullish().describe('Deprecated compatibility field; derived from allocation service months.'),
   "paymentType": zod.enum(['direct_payment', 'reimbursement', 'fee']),
   "source": zod.enum(['quickbooks', 'manual', 'historical_import']),
   "loggedBy": zod.string().nullish(),
@@ -2973,6 +2986,7 @@ export const UpdatePaymentResponse = zod.object({
   "allocations": zod.array(zod.object({
   "id": zod.string(),
   "authorizationId": zod.string(),
+  "serviceMonth": zod.string().regex(updatePaymentResponseAllocationsItemServiceMonthRegExp),
   "authNumber": zod.string().nullish(),
   "amount": zod.string().regex(updatePaymentResponseAllocationsItemAmountRegExp)
 }))

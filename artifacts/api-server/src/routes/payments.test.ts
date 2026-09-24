@@ -7,6 +7,7 @@ import {
 import request from "supertest";
 import app from "../app";
 import { newToken } from "../lib/auth";
+import { authorizationTotalsPaid } from "../lib/serializers";
 
 const nonce = `pay${Date.now().toString(36)}`;
 const MONTHLY_FEE_RULE = "flat_160_per_client_month";
@@ -81,7 +82,7 @@ async function createPayment(amount: string, checkDate = "2026-01-15", paymentTy
     .post("/api/payments")
     .set("Cookie", cookie)
     .send({ clientId: ownerId, qbCheckNumber: qb, checkDate, amount, paymentType,
-      allocations: [{ authorizationId: testAuth.id, amount }] });
+      allocations: [{ authorizationId: testAuth.id, serviceMonth: checkDate.slice(0, 7), amount }] });
   expect(res.status).toBe(201);
   return res.body as { id: string; amount: string; paymentMonth: string };
 }
@@ -98,6 +99,40 @@ async function monthlyFees(feeMonth: string, ownerId = clientId) {
 }
 
 describe("monthly payment fees", () => {
+  it("persists each same-authorization service month, reconciles each fee month, and preserves the total paid", async () => {
+    const [auth] = await db.insert(authorizationsTable).values({
+      clientId,
+      authNumber: `${nonce}-multi-month-fee`,
+      serviceCode: "TEST",
+      paymentType: "direct_payment",
+      servicePeriodStart: "2034-01-01",
+      servicePeriodEnd: "2036-12-31",
+      maxPeriodAmount: "1000.00",
+      status: "active",
+    }).returning();
+    const response = await request(app).post("/api/payments").set("Cookie", cookie).send({
+      clientId,
+      qbCheckNumber: `${nonce}-multi-month-fee-check`,
+      checkDate: "2035-04-15",
+      amount: "60.00",
+      paymentType: "direct_payment",
+      allocations: [
+        { authorizationId: auth.id, serviceMonth: "2035-01", amount: "10.00" },
+        { authorizationId: auth.id, serviceMonth: "2035-02", amount: "20.00" },
+        { authorizationId: auth.id, serviceMonth: "2035-03", amount: "30.00" },
+      ],
+    });
+    expect(response.status).toBe(201);
+    expect(response.body.paymentMonth).toBe("2035-01");
+    expect(response.body.allocations.map((item: { serviceMonth: string }) => item.serviceMonth).sort())
+      .toEqual(["2035-01", "2035-02", "2035-03"]);
+    expect(await monthlyFees("2035-01")).toHaveLength(1);
+    expect(await monthlyFees("2035-02")).toHaveLength(1);
+    expect(await monthlyFees("2035-03")).toHaveLength(1);
+    expect(await monthlyFees("2035-04")).toHaveLength(0);
+    expect((await authorizationTotalsPaid([auth.id])).get(auth.id)?.toFixed(2)).toBe("60.00");
+  });
+
   it("creates one flat monthly fee with trigger traceability and an audit entry", async () => {
     const payment = await createPayment("100.00", "2026-03-15");
     const fees = await monthlyFees("2026-03");
@@ -154,7 +189,7 @@ describe("monthly payment fees", () => {
     const before = await monthlyFees("2026-07");
     const [allocation] = await db.select().from(paymentAllocationsTable).where(eq(paymentAllocationsTable.paymentId, payment.id));
     const res = await request(app).patch(`/api/payments/${payment.id}`)
-      .set("Cookie", cookie).send({ amount: "900.00", allocations: [{ authorizationId: allocation.authorizationId, amount: "900.00" }] });
+      .set("Cookie", cookie).send({ amount: "900.00", allocations: [{ authorizationId: allocation.authorizationId, serviceMonth: "2026-07", amount: "900.00" }] });
     expect(res.status).toBe(200);
     expect(await monthlyFees("2026-07")).toEqual(before);
   });
@@ -366,7 +401,7 @@ describe("payment month validation", () => {
         qbCheckNumber: `${nonce}-valid-month`,
         checkDate: "2026-01-15",
         amount: "25.00",
-         allocations: [{ authorizationId: authId, amount: "25.00" }],
+         allocations: [{ authorizationId: authId, serviceMonth: "2026-02", amount: "25.00" }],
         paymentMonth: "2026-02",
         paymentType: "direct_payment",
       });

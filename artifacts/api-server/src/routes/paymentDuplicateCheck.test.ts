@@ -95,34 +95,75 @@ async function seedPayment(paymentMonth: string, authorizationId: string | null)
     })
     .returning();
   if (authorizationId) {
-    await db.insert(paymentAllocationsTable).values({ paymentId: p.id, authorizationId, amount: "100.00" });
+    await db.insert(paymentAllocationsTable).values({ paymentId: p.id, authorizationId, serviceMonth: paymentMonth, amount: "100.00" });
   }
   return p;
 }
 
 describe("checkDuplicatePayment (shared function)", () => {
   it("returns isDuplicate=false with no existing payments", async () => {
-    const res = await checkDuplicatePayment(db, { clientId, authorizationId: authId, paymentMonth: "2026-02" });
+    const res = await checkDuplicatePayment(db, { clientId, authorizationId: authId, serviceMonth: "2026-02" });
     expect(res.isDuplicate).toBe(false);
     expect(res.existingPayments).toEqual([]);
   });
 
   it("returns isDuplicate=true and the existing payment for a matching triple", async () => {
     const seeded = await seedPayment("2026-03", authId);
-    const res = await checkDuplicatePayment(db, { clientId, authorizationId: authId, paymentMonth: "2026-03" });
+    const res = await checkDuplicatePayment(db, { clientId, authorizationId: authId, serviceMonth: "2026-03" });
     expect(res.isDuplicate).toBe(true);
     expect(res.existingPayments.map((p) => p.id)).toContain(seeded.id);
   });
 
   it("does not match a payment in a different month", async () => {
     await seedPayment("2026-04", authId);
-    const res = await checkDuplicatePayment(db, { clientId, authorizationId: authId, paymentMonth: "2026-05" });
+    const res = await checkDuplicatePayment(db, { clientId, authorizationId: authId, serviceMonth: "2026-05" });
     expect(res.isDuplicate).toBe(false);
+  });
+
+  it("uses the allocation service month and retains the parent-only legacy fallback", async () => {
+    const [allocationMonthPayment] = await db.insert(paymentsTable).values({
+      clientId,
+      authorizationId: null,
+      qbCheckNumber: nextCheck(),
+      checkDate: "2037-02-15",
+      amount: "100.00",
+      paymentMonth: "2037-01",
+      paymentType: "direct_payment",
+      source: "manual",
+      loggedBy: staffId,
+    }).returning();
+    await db.insert(paymentAllocationsTable).values({
+      paymentId: allocationMonthPayment.id,
+      authorizationId: authId,
+      serviceMonth: "2037-02",
+      amount: "100.00",
+    });
+    expect((await checkDuplicatePayment(db, {
+      clientId, authorizationId: authId, serviceMonth: "2037-02",
+    })).isDuplicate).toBe(true);
+    expect((await checkDuplicatePayment(db, {
+      clientId, authorizationId: authId, serviceMonth: "2037-01",
+    })).isDuplicate).toBe(false);
+
+    const [parentOnlyPayment] = await db.insert(paymentsTable).values({
+      clientId,
+      authorizationId: authId,
+      qbCheckNumber: nextCheck(),
+      checkDate: "2037-03-15",
+      amount: "100.00",
+      paymentMonth: "2037-03",
+      paymentType: "direct_payment",
+      source: "manual",
+      loggedBy: staffId,
+    }).returning();
+    expect((await checkDuplicatePayment(db, {
+      clientId, authorizationId: authId, serviceMonth: "2037-03",
+    })).existingPayments.map((payment) => payment.id)).toContain(parentOnlyPayment.id);
   });
 
   it("matches no-authorization payments when authorizationId is null", async () => {
     const seeded = await seedPayment("2026-06", null);
-    const res = await checkDuplicatePayment(db, { clientId, authorizationId: null, paymentMonth: "2026-06" });
+    const res = await checkDuplicatePayment(db, { clientId, authorizationId: null, serviceMonth: "2026-06" });
     expect(res.isDuplicate).toBe(true);
     expect(res.existingPayments.map((p) => p.id)).toContain(seeded.id);
   });
@@ -130,20 +171,20 @@ describe("checkDuplicatePayment (shared function)", () => {
   it("ignores soft-deleted payments", async () => {
     const seeded = await seedPayment("2026-07", authId);
     await db.update(paymentsTable).set({ isDeleted: true }).where(eq(paymentsTable.id, seeded.id));
-    const res = await checkDuplicatePayment(db, { clientId, authorizationId: authId, paymentMonth: "2026-07" });
+    const res = await checkDuplicatePayment(db, { clientId, authorizationId: authId, serviceMonth: "2026-07" });
     expect(res.isDuplicate).toBe(false);
   });
 
   it("excludes the payment's own id via excludePaymentId", async () => {
     const seeded = await seedPayment("2030-01", authId);
     // Without exclusion the row matches itself.
-    const included = await checkDuplicatePayment(db, { clientId, authorizationId: authId, paymentMonth: "2030-01" });
+    const included = await checkDuplicatePayment(db, { clientId, authorizationId: authId, serviceMonth: "2030-01" });
     expect(included.isDuplicate).toBe(true);
     // Excluding its own id makes it a non-duplicate.
     const excluded = await checkDuplicatePayment(db, {
       clientId,
       authorizationId: authId,
-      paymentMonth: "2030-01",
+      serviceMonth: "2030-01",
       excludePaymentId: seeded.id,
     });
     expect(excluded.isDuplicate).toBe(false);
@@ -161,7 +202,7 @@ describe("POST /payments duplicate hard stop", () => {
         qbCheckNumber: nextCheck(),
         checkDate: "2026-08-15",
         amount: "100.00",
-        allocations: [{ authorizationId: authId, amount: "100.00" }],
+        allocations: [{ authorizationId: authId, serviceMonth: "2026-08", amount: "100.00" }],
         paymentMonth: "2026-08",
         paymentType: "direct_payment",
       });
@@ -176,7 +217,7 @@ describe("POST /payments duplicate hard stop", () => {
         qbCheckNumber: nextCheck(),
         checkDate: "2026-08-20",
         amount: "200.00",
-        allocations: [{ authorizationId: authId, amount: "200.00" }],
+        allocations: [{ authorizationId: authId, serviceMonth: "2026-08", amount: "200.00" }],
         paymentMonth: "2026-08",
         paymentType: "direct_payment",
       });
@@ -202,7 +243,7 @@ describe("POST /payments duplicate hard stop", () => {
         qbCheckNumber: nextCheck(),
         checkDate: "2026-09-15",
         amount: "100.00",
-        allocations: [{ authorizationId: authId, amount: "100.00" }],
+        allocations: [{ authorizationId: authId, serviceMonth: "2026-09", amount: "100.00" }],
         paymentMonth: "2026-09",
         paymentType: "direct_payment",
       });
@@ -217,7 +258,7 @@ describe("POST /payments duplicate hard stop", () => {
         qbCheckNumber: overrideCheck,
         checkDate: "2026-09-20",
         amount: "250.00",
-        allocations: [{ authorizationId: authId, amount: "250.00" }],
+        allocations: [{ authorizationId: authId, serviceMonth: "2026-09", amount: "250.00" }],
         paymentMonth: "2026-09",
         paymentType: "direct_payment",
         overrideDuplicate: true,
@@ -245,7 +286,7 @@ describe("POST /payments duplicate hard stop", () => {
         qbCheckNumber: nextCheck(),
         checkDate: "2026-10-15",
         amount: "100.00",
-        allocations: [{ authorizationId: authId, amount: "100.00" }],
+        allocations: [{ authorizationId: authId, serviceMonth: "2026-10", amount: "100.00" }],
         paymentMonth: "2026-10",
         paymentType: "direct_payment",
       });
@@ -259,7 +300,7 @@ describe("POST /payments duplicate hard stop", () => {
         qbCheckNumber: nextCheck(),
         checkDate: "2026-10-20",
         amount: "100.00",
-        allocations: [{ authorizationId: authId, amount: "100.00" }],
+        allocations: [{ authorizationId: authId, serviceMonth: "2026-10", amount: "100.00" }],
         paymentMonth: "2026-10",
         paymentType: "direct_payment",
         overrideDuplicate: true,
@@ -278,15 +319,14 @@ describe("POST /payments duplicate hard stop", () => {
         qbCheckNumber: nextCheck(),
         checkDate: "2026-11-15",
         amount: "100.00",
-        allocations: [{ authorizationId: authId, amount: "100.00" }],
+        allocations: [{ authorizationId: authId, serviceMonth: "2026-11", amount: "100.00" }],
         paymentMonth: "2026-11",
         paymentType: "direct_payment",
       });
     expect(res.status).toBe(201);
   });
 
-  it("derives paymentMonth from checkDate so the check can't be skipped by omitting the month", async () => {
-    // First payment WITH an explicit month.
+  it("derives paymentMonth from allocations instead of the check date", async () => {
     const first = await request(app)
       .post("/api/payments")
       .set("Cookie", cookie)
@@ -296,15 +336,12 @@ describe("POST /payments duplicate hard stop", () => {
         qbCheckNumber: nextCheck(),
         checkDate: "2026-12-15",
         amount: "100.00",
-        allocations: [{ authorizationId: authId, amount: "100.00" }],
-        paymentMonth: "2026-12",
+        allocations: [{ authorizationId: authId, serviceMonth: "2026-02", amount: "100.00" }],
         paymentType: "direct_payment",
       });
     expect(first.status).toBe(201);
-    // Server derives 2026-12 from checkDate even though the month is omitted.
-    expect(first.body.paymentMonth).toBe("2026-12");
+    expect(first.body.paymentMonth).toBe("2026-02");
 
-    // Second payment OMITS the month — must still be blocked as a duplicate.
     const dup = await request(app)
       .post("/api/payments")
       .set("Cookie", cookie)
@@ -312,13 +349,76 @@ describe("POST /payments duplicate hard stop", () => {
         clientId,
         authorizationId: authId,
         qbCheckNumber: nextCheck(),
-        checkDate: "2026-12-20",
+        checkDate: "2027-01-20",
         amount: "200.00",
-        allocations: [{ authorizationId: authId, amount: "200.00" }],
+        allocations: [{ authorizationId: authId, serviceMonth: "2026-02", amount: "200.00" }],
         paymentType: "direct_payment",
       });
     expect(dup.status).toBe(409);
     expect(dup.body.code).toBe("duplicate_payment");
+  });
+
+  it("allows multiple allocation months for one authorization but rejects the same auth-month pair across payments", async () => {
+    const [multiMonthAuth] = await db.insert(authorizationsTable).values({
+      clientId,
+      authNumber: `${nonce}-multi-month`,
+      serviceCode: "459",
+      paymentType: "direct_payment",
+      servicePeriodStart: "2026-01-01",
+      servicePeriodEnd: "2036-12-31",
+      maxPeriodAmount: "10000.00",
+      status: "active",
+    }).returning();
+    const response = await request(app).post("/api/payments").set("Cookie", cookie).send({
+      clientId,
+      qbCheckNumber: nextCheck(),
+      checkDate: "2035-04-15",
+      amount: "30.00",
+      paymentType: "direct_payment",
+      allocations: [
+        { authorizationId: multiMonthAuth.id, serviceMonth: "2035-01", amount: "10.00" },
+        { authorizationId: multiMonthAuth.id, serviceMonth: "2035-02", amount: "10.00" },
+        { authorizationId: multiMonthAuth.id, serviceMonth: "2035-03", amount: "10.00" },
+      ],
+    });
+    expect(response.status).toBe(201);
+    expect(response.body.paymentMonth).toBe("2035-01");
+    expect(response.body.allocations.map((allocation: { serviceMonth: string }) => allocation.serviceMonth).sort())
+      .toEqual(["2035-01", "2035-02", "2035-03"]);
+
+    const duplicateLine = await request(app).post("/api/payments").set("Cookie", cookie).send({
+      clientId,
+      qbCheckNumber: nextCheck(),
+      checkDate: "2035-12-15",
+      amount: "10.00",
+      paymentType: "direct_payment",
+      allocations: [
+        { authorizationId: multiMonthAuth.id, serviceMonth: "2035-05", amount: "5.00" },
+        { authorizationId: multiMonthAuth.id, serviceMonth: "2035-05", amount: "5.00" },
+      ],
+    });
+    expect(duplicateLine.status).toBe(400);
+
+    const duplicate = await request(app).post("/api/payments").set("Cookie", cookie).send({
+      clientId,
+      qbCheckNumber: nextCheck(),
+      checkDate: "2035-12-15",
+      amount: "10.00",
+      paymentType: "direct_payment",
+      allocations: [{ authorizationId: multiMonthAuth.id, serviceMonth: "2035-02", amount: "10.00" }],
+    });
+    expect(duplicate.status).toBe(409);
+    expect(duplicate.body.code).toBe("duplicate_payment");
+
+    const anotherMonth = await request(app).post("/api/payments").set("Cookie", cookie).send({
+      clientId,
+      qbCheckNumber: nextCheck(),
+      checkDate: "2035-12-15",
+      amount: "10.00",
+      paymentType: "direct_payment",
+      allocations: [{ authorizationId: multiMonthAuth.id, serviceMonth: "2035-04", amount: "10.00" }],
+    });
+    expect(anotherMonth.status).toBe(201);
   });
 
   it("keys the POST override audit entry to the NEW payment id (not the client id)", async () => {
@@ -346,7 +446,7 @@ describe("POST /payments duplicate hard stop", () => {
         qbCheckNumber: nextCheck(),
         checkDate: "2028-01-15",
         amount: "100.00",
-        allocations: [{ authorizationId: auth2.id, amount: "100.00" }],
+        allocations: [{ authorizationId: auth2.id, serviceMonth: "2028-01", amount: "100.00" }],
         paymentMonth: "2028-01",
         paymentType: "direct_payment",
       });
@@ -359,7 +459,7 @@ describe("POST /payments duplicate hard stop", () => {
         qbCheckNumber: nextCheck(),
         checkDate: "2028-01-20",
         amount: "250.00",
-        allocations: [{ authorizationId: auth2.id, amount: "250.00" }],
+        allocations: [{ authorizationId: auth2.id, serviceMonth: "2028-01", amount: "250.00" }],
         paymentMonth: "2028-01",
         paymentType: "direct_payment",
         overrideDuplicate: true,
@@ -392,7 +492,7 @@ describe("PATCH /payments/:id duplicate hard stop", () => {
         qbCheckNumber: nextCheck(),
         checkDate: "2029-01-15",
         amount: "100.00",
-        allocations: [{ authorizationId: authId, amount: "100.00" }],
+        allocations: [{ authorizationId: authId, serviceMonth: "2029-01", amount: "100.00" }],
         paymentMonth: "2029-01",
         paymentType: "direct_payment",
       });
@@ -406,7 +506,7 @@ describe("PATCH /payments/:id duplicate hard stop", () => {
         qbCheckNumber: nextCheck(),
         checkDate: "2029-02-15",
         amount: "100.00",
-        allocations: [{ authorizationId: authId, amount: "100.00" }],
+        allocations: [{ authorizationId: authId, serviceMonth: "2029-02", amount: "100.00" }],
         paymentMonth: "2029-02",
         paymentType: "direct_payment",
       });
@@ -429,7 +529,7 @@ describe("PATCH /payments/:id duplicate hard stop", () => {
     expect(noop.status).toBe(200);
   });
 
-  it("derives the month from a changed checkDate for the PATCH duplicate check", async () => {
+  it("keeps allocation service month independent from check date and checks PATCH allocation months", async () => {
     const a = await request(app)
       .post("/api/payments")
       .set("Cookie", cookie)
@@ -439,7 +539,7 @@ describe("PATCH /payments/:id duplicate hard stop", () => {
         qbCheckNumber: nextCheck(),
         checkDate: "2029-05-15",
         amount: "100.00",
-        allocations: [{ authorizationId: authId, amount: "100.00" }],
+        allocations: [{ authorizationId: authId, serviceMonth: "2029-05", amount: "100.00" }],
         paymentMonth: "2029-05",
         paymentType: "direct_payment",
       });
@@ -452,15 +552,23 @@ describe("PATCH /payments/:id duplicate hard stop", () => {
         qbCheckNumber: nextCheck(),
         checkDate: "2029-06-15",
         amount: "100.00",
-        allocations: [{ authorizationId: authId, amount: "100.00" }],
+        allocations: [{ authorizationId: authId, serviceMonth: "2029-06", amount: "100.00" }],
         paymentMonth: "2029-06",
         paymentType: "direct_payment",
       });
-    // Change only checkDate (month implied) so B lands in A's month → 409.
-    const collide = await request(app)
+    const changedCheckDate = await request(app)
       .patch(`/api/payments/${b.body.id}`)
       .set("Cookie", cookie)
       .send({ checkDate: "2029-05-20" });
+    expect(changedCheckDate.status).toBe(200);
+    expect(changedCheckDate.body.paymentMonth).toBe("2029-06");
+
+    const collide = await request(app)
+      .patch(`/api/payments/${b.body.id}`)
+      .set("Cookie", cookie)
+      .send({
+        allocations: [{ authorizationId: authId, serviceMonth: "2029-05", amount: "100.00" }],
+      });
     expect(collide.status).toBe(409);
     expect(collide.body.existingPayments[0].id).toBe(a.body.id);
   });
@@ -475,7 +583,7 @@ describe("PATCH /payments/:id duplicate hard stop", () => {
         qbCheckNumber: nextCheck(),
         checkDate: "2029-09-15",
         amount: "100.00",
-        allocations: [{ authorizationId: authId, amount: "100.00" }],
+        allocations: [{ authorizationId: authId, serviceMonth: "2029-09", amount: "100.00" }],
         paymentMonth: "2029-09",
         paymentType: "direct_payment",
       });
@@ -488,7 +596,7 @@ describe("PATCH /payments/:id duplicate hard stop", () => {
         qbCheckNumber: nextCheck(),
         checkDate: "2029-10-15",
         amount: "100.00",
-        allocations: [{ authorizationId: authId, amount: "100.00" }],
+        allocations: [{ authorizationId: authId, serviceMonth: "2029-10", amount: "100.00" }],
         paymentMonth: "2029-10",
         paymentType: "direct_payment",
       });

@@ -8,6 +8,8 @@
 
 export interface PaymentAllocationInput {
   authorizationId: string;
+  /** @pattern ^\d{4}-(0[1-9]|1[0-2])$ */
+  serviceMonth: string;
   /** @pattern ^\d+(\.\d{1,2})?$ */
   amount: string;
 }

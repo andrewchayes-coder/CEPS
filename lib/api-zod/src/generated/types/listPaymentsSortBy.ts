@@ -17,5 +17,6 @@ export const ListPaymentsSortBy = {
   amount: 'amount',
   remitted: 'remitted',
   paymentType: 'paymentType',
+  serviceMonth: 'serviceMonth',
   createdAt: 'createdAt',
 } as const;

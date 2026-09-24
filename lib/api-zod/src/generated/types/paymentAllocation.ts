@@ -9,6 +9,8 @@
 export interface PaymentAllocation {
   id: string;
   authorizationId: string;
+  /** @pattern ^\d{4}-(0[1-9]|1[0-2])$ */
+  serviceMonth: string;
   /** @nullable */
   authNumber?: string | null;
   /** @pattern ^\d+(\.\d{1,2})?$ */

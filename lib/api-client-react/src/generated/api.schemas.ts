@@ -996,6 +996,8 @@ export const PaymentSource = {
 export interface PaymentAllocation {
   id: string;
   authorizationId: string;
+  /** @pattern ^\d{4}-(0[1-9]|1[0-2])$ */
+  serviceMonth: string;
   /** @nullable */
   authNumber?: string | null;
   /** @pattern ^\d+(\.\d{1,2})?$ */
@@ -1020,7 +1022,10 @@ export interface Payment {
   qbCheckNumber: string;
   checkDate: string;
   amount: string;
-  /** @nullable */
+  /**
+     * Deprecated compatibility field; derived from allocation service months.
+     * @nullable
+     */
   paymentMonth?: string | null;
   paymentType: PaymentPaymentType;
   source: PaymentSource;
@@ -1790,6 +1795,8 @@ export const PaymentInputPaymentType = {
 
 export interface PaymentAllocationInput {
   authorizationId: string;
+  /** @pattern ^\d{4}-(0[1-9]|1[0-2])$ */
+  serviceMonth: string;
   /** @pattern ^\d+(\.\d{1,2})?$ */
   amount: string;
 }
@@ -1806,6 +1813,7 @@ export interface PaymentInput {
   checkDate: string;
   amount: string;
   /**
+     * Deprecated compatibility field; derived from allocation service months.
      * @nullable
      * @pattern ^\d{4}-(0[1-9]|1[0-2])$
      */
@@ -2172,6 +2180,7 @@ export interface PaymentUpdate {
   checkDate?: string;
   amount?: string;
   /**
+     * Deprecated compatibility field; derived from allocation service months.
      * @nullable
      * @pattern ^\d{4}-(0[1-9]|1[0-2])$
      */
@@ -2767,6 +2776,7 @@ export const ListPaymentsSortBy = {
   amount: 'amount',
   remitted: 'remitted',
   paymentType: 'paymentType',
+  serviceMonth: 'serviceMonth',
   createdAt: 'createdAt',
 } as const;
 

@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { randomUUID } from "node:crypto";
-import { inArray, eq, sql } from "drizzle-orm";
+import { and, inArray, eq, sql } from "drizzle-orm";
 import {
   db,
   usersTable,
@@ -92,7 +92,7 @@ beforeAll(async () => {
     })
     .returning();
   matchPaymentId = pay.id;
-  await db.insert(paymentAllocationsTable).values({ paymentId: pay.id, authorizationId: authAId, amount: "500.00" });
+  await db.insert(paymentAllocationsTable).values({ paymentId: pay.id, authorizationId: authAId, serviceMonth: "2026-01", amount: "500.00" });
 
   const token = newToken();
   await db.insert(sessionsTable).values({
@@ -338,9 +338,13 @@ describe("POST /remittances/import (Alta batch import)", () => {
     const [crossClient] = await makePayment({ clientId: clientBId, authorizationId: null });
     const [crossAuth] = await makePayment({ authorizationId: otherAuth.id });
     const [crossMonth] = await makePayment({ paymentMonth: "2026-08" });
+    const [crossAllocationMonth] = await makePayment({ paymentMonth: "2026-07" });
     const [wrongAmount] = await makePayment({ amount: "98.00" });
     const [valid] = await makePayment({});
-    await db.insert(paymentAllocationsTable).values({ paymentId: valid.id, authorizationId: authAId, amount: "99.00" });
+    await db.insert(paymentAllocationsTable).values([
+      { paymentId: crossAllocationMonth.id, authorizationId: authAId, serviceMonth: "2026-08", amount: "99.00" },
+      { paymentId: valid.id, authorizationId: authAId, serviceMonth: "2026-07", amount: "99.00" },
+    ]);
     const [remittance] = await db.insert(remittancesTable).values({
       clientId: clientAId, authorizationId: authAId, remittanceDate: "2026-07-20",
       amount: "99.00", paymentMonth: "2026-07", status: "received", source: "manual",
@@ -349,6 +353,12 @@ describe("POST /remittances/import (Alta batch import)", () => {
       const response = await request(app).post(`/api/remittances/${remittance.id}/match`).set("Cookie", cookie).send({ paymentId: payment.id, amount: "99.00" });
       expect(response.status).toBe(400);
     }
+    const wrongAllocationMonth = await request(app)
+      .post(`/api/remittances/${remittance.id}/match`)
+      .set("Cookie", cookie)
+      .send({ paymentId: crossAllocationMonth.id, amount: "99.00" });
+    expect(wrongAllocationMonth.status).toBe(400);
+    expect(wrongAllocationMonth.body.error).toContain("different service month");
     const tooLargeForPayment = await request(app).post(`/api/remittances/${remittance.id}/match`).set("Cookie", cookie).send({ paymentId: wrongAmount.id, amount: "99.00" });
     expect(tooLargeForPayment.status).toBe(409);
     const success = await request(app).post(`/api/remittances/${remittance.id}/match`).set("Cookie", cookie).send({ paymentId: valid.id, amount: "99.00" });
@@ -393,7 +403,7 @@ describe("POST /remittances/import (Alta batch import)", () => {
       source: "manual",
       remitted: false,
     }).returning();
-    await db.insert(paymentAllocationsTable).values({ paymentId: payment.id, authorizationId: authAId, amount: "100.00" });
+    await db.insert(paymentAllocationsTable).values({ paymentId: payment.id, authorizationId: authAId, serviceMonth: "2026-09", amount: "100.00" });
     const [partialFee] = await db.insert(feesTable).values({
       clientId: clientAId, paymentId: payment.id, amount: "160.00",
       feeMonth: "2026-09", ruleApplied: "flat_160_per_client_month", status: "pending",
@@ -469,7 +479,7 @@ describe("POST /remittances/import (Alta batch import)", () => {
       source: "manual",
       remitted: false,
     }).returning();
-    await db.insert(paymentAllocationsTable).values({ paymentId: payment.id, authorizationId: authAId, amount: "100.00" });
+    await db.insert(paymentAllocationsTable).values({ paymentId: payment.id, authorizationId: authAId, serviceMonth: "2026-10", amount: "100.00" });
     const [first, second] = await db.insert(remittancesTable).values([
       {
         clientId: clientAId, authorizationId: authAId, remittanceDate: "2026-10-20",
@@ -508,7 +518,7 @@ describe("POST /remittances/import (Alta batch import)", () => {
     }
   });
 
-  it("imports split authorization remittances without closing payment early", async () => {
+  it("matches remittances by allocation month and collects every fee on a fully remitted multi-month check", async () => {
     const [splitAuth] = await db.insert(authorizationsTable).values({
       clientId: clientAId, authNumber: `${nonce}-SPLIT-B`, serviceCode: "490",
       paymentType: "direct_payment", servicePeriodStart: "2026-01-01",
@@ -516,17 +526,33 @@ describe("POST /remittances/import (Alta batch import)", () => {
     }).returning();
     const [splitPayment] = await db.insert(paymentsTable).values({
       clientId: clientAId, qbCheckNumber: `${nonce}-SPLIT`, checkDate: "2026-11-15",
-      paymentMonth: "2026-11", amount: "30.00", paymentType: "direct_payment",
+      paymentMonth: "2026-11", amount: "40.00", paymentType: "direct_payment",
       source: "manual", remitted: false,
     }).returning();
     await db.insert(paymentAllocationsTable).values([
-      { paymentId: splitPayment.id, authorizationId: authAId, amount: "20.00" },
-      { paymentId: splitPayment.id, authorizationId: splitAuth.id, amount: "10.00" },
+      { paymentId: splitPayment.id, authorizationId: authAId, serviceMonth: "2026-11", amount: "20.00" },
+      { paymentId: splitPayment.id, authorizationId: authAId, serviceMonth: "2026-12", amount: "10.00" },
+      { paymentId: splitPayment.id, authorizationId: splitAuth.id, serviceMonth: "2026-11", amount: "10.00" },
     ]);
-    const [fee] = await db.insert(feesTable).values({
-      clientId: clientAId, paymentId: splitPayment.id, amount: "160.00",
-      feeMonth: "2026-11", ruleApplied: "flat_160_per_client_month", status: "pending",
-    }).returning();
+    const fees = await db.insert(feesTable).values([
+      {
+        clientId: clientAId, paymentId: splitPayment.id, amount: "160.00",
+        feeMonth: "2026-11", ruleApplied: "flat_160_per_client_month", status: "pending",
+      },
+      {
+        clientId: clientAId, paymentId: splitPayment.id, amount: "160.00",
+        feeMonth: "2026-12", ruleApplied: "flat_160_per_client_month", status: "pending",
+      },
+    ]).returning();
+    const wrongMonth = await request(app).post("/api/remittances/import").set("Cookie", cookie).send({
+      csvText: altaReport(`${nonce}-SPLIT-WRONG-MONTH`, "2026-10-20", [
+        { uci: `${nonce}-UCI-A`, auth: `${nonce}-AUTH-A`, month: "2026-10", amount: "20.00" },
+      ]),
+    });
+    expect(wrongMonth.status).toBe(200);
+    expect(wrongMonth.body.autoMatched).toBe(0);
+    expect(wrongMonth.body.needsManualMatch).toBe(1);
+
     const first = await request(app).post("/api/remittances/import").set("Cookie", cookie).send({
       csvText: altaReport(`${nonce}-SPLIT-A`, "2026-11-20", [
         { uci: `${nonce}-UCI-A`, auth: `${nonce}-AUTH-A`, month: "2026-11", amount: "20.00" },
@@ -536,7 +562,8 @@ describe("POST /remittances/import (Alta batch import)", () => {
     expect(first.body.autoMatched).toBe(1);
     let [saved] = await db.select().from(paymentsTable).where(eq(paymentsTable.id, splitPayment.id));
     expect(saved.remitted).toBe(false);
-    expect((await db.select().from(feesTable).where(eq(feesTable.id, fee.id)))[0].status).toBe("pending");
+    expect((await db.select().from(feesTable).where(inArray(feesTable.id, fees.map((fee) => fee.id))))
+      .every((fee) => fee.status === "pending")).toBe(true);
     const second = await request(app).post("/api/remittances/import").set("Cookie", cookie).send({
       csvText: altaReport(`${nonce}-SPLIT-B`, "2026-11-21", [
         { uci: `${nonce}-UCI-A`, auth: `${nonce}-SPLIT-B`, month: "2026-11", amount: "10.00" },
@@ -545,10 +572,25 @@ describe("POST /remittances/import (Alta batch import)", () => {
     expect(second.status).toBe(200);
     expect(second.body.autoMatched).toBe(1);
     [saved] = await db.select().from(paymentsTable).where(eq(paymentsTable.id, splitPayment.id));
+    expect(saved.remitted).toBe(false);
+    const third = await request(app).post("/api/remittances/import").set("Cookie", cookie).send({
+      csvText: altaReport(`${nonce}-SPLIT-C`, "2026-12-21", [
+        { uci: `${nonce}-UCI-A`, auth: `${nonce}-AUTH-A`, month: "2026-12", amount: "10.00" },
+      ]),
+    });
+    expect(third.status).toBe(200);
+    expect(third.body.autoMatched).toBe(1);
+    [saved] = await db.select().from(paymentsTable).where(eq(paymentsTable.id, splitPayment.id));
     expect(saved.remitted).toBe(true);
-    expect((await db.select().from(feesTable).where(eq(feesTable.id, fee.id)))[0].status).toBe("collected");
+    expect((await db.select().from(feesTable).where(inArray(feesTable.id, fees.map((fee) => fee.id))))
+      .every((fee) => fee.status === "collected")).toBe(true);
+    const feeAudits = await db.select().from(auditLogTable).where(and(
+      eq(auditLogTable.action, "collect_fee"),
+      inArray(auditLogTable.entityId, fees.map((fee) => fee.id)),
+    ));
+    expect(feeAudits).toHaveLength(2);
     const [sum] = await db.select({ total: sql<string>`sum(${remittanceAllocationsTable.amount})` })
       .from(remittanceAllocationsTable).where(eq(remittanceAllocationsTable.paymentId, splitPayment.id));
-    expect(sum.total).toBe("30.00");
+    expect(sum.total).toBe("40.00");
   });
 });

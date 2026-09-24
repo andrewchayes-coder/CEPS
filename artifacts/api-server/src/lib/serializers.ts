@@ -270,7 +270,7 @@ export function invoiceJson(
 
 export function paymentJson(
   p: Payment,
-  opts: { clientName?: string | null; vendorName?: string | null; authNumber?: string | null; allocatedAmount?: string; remainingAmount?: string; allocations?: { id: string; authorizationId: string; authNumber?: string | null; amount: string }[] } = {},
+  opts: { clientName?: string | null; vendorName?: string | null; authNumber?: string | null; allocatedAmount?: string; remainingAmount?: string; allocations?: { id: string; authorizationId: string; authNumber?: string | null; serviceMonth: string; amount: string }[] } = {},
 ) {
   return {
     id: p.id,

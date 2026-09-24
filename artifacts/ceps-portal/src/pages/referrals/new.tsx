@@ -13,10 +13,11 @@ import { Textarea } from '@/components/ui/textarea';
 import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { Separator } from '@/components/ui/separator';
 import { useToast } from '@/hooks/use-toast';
-import { ChevronLeft, ChevronRight, AlertTriangle, CheckCircle2, Users, FileText } from 'lucide-react';
+import { ChevronDown, ChevronLeft, ChevronRight, AlertTriangle, CheckCircle2, Users, FileText } from 'lucide-react';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { FileUpload } from '@/components/file-upload';
 import { trackAnalyticsEvent } from '@/lib/analytics';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 
 // -----------------------------------------------------------------------------
 // Validation Schemas (Step by Step to manage complex conditional logic)
@@ -75,6 +76,10 @@ const clientSchemaBase = {
   preferredLanguage: z.string().min(1, 'Preferred language is required'),
   clientIsMinor: z.boolean(),
   familyRepName: z.string().optional(),
+  familyRepRelationship: z.string().optional(),
+  familyRepPhone: z.string().optional(),
+  familyRepEmail: z.string().email('Enter a valid family representative email').or(z.literal('')).optional(),
+  familyRepAddress: z.string().optional(),
   contactPhone: z.string().min(10, 'Contact phone is required'),
   contactEmail: z.string().email('Valid contact email is required'),
   contactStreet: z.string().min(1, 'Street is required'),
@@ -116,6 +121,19 @@ const fullSchema = z.object({
 }, {
   message: "Family Representative name is required for minors",
   path: ["familyRepName"]
+})
+.refine(data => {
+  if (data.clientIsMinor) return true;
+  const hasFamilyRepDetails = Boolean(
+    data.familyRepRelationship?.trim() ||
+    data.familyRepPhone?.trim() ||
+    data.familyRepEmail?.trim() ||
+    data.familyRepAddress?.trim()
+  );
+  return !hasFamilyRepDetails || Boolean(data.familyRepName?.trim());
+}, {
+  message: "Name is required when adding a family representative",
+  path: ["familyRepName"]
 });
 
 type FormValues = z.infer<typeof fullSchema>;
@@ -128,6 +146,7 @@ export default function ReferralNewPage() {
   const createReferral = useCreateReferral();
   const [currentStep, setCurrentStep] = useState(0);
   const [supportingDocumentUrl, setSupportingDocumentUrl] = useState<string | undefined>(undefined);
+  const [familyRepOpen, setFamilyRepOpen] = useState(false);
 
   const form = useForm<FormValues>({
     resolver: zodResolver(fullSchema),
@@ -161,6 +180,10 @@ export default function ReferralNewPage() {
       preferredLanguage: 'English',
       clientIsMinor: false,
       familyRepName: '',
+      familyRepRelationship: '',
+      familyRepPhone: '',
+      familyRepEmail: '',
+      familyRepAddress: '',
       contactPhone: '',
       contactEmail: '',
       contactStreet: '',
@@ -204,6 +227,17 @@ export default function ReferralNewPage() {
     // Remove fields that go at the top level
     const serviceFrequency = intakeFields.serviceFrequency;
     delete (intakeFields as any).serviceFrequency;
+    if (intakeFields.clientIsMinor) {
+      delete (intakeFields as any).familyRepRelationship;
+      delete (intakeFields as any).familyRepPhone;
+      delete (intakeFields as any).familyRepEmail;
+      delete (intakeFields as any).familyRepAddress;
+    } else {
+      for (const field of ['familyRepName', 'familyRepRelationship', 'familyRepPhone', 'familyRepEmail', 'familyRepAddress'] as const) {
+        const value = intakeFields[field];
+        if (!value?.trim()) delete (intakeFields as any)[field];
+      }
+    }
     createReferral.mutate({
       data: {
         submittedVia: 'portal',
@@ -535,7 +569,22 @@ export default function ReferralNewPage() {
                   <FormItem className="space-y-3">
                     <FormLabel>Is the participant a minor?</FormLabel>
                     <FormControl>
-                      <RadioGroup onValueChange={(val) => field.onChange(val === 'true')} defaultValue={field.value ? 'true' : 'false'} className="flex space-x-4">
+                      <RadioGroup
+                        onValueChange={(val) => {
+                          const isMinor = val === 'true';
+                          field.onChange(isMinor);
+                          if (isMinor) {
+                            form.setValue('familyRepName', '');
+                            form.setValue('familyRepRelationship', '');
+                            form.setValue('familyRepPhone', '');
+                            form.setValue('familyRepEmail', '');
+                            form.setValue('familyRepAddress', '');
+                            setFamilyRepOpen(false);
+                          }
+                        }}
+                        value={field.value ? 'true' : 'false'}
+                        className="flex space-x-4"
+                      >
                         <FormItem className="flex items-center space-x-2 space-y-0"><FormControl><RadioGroupItem value="true" /></FormControl><FormLabel className="font-normal">Yes</FormLabel></FormItem>
                         <FormItem className="flex items-center space-x-2 space-y-0"><FormControl><RadioGroupItem value="false" /></FormControl><FormLabel className="font-normal">No</FormLabel></FormItem>
                       </RadioGroup>
@@ -579,6 +628,74 @@ export default function ReferralNewPage() {
                     )} />
                   </div>
                 </div>
+
+                {!clientIsMinor && (
+                  <div className="rounded-lg border">
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      className="w-full justify-between whitespace-normal text-left"
+                      aria-expanded={familyRepOpen}
+                      aria-controls="optional-family-representative"
+                      onClick={() => setFamilyRepOpen((open) => !open)}
+                      data-testid="toggle-optional-family-representative"
+                    >
+                      <span>Add a family representative (optional)</span>
+                      <ChevronDown className={`h-4 w-4 shrink-0 transition-transform ${familyRepOpen ? 'rotate-180' : ''}`} />
+                    </Button>
+                    {familyRepOpen && (
+                      <div id="optional-family-representative" className="space-y-4 border-t p-4" data-testid="optional-family-representative">
+                        <FormField control={form.control} name="familyRepName" render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Name</FormLabel>
+                            <FormControl><Input {...field} /></FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )} />
+                        <FormField control={form.control} name="familyRepRelationship" render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Relationship</FormLabel>
+                            <Select value={field.value || ''} onValueChange={field.onChange}>
+                              <FormControl>
+                                <SelectTrigger><SelectValue placeholder="Select relationship" /></SelectTrigger>
+                              </FormControl>
+                              <SelectContent>
+                                <SelectItem value="parent">Parent</SelectItem>
+                                <SelectItem value="guardian">Guardian</SelectItem>
+                                <SelectItem value="conservator">Conservator</SelectItem>
+                                <SelectItem value="other">Other</SelectItem>
+                              </SelectContent>
+                            </Select>
+                            <FormMessage />
+                          </FormItem>
+                        )} />
+                        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                          <FormField control={form.control} name="familyRepPhone" render={({ field }) => (
+                            <FormItem>
+                              <FormLabel>Phone</FormLabel>
+                              <FormControl><Input type="tel" {...field} /></FormControl>
+                              <FormMessage />
+                            </FormItem>
+                          )} />
+                          <FormField control={form.control} name="familyRepEmail" render={({ field }) => (
+                            <FormItem>
+                              <FormLabel>Email</FormLabel>
+                              <FormControl><Input type="email" {...field} /></FormControl>
+                              <FormMessage />
+                            </FormItem>
+                          )} />
+                        </div>
+                        <FormField control={form.control} name="familyRepAddress" render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Address</FormLabel>
+                            <FormControl><Input {...field} /></FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )} />
+                      </div>
+                    )}
+                  </div>
+                )}
 
               </CardContent>
             </Card>

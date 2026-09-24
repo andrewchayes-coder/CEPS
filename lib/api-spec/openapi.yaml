@@ -2802,6 +2802,10 @@ components:
         clientUci: { type: string }
         preferredLanguage: { type: string }
         familyRepName: { type: string }
+        familyRepRelationship: { type: string, enum: [parent, guardian, conservator, other] }
+        familyRepPhone: { type: string }
+        familyRepEmail: { type: string }
+        familyRepAddress: { type: string }
         clientIsMinor: { type: boolean }
         contactPhone: { type: string }
         contactEmail: { type: string }

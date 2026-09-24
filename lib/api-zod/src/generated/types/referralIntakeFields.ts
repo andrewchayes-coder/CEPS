@@ -5,6 +5,7 @@
  * CEPS Portal API — referral intake, authorizations, invoices, payments, remittances, vendors, reporting
  * OpenAPI spec version: 0.1.0
  */
+import type { ReferralIntakeFieldsFamilyRepRelationship } from './referralIntakeFieldsFamilyRepRelationship';
 import type { ReferralIntakeFieldsServiceType } from './referralIntakeFieldsServiceType';
 import type { ReferralIntakeFieldsVendorBillingDifferent } from './referralIntakeFieldsVendorBillingDifferent';
 
@@ -43,6 +44,10 @@ export interface ReferralIntakeFields {
   clientUci?: string;
   preferredLanguage?: string;
   familyRepName?: string;
+  familyRepRelationship?: ReferralIntakeFieldsFamilyRepRelationship;
+  familyRepPhone?: string;
+  familyRepEmail?: string;
+  familyRepAddress?: string;
   clientIsMinor?: boolean;
   contactPhone?: string;
   contactEmail?: string;

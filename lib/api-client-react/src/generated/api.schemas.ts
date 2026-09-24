@@ -581,6 +581,16 @@ export const ReferralIntakeFieldsServiceType = {
   reimbursement_024: 'reimbursement_024',
 } as const;
 
+export type ReferralIntakeFieldsFamilyRepRelationship = typeof ReferralIntakeFieldsFamilyRepRelationship[keyof typeof ReferralIntakeFieldsFamilyRepRelationship];
+
+
+export const ReferralIntakeFieldsFamilyRepRelationship = {
+  parent: 'parent',
+  guardian: 'guardian',
+  conservator: 'conservator',
+  other: 'other',
+} as const;
+
 /**
  * Structured referral form data (Section 9 field list)
  */
@@ -616,6 +626,10 @@ export interface ReferralIntakeFields {
   clientUci?: string;
   preferredLanguage?: string;
   familyRepName?: string;
+  familyRepRelationship?: ReferralIntakeFieldsFamilyRepRelationship;
+  familyRepPhone?: string;
+  familyRepEmail?: string;
+  familyRepAddress?: string;
   clientIsMinor?: boolean;
   contactPhone?: string;
   contactEmail?: string;

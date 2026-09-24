@@ -344,6 +344,14 @@ router.post("/referrals", requireStaffOrCoordinator, async (req, res): Promise<v
     res.status(400).json({ error: "Client first name, last name, DOB and UCI are required" });
     return;
   }
+  const hasAdultRepContactWithoutName = f.clientIsMinor !== true &&
+    !clean(f.familyRepName) &&
+    [f.familyRepRelationship, f.familyRepPhone, f.familyRepEmail, f.familyRepAddress]
+      .some((value) => clean(value) !== null);
+  if (hasAdultRepContactWithoutName) {
+    res.status(400).json({ error: "Family representative contact details require a family representative name" });
+    return;
+  }
 
   const clientUci = f.clientUci;
   const clientFirstName = f.clientFirstName;
@@ -364,7 +372,7 @@ router.post("/referrals", requireStaffOrCoordinator, async (req, res): Promise<v
     let [client] = await tx.select().from(clientsTable)
       .where(eq(clientsTable.uciNumber, clientUci)).for("update");
     if (client?.isDeleted) throw new DeletedParticipantError();
-    const contactIsFamily = f.clientIsMinor === true;
+    const contactIsFamily = f.clientIsMinor === true || client?.isMinor === true;
     if (!client) {
       const [createdClient] = await tx
         .insert(clientsTable)
@@ -389,7 +397,7 @@ router.post("/referrals", requireStaffOrCoordinator, async (req, res): Promise<v
         })
         .returning();
       client = createdClient;
-    } else {
+    } else if (!contactIsFamily) {
       const clientUpdates: Record<string, string> = {};
       const changes: string[] = [];
       for (const field of ["phone", "email", "address"] as const) {
@@ -419,28 +427,35 @@ router.post("/referrals", requireStaffOrCoordinator, async (req, res): Promise<v
 
     let familyRepresentative: typeof familyRepresentativesTable.$inferSelect | undefined;
     const repName = clean(f.familyRepName);
-    if (contactIsFamily && repName) {
+    if (repName) {
+      const representativeContact = contactIsFamily
+        ? contact
+        : {
+            phone: clean(f.familyRepPhone),
+            email: clean(f.familyRepEmail),
+            address: clean(f.familyRepAddress),
+          };
+      const representativeRelationship = clean(f.familyRepRelationship) ?? "parent";
       const reps = await tx.select().from(familyRepresentativesTable).where(and(
         eq(familyRepresentativesTable.clientId, client.id),
         eq(familyRepresentativesTable.isDeleted, false),
       ));
       familyRepresentative = reps.find((rep) =>
         rep.name.trim() === repName &&
-        rep.relationship === "parent" &&
-        rep.phone === contact.phone &&
-        rep.email === contact.email &&
-        rep.address === contact.address &&
-        rep.userId === null,
+        rep.relationship === representativeRelationship &&
+        rep.phone === representativeContact.phone &&
+        rep.email === representativeContact.email &&
+        rep.address === representativeContact.address,
       );
       if (!familyRepresentative) {
         [familyRepresentative] = await tx.insert(familyRepresentativesTable).values({
           clientId: client.id,
           name: repName,
-          relationship: "parent",
-          phone: contact.phone,
-          email: contact.email,
-          address: contact.address,
-          isPrimary: true,
+          relationship: representativeRelationship,
+          phone: representativeContact.phone,
+          email: representativeContact.email,
+          address: representativeContact.address,
+          isPrimary: reps.length === 0,
           userId: null,
           createdBy: req.user!.id,
         }).returning();

@@ -203,6 +203,7 @@ export * from './referralInputPaymentTypeRequested';
 export * from './referralInputServiceFrequency';
 export * from './referralInputSubmittedVia';
 export * from './referralIntakeFields';
+export * from './referralIntakeFieldsFamilyRepRelationship';
 export * from './referralIntakeFieldsServiceType';
 export * from './referralIntakeFieldsVendorBillingDifferent';
 export * from './referralIntakeSentTo';

@@ -24,6 +24,7 @@ const createdReferralIds: string[] = [];
 const createdClientUcis: string[] = [];
 const createdVendorNames: string[] = [];
 const createdQueueIds: string[] = [];
+const createdLinkedUserIds: string[] = [];
 
 async function session(userId: string) {
   const token = newToken();
@@ -103,6 +104,9 @@ afterAll(async () => {
   }
   if (createdClientUcis.length) {
     await db.delete(clientsTable).where(inArray(clientsTable.uciNumber, createdClientUcis));
+  }
+  if (createdLinkedUserIds.length) {
+    await db.delete(usersTable).where(inArray(usersTable.id, createdLinkedUserIds));
   }
   await db.delete(auditLogTable).where(eq(auditLogTable.userId, staffId));
   await db.delete(sessionsTable).where(eq(sessionsTable.userId, staffId));
@@ -332,5 +336,273 @@ describe("POST /referrals client contact and family representative carryover", (
     expect(reps).toHaveLength(1);
     expect(reps[0].isPrimary).toBe(true);
     expect(reps[0].userId).toBeNull();
+  });
+
+  it("keeps an existing primary when adding a different representative for an existing minor", async () => {
+    const uci = `${nonce}-existing-minor-secondary-rep`;
+    const vendorName = `${nonce} Existing Minor Secondary Vendor`;
+    createdClientUcis.push(uci);
+    createdVendorNames.push(vendorName);
+    const [client] = await db.insert(clientsTable).values({
+      firstName: "Existing",
+      lastName: "Minor With Rep",
+      dateOfBirth: "2015-05-05",
+      uciNumber: uci,
+      isMinor: true,
+    }).returning();
+    const [existingPrimary] = await db.insert(familyRepresentativesTable).values({
+      clientId: client.id,
+      name: "Current Guardian",
+      relationship: "guardian",
+      phone: "555-current",
+      email: "current@example.test",
+      address: "1 Existing Road",
+      isPrimary: true,
+      userId: null,
+      createdBy: staffId,
+    }).returning();
+
+    const res = await request(app).post("/api/referrals").set("Cookie", staffCookie).send({
+      submittedVia: "staff_manual_entry",
+      intakeFields: {
+        ...baseIntake(uci, vendorName),
+        clientIsMinor: true,
+        familyRepName: "New Guardian",
+        familyRepRelationship: "guardian",
+        contactPhone: "555-new-guardian",
+        contactEmail: "new-guardian@example.test",
+        contactStreet: "2 New Guardian Road",
+      },
+    });
+    expect(res.status).toBe(201);
+
+    const reps = await db.select().from(familyRepresentativesTable).where(eq(familyRepresentativesTable.clientId, client.id));
+    expect(reps).toHaveLength(2);
+    expect(reps.find((rep) => rep.id === existingPrimary.id)).toMatchObject({
+      name: "Current Guardian",
+      isPrimary: true,
+    });
+    expect(reps.find((rep) => rep.name === "New Guardian")?.isPrimary).toBe(false);
+    expect(reps.filter((rep) => rep.isPrimary)).toHaveLength(1);
+  });
+
+  it("creates an optional adult representative separately from the participant contact", async () => {
+    const uci = `${nonce}-adult-with-rep`;
+    const vendorName = `${nonce} Adult Rep Vendor`;
+    createdClientUcis.push(uci);
+    createdVendorNames.push(vendorName);
+    const res = await request(app).post("/api/referrals").set("Cookie", staffCookie).send({
+      submittedVia: "staff_manual_entry",
+      intakeFields: {
+        ...baseIntake(uci, vendorName),
+        clientIsMinor: false,
+        familyRepName: "Adult Participant Support",
+        familyRepRelationship: "guardian",
+        familyRepPhone: "555-family-phone",
+        familyRepEmail: "family@example.test",
+        familyRepAddress: "22 Family Lane, Sacramento, CA, 95814",
+        contactPhone: "555-participant-phone",
+        contactEmail: "participant@example.test",
+        contactStreet: "10 Participant Street",
+        contactCity: "Sacramento",
+        contactState: "CA",
+        contactZip: "95814",
+      },
+    });
+    expect(res.status).toBe(201);
+    const [client] = await db.select().from(clientsTable).where(eq(clientsTable.uciNumber, uci));
+    expect(client).toMatchObject({
+      isMinor: false,
+      phone: "555-participant-phone",
+      email: "participant@example.test",
+      address: "10 Participant Street, Sacramento, CA, 95814",
+    });
+    const [rep] = await db.select().from(familyRepresentativesTable).where(eq(familyRepresentativesTable.clientId, client.id));
+    expect(rep).toMatchObject({
+      name: "Adult Participant Support",
+      relationship: "guardian",
+      phone: "555-family-phone",
+      email: "family@example.test",
+      address: "22 Family Lane, Sacramento, CA, 95814",
+      isPrimary: true,
+      userId: null,
+    });
+  });
+
+  it("does not make a newly added adult representative primary when another representative exists", async () => {
+    const uci = `${nonce}-adult-secondary-rep`;
+    const vendorName = `${nonce} Adult Secondary Vendor`;
+    createdClientUcis.push(uci);
+    createdVendorNames.push(vendorName);
+    const [client] = await db.insert(clientsTable).values({
+      firstName: "Existing",
+      lastName: "Adult",
+      dateOfBirth: "1990-05-05",
+      uciNumber: uci,
+      isMinor: false,
+    }).returning();
+    const [existingRep] = await db.insert(familyRepresentativesTable).values({
+      clientId: client.id,
+      name: "Existing Primary",
+      relationship: "parent",
+      isPrimary: true,
+      userId: staffId,
+      createdBy: staffId,
+    }).returning();
+    const body = {
+      submittedVia: "staff_manual_entry",
+      intakeFields: {
+        ...baseIntake(uci, vendorName),
+        clientIsMinor: false,
+        familyRepName: "Additional Support",
+        familyRepRelationship: "other",
+        familyRepPhone: "555-secondary",
+        familyRepEmail: "secondary@example.test",
+        familyRepAddress: "42 Second Street",
+      },
+    };
+    const first = await request(app).post("/api/referrals").set("Cookie", staffCookie).send(body);
+    expect(first.status).toBe(201);
+    const second = await request(app).post("/api/referrals").set("Cookie", staffCookie).send(body);
+    expect(second.status).toBe(201);
+    const reps = await db.select().from(familyRepresentativesTable).where(eq(familyRepresentativesTable.clientId, client.id));
+    expect(reps).toHaveLength(2);
+    expect(reps.find((rep) => rep.id === existingRep.id)).toMatchObject({
+      name: "Existing Primary",
+      userId: staffId,
+      isPrimary: true,
+    });
+    expect(reps.find((rep) => rep.name === "Additional Support")?.isPrimary).toBe(false);
+  });
+
+  it("reuses a matching linked representative instead of creating a duplicate", async () => {
+    const uci = `${nonce}-linked-rep-match`;
+    const vendorName = `${nonce} Linked Rep Vendor`;
+    createdClientUcis.push(uci);
+    createdVendorNames.push(vendorName);
+    const [client] = await db.insert(clientsTable).values({
+      firstName: "Existing",
+      lastName: "Adult",
+      dateOfBirth: "1990-05-05",
+      uciNumber: uci,
+      isMinor: false,
+    }).returning();
+    const [linkedUser] = await db.insert(usersTable).values({
+      name: "Linked Support",
+      email: `${nonce}-linked-rep@test.local`,
+      role: "parent_guardian",
+    }).returning();
+    createdLinkedUserIds.push(linkedUser.id);
+    const [linkedRep] = await db.insert(familyRepresentativesTable).values({
+      clientId: client.id,
+      name: "Linked Support",
+      relationship: "guardian",
+      phone: "555-linked",
+      email: "linked@example.test",
+      address: "7 Linked Road",
+      isPrimary: true,
+      userId: linkedUser.id,
+      createdBy: staffId,
+    }).returning();
+    const res = await request(app).post("/api/referrals").set("Cookie", staffCookie).send({
+      submittedVia: "staff_manual_entry",
+      intakeFields: {
+        ...baseIntake(uci, vendorName),
+        clientIsMinor: false,
+        familyRepName: "Linked Support",
+        familyRepRelationship: "guardian",
+        familyRepPhone: "555-linked",
+        familyRepEmail: "linked@example.test",
+        familyRepAddress: "7 Linked Road",
+      },
+    });
+    expect(res.status).toBe(201);
+    const reps = await db.select().from(familyRepresentativesTable).where(eq(familyRepresentativesTable.clientId, client.id));
+    expect(reps).toHaveLength(1);
+    expect(reps[0]).toMatchObject({ id: linkedRep.id, userId: linkedUser.id, isPrimary: true });
+  });
+
+  it("does not copy an existing minor's intake representative contact onto the participant record", async () => {
+    const uci = `${nonce}-existing-minor-contact`;
+    const vendorName = `${nonce} Existing Minor Contact Vendor`;
+    createdClientUcis.push(uci);
+    createdVendorNames.push(vendorName);
+    const [client] = await db.insert(clientsTable).values({
+      firstName: "Existing",
+      lastName: "Minor",
+      dateOfBirth: "2015-05-05",
+      uciNumber: uci,
+      isMinor: true,
+      phone: "555-participant-old",
+      email: "participant-old@example.test",
+      address: "1 Participant Road",
+    }).returning();
+    const res = await request(app).post("/api/referrals").set("Cookie", staffCookie).send({
+      submittedVia: "staff_manual_entry",
+      intakeFields: {
+        ...baseIntake(uci, vendorName),
+        clientIsMinor: true,
+        familyRepName: "New Guardian",
+        familyRepRelationship: "guardian",
+        contactPhone: "555-guardian",
+        contactEmail: "guardian@example.test",
+        contactStreet: "2 Guardian Road",
+        contactCity: "Sacramento",
+        contactState: "CA",
+        contactZip: "95814",
+      },
+    });
+    expect(res.status).toBe(201);
+    const [savedClient] = await db.select().from(clientsTable).where(eq(clientsTable.id, client.id));
+    expect(savedClient).toMatchObject({
+      phone: "555-participant-old",
+      email: "participant-old@example.test",
+      address: "1 Participant Road",
+    });
+    const [rep] = await db.select().from(familyRepresentativesTable).where(eq(familyRepresentativesTable.clientId, client.id));
+    expect(rep).toMatchObject({
+      name: "New Guardian",
+      relationship: "guardian",
+      phone: "555-guardian",
+      email: "guardian@example.test",
+      address: "2 Guardian Road, Sacramento, CA, 95814",
+    });
+  });
+
+  it("rejects an adult family representative relationship outside the supported values", async () => {
+    const uci = `${nonce}-invalid-adult-rep-relationship`;
+    const res = await request(app).post("/api/referrals").set("Cookie", staffCookie).send({
+      submittedVia: "staff_manual_entry",
+      intakeFields: {
+        ...baseIntake(uci, `${nonce} Invalid Relationship Vendor`),
+        clientIsMinor: false,
+        familyRepName: "Invalid Relationship Rep",
+        familyRepRelationship: "neighbor",
+        familyRepPhone: "555-neighbor",
+      },
+    });
+    expect(res.status).toBe(400);
+    expect(res.body.error).toContain("familyRepRelationship");
+    const clients = await db.select().from(clientsTable).where(eq(clientsTable.uciNumber, uci));
+    expect(clients).toHaveLength(0);
+  });
+
+  it("rejects adult family representative contact details when the name is missing", async () => {
+    const uci = `${nonce}-adult-rep-without-name`;
+    createdClientUcis.push(uci);
+    const res = await request(app).post("/api/referrals").set("Cookie", staffCookie).send({
+      submittedVia: "staff_manual_entry",
+      intakeFields: {
+        ...baseIntake(uci, `${nonce} Missing Rep Name Vendor`),
+        clientIsMinor: false,
+        familyRepName: "",
+        familyRepPhone: "555-missing-name",
+        familyRepEmail: "missing-name@example.test",
+      },
+    });
+    expect(res.status).toBe(400);
+    expect(res.body.error).toContain("Family representative contact details require a family representative name");
+    const clients = await db.select().from(clientsTable).where(eq(clientsTable.uciNumber, uci));
+    expect(clients).toHaveLength(0);
   });
 });

@@ -1,6 +1,5 @@
 import React, { useState } from 'react';
 import {
-  useListFamilyRepresentatives,
   useCreateFamilyRepresentative,
   useUpdateFamilyRepresentative,
   useDeleteFamilyRepresentative,
@@ -54,6 +53,16 @@ export function ManageFamilyRepDialog({
   const { toast } = useToast();
 
   const handleOpenChange = (o: boolean) => {
+    if (o && rep) {
+      setForm({
+        name: rep.name,
+        relationship: rep.relationship || 'parent',
+        phone: rep.phone || '',
+        email: rep.email || '',
+        address: rep.address || '',
+        isPrimary: rep.isPrimary,
+      });
+    }
     setOpen(o);
     if (!o) {
       if (onClose) onClose();
@@ -224,6 +233,10 @@ function EditMyFamilyRepInfoDialog({ clientId, rep }: { clientId: string; rep: F
   const updateRep = useUpdateFamilyRepresentative();
   const queryClient = useQueryClient();
   const { toast } = useToast();
+  const handleOpenChange = (nextOpen: boolean) => {
+    if (nextOpen) setForm({ name: rep.name, phone: rep.phone || '', email: rep.email || '', address: rep.address || '' });
+    setOpen(nextOpen);
+  };
 
   const handleSave = () => {
     updateRep.mutate(
@@ -240,7 +253,7 @@ function EditMyFamilyRepInfoDialog({ clientId, rep }: { clientId: string; rep: F
   };
 
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
+    <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogTrigger asChild>
         <Button variant="outline" size="sm" data-testid={`button-edit-my-info-${rep.id}`}>
           <Pencil className="w-4 h-4 mr-2" /> Edit My Info
@@ -284,20 +297,37 @@ function EditMyFamilyRepInfoDialog({ clientId, rep }: { clientId: string; rep: F
   );
 }
 
-export function FamilyRepresentativesSection({ clientId }: { clientId: string }) {
+export function RepresentativeEditAction({ clientId, rep }: { clientId: string; rep: FamilyRepresentative }) {
+  const { user } = useAuth();
+  if (user?.role === 'staff') return <ManageFamilyRepDialog clientId={clientId} rep={rep} />;
+  if ((user?.role === 'parent_guardian' || user?.role === 'self') && rep.userId === user.id) {
+    return <EditMyFamilyRepInfoDialog clientId={clientId} rep={rep} />;
+  }
+  return null;
+}
+
+export function FamilyRepresentativesSection({
+  clientId,
+  representatives,
+  isLoading = false,
+  isError = false,
+  onRetry,
+  primaryDisplayed = false,
+}: {
+  clientId: string;
+  representatives: FamilyRepresentative[];
+  isLoading?: boolean;
+  isError?: boolean;
+  onRetry?: () => void;
+  primaryDisplayed?: boolean;
+}) {
   const { user } = useAuth();
   const isStaff = user?.role === 'staff';
-  const isSelfService = user?.role === 'parent_guardian' || user?.role === 'self';
   const queryClient = useQueryClient();
-
-  const { data: reps = [], isLoading } = useListFamilyRepresentatives(
-    { clientId },
-    { query: { enabled: !!clientId, queryKey: getListFamilyRepresentativesQueryKey({ clientId }) } }
-  );
 
   return (
     <div className="w-full space-y-4">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-wrap items-center justify-between gap-3">
         <p className="font-medium text-primary flex items-center gap-2">
           <User className="w-4 h-4" /> Family Representatives
         </p>
@@ -305,21 +335,24 @@ export function FamilyRepresentativesSection({ clientId }: { clientId: string })
       </div>
       
       {isLoading ? (
-        <div className="text-sm text-muted-foreground py-2">Loading representatives...</div>
-      ) : reps.length === 0 ? (
+        <div className="space-y-2 animate-pulse" aria-label="Loading representatives"><div className="h-4 w-2/3 rounded bg-muted" /><div className="h-4 w-1/2 rounded bg-muted" /></div>
+      ) : isError ? (
+        <div className="flex flex-wrap items-center gap-3 text-sm text-muted-foreground">
+          <span>Representatives could not be loaded.</span>
+          {onRetry && <Button variant="outline" size="sm" onClick={onRetry} data-testid="button-retry-representatives">Retry</Button>}
+        </div>
+      ) : representatives.length === 0 ? (
         <div className="text-sm text-muted-foreground p-4 border border-dashed rounded-md bg-muted/20 text-center">
-          No family representatives added.
+          {primaryDisplayed ? 'The primary representative is shown in Contact Information.' : 'No family representatives added.'}
         </div>
       ) : (
         <div className="space-y-3">
-          {reps.map((rep) => {
-            const isMe = isSelfService && rep.userId === user?.id;
-            
+          {representatives.map((rep) => {
             return (
-              <div key={rep.id} className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-4 border rounded-md bg-card shadow-sm" data-testid={`rep-row-${rep.id}`}>
-                <div className="space-y-1">
-                  <div className="flex items-center gap-2">
-                    <span className="font-semibold text-foreground">{rep.name}</span>
+              <div key={rep.id} className="min-w-0 space-y-3 rounded-md border bg-card p-3 shadow-sm sm:p-4" data-testid={`rep-row-${rep.id}`}>
+                <div className="min-w-0 space-y-2">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="min-w-0 break-words font-semibold text-foreground">{rep.name}</span>
                     <Badge variant="outline" className="capitalize text-xs font-normal">
                       {rep.relationship || 'unknown'}
                     </Badge>
@@ -330,7 +363,7 @@ export function FamilyRepresentativesSection({ clientId }: { clientId: string })
                     )}
                     <Badge 
                       variant={rep.portalAccountStatus === 'active' ? 'default' : 'secondary'} 
-                      className={`text-[10px] font-medium ml-1 ${
+                       className={`text-[10px] font-medium ${
                         rep.portalAccountStatus === 'active' 
                           ? 'bg-chart-5 text-white hover:bg-chart-5/90' 
                           : rep.portalAccountStatus === 'invited'
@@ -345,13 +378,14 @@ export function FamilyRepresentativesSection({ clientId }: { clientId: string })
                           : 'No portal access'}
                     </Badge>
                   </div>
-                  <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-muted-foreground">
-                    {rep.phone && <span className="flex items-center gap-1"><Phone className="w-3 h-3" /> {rep.phone}</span>}
-                    {rep.email && <span className="flex items-center gap-1"><Mail className="w-3 h-3" /> {rep.email}</span>}
+                  <div className="space-y-1 text-sm text-muted-foreground">
+                    <div className="flex min-w-0 items-start gap-2" data-testid={`rep-phone-${rep.id}`}><Phone className="mt-0.5 h-3.5 w-3.5 shrink-0" /><span className="min-w-0 break-words">Phone: {rep.phone || '-'}</span></div>
+                    <div className="flex min-w-0 items-start gap-2" data-testid={`rep-email-${rep.id}`}><Mail className="mt-0.5 h-3.5 w-3.5 shrink-0" /><span className="min-w-0 break-all">Email: {rep.email || '-'}</span></div>
+                    <div className="flex min-w-0 items-start gap-2" data-testid={`rep-address-${rep.id}`}><MapPin className="mt-0.5 h-3.5 w-3.5 shrink-0" /><span className="min-w-0 break-words">Address: {rep.address || '-'}</span></div>
                   </div>
                 </div>
                 
-                <div className="flex items-center gap-2 shrink-0 flex-wrap">
+                <div className="flex min-w-0 flex-wrap items-center gap-2 border-t pt-2" data-testid={`rep-actions-${rep.id}`}>
                   {isStaff && rep.portalAccountStatus === 'none' && (
                     <InvitePortalDialog 
                       linkedRecordType="client" 
@@ -365,13 +399,11 @@ export function FamilyRepresentativesSection({ clientId }: { clientId: string })
                   )}
                   {isStaff && (
                     <>
-                      <ManageFamilyRepDialog clientId={clientId} rep={rep} />
+                      <RepresentativeEditAction clientId={clientId} rep={rep} />
                       <RemoveFamilyRepDialog clientId={clientId} rep={rep} />
                     </>
                   )}
-                  {isMe && (
-                    <EditMyFamilyRepInfoDialog clientId={clientId} rep={rep} />
-                  )}
+                  {!isStaff && <RepresentativeEditAction clientId={clientId} rep={rep} />}
                 </div>
               </div>
             );

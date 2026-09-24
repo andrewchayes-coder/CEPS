@@ -1,12 +1,13 @@
 import { expect, test, type Page } from '@playwright/test';
 
-async function openReferral(page: Page, calls: { count: number }) {
+async function openReferral(page: Page, calls: { count: number; body?: any }) {
   await page.route('**/api/auth/me', (route) => route.fulfill({
     json: { id: 'test-staff', name: 'Test Staff', email: 'staff@example.test', role: 'staff', active: true, permissions: [] },
   }));
   await page.route('**/api/referrals', (route) => {
     if (route.request().method() === 'POST') {
       calls.count++;
+      calls.body = route.request().postDataJSON();
       return route.fulfill({ status: 201, json: { id: 'new-referral' } });
     }
     return route.continue();
@@ -62,6 +63,12 @@ test('Documents Next opens Review without creating a referral; only Submit creat
 
   await page.getByRole('button', { name: 'Submit Referral', exact: true }).click();
   await expect.poll(() => calls.count).toBe(1);
+  expect(calls.body.intakeFields.contactEmail).toBe('pat@example.test');
+  expect(calls.body.intakeFields.familyRepName).toBeUndefined();
+  expect(calls.body.intakeFields.familyRepRelationship).toBeUndefined();
+  expect(calls.body.intakeFields.familyRepPhone).toBeUndefined();
+  expect(calls.body.intakeFields.familyRepEmail).toBeUndefined();
+  expect(calls.body.intakeFields.familyRepAddress).toBeUndefined();
 });
 
 test('Enter in a Participant text input advances to Documents without submitting', async ({ page }) => {
@@ -70,5 +77,48 @@ test('Enter in a Participant text input advances to Documents without submitting
   await fillThroughParticipant(page);
   await page.getByLabel('UCI Number').press('Enter');
   await expect(page.getByText('Supporting Documents', { exact: true })).toBeVisible();
+  expect(calls.count).toBe(0);
+});
+
+test('adult intake can add a family representative without replacing participant contact details', async ({ page }) => {
+  const calls: { count: number; body?: any } = { count: 0 };
+  await openReferral(page, calls);
+  await fillThroughParticipant(page);
+  await page.getByTestId('toggle-optional-family-representative').click();
+  await expect(page.getByTestId('optional-family-representative')).toBeVisible();
+  await page.getByLabel('Name', { exact: true }).fill('Morgan Rivera');
+  await page.getByRole('combobox').click();
+  await page.getByRole('option', { name: 'Guardian' }).click();
+  await page.getByLabel('Phone', { exact: true }).fill('5559876543');
+  await page.getByLabel('Email', { exact: true }).fill('morgan@example.test');
+  await page.getByLabel('Address', { exact: true }).fill('12 Oak Street');
+
+  await page.getByRole('button', { name: 'Next' }).click();
+  await page.getByRole('button', { name: 'Next' }).click();
+  await page.getByRole('button', { name: 'Submit Referral', exact: true }).click();
+  await expect.poll(() => calls.count).toBe(1);
+
+  expect(calls.body.intakeFields.clientIsMinor).toBe(false);
+  expect(calls.body.intakeFields.contactEmail).toBe('pat@example.test');
+  expect(calls.body.intakeFields.contactPhone).toBe('5551234567');
+  expect(calls.body.intakeFields.contactStreet).toBe('200 Main St');
+  expect(calls.body.intakeFields.familyRepName).toBe('Morgan Rivera');
+  expect(calls.body.intakeFields.familyRepRelationship).toBe('guardian');
+  expect(calls.body.intakeFields.familyRepPhone).toBe('5559876543');
+  expect(calls.body.intakeFields.familyRepEmail).toBe('morgan@example.test');
+  expect(calls.body.intakeFields.familyRepAddress).toBe('12 Oak Street');
+});
+
+test('adult family representative details require a name and valid optional email', async ({ page }) => {
+  const calls = { count: 0 };
+  await openReferral(page, calls);
+  await fillThroughParticipant(page);
+  await page.getByTestId('toggle-optional-family-representative').click();
+  await page.getByLabel('Phone', { exact: true }).fill('5559876543');
+  await page.getByLabel('Email', { exact: true }).fill('not-an-email');
+  await page.getByRole('button', { name: 'Next' }).click();
+  await expect(page.getByText('Name is required when adding a family representative')).toBeVisible();
+  await expect(page.getByText('Enter a valid family representative email')).toBeVisible();
+  await expect(page.getByText('Supporting Documents', { exact: true })).not.toBeVisible();
   expect(calls.count).toBe(0);
 });

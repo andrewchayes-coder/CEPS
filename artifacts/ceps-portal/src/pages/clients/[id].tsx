@@ -1,11 +1,11 @@
 import React from 'react';
 import { useLocation, useParams, useSearch } from 'wouter';
-import { useGetClientCase, useListFees, useDeleteClient, useDeleteFee, type CaseDocument } from '@workspace/api-client-react';
+import { useGetClientCase, useListFees, useDeleteClient, useDeleteFee, useListFamilyRepresentatives, getListFamilyRepresentativesQueryKey, type CaseDocument } from '@workspace/api-client-react';
 import { useAuth } from '@/components/auth/auth-provider';
 import { InvitePortalDialog } from '@/components/invite-portal-dialog';
 import { EditClientDialog } from '@/components/edit-client-dialog';
 import { EditContactInfoDialog } from '@/components/edit-contact-info-dialog';
-import { FamilyRepresentativesSection } from '@/components/family-representatives';
+import { FamilyRepresentativesSection, RepresentativeEditAction } from '@/components/family-representatives';
 import { EditFeeDialog } from '@/components/edit-fee-dialog';
 import { CreateRemittanceDialog } from '@/components/create-remittance-dialog';
 import { DeleteEntityButton } from '@/components/delete-entity-button';
@@ -151,6 +151,10 @@ export default function ClientDetailPage() {
     { clientId: id },
     { query: { enabled: !!id, queryKey: ['fees', id] } },
   );
+  const { data: representatives = [], isLoading: repsLoading, isError: repsError, refetch: refetchReps } = useListFamilyRepresentatives(
+    { clientId: id },
+    { query: { enabled: !!id, queryKey: getListFamilyRepresentativesQueryKey({ clientId: id }) } },
+  );
   const authorizationsSort = useTableSort<string>('authNumber');
   const invoicesSort = useTableSort<string>('serviceMonth');
   const paymentsSort = useTableSort<string>('checkDate', 'desc');
@@ -161,6 +165,13 @@ export default function ClientDetailPage() {
   if (!caseData) return <div className="p-8 text-center">Participant not found.</div>;
 
   const { client, authorizations, invoices, payments, remittances, referrals } = caseData;
+  const primaryRepresentative = client.isMinor ? representatives.find((rep) => rep.isPrimary) : undefined;
+  const remainingRepresentatives = primaryRepresentative
+    ? representatives.filter((rep) => rep.id !== primaryRepresentative.id)
+    : representatives;
+  const showRepresentativesCard = !repsLoading && !repsError
+    ? remainingRepresentatives.length > 0 || isStaff
+    : true;
   const feeList = fees ?? [];
   const sortedAuthorizations = stableSort(authorizations, authorizationsSort.sort, {
     authNumber: (auth) => auth.authNumber,
@@ -223,7 +234,7 @@ export default function ClientDetailPage() {
               <span className="font-mono bg-muted px-1.5 py-0.5 rounded">UCI: {client.uciNumber}</span>
               <span>DOB: {client.dateOfBirth}</span>
             </div>
-            {isFamily && (
+            {isFamily && !primaryRepresentative && (
               <div className="mt-2 text-sm text-muted-foreground space-y-0.5" data-testid="header-contact-info">
                 <div className="flex flex-wrap items-center gap-x-4 gap-y-0.5">
                   {client.phone && <span className="flex items-center gap-1.5"><Phone className="w-3.5 h-3.5" /> {client.phone}</span>}
@@ -299,28 +310,68 @@ export default function ClientDetailPage() {
 
         <TabsContent value="overview" className="pt-6 space-y-6">
           <div className="grid md:grid-cols-2 gap-6">
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-lg">Contact Information</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4 text-sm">
-                <div className="grid grid-cols-3 gap-1">
-                  <span className="text-muted-foreground">Phone:</span>
-                  <span className="col-span-2">{client.phone || '-'}</span>
-                  <span className="text-muted-foreground">Email:</span>
-                  <span className="col-span-2">{client.email || '-'}</span>
-                  <span className="text-muted-foreground">Address:</span>
-                  <span className="col-span-2">{client.address || '-'}</span>
-                  <span className="text-muted-foreground">Preferred Language:</span>
-                  <span className="col-span-2" data-testid="client-preferred-language">
-                    {client.preferredLanguage || 'English'}
-                  </span>
-                </div>
-                <div className="pt-4 border-t mt-4">
-                  <FamilyRepresentativesSection clientId={client.id} />
-                </div>
-              </CardContent>
-            </Card>
+            <div className="min-w-0 space-y-4">
+              <Card data-testid="card-contact-information">
+                <CardHeader className="pb-3">
+                  <CardTitle className="text-lg">Contact Information</CardTitle>
+                  <CardDescription data-testid="contact-subheader">
+                    {primaryRepresentative ? 'Family Representative' : 'Client'}
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4 text-sm">
+                  {client.isMinor && repsLoading ? (
+                    <div className="space-y-3 animate-pulse" aria-label="Loading contact information">
+                      <div className="h-4 w-2/3 rounded bg-muted" />
+                      <div className="h-4 w-1/2 rounded bg-muted" />
+                      <div className="h-4 w-3/4 rounded bg-muted" />
+                    </div>
+                  ) : client.isMinor && repsError ? (
+                    <div className="flex flex-wrap items-center gap-3 text-muted-foreground">
+                      <span>Contact information could not be loaded.</span>
+                      <Button variant="outline" size="sm" onClick={() => refetchReps()} data-testid="button-retry-contact">Retry</Button>
+                    </div>
+                  ) : (
+                    <>
+                      <dl className="grid grid-cols-[minmax(5rem,auto)_minmax(0,1fr)] gap-x-3 gap-y-2">
+                        {primaryRepresentative && (
+                          <>
+                            <dt className="text-muted-foreground">Name:</dt>
+                            <dd className="min-w-0 break-words font-medium" data-testid="contact-name">{primaryRepresentative.name}</dd>
+                          </>
+                        )}
+                        <dt className="text-muted-foreground">Phone:</dt>
+                        <dd className="min-w-0 break-words" data-testid="contact-phone">{primaryRepresentative ? primaryRepresentative.phone || '-' : client.phone || '-'}</dd>
+                        <dt className="text-muted-foreground">Email:</dt>
+                        <dd className="min-w-0 break-all" data-testid="contact-email">{primaryRepresentative ? primaryRepresentative.email || '-' : client.email || '-'}</dd>
+                        <dt className="text-muted-foreground">Address:</dt>
+                        <dd className="min-w-0 break-words" data-testid="contact-address">{primaryRepresentative ? primaryRepresentative.address || '-' : client.address || '-'}</dd>
+                        <dt className="text-muted-foreground">Preferred Language:</dt>
+                        <dd className="min-w-0 break-words" data-testid="client-preferred-language">{client.preferredLanguage || 'English'}</dd>
+                      </dl>
+                      {primaryRepresentative && (
+                        <div className="flex flex-wrap gap-2 border-t pt-3" data-testid="contact-actions">
+                          <RepresentativeEditAction clientId={client.id} rep={primaryRepresentative} />
+                        </div>
+                      )}
+                    </>
+                  )}
+                </CardContent>
+              </Card>
+              {showRepresentativesCard && (
+                <Card data-testid="card-family-representatives">
+                  <CardContent className="p-4 sm:p-6">
+                    <FamilyRepresentativesSection
+                      clientId={client.id}
+                      representatives={remainingRepresentatives}
+                      isLoading={repsLoading}
+                      isError={repsError}
+                      onRetry={() => refetchReps()}
+                      primaryDisplayed={!!primaryRepresentative}
+                    />
+                  </CardContent>
+                </Card>
+              )}
+            </div>
 
             <div className="space-y-6">
               <h3 className="font-semibold text-lg flex items-center gap-2">

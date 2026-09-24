@@ -51,15 +51,15 @@ export const clientsTable = pgTable("clients", {
   ),
   firstNameTrgmIdx: index("clients_first_name_trgm_idx").using(
     "gin",
-    sql`${table.firstName} gin_trgm_ops`,
+    table.firstName.op("gin_trgm_ops"),
   ),
   lastNameTrgmIdx: index("clients_last_name_trgm_idx").using(
     "gin",
-    sql`${table.lastName} gin_trgm_ops`,
+    table.lastName.op("gin_trgm_ops"),
   ),
   uciNumberTrgmIdx: index("clients_uci_number_trgm_idx").using(
     "gin",
-    sql`${table.uciNumber} gin_trgm_ops`,
+    table.uciNumber.op("gin_trgm_ops"),
   ),
   fullNameTrgmIdx: index("clients_full_name_trgm_idx").using(
     "gin",

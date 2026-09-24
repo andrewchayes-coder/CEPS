@@ -20,7 +20,7 @@ export const auditLogTable = pgTable(
     index("audit_log_user_id_created_at_idx").on(t.userId, t.createdAt.desc()),
     index("audit_log_action_trgm_idx").using(
       "gin",
-      sql`${t.action} gin_trgm_ops`,
+      t.action.op("gin_trgm_ops"),
     ),
     index("audit_log_entity_type_trgm_idx").using(
       "gin",

@@ -61,11 +61,11 @@ export const authorizationsTable = pgTable("authorizations", {
     .where(sql`${table.isDeleted} = false`),
   authNumberTrgmIdx: index("authorizations_auth_number_trgm_idx").using(
     "gin",
-    sql`${table.authNumber} gin_trgm_ops`,
+    table.authNumber.op("gin_trgm_ops"),
   ),
   serviceCodeTrgmIdx: index("authorizations_service_code_trgm_idx").using(
     "gin",
-    sql`${table.serviceCode} gin_trgm_ops`,
+    table.serviceCode.op("gin_trgm_ops"),
   ),
   activityDescriptionTrgmIdx: index("authorizations_activity_description_trgm_idx").using(
     "gin",

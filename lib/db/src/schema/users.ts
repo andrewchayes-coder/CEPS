@@ -5,6 +5,7 @@ import {
   boolean,
   timestamp,
   index,
+  foreignKey,
 } from "drizzle-orm/pg-core";
 import { sql } from "drizzle-orm";
 import { familyRepresentativesTable } from "./familyRepresentatives";
@@ -27,11 +28,11 @@ export const usersTable = pgTable("users", {
 }, (table) => ({
   nameTrgmIdx: index("users_name_trgm_idx").using(
     "gin",
-    sql`${table.name} gin_trgm_ops`,
+    table.name.op("gin_trgm_ops"),
   ),
   emailTrgmIdx: index("users_email_trgm_idx").using(
     "gin",
-    sql`${table.email} gin_trgm_ops`,
+    table.email.op("gin_trgm_ops"),
   ),
   phoneTrgmIdx: index("users_phone_trgm_idx").using(
     "gin",
@@ -63,9 +64,7 @@ export const magicLinksTable = pgTable("magic_links", {
   email: text("email").notNull(),
   purpose: text("purpose").notNull(), // login | signature | invite
   referralId: uuid("referral_id"),
-  familyRepresentativeId: uuid("family_representative_id").references(
-    () => familyRepresentativesTable.id,
-  ),
+  familyRepresentativeId: uuid("family_representative_id"),
   // Invite-only fields: the role and linked record the accepted account gets.
   inviteRole: text("invite_role"), // vendor | parent_guardian | self
   linkedRecordType: text("linked_record_type"), // client | vendor
@@ -75,6 +74,12 @@ export const magicLinksTable = pgTable("magic_links", {
   createdAt: timestamp("created_at", { withTimezone: true })
     .notNull()
     .defaultNow(),
-});
+}, (table) => ({
+  familyRepresentativeFk: foreignKey({
+    columns: [table.familyRepresentativeId],
+    foreignColumns: [familyRepresentativesTable.id],
+    name: "magic_links_family_rep_fk",
+  }),
+}));
 
 export type MagicLink = typeof magicLinksTable.$inferSelect;

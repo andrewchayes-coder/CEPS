@@ -39,7 +39,7 @@ export const vendorsTable = pgTable("vendors", {
   nameLowerUnique: uniqueIndex("vendors_name_lower_unique").on(sql`lower(${table.name})`),
   nameTrgmIdx: index("vendors_name_trgm_idx").using(
     "gin",
-    sql`${table.name} gin_trgm_ops`,
+    table.name.op("gin_trgm_ops"),
   ),
   altaVendorNumberTrgmIdx: index("vendors_alta_vendor_number_trgm_idx").using(
     "gin",

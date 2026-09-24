@@ -7,6 +7,7 @@ import {
   timestamp,
   numeric,
   index,
+  foreignKey,
 } from "drizzle-orm/pg-core";
 import { sql } from "drizzle-orm";
 import { clientsTable } from "./clients";
@@ -28,9 +29,7 @@ export const referralsTable = pgTable("referrals", {
   intakeFields: jsonb("intake_fields"),
   parentEmail: text("parent_email"),
   intakeSentTo: text("intake_sent_to"), // participant | family_rep
-  intakeSentToFamilyRepId: uuid("intake_sent_to_family_rep_id").references(
-    () => familyRepresentativesTable.id,
-  ),
+  intakeSentToFamilyRepId: uuid("intake_sent_to_family_rep_id"),
   intakeSentAt: timestamp("intake_sent_at", { withTimezone: true }),
   parentSignedAt: timestamp("parent_signed_at", { withTimezone: true }),
   signedByName: text("signed_by_name"),
@@ -54,6 +53,11 @@ export const referralsTable = pgTable("referrals", {
     .notNull()
     .defaultNow(),
 }, (table) => ({
+  intakeFamilyRepresentativeFk: foreignKey({
+    columns: [table.intakeSentToFamilyRepId],
+    foreignColumns: [familyRepresentativesTable.id],
+    name: "referrals_intake_family_rep_fk",
+  }),
   // Backing indexes for the SQL-WHERE list filtering / role scoping
   // (Prompt 6), following the audit-log indexing pattern.
   createdAtIdx: index("referrals_created_at_idx").on(table.createdAt.desc()),

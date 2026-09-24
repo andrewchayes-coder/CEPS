@@ -22,6 +22,7 @@ import {
 } from '@/components/ui/select';
 import { useToast } from '@/hooks/use-toast';
 import { Pencil } from 'lucide-react';
+import { apiErrorMessage } from '@/lib/api-error';
 
 const STATUSES = [
   'intake',
@@ -119,7 +120,7 @@ export function EditReferralDialog({ id, referral, onSaved }: Props) {
           setOpen(false);
           onSaved?.();
         },
-        onError: () => toast({ variant: 'destructive', title: 'Error', description: 'Could not update referral.' }),
+        onError: (error: unknown) => toast({ variant: 'destructive', title: 'Error', description: apiErrorMessage(error, 'Could not update referral.') }),
       },
     );
   };

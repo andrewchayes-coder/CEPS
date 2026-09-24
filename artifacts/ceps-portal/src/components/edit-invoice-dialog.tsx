@@ -31,11 +31,12 @@ import { SearchableSelect } from '@/components/searchable-select';
 import { MonthYearInput } from '@/components/month-year-input';
 import { useDebounce } from '@/hooks/use-debounce';
 import { FileUpload } from '@/components/file-upload';
+import { Badge } from '@/components/ui/badge';
+import { apiErrorMessage } from '@/lib/api-error';
 
 const formSchema = z.object({
   vendorId: z.string().optional(),
   paymentType: z.string(),
-  status: z.string(),
   notes: z.string().optional(),
   lineItems: z.array(z.object({
     id: z.string().optional(),
@@ -73,7 +74,6 @@ export function EditInvoiceDialog({ id, invoice, onSaved }: Props) {
     defaultValues: {
       vendorId: invoice.vendorId ?? '',
       paymentType: invoice.paymentType,
-      status: invoice.status,
       notes: invoice.notes ?? '',
       lineItems: invoice.lineItems.length > 0
         ? invoice.lineItems.map(l => ({ authorizationId: l.authorizationId, serviceMonth: l.serviceMonth, amount: l.amount, documentUrl: l.documentUrl ?? null }))
@@ -119,7 +119,6 @@ export function EditInvoiceDialog({ id, invoice, onSaved }: Props) {
       form.reset({
         vendorId: invoice.vendorId ?? '',
         paymentType: invoice.paymentType,
-        status: invoice.status,
         notes: invoice.notes ?? '',
         lineItems: invoice.lineItems.length > 0
           ? invoice.lineItems.map(l => ({ authorizationId: l.authorizationId, serviceMonth: l.serviceMonth, amount: l.amount, documentUrl: l.documentUrl ?? null }))
@@ -133,7 +132,6 @@ export function EditInvoiceDialog({ id, invoice, onSaved }: Props) {
       vendorId: data.vendorId === 'none' || data.vendorId === '' ? null : data.vendorId,
       amountRequested: totalAmount.toFixed(2),
       paymentType: data.paymentType as InvoiceUpdate['paymentType'],
-      status: data.status as InvoiceUpdate['status'],
       notes: data.notes === '' ? undefined : data.notes,
       lineItems: data.lineItems
     };
@@ -145,7 +143,7 @@ export function EditInvoiceDialog({ id, invoice, onSaved }: Props) {
           setOpen(false);
           onSaved?.();
         },
-        onError: () => toast({ variant: 'destructive', title: 'Error', description: 'Could not update invoice.' }),
+        onError: (error: unknown) => toast({ variant: 'destructive', title: 'Error', description: apiErrorMessage(error, 'Could not update invoice.') }),
       },
     );
   };
@@ -203,22 +201,11 @@ export function EditInvoiceDialog({ id, invoice, onSaved }: Props) {
                   <FormMessage />
                 </FormItem>
               )} />
-              <FormField control={form.control} name="status" render={({ field }) => (
-                <FormItem>
-                  <FormLabel htmlFor="edit-invoice-status">Status</FormLabel>
-                  <Select value={field.value} onValueChange={field.onChange}>
-                    <FormControl><SelectTrigger id="edit-invoice-status"><SelectValue /></SelectTrigger></FormControl>
-                    <SelectContent>
-                      <SelectItem value="pending_review">Pending Review</SelectItem>
-                      <SelectItem value="validated">Validated</SelectItem>
-                      <SelectItem value="approved">Approved</SelectItem>
-                      <SelectItem value="rejected">Rejected</SelectItem>
-                      <SelectItem value="duplicate">Duplicate</SelectItem>
-                    </SelectContent>
-                  </Select>
-                  <FormMessage />
-                </FormItem>
-              )} />
+              <div className="space-y-2 col-span-2">
+                <Label>Status</Label>
+                <div><Badge variant="secondary" className="capitalize">{invoice.status.replace(/_/g, ' ')}</Badge></div>
+                <p className="text-xs text-muted-foreground">Use Validate / Approve / Reject on the invoice page to change status.</p>
+              </div>
             </div>
 
             <div className="space-y-4 border rounded-md p-4">

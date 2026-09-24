@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { apiErrorMessage } from '@/lib/api-error';
 import { useCancelAuthorization } from '@workspace/api-client-react';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
@@ -42,7 +43,7 @@ export function CancelAuthorizationDialog({ id, onCanceled, trigger, variant = '
           setReason('');
           onCanceled?.();
         },
-        onError: () => toast({ variant: 'destructive', title: 'Error', description: 'Could not cancel authorization.' }),
+        onError: (error: unknown) => toast({ variant: 'destructive', title: 'Error', description: apiErrorMessage(error, 'Could not cancel authorization.') }),
       }
     );
   };

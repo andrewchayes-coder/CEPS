@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { apiErrorMessage } from '@/lib/api-error';
 import { useUpdateClient } from '@workspace/api-client-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -92,8 +93,8 @@ export function EditContactInfoDialog({ id, client, isGuardian, onSaved }: Props
           setOpen(false);
           onSaved?.();
         },
-        onError: () =>
-          toast({ variant: 'destructive', title: 'Error', description: 'Could not update contact info.' }),
+        onError: (error: unknown) =>
+          toast({ variant: 'destructive', title: 'Error', description: apiErrorMessage(error, 'Could not update contact info.') }),
       },
     );
   };

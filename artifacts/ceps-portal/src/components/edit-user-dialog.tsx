@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { apiErrorMessage } from '@/lib/api-error';
 import { useUpdateUser, UserUpdateRole } from '@workspace/api-client-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -72,7 +73,7 @@ export function EditUserDialog({ id, user, onSaved }: Props) {
           toast({
             variant: 'destructive',
             title: 'Error',
-            description: err?.data?.message || 'Could not update user.',
+            description: apiErrorMessage(err, 'Could not update user.'),
           }),
       },
     );

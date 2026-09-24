@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { apiErrorMessage } from '@/lib/api-error';
 import { useUpdateFee, useWaiveFee, useCorrectFeeCollection } from '@workspace/api-client-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -55,7 +56,7 @@ export function EditFeeDialog({ id, fee, onSaved }: Props) {
           setOpen(false);
           onSaved?.();
         },
-        onError: () => toast({ variant: 'destructive', title: 'Error', description: 'Could not update fee.' }),
+        onError: (error: unknown) => toast({ variant: 'destructive', title: 'Error', description: apiErrorMessage(error, 'Could not update fee.') }),
       },
     );
   };
@@ -67,7 +68,7 @@ export function EditFeeDialog({ id, fee, onSaved }: Props) {
     }
     waiveFee.mutate({ id, data: { reason: reason.trim() } }, {
       onSuccess: () => { toast({ title: 'Fee waived' }); setOpen(false); onSaved?.(); },
-      onError: () => toast({ variant: 'destructive', title: 'Error', description: 'Could not waive fee.' }),
+      onError: (error: unknown) => toast({ variant: 'destructive', title: 'Error', description: apiErrorMessage(error, 'Could not waive fee.') }),
     });
   };
 
@@ -78,7 +79,7 @@ export function EditFeeDialog({ id, fee, onSaved }: Props) {
     }
     correctFeeCollection.mutate({ id, data: { reason: reason.trim() } }, {
       onSuccess: () => { toast({ title: 'Collection corrected' }); setOpen(false); onSaved?.(); },
-      onError: () => toast({ variant: 'destructive', title: 'Error', description: 'Could not correct fee collection.' }),
+      onError: (error: unknown) => toast({ variant: 'destructive', title: 'Error', description: apiErrorMessage(error, 'Could not correct fee collection.') }),
     });
   };
 

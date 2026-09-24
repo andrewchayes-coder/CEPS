@@ -8,7 +8,8 @@
     "build": "node ./build.mjs",
     "start": "node --enable-source-maps ./dist/index.mjs",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "test": "vitest run --maxWorkers=1"
+    "test": "vitest run --maxWorkers=1",
+    "grant-staff-permissions": "pnpm --filter @workspace/db exec tsx ../../artifacts/api-server/src/scripts/grant-missing-staff-permissions.ts"
   },
   "dependencies": {
     "@google-cloud/storage": "^8.0.0",

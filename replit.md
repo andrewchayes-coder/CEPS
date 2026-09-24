@@ -21,6 +21,9 @@ pnpm monorepo, OpenAPI-first:
 - Fee auto-generation on payment: placeholder TODO (rule unconfirmed — see open items).
 
 ## Dev notes
+### Data backfills
+Development schema is synced by `drizzle-kit push` in `scripts/post-merge.sh`; Replit Publish syncs schema only. Neither executes `lib/db/migrations/*.sql`. Put INSERT/UPDATE/DELETE backfills in explicit run-once scripts, not migration SQL. The staff-permission repair is `pnpm --filter @workspace/api-server run grant-staff-permissions`; run it manually against the intended database, never on server startup. It grants the three workflow permissions only to staff with no permission rows and writes an audit entry for each account granted. Review zero-permission staff before running if any were intentionally restricted to zero permissions.
+
 - Seed dummy data: `npx tsx artifacts/api-server/src/scripts/seed.ts` (idempotent). Demo logins (password `ceps-demo-2026`): staff@ceps.example, coordinator@alta.example, parent@family.example, vendor@sunrisemusic.example.
 - Dummy data only — never seed or import real client data.
 - Brand: primary blue #00A8E0, accents (#F2863A, #F3B11B, #813072, #5EBE8F, #AFCE0C) for status only; "CEPS" text wordmark; no emojis in UI.

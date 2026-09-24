@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { apiErrorMessage } from '@/lib/api-error';
 import { useCreateInvite } from '@workspace/api-client-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -75,7 +76,7 @@ export function InvitePortalDialog({ linkedRecordType, linkedRecordId, recordNam
           toast({
             variant: 'destructive',
             title: 'Could not create invite',
-            description: err?.data?.message || 'An account with that email may already exist.',
+            description: apiErrorMessage(err, 'An account with that email may already exist.'),
           });
         },
       },

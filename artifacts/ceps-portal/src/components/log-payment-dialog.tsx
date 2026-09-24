@@ -35,6 +35,7 @@ import { trackAnalyticsEvent } from '@/lib/analytics';
 import { SearchableSelect } from '@/components/searchable-select';
 import { useDebounce } from '@/hooks/use-debounce';
 import { getInvoiceDisplayMonth } from '@/lib/invoice-utils';
+import { apiErrorMessage } from '@/lib/api-error';
 
 const PAYMENT_TYPES = ['direct_payment', 'reimbursement', 'fee'];
 
@@ -72,6 +73,7 @@ export function LogPaymentDialog({ onSaved, defaultClientId, defaultInvoiceId }:
   const [form, setForm] = useState({ ...emptyForm, clientId: defaultClientId ?? '', invoiceId: defaultInvoiceId ?? 'none' });
   const [duplicate, setDuplicate] = useState<Payment[] | null>(null);
   const [justification, setJustification] = useState('');
+  const [allocationError, setAllocationError] = useState('');
 
   const [clientSearch, setClientSearch] = useState('');
   const debouncedClientSearch = useDebounce(clientSearch, 300);
@@ -122,6 +124,7 @@ export function LogPaymentDialog({ onSaved, defaultClientId, defaultInvoiceId }:
   const set = (k: string, v: any) => setForm((p) => ({ ...p, [k]: v }));
 
   const handleClientChange = (v: string) => {
+    setAllocationError('');
     setForm((p) => ({
       ...p,
       clientId: v,
@@ -132,6 +135,7 @@ export function LogPaymentDialog({ onSaved, defaultClientId, defaultInvoiceId }:
   };
 
   const handleInvoiceChange = (invId: string) => {
+    setAllocationError('');
     const inv = invoices.find(i => i.id === invId);
     if (!inv || !inv.lineItems) {
       setForm(p => ({ ...p, invoiceId: invId, allocations: [{ authorizationId: 'none', amount: '' }] }));
@@ -160,14 +164,17 @@ export function LogPaymentDialog({ onSaved, defaultClientId, defaultInvoiceId }:
   };
 
   const handleAddAllocation = () => {
+    setAllocationError('');
     setForm(p => ({ ...p, allocations: [...p.allocations, { authorizationId: 'none', amount: '' }] }));
   };
 
   const handleRemoveAllocation = (index: number) => {
+    setAllocationError('');
     setForm(p => ({ ...p, allocations: p.allocations.filter((_, i) => i !== index) }));
   };
 
   const handleAllocationChange = (index: number, key: 'authorizationId' | 'amount', value: string) => {
+    setAllocationError('');
     setForm(p => {
       const newAllocs = [...p.allocations];
       newAllocs[index] = { ...newAllocs[index], [key]: value };
@@ -181,6 +188,7 @@ export function LogPaymentDialog({ onSaved, defaultClientId, defaultInvoiceId }:
     setForm({ ...emptyForm, clientId: defaultClientId ?? '', invoiceId: defaultInvoiceId ?? 'none' });
     setDuplicate(null);
     setJustification('');
+    setAllocationError('');
   };
 
   const submit = (override: boolean) => {
@@ -188,6 +196,11 @@ export function LogPaymentDialog({ onSaved, defaultClientId, defaultInvoiceId }:
       toast({ variant: 'destructive', title: 'Participant required', description: 'Choose a participant for this payment.' });
       return;
     }
+    if (form.allocations.some((a) => !a.authorizationId || a.authorizationId === 'none')) {
+      setAllocationError('Select an authorization for every allocation before logging the payment.');
+      return;
+    }
+    setAllocationError('');
     if (override && justification.trim() === '') {
       toast({ variant: 'destructive', title: 'Justification required', description: 'Enter a written justification to override the duplicate-payment stop.' });
       return;
@@ -201,7 +214,7 @@ export function LogPaymentDialog({ onSaved, defaultClientId, defaultInvoiceId }:
       vendorId: form.vendorId === 'none' ? null : form.vendorId,
       invoiceId: form.invoiceId === 'none' ? null : form.invoiceId,
       allocations: form.allocations.map(a => ({
-        authorizationId: a.authorizationId === 'none' ? '' : a.authorizationId,
+        authorizationId: a.authorizationId,
         amount: a.amount
       })),
       ...(override ? { overrideDuplicate: true, overrideJustification: justification.trim() } : {}),
@@ -225,7 +238,7 @@ export function LogPaymentDialog({ onSaved, defaultClientId, defaultInvoiceId }:
             setDuplicate(dup.existingPayments);
             return;
           }
-          toast({ variant: 'destructive', title: 'Error', description: 'Could not log the payment.' });
+          toast({ variant: 'destructive', title: 'Error', description: apiErrorMessage(err, 'Could not log the payment.') });
         },
       },
     );
@@ -366,6 +379,7 @@ export function LogPaymentDialog({ onSaved, defaultClientId, defaultInvoiceId }:
               </Button>
             </div>
           ))}
+          {allocationError && <p role="alert" className="text-sm text-destructive" data-testid="error-payment-allocation">{allocationError}</p>}
 
           <Button type="button" variant="outline" size="sm" onClick={handleAddAllocation} data-testid="button-add-payment-allocation">
             <Plus className="w-4 h-4 mr-2" /> Add Allocation

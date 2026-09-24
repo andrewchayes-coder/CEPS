@@ -234,9 +234,15 @@ test('remittance creation scopes and clears authorization before submission', as
   });
 });
 
-test('invoice edit fields expose their visible labels as accessible names', async ({ page }) => {
+test('invoice edit shows read-only status and never sends status in PATCH', async ({ page }) => {
   await mockStaffSession(page);
-  await page.route('**/api/invoices/invoice-1', (route) => route.fulfill({
+  let updatePayload: Record<string, unknown> | null = null;
+  await page.route('**/api/invoices/invoice-1', (route) => {
+    if (route.request().method() === 'PATCH') {
+      updatePayload = route.request().postDataJSON();
+      return route.fulfill({ json: { id: 'invoice-1', ...updatePayload } });
+    }
+    return route.fulfill({
     json: {
       ...invoices['client-1'][0],
       clientName: 'Pat Participant',
@@ -249,7 +255,8 @@ test('invoice edit fields expose their visible labels as accessible names', asyn
       submittedByRole: 'staff',
       lineItems: [{ authorizationId: 'authorization-1', serviceMonth: '2026-07', amount: '125.00' }]
     },
-  }));
+    });
+  });
   await page.route('**/api/invoices/invoice-1/validate', (route) => route.fulfill({
     json: { valid: true, checks: [] },
   }));
@@ -267,8 +274,12 @@ test('invoice edit fields expose their visible labels as accessible names', asyn
   await expect(dialog.getByLabel('Participant')).toBeVisible();
   await expect(dialog.getByRole('combobox', { name: 'Vendor' })).toBeVisible();
   await expect(dialog.getByRole('combobox', { name: 'Payment Type' })).toBeVisible();
-  await expect(dialog.getByRole('combobox', { name: 'Status' })).toBeVisible();
+  await expect(dialog.getByText('Use Validate / Approve / Reject on the invoice page to change status.')).toBeVisible();
+  await expect(dialog.getByRole('combobox', { name: 'Status' })).toHaveCount(0);
   await expect(dialog.getByLabel('Notes')).toBeVisible();
+  await dialog.getByTestId('button-save-invoice').click();
+  await expect.poll(() => updatePayload).not.toBeNull();
+  expect(updatePayload).not.toHaveProperty('status');
 });
 
 test('payment edit fields expose their visible labels as accessible names', async ({ page }) => {

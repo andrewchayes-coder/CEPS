@@ -15,6 +15,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { FileUpload } from '@/components/file-upload';
 import { DocumentPreview } from '@/components/document-preview';
 import { getInvoiceDisplayMonth } from '@/lib/invoice-utils';
+import { apiErrorMessage } from '@/lib/api-error';
 
 export default function InvoiceDetailPage() {
   const { id } = useParams<{ id: string }>();
@@ -59,7 +60,7 @@ export default function InvoiceDetailPage() {
           toast({ title: documentUrl ? 'Document attached' : 'Document removed' });
           refetch();
         },
-        onError: () => toast({ variant: 'destructive', title: 'Error', description: 'Could not update the attachment.' }),
+         onError: (error: unknown) => toast({ variant: 'destructive', title: 'Error', description: apiErrorMessage(error, 'Could not update the attachment.') }),
       },
     );
   };
@@ -225,6 +226,9 @@ export default function InvoiceDetailPage() {
                  </Button>
                </div>
              )}
+             {isStaff && invoice.status === 'pending_review' && !canValidate && (
+               <p className="pt-4 border-t text-sm text-muted-foreground">You don't have permission to validate invoices — ask an admin to grant it in Admin &gt; Users.</p>
+             )}
              {invoice.status === 'validated' && canApprove && (
               <div className="pt-4 border-t space-y-4">
                 {needsOverride && (
@@ -240,6 +244,9 @@ export default function InvoiceDetailPage() {
                     />
                   </div>
                 )}
+             {isStaff && invoice.status === 'validated' && !canApprove && (
+               <p className="pt-4 border-t text-sm text-muted-foreground">You don't have permission to approve invoices — ask an admin to grant it in Admin &gt; Users.</p>
+             )}
 
                 <div className="flex gap-2">
                   <Button

@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { apiErrorMessage } from '@/lib/api-error';
 import { useUpdatePayment, useListVendors, useListInvoices, useListAuthorizations, type PaymentAllocation } from '@workspace/api-client-react';
 import type { PaymentUpdate } from '@workspace/api-client-react';
 import { Button } from '@/components/ui/button';
@@ -160,7 +161,7 @@ export function EditPaymentDialog({ id, payment, onSaved }: Props) {
           setOpen(false);
           onSaved?.();
         },
-        onError: () => toast({ variant: 'destructive', title: 'Error', description: 'Could not update payment.' }),
+        onError: (error: unknown) => toast({ variant: 'destructive', title: 'Error', description: apiErrorMessage(error, 'Could not update payment.') }),
       },
     );
   };

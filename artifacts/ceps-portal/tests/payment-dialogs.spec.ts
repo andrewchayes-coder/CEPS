@@ -96,6 +96,41 @@ test('log payment dialog offers eligible invoices and defaults allocations group
   });
 });
 
+test('log payment blocks missing authorization and shows server 403 and 400 messages', async ({ page }) => {
+  const invoiceStatuses: URL[] = [];
+  await mockPaymentPage(page, invoiceStatuses);
+  let postCount = 0;
+  await page.route('**/api/payments', (route) => {
+    if (route.request().method() === 'POST') {
+      postCount++;
+      return route.fulfill({
+        status: postCount === 1 ? 403 : 400,
+        json: { error: postCount === 1 ? 'Missing required permission' : 'Authorization is not active' },
+      });
+    }
+    return route.continue();
+  });
+  await page.goto('/payments');
+  await page.getByTestId('button-log-payment').click();
+  const dialog = page.getByRole('dialog', { name: 'Log Payment' });
+  await dialog.getByTestId('select-payment-client-id').click();
+  await page.getByRole('option', { name: 'Pat Participant' }).click();
+  await dialog.getByTestId('input-payment-check-number').fill('CHK-2');
+  await dialog.getByTestId('input-payment-date').fill('2026-08-01');
+  await dialog.getByTestId('input-payment-alloc-0-amount').fill('25.00');
+  await dialog.getByTestId('button-save-payment').click();
+  await expect(dialog.getByTestId('error-payment-allocation')).toContainText('Select an authorization');
+  expect(postCount).toBe(0);
+
+  await dialog.getByTestId('select-payment-alloc-0-auth').click();
+  await page.getByRole('option', { name: 'AUTH-1' }).click();
+  await dialog.getByTestId('button-save-payment').click();
+  await expect(page.getByText('Missing required permission', { exact: true })).toBeVisible();
+  await dialog.getByTestId('button-save-payment').click();
+  await expect(page.getByText('Authorization is not active', { exact: true })).toBeVisible();
+  expect(postCount).toBe(2);
+});
+
 test('3-line invoice editor across 2 auths and 2 months computes totals and submits correctly', async ({ page }) => {
   await page.route('**/api/auth/me', (route) => route.fulfill({ json: staffUser }));
   await page.route('**/api/clients?*', (route) => route.fulfill({ json: { total: 1, items: [client] } }));

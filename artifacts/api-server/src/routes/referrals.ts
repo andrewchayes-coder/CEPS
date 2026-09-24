@@ -485,8 +485,16 @@ router.post("/referrals", requireStaffOrCoordinator, async (req, res): Promise<v
     }
 
     // Find or create the vendor by name.
-    if (f.vendorName) {
-      const [vendor] = await tx.select().from(vendorsTable).where(eq(vendorsTable.name, f.vendorName));
+    const vendorName = clean(f.vendorName);
+    let vendorId: string | null = null;
+    if (vendorName) {
+      const findVendorByNormalizedName = () =>
+        tx
+          .select()
+          .from(vendorsTable)
+          .where(sql`lower(btrim(${vendorsTable.name})) = lower(btrim(${vendorName}))`)
+          .limit(1);
+      let [vendor] = await findVendorByNormalizedName();
       if (!vendor) {
         const serviceAddress = [f.vendorServiceStreet, f.vendorServiceCity, f.vendorServiceState, f.vendorServiceZip]
           .filter(Boolean)
@@ -495,15 +503,21 @@ router.post("/referrals", requireStaffOrCoordinator, async (req, res): Promise<v
           f.vendorBillingDifferent === "yes"
             ? [f.vendorBillingStreet, f.vendorBillingCity, f.vendorBillingState, f.vendorBillingZip].filter(Boolean).join(", ")
             : serviceAddress;
-        await tx.insert(vendorsTable).values({
-          name: f.vendorName,
+        [vendor] = await tx.insert(vendorsTable).values({
+          name: vendorName,
           email: f.vendorEmail,
           phone: f.vendorPhone,
           contactPerson: f.vendorContactPerson,
           serviceAddress: serviceAddress || null,
           billingAddress: billingAddress || null,
-        });
+        }).onConflictDoNothing().returning();
+        // Another intake may have inserted the same case-insensitive name
+        // after the lookup. Resolve that row rather than leaving the referral
+        // without its vendor link.
+        if (!vendor) [vendor] = await findVendorByNormalizedName();
+        if (!vendor) throw new Error(`Could not resolve vendor "${vendorName}" after insert`);
       }
+      vendorId = vendor.id;
     }
 
     // Portal sends '' for untouched optional fields — normalize to null.
@@ -511,6 +525,7 @@ router.post("/referrals", requireStaffOrCoordinator, async (req, res): Promise<v
       .insert(referralsTable)
       .values({
         clientId: client.id,
+        vendorId,
         serviceCoordinatorId: req.user!.role === "service_coordinator" ? req.user!.id : null,
         referralDate: new Date().toISOString().slice(0, 10),
         status: "intake",

@@ -10,7 +10,8 @@
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run --maxWorkers=1",
     "grant-staff-permissions": "pnpm --filter @workspace/db exec tsx ../../artifacts/api-server/src/scripts/grant-missing-staff-permissions.ts",
-    "backfill-payment-allocation-service-month": "pnpm --filter @workspace/db exec tsx ../../artifacts/api-server/src/scripts/backfill-payment-allocation-service-month.ts"
+    "backfill-payment-allocation-service-month": "pnpm --filter @workspace/db exec tsx ../../artifacts/api-server/src/scripts/backfill-payment-allocation-service-month.ts",
+    "backfill-referral-vendor-id": "pnpm --filter @workspace/db exec tsx ../../artifacts/api-server/src/scripts/backfill-referral-vendor-id.ts"
   },
   "dependencies": {
     "@google-cloud/storage": "^8.0.0",

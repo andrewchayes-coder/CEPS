@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { apiErrorMessage } from '@/lib/api-error';
-import { useUpdateAuthorization, useListVendors } from '@workspace/api-client-react';
+import { useUpdateAuthorization, useListVendors, getListVendorsQueryKey } from '@workspace/api-client-react';
 import type { AuthorizationUpdate } from '@workspace/api-client-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -26,9 +26,11 @@ import { useToast } from '@/hooks/use-toast';
 import { Pencil } from 'lucide-react';
 import { SearchableSelect } from '@/components/searchable-select';
 import { useDebounce } from '@/hooks/use-debounce';
+import { Checkbox } from '@/components/ui/checkbox';
 
 const SERVICE_CODES = ['459', '024', '490'];
 type AuthorizationLike = {
+  clientId: string;
   authNumber: string;
   serviceCode: string;
   activityDescription?: string | null;
@@ -80,10 +82,15 @@ export function EditAuthorizationDialog({ id, authorization, onSaved }: Props) {
 
   const [vendorSearch, setVendorSearch] = useState('');
   const debouncedVendorSearch = useDebounce(vendorSearch, 300);
-  // Do not participant-filter here because changing the authorization's vendor establishes that association.
+  const [showAllVendors, setShowAllVendors] = useState(false);
+  const vendorParams = {
+    ...(!showAllVendors ? { clientId: authorization.clientId } : {}),
+    search: debouncedVendorSearch,
+    limit: 50,
+  };
   const { data: vendorsData, isLoading: vendorsLoading } = useListVendors(
-    { search: debouncedVendorSearch, limit: 50 },
-    { query: { enabled: open, queryKey: ['vendors', { search: debouncedVendorSearch, limit: 50 }] } }
+    vendorParams,
+    { query: { enabled: open, queryKey: getListVendorsQueryKey(vendorParams) } }
   );
   const vendors = vendorsData?.items ?? [];
 
@@ -122,7 +129,10 @@ export function EditAuthorizationDialog({ id, authorization, onSaved }: Props) {
   };
 
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
+    <Dialog open={open} onOpenChange={(nextOpen) => {
+      setOpen(nextOpen);
+      if (!nextOpen) setShowAllVendors(false);
+    }}>
       <DialogTrigger asChild>
         <Button variant="ghost" size="sm" data-testid="button-edit-authorization">
           <Pencil className="w-4 h-4" />
@@ -197,6 +207,17 @@ export function EditAuthorizationDialog({ id, authorization, onSaved }: Props) {
               clearLabel="None"
               data-testid="select-auth-vendor"
             />
+            <div className="flex items-center gap-2 pt-1">
+              <Checkbox
+                id="show-all-edit-auth-vendors"
+                checked={showAllVendors}
+                onCheckedChange={(checked) => setShowAllVendors(checked === true)}
+                data-testid="checkbox-show-all-edit-auth-vendors"
+              />
+              <label htmlFor="show-all-edit-auth-vendors" className="text-sm text-muted-foreground">
+                Show all vendors
+              </label>
+            </div>
           </div>
         </div>
         <DialogFooter>

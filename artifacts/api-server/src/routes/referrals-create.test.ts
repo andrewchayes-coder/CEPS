@@ -87,15 +87,17 @@ afterAll(async () => {
   if (createdReferralIds.length) {
     await db.delete(referralsTable).where(inArray(referralsTable.id, createdReferralIds));
   }
-  if (createdVendorNames.length) {
-    await db.delete(vendorsTable).where(inArray(vendorsTable.name, createdVendorNames));
-  }
   if (createdClientUcis.length) {
     const referralClients = await db.select({ id: clientsTable.id }).from(clientsTable)
       .where(inArray(clientsTable.uciNumber, createdClientUcis));
     if (referralClients.length) {
       await db.delete(referralsTable).where(inArray(referralsTable.clientId, referralClients.map((c) => c.id)));
     }
+  }
+  if (createdVendorNames.length) {
+    await db.delete(vendorsTable).where(inArray(vendorsTable.name, createdVendorNames));
+  }
+  if (createdClientUcis.length) {
     const repClients = await db.select({ id: clientsTable.id }).from(clientsTable)
       .where(inArray(clientsTable.uciNumber, createdClientUcis));
     if (repClients.length) {
@@ -114,6 +116,29 @@ afterAll(async () => {
 });
 
 describe("POST /referrals supporting documents", () => {
+  it("reuses a vendor by trimmed case-insensitive name and links it to the referral", async () => {
+    const uci = `${nonce}-case-insensitive-vendor`;
+    createdClientUcis.push(uci);
+    const existingVendorName = `${nonce} Case Reuse Vendor`;
+    const [existingVendor] = await db.insert(vendorsTable).values({
+      name: existingVendorName,
+    }).returning();
+    createdVendorNames.push(existingVendorName);
+
+    const response = await request(app).post("/api/referrals").set("Cookie", staffCookie).send({
+      submittedVia: "staff_manual_entry",
+      intakeFields: baseIntake(uci, `  ${existingVendorName.toUpperCase()}  `),
+    });
+
+    expect(response.status).toBe(201);
+    createdReferralIds.push(response.body.id);
+    const [referral] = await db.select().from(referralsTable).where(eq(referralsTable.id, response.body.id));
+    expect(referral.vendorId).toBe(existingVendor.id);
+    const matchingVendors = await db.select().from(vendorsTable)
+      .where(eq(vendorsTable.name, existingVendorName));
+    expect(matchingVendors).toHaveLength(1);
+  });
+
   it("suggests eligible POS rows with normalized UCI before falling back to normalized name", async () => {
     const uci = `${nonce}-suggest  uci`;
     const vendorName = `${nonce} Suggest Vendor`;

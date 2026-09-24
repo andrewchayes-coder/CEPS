@@ -6,6 +6,7 @@ import {
     useCreateAuthorization,
     useListClients,
     useListVendors,
+    getListVendorsQueryKey,
     useParseAuthorizationPdf,
     AuthorizationInputServiceCode,
     AuthorizationInputPaymentType,
@@ -69,8 +70,7 @@ export default function AuthorizationNewPage() {
 
   const [vendorSearch, setVendorSearch] = useState('');
   const debouncedVendorSearch = useDebounce(vendorSearch, 300);
-  const { data: vendorsData, isLoading: vendorsLoading } = useListVendors({ search: debouncedVendorSearch, limit: 50 });
-  const vendors = vendorsData?.items ?? [];
+  const [showAllVendors, setShowAllVendors] = useState(false);
 
   const [warnings, setWarnings] = useState<string[]>([]);
   const [posPdfUrl, setPosPdfUrl] = useState<string | undefined>(undefined);
@@ -112,7 +112,57 @@ export default function AuthorizationNewPage() {
   const { watch, setValue } = form;
   const serviceCode = watch('serviceCode');
   const watchClientId = watch('clientId');
+  const watchVendorId = watch('vendorId');
   const watchAuthNumber = watch('authNumber');
+  const vendorParams = {
+    ...(watchClientId && !showAllVendors ? { clientId: watchClientId } : {}),
+    search: debouncedVendorSearch,
+    limit: 50,
+  };
+  const { data: vendorsData, isLoading: vendorsLoading } = useListVendors(vendorParams, {
+    query: {
+      enabled: !!watchClientId,
+      queryKey: getListVendorsQueryKey(vendorParams),
+    },
+  });
+  const vendors = vendorsData?.items ?? [];
+  const previousClientId = useRef(watchClientId);
+  const pendingVendorPreselection = useRef<string | null>(null);
+
+  const handleClientChange = (clientId: string) => {
+    if (form.getValues('clientId') !== clientId) {
+      previousClientId.current = clientId;
+      pendingVendorPreselection.current = clientId || null;
+      setValue('vendorId', '', { shouldDirty: true, shouldValidate: true });
+      setShowAllVendors(false);
+    }
+    setValue('clientId', clientId, { shouldDirty: true, shouldValidate: true });
+  };
+
+  React.useEffect(() => {
+    // Keep programmatic client selection (including POS matching) in sync with
+    // the same dependent-field behavior as the participant picker.
+    if (previousClientId.current === watchClientId) return;
+    previousClientId.current = watchClientId;
+    pendingVendorPreselection.current = watchClientId || null;
+    setValue('vendorId', '', { shouldDirty: true, shouldValidate: true });
+    setShowAllVendors(false);
+  }, [watchClientId, setValue]);
+
+  React.useEffect(() => {
+    const clientToPreselect = pendingVendorPreselection.current;
+    if (
+      !clientToPreselect ||
+      clientToPreselect !== watchClientId ||
+      showAllVendors ||
+      vendorsLoading
+    ) return;
+
+    pendingVendorPreselection.current = null;
+    if (vendors.length === 1 && !watchVendorId) {
+      setValue('vendorId', vendors[0].id, { shouldDirty: true, shouldValidate: true });
+    }
+  }, [watchClientId, watchVendorId, showAllVendors, vendors, vendorsLoading, setValue]);
 
   const currentDiffFingerprint = JSON.stringify({
     servicePeriodStart: watch('servicePeriodStart'),
@@ -177,6 +227,8 @@ export default function AuthorizationNewPage() {
     setAutoFilled(new Set());
     setWarnings([]);
     setConfirmedFingerprint(null);
+    setShowAllVendors(false);
+    pendingVendorPreselection.current = null;
     form.reset({
       clientId: '',
       vendorId: '',
@@ -235,7 +287,7 @@ export default function AuthorizationNewPage() {
                     if (match.method === 'uci' || match.method === 'name') {
                         setMatchedClient(match.client);
                         if (match.client && match.client.id) {
-                          setValue('clientId', match.client.id, { shouldValidate: true });
+                          handleClientChange(match.client.id);
                           setAutoFilled(prev => new Set(prev).add('clientId'));
                         }
 
@@ -581,7 +633,7 @@ export default function AuthorizationNewPage() {
                     <FormControl>
                       <SearchableSelect
                         value={field.value}
-                        onValueChange={field.onChange}
+                        onValueChange={handleClientChange}
                         options={allClientOptions}
                         onSearchChange={setClientSearch}
                         loading={clientsLoading}
@@ -603,14 +655,26 @@ export default function AuthorizationNewPage() {
                         options={vendors.map(v => ({ value: v.id, label: v.name }))}
                         onSearchChange={setVendorSearch}
                         loading={vendorsLoading}
-                        placeholder="Select vendor"
+                        placeholder={watchClientId ? 'Select vendor' : 'Select a participant first'}
                         allowClear
                         clearLabel="None"
                         data-testid="select-auth-vendor"
-                        disabled={isQueued || isAmendment}
+                        disabled={isQueued || isAmendment || !watchClientId}
                       />
                     </FormControl>
                     <FormMessage />
+                    <div className="flex items-center gap-2 pt-1">
+                      <Checkbox
+                        id="show-all-auth-vendors"
+                        checked={showAllVendors}
+                        onCheckedChange={(checked) => setShowAllVendors(checked === true)}
+                        disabled={!watchClientId || isQueued || isAmendment}
+                        data-testid="checkbox-show-all-auth-vendors"
+                      />
+                      <label htmlFor="show-all-auth-vendors" className="text-sm text-muted-foreground">
+                        Show all vendors
+                      </label>
+                    </div>
                   </FormItem>
                 )} />
               </div>

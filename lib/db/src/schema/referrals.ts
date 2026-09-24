@@ -13,12 +13,14 @@ import { sql } from "drizzle-orm";
 import { clientsTable } from "./clients";
 import { usersTable } from "./users";
 import { familyRepresentativesTable } from "./familyRepresentatives";
+import { vendorsTable } from "./vendors";
 
 export const referralsTable = pgTable("referrals", {
   id: uuid("id").primaryKey().defaultRandom(),
   clientId: uuid("client_id")
     .notNull()
     .references(() => clientsTable.id),
+  vendorId: uuid("vendor_id"),
   serviceCoordinatorId: uuid("service_coordinator_id").references(
     () => usersTable.id,
   ),
@@ -58,10 +60,16 @@ export const referralsTable = pgTable("referrals", {
     foreignColumns: [familyRepresentativesTable.id],
     name: "referrals_intake_family_rep_fk",
   }),
+  vendorFk: foreignKey({
+    columns: [table.vendorId],
+    foreignColumns: [vendorsTable.id],
+    name: "referrals_vendor_fk",
+  }).onDelete("no action"),
   // Backing indexes for the SQL-WHERE list filtering / role scoping
   // (Prompt 6), following the audit-log indexing pattern.
   createdAtIdx: index("referrals_created_at_idx").on(table.createdAt.desc()),
   clientIdIdx: index("referrals_client_id_idx").on(table.clientId),
+  vendorIdIdx: index("referrals_vendor_id_idx").on(table.vendorId),
   serviceCoordinatorIdIdx: index("referrals_service_coordinator_id_idx").on(
     table.serviceCoordinatorId,
   ),

@@ -78,6 +78,11 @@ router.get("/vendors", requireAuth, async (req, res): Promise<void> => {
       from payments
       where payments.client_id = ${query.data.clientId}
         and payments.is_deleted = false
+      union
+      select vendor_id
+      from referrals
+      where referrals.client_id = ${query.data.clientId}
+        and referrals.vendor_id is not null
     )`);
   }
   if (query.data.search) {

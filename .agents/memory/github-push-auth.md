@@ -8,3 +8,5 @@ Git CLI credentials may be stale even while the connected GitHub integration has
 **Why:** Deployment-generated empty commits can be ahead of the tracked remote. Recreating a merely equivalent commit with different metadata would split local and remote history, and an unverified Git API write risks pushing different contents.
 
 **How to apply:** First try the ordinary push. If it fails authentication, check the existing connection's repository permission. Only update the remote reference after confirming the exact local ancestry and object IDs; do not force-push or expose connector credentials.
+
+The Git Data API uses the commit message exactly as supplied, without adding the terminal newline that the local Git commit normally contains. **Why:** A byte-for-byte tree and metadata match can still produce a different commit ID if the API message omits that final newline. **How to apply:** Read the local commit object's full message, including its ending, when recreating an exact object via the API. Verify its SHA before changing any ref.

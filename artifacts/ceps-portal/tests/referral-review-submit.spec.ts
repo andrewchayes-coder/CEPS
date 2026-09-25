@@ -1,8 +1,8 @@
 import { expect, test, type Page } from '@playwright/test';
 
-async function openReferral(page: Page, calls: { count: number; body?: any }) {
+async function openReferral(page: Page, calls: { count: number; body?: any }, role = 'staff') {
   await page.route('**/api/auth/me', (route) => route.fulfill({
-    json: { id: 'test-staff', name: 'Test Staff', email: 'staff@example.test', role: 'staff', active: true, permissions: [] },
+    json: { id: 'test-staff', name: 'Test Staff', email: 'staff@example.test', role, active: true, permissions: [] },
   }));
   await page.route('**/api/referrals', (route) => {
     if (route.request().method() === 'POST') {
@@ -48,15 +48,54 @@ async function fillThroughParticipant(page: Page) {
   await page.getByPlaceholder('ZIP').fill('95814');
 }
 
+async function chooseLanguage(page: Page, language: string) {
+  await page.getByTestId('select-preferred-language').click();
+  await page.getByRole('option', { name: language, exact: true }).click();
+}
+
+test('Participant cannot advance without a language for either adult or minor', async ({ page }) => {
+  const calls = { count: 0 };
+  await openReferral(page, calls);
+  await fillThroughParticipant(page);
+  await expect(page.getByTestId('select-preferred-language')).toContainText('Select a language');
+  await page.getByRole('button', { name: 'Next' }).click();
+  await expect(page.getByText('Preferred language is required')).toBeVisible();
+  await expect(page.getByText('Supporting Documents', { exact: true })).not.toBeVisible();
+  await page.getByRole('radio', { name: 'Yes' }).click();
+  await page.getByLabel('Parent/Guardian Name').fill('Morgan Rivera');
+  await page.getByRole('button', { name: 'Next' }).click();
+  await expect(page.getByText('Preferred language is required')).toBeVisible();
+  expect(calls.count).toBe(0);
+});
+
+test('Other requires text and saves trimmed effective language for coordinator intake', async ({ page }) => {
+  const calls: { count: number; body?: any } = { count: 0 };
+  await openReferral(page, calls, 'service_coordinator');
+  await fillThroughParticipant(page);
+  await chooseLanguage(page, 'Other');
+  await page.getByRole('button', { name: 'Next' }).click();
+  await expect(page.getByText('Preferred language is required')).toBeVisible();
+  await page.getByTestId('input-preferred-language-other').fill('  Somali  ');
+  await page.getByRole('button', { name: 'Next' }).click();
+  await expect(page.getByText('Supporting Documents', { exact: true })).toBeVisible();
+  await page.getByRole('button', { name: 'Next' }).click();
+  await expect(page.getByTestId('review-preferred-language')).toHaveText('Somali');
+  await page.getByRole('button', { name: 'Submit Referral' }).click();
+  await expect.poll(() => calls.count).toBe(1);
+  expect(calls.body.intakeFields.preferredLanguage).toBe('Somali');
+});
+
 test('Documents Next opens Review without creating a referral; only Submit creates once', async ({ page }) => {
   const calls = { count: 0 };
   await openReferral(page, calls);
   await fillThroughParticipant(page);
+  await chooseLanguage(page, 'Spanish');
   await page.getByRole('button', { name: 'Next' }).click();
   await expect(page.getByText('Supporting Documents', { exact: true })).toBeVisible();
 
   await page.getByRole('button', { name: 'Next' }).click();
   await expect(page.getByText('Review & Submit', { exact: true })).toBeVisible();
+  await expect(page.getByTestId('review-preferred-language')).toHaveText('Spanish');
   await page.waitForTimeout(2300); // The regression used to submit and redirect after about two seconds.
   expect(calls.count).toBe(0);
   await expect(page.getByRole('button', { name: 'Submit Referral', exact: true })).toBeVisible();
@@ -64,6 +103,7 @@ test('Documents Next opens Review without creating a referral; only Submit creat
   await page.getByRole('button', { name: 'Submit Referral', exact: true }).click();
   await expect.poll(() => calls.count).toBe(1);
   expect(calls.body.intakeFields.contactEmail).toBe('pat@example.test');
+  expect(calls.body.intakeFields.preferredLanguage).toBe('Spanish');
   expect(calls.body.intakeFields.familyRepName).toBeUndefined();
   expect(calls.body.intakeFields.familyRepRelationship).toBeUndefined();
   expect(calls.body.intakeFields.familyRepPhone).toBeUndefined();
@@ -75,6 +115,7 @@ test('Enter in a Participant text input advances to Documents without submitting
   const calls = { count: 0 };
   await openReferral(page, calls);
   await fillThroughParticipant(page);
+  await chooseLanguage(page, 'English');
   await page.getByLabel('UCI Number').press('Enter');
   await expect(page.getByText('Supporting Documents', { exact: true })).toBeVisible();
   expect(calls.count).toBe(0);
@@ -84,10 +125,11 @@ test('adult intake can add a family representative without replacing participant
   const calls: { count: number; body?: any } = { count: 0 };
   await openReferral(page, calls);
   await fillThroughParticipant(page);
+  await chooseLanguage(page, 'Ukrainian');
   await page.getByTestId('toggle-optional-family-representative').click();
   await expect(page.getByTestId('optional-family-representative')).toBeVisible();
   await page.getByLabel('Name', { exact: true }).fill('Morgan Rivera');
-  await page.getByRole('combobox').click();
+  await page.getByRole('combobox', { name: 'Relationship' }).click();
   await page.getByRole('option', { name: 'Guardian' }).click();
   await page.getByLabel('Phone', { exact: true }).fill('5559876543');
   await page.getByLabel('Email', { exact: true }).fill('morgan@example.test');
@@ -113,6 +155,7 @@ test('adult family representative details require a name and valid optional emai
   const calls = { count: 0 };
   await openReferral(page, calls);
   await fillThroughParticipant(page);
+  await chooseLanguage(page, 'English');
   await page.getByTestId('toggle-optional-family-representative').click();
   await page.getByLabel('Phone', { exact: true }).fill('5559876543');
   await page.getByLabel('Email', { exact: true }).fill('not-an-email');

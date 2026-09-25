@@ -47,6 +47,13 @@ class DeletedParticipantError extends Error {
   }
 }
 
+class UnauthorizedExistingClientError extends Error {
+  constructor() {
+    super("Forbidden");
+    this.name = "UnauthorizedExistingClientError";
+  }
+}
+
 const router: IRouter = Router();
 
 async function sendIntakeEmail(
@@ -336,6 +343,14 @@ router.post("/referrals", requireStaffOrCoordinator, async (req, res): Promise<v
     return;
   }
   const f = parsed.data.intakeFields;
+  const preferredLanguage = typeof f.preferredLanguage === "string"
+    ? f.preferredLanguage.trim()
+    : "";
+  if (!preferredLanguage) {
+    res.status(400).json({ error: "Preferred language is required" });
+    return;
+  }
+  f.preferredLanguage = preferredLanguage;
   if (f.vendorAcceptsChecks === false) {
     res.status(400).json({ error: "FMS can only pay vendors who accept checks. This referral cannot be submitted." });
     return;
@@ -372,6 +387,20 @@ router.post("/referrals", requireStaffOrCoordinator, async (req, res): Promise<v
     let [client] = await tx.select().from(clientsTable)
       .where(eq(clientsTable.uciNumber, clientUci)).for("update");
     if (client?.isDeleted) throw new DeletedParticipantError();
+    if (
+      client &&
+      req.user!.role === "service_coordinator" &&
+      client.assignedCoordinatorId !== req.user!.id
+    ) {
+      // Referral coordinators may differ from the participant's assigned
+      // coordinator. Treat any non-closed referral as an active ownership link.
+      const [ownedReferral] = await tx.select({ id: referralsTable.id }).from(referralsTable).where(and(
+        eq(referralsTable.clientId, client.id),
+        eq(referralsTable.serviceCoordinatorId, req.user!.id),
+        ne(referralsTable.status, "closed"),
+      )).limit(1);
+      if (!ownedReferral) throw new UnauthorizedExistingClientError();
+    }
     // An explicit adult answer corrects an existing minor record; an omitted
     // answer leaves the existing classification in place.
     const reclassifyAsAdult = client?.isMinor === true && f.clientIsMinor === false;
@@ -400,19 +429,27 @@ router.post("/referrals", requireStaffOrCoordinator, async (req, res): Promise<v
         })
         .returning();
       client = createdClient;
-    } else if (!contactIsFamily) {
+    } else {
       const clientUpdates: Record<string, string | boolean> = {};
       const changes: string[] = [];
       if (reclassifyAsAdult) clientUpdates.isMinor = false;
-      for (const field of ["phone", "email", "address"] as const) {
-        const incoming = contact[field];
-        if (!incoming) continue;
-        if (client[field] !== incoming) {
-          clientUpdates[field] = incoming;
-          if (client[field]) {
-            changes.push(`${field}: ${JSON.stringify(client[field])} -> ${JSON.stringify(incoming)}`);
+      if (!contactIsFamily) {
+        for (const field of ["phone", "email", "address"] as const) {
+          const incoming = contact[field];
+          if (!incoming) continue;
+          if (client[field] !== incoming) {
+            clientUpdates[field] = incoming;
+            if (client[field]) {
+              changes.push(`${field}: ${JSON.stringify(client[field])} -> ${JSON.stringify(incoming)}`);
+            }
           }
         }
+      }
+      if (client.preferredLanguage !== preferredLanguage) {
+        clientUpdates.preferredLanguage = preferredLanguage;
+        changes.push(
+          `preferredLanguage: ${JSON.stringify(client.preferredLanguage)} -> ${JSON.stringify(preferredLanguage)}`,
+        );
       }
       if (Object.keys(clientUpdates).length) {
         [client] = await tx.update(clientsTable).set(clientUpdates).where(eq(clientsTable.id, client.id)).returning();
@@ -546,6 +583,10 @@ router.post("/referrals", requireStaffOrCoordinator, async (req, res): Promise<v
   } catch (error) {
     if (error instanceof DeletedParticipantError) {
       res.status(409).json({ error: error.message });
+      return;
+    }
+    if (error instanceof UnauthorizedExistingClientError) {
+      res.status(403).json({ error: error.message });
       return;
     }
     throw error;

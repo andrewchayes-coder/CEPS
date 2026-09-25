@@ -89,8 +89,9 @@ test('key staff pages use Participant wording while preserving client record rou
   await expect(page.getByText(/\bClients?\b/)).toHaveCount(0);
 });
 
-test('participant detail displays the preferred language and defaults to English when unset', async ({ page }) => {
+test('participant detail displays the preferred language and shows Not set when unset', async ({ page }) => {
   await mockSession(page, 'staff');
+  await page.route('**/api/family-representatives?*', (route) => route.fulfill({ json: [] }));
   let preferredLanguage: string | null = 'Spanish';
   await page.route(`**/api/clients/${participantId}/case`, (route) =>
     route.fulfill({
@@ -120,7 +121,57 @@ test('participant detail displays the preferred language and defaults to English
 
   preferredLanguage = null;
   await page.reload();
-  await expect(page.getByTestId('client-preferred-language')).toHaveText('English');
+  await expect(page.getByTestId('client-preferred-language')).toHaveText('Not set');
+  await expect(page.getByTestId('client-preferred-language')).toHaveClass(/text-muted-foreground/);
+});
+
+test('profile language is visible to coordinator and family, with their existing editor permissions', async ({ page }) => {
+  await page.route(`**/api/clients/${participantId}/case`, (route) => route.fulfill({
+    json: { client: { id: participantId, firstName: 'Jordan', lastName: 'Rivera', uciNumber: 'UCI-100', dateOfBirth: '2000-01-01', status: 'active', preferredLanguage: null }, referrals: [], authorizations: [], invoices: [], payments: [], remittances: [], documents: [] },
+  }));
+  await page.route('**/api/fees?*', (route) => route.fulfill({ json: [] }));
+  await page.route('**/api/family-representatives?*', (route) => route.fulfill({ json: [] }));
+  let role = 'service_coordinator';
+  await page.route('**/api/auth/me', (route) => route.fulfill({ json: { ...baseUser, role } }));
+  for (role of ['service_coordinator', 'parent_guardian', 'self']) {
+    await page.goto(`/clients/${participantId}`);
+    await expect(page.getByTestId('client-preferred-language')).toHaveText('Not set');
+    await expect(page.getByTestId('button-edit-client')).toHaveCount(0);
+    await expect(page.getByTestId('button-edit-contact-info')).toHaveCount(role === 'service_coordinator' ? 0 : 1);
+  }
+});
+
+test('staff and family editors preserve non-list languages and save trimmed Other text', async ({ page }) => {
+  let role = 'staff';
+  let currentLanguage = 'Somali';
+  const patches: any[] = [];
+  await page.route('**/api/auth/me', (route) => route.fulfill({ json: { ...baseUser, role } }));
+  await page.route(`**/api/clients/${participantId}/case`, (route) => route.fulfill({
+    json: { client: { id: participantId, firstName: 'Jordan', lastName: 'Rivera', uciNumber: 'UCI-100', dateOfBirth: '2000-01-01', status: 'active', preferredLanguage: currentLanguage }, referrals: [], authorizations: [], invoices: [], payments: [], remittances: [], documents: [] },
+  }));
+  await page.route(`**/api/clients/${participantId}`, (route) => {
+    if (route.request().method() === 'PATCH') {
+      const body = route.request().postDataJSON();
+      patches.push(body);
+      currentLanguage = body.preferredLanguage;
+      return route.fulfill({ json: { id: participantId, ...body } });
+    }
+    return route.fallback();
+  });
+  await page.route('**/api/fees?*', (route) => route.fulfill({ json: [] }));
+  await page.route('**/api/family-representatives?*', (route) => route.fulfill({ json: [] }));
+
+  for (role of ['staff', 'self']) {
+    await page.goto(`/clients/${participantId}`);
+    await page.getByTestId(role === 'staff' ? 'button-edit-client' : 'button-edit-contact-info').click();
+    await expect(page.getByTestId('select-preferred-language')).toContainText('Other');
+    await expect(page.getByTestId('input-preferred-language-other')).toHaveValue(currentLanguage);
+    await page.getByTestId('input-preferred-language-other').fill('  Tigrinya  ');
+    await page.getByTestId(role === 'staff' ? 'button-save-client' : 'button-save-contact-info').click();
+    await expect.poll(() => patches.length).toBe(role === 'staff' ? 1 : 2);
+    expect(patches.at(-1).preferredLanguage).toBe('Tigrinya');
+    currentLanguage = 'Somali';
+  }
 });
 
 test('referral list and detail participant names link to the existing client record', async ({ page }) => {

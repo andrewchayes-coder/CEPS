@@ -15,6 +15,8 @@ import {
 } from '@/components/ui/dialog';
 import { useToast } from '@/hooks/use-toast';
 import { Pencil } from 'lucide-react';
+import { PreferredLanguageField } from '@/components/preferred-language-field';
+import { languageChoice, validLanguage } from '@/lib/preferred-language';
 
 type ClientContactLike = {
   firstName: string;
@@ -47,6 +49,8 @@ export function EditContactInfoDialog({ id, client, isGuardian, onSaved }: Props
   const { toast } = useToast();
   const updateClient = useUpdateClient();
   const [open, setOpen] = useState(false);
+  const [languageError, setLanguageError] = useState('');
+  const [otherSelected, setOtherSelected] = useState(() => languageChoice(client.preferredLanguage) === 'Other');
   const [form, setForm] = useState({
     firstName: client.firstName,
     lastName: client.lastName,
@@ -76,11 +80,16 @@ export function EditContactInfoDialog({ id, client, isGuardian, onSaved }: Props
   };
 
   const handleSave = () => {
+    if (otherSelected && !validLanguage(form.preferredLanguage)) {
+      setLanguageError('Specify a language other than Other');
+      return;
+    }
     // Send only the fields the user actually changed — untouched optional
     // fields must not be written back (null would become '').
     const changed = Object.fromEntries(
       Object.entries(form).filter(([k, v]) => v !== initial[k as keyof typeof initial]),
     );
+    if (typeof changed.preferredLanguage === 'string') changed.preferredLanguage = changed.preferredLanguage.trim();
     if (Object.keys(changed).length === 0) {
       setOpen(false);
       return;
@@ -102,7 +111,19 @@ export function EditContactInfoDialog({ id, client, isGuardian, onSaved }: Props
   const clientLabel = isGuardian ? "Your child's information" : 'Your information';
 
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
+    <Dialog open={open} onOpenChange={(next) => {
+      setOpen(next);
+      if (next) {
+        setForm({
+          firstName: client.firstName, lastName: client.lastName, address: client.address ?? '',
+          phone: client.phone ?? '', email: client.email ?? '', preferredLanguage: client.preferredLanguage ?? '',
+          familyRepName: client.familyRepName ?? '', familyRepPhone: client.familyRepPhone ?? '',
+          familyRepEmail: client.familyRepEmail ?? '', familyRepAddress: client.familyRepAddress ?? '',
+        });
+        setOtherSelected(languageChoice(client.preferredLanguage) === 'Other');
+        setLanguageError('');
+      }
+    }}>
       <DialogTrigger asChild>
         <Button variant="outline" size="sm" data-testid="button-edit-contact-info">
           <Pencil className="w-4 h-4 mr-2" /> Edit Contact Info
@@ -140,8 +161,15 @@ export function EditContactInfoDialog({ id, client, isGuardian, onSaved }: Props
                 <Input type="email" value={form.email} onChange={(e) => set('email', e.target.value)} />
               </div>
               <div className="space-y-2 col-span-2">
-                <Label>Preferred Language</Label>
-                <Input value={form.preferredLanguage} onChange={(e) => set('preferredLanguage', e.target.value)} />
+                <PreferredLanguageField
+                  value={form.preferredLanguage}
+                  onChange={(value, isOther) => {
+                    set('preferredLanguage', value);
+                    setOtherSelected(isOther);
+                    setLanguageError('');
+                  }}
+                  error={languageError}
+                />
               </div>
             </div>
           </div>

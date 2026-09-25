@@ -351,7 +351,7 @@ export default function ClientDetailPage() {
                         <dt className="text-muted-foreground">Address:</dt>
                         <dd className="min-w-0 break-words" data-testid="contact-address">{primaryRepresentative ? primaryRepresentative.address || '-' : client.address || '-'}</dd>
                         <dt className="text-muted-foreground">Preferred Language:</dt>
-                        <dd className="min-w-0 break-words" data-testid="client-preferred-language">{client.preferredLanguage || 'English'}</dd>
+                        <dd className={`min-w-0 break-words ${!client.preferredLanguage?.trim() ? 'text-muted-foreground' : ''}`} data-testid="client-preferred-language">{client.preferredLanguage?.trim() || 'Not set'}</dd>
                       </dl>
                       {primaryRepresentative && (
                         <div className="flex flex-wrap gap-2 border-t pt-3" data-testid="contact-actions">

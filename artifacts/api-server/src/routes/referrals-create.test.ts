@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import request from "supertest";
-import { inArray, eq, and } from "drizzle-orm";
+import { inArray, eq, and, sql } from "drizzle-orm";
 import {
   db,
   usersTable,
@@ -108,12 +108,24 @@ afterAll(async () => {
     await db.delete(clientsTable).where(inArray(clientsTable.uciNumber, createdClientUcis));
   }
   if (createdLinkedUserIds.length) {
+    await db.delete(auditLogTable).where(inArray(auditLogTable.userId, createdLinkedUserIds));
+    await db.delete(sessionsTable).where(inArray(sessionsTable.userId, createdLinkedUserIds));
     await db.delete(usersTable).where(inArray(usersTable.id, createdLinkedUserIds));
   }
   await db.delete(auditLogTable).where(eq(auditLogTable.userId, staffId));
   await db.delete(sessionsTable).where(eq(sessionsTable.userId, staffId));
   await db.delete(usersTable).where(eq(usersTable.id, staffId));
 });
+
+async function makeCoordinator(label: string) {
+  const [coordinator] = await db.insert(usersTable).values({
+    name: `${nonce} ${label}`,
+    email: `${nonce}-${label.toLowerCase().replaceAll(" ", "-")}@test.local`,
+    role: "service_coordinator",
+  }).returning();
+  createdLinkedUserIds.push(coordinator.id);
+  return { id: coordinator.id, cookie: await session(coordinator.id) };
+}
 
 describe("POST /referrals supporting documents", () => {
   it("reuses a vendor by trimmed case-insensitive name and links it to the referral", async () => {
@@ -248,6 +260,305 @@ describe("POST /referrals supporting documents", () => {
 });
 
 describe("POST /referrals client contact and family representative carryover", () => {
+  it("rejects a coordinator's unrelated existing-client UCI before making any writes", async () => {
+    const coordinator = await makeCoordinator("Unauthorized Coordinator");
+    const assignedCoordinator = await makeCoordinator("Different Assigned Coordinator");
+    const uci = `${nonce}-unauthorized-existing-client`;
+    const vendorName = `${nonce} Unauthorized Existing Client Vendor`;
+    createdClientUcis.push(uci);
+    const [client] = await db.insert(clientsTable).values({
+      firstName: "Protected",
+      lastName: "Participant",
+      dateOfBirth: "2015-05-05",
+      uciNumber: uci,
+      preferredLanguage: "English",
+      assignedCoordinatorId: assignedCoordinator.id,
+      isMinor: true,
+    }).returning();
+
+    const response = await request(app).post("/api/referrals").set("Cookie", coordinator.cookie).send({
+      submittedVia: "staff_manual_entry",
+      intakeFields: {
+        ...baseIntake(uci, vendorName),
+        preferredLanguage: "Spanish",
+      },
+    });
+
+    expect(response.status).toBe(403);
+    const [unchanged] = await db.select().from(clientsTable).where(eq(clientsTable.id, client.id));
+    expect(unchanged.preferredLanguage).toBe("English");
+    expect(await db.select().from(referralsTable).where(eq(referralsTable.clientId, client.id))).toHaveLength(0);
+    expect(await db.select().from(familyRepresentativesTable).where(
+      eq(familyRepresentativesTable.clientId, client.id),
+    )).toHaveLength(0);
+    expect(await db.select().from(vendorsTable).where(eq(vendorsTable.name, vendorName))).toHaveLength(0);
+    expect(await db.select().from(auditLogTable).where(eq(auditLogTable.userId, coordinator.id))).toHaveLength(0);
+  });
+
+  it("allows a coordinator assigned to an existing client to submit the referral", async () => {
+    const coordinator = await makeCoordinator("Assigned Client Coordinator");
+    const uci = `${nonce}-assigned-coordinator-client`;
+    const vendorName = `${nonce} Assigned Coordinator Vendor`;
+    createdClientUcis.push(uci);
+    createdVendorNames.push(vendorName);
+    const [client] = await db.insert(clientsTable).values({
+      firstName: "Assigned",
+      lastName: "Participant",
+      dateOfBirth: "1990-05-05",
+      uciNumber: uci,
+      preferredLanguage: "English",
+      assignedCoordinatorId: coordinator.id,
+      isMinor: false,
+    }).returning();
+
+    const response = await request(app).post("/api/referrals").set("Cookie", coordinator.cookie).send({
+      submittedVia: "staff_manual_entry",
+      intakeFields: {
+        ...baseIntake(uci, vendorName),
+        clientIsMinor: false,
+        preferredLanguage: "Spanish",
+        familyRepName: "",
+        contactPhone: "",
+        contactEmail: "",
+        contactStreet: "",
+        contactCity: "",
+        contactState: "",
+        contactZip: "",
+      },
+    });
+    expect(response.status).toBe(201);
+    const [updated] = await db.select().from(clientsTable).where(eq(clientsTable.id, client.id));
+    expect(updated.preferredLanguage).toBe("Spanish");
+  });
+
+  it("allows a coordinator who owns an active referral even when another coordinator is assigned to the client", async () => {
+    const referralOwner = await makeCoordinator("Existing Referral Owner");
+    const assignedCoordinator = await makeCoordinator("Referral Owner Different Assignee");
+    const uci = `${nonce}-referral-owner-client`;
+    const vendorName = `${nonce} Referral Owner Vendor`;
+    createdClientUcis.push(uci);
+    createdVendorNames.push(vendorName);
+    const [client] = await db.insert(clientsTable).values({
+      firstName: "Referral",
+      lastName: "Owned Participant",
+      dateOfBirth: "1990-05-05",
+      uciNumber: uci,
+      preferredLanguage: "English",
+      assignedCoordinatorId: assignedCoordinator.id,
+      isMinor: false,
+    }).returning();
+    const [existingReferral] = await db.insert(referralsTable).values({
+      clientId: client.id,
+      serviceCoordinatorId: referralOwner.id,
+      referralDate: "2026-01-15",
+      status: "active",
+    }).returning();
+    createdReferralIds.push(existingReferral.id);
+
+    const response = await request(app).post("/api/referrals").set("Cookie", referralOwner.cookie).send({
+      submittedVia: "staff_manual_entry",
+      intakeFields: {
+        ...baseIntake(uci, vendorName),
+        clientIsMinor: false,
+        preferredLanguage: "Ukrainian",
+        familyRepName: "",
+        contactPhone: "",
+        contactEmail: "",
+        contactStreet: "",
+        contactCity: "",
+        contactState: "",
+        contactZip: "",
+      },
+    });
+    expect(response.status).toBe(201);
+    const [updated] = await db.select().from(clientsTable).where(eq(clientsTable.id, client.id));
+    expect(updated.preferredLanguage).toBe("Ukrainian");
+  });
+
+  it("still allows a coordinator to create a new client through referral intake", async () => {
+    const coordinator = await makeCoordinator("New Client Intake Coordinator");
+    const uci = `${nonce}-coordinator-new-client`;
+    const vendorName = `${nonce} Coordinator New Client Vendor`;
+    createdClientUcis.push(uci);
+    createdVendorNames.push(vendorName);
+
+    const response = await request(app).post("/api/referrals").set("Cookie", coordinator.cookie).send({
+      submittedVia: "staff_manual_entry",
+      intakeFields: baseIntake(uci, vendorName),
+    });
+    expect(response.status).toBe(201);
+    const [client] = await db.select().from(clientsTable).where(eq(clientsTable.uciNumber, uci));
+    expect(client).toMatchObject({
+      preferredLanguage: "English",
+      assignedCoordinatorId: coordinator.id,
+    });
+  });
+
+  it("stores the trimmed preferred language for a new client", async () => {
+    const uci = `${nonce}-new-language`;
+    const vendorName = `${nonce} New Language Vendor`;
+    createdClientUcis.push(uci);
+    createdVendorNames.push(vendorName);
+    const response = await request(app).post("/api/referrals").set("Cookie", staffCookie).send({
+      submittedVia: "staff_manual_entry",
+      intakeFields: {
+        ...baseIntake(uci, vendorName),
+        preferredLanguage: "  Spanish  ",
+      },
+    });
+
+    expect(response.status).toBe(201);
+    createdReferralIds.push(response.body.id);
+    const [client] = await db.select().from(clientsTable).where(eq(clientsTable.uciNumber, uci));
+    expect(client.preferredLanguage).toBe("Spanish");
+    const [referral] = await db.select().from(referralsTable).where(eq(referralsTable.id, response.body.id));
+    expect((referral.intakeFields as Record<string, unknown>).preferredLanguage).toBe("Spanish");
+  });
+
+  it("updates an existing adult's preferred language and audits a language-only change", async () => {
+    const uci = `${nonce}-adult-language`;
+    const vendorName = `${nonce} Adult Language Vendor`;
+    createdClientUcis.push(uci);
+    createdVendorNames.push(vendorName);
+    const [client] = await db.insert(clientsTable).values({
+      firstName: "Existing",
+      lastName: "Adult Language",
+      dateOfBirth: "1990-05-05",
+      uciNumber: uci,
+      preferredLanguage: "English",
+      isMinor: false,
+      phone: "555-existing",
+      email: "existing@example.test",
+      address: "Existing Road",
+    }).returning();
+
+    const response = await request(app).post("/api/referrals").set("Cookie", staffCookie).send({
+      submittedVia: "staff_manual_entry",
+      intakeFields: {
+        ...baseIntake(uci, vendorName),
+        clientIsMinor: false,
+        preferredLanguage: "  Ukrainian ",
+        contactPhone: "",
+        contactEmail: "",
+        contactStreet: "",
+        contactCity: "",
+        contactState: "",
+        contactZip: "",
+      },
+    });
+    expect(response.status).toBe(201);
+
+    const [updated] = await db.select().from(clientsTable).where(eq(clientsTable.id, client.id));
+    expect(updated).toMatchObject({
+      preferredLanguage: "Ukrainian",
+      phone: "555-existing",
+      email: "existing@example.test",
+      address: "Existing Road",
+    });
+    const languageAudits = await db.select().from(auditLogTable).where(and(
+      eq(auditLogTable.userId, staffId),
+      eq(auditLogTable.entityId, client.id),
+      eq(auditLogTable.action, "update_client_contact_from_referral"),
+    ));
+    expect(languageAudits).toHaveLength(1);
+    expect(languageAudits[0].detail).toContain('preferredLanguage: "English" -> "Ukrainian"');
+
+    const unchangedResponse = await request(app).post("/api/referrals").set("Cookie", staffCookie).send({
+      submittedVia: "staff_manual_entry",
+      intakeFields: {
+        ...baseIntake(uci, `${nonce} Unchanged Language Vendor`),
+        clientIsMinor: false,
+        preferredLanguage: "Ukrainian",
+        contactPhone: "",
+        contactEmail: "",
+        contactStreet: "",
+        contactCity: "",
+        contactState: "",
+        contactZip: "",
+      },
+    });
+    createdVendorNames.push(`${nonce} Unchanged Language Vendor`);
+    expect(unchangedResponse.status).toBe(201);
+    const sameLanguageAudits = await db.select().from(auditLogTable).where(and(
+      eq(auditLogTable.userId, staffId),
+      eq(auditLogTable.entityId, client.id),
+      eq(auditLogTable.action, "update_client_contact_from_referral"),
+    ));
+    expect(sameLanguageAudits).toHaveLength(1);
+  });
+
+  it("updates preferred language on an existing minor when referral contact is a family representative", async () => {
+    const uci = `${nonce}-minor-language`;
+    const vendorName = `${nonce} Minor Language Vendor`;
+    createdClientUcis.push(uci);
+    createdVendorNames.push(vendorName);
+    const [client] = await db.insert(clientsTable).values({
+      firstName: "Existing",
+      lastName: "Minor Language",
+      dateOfBirth: "2015-05-05",
+      uciNumber: uci,
+      preferredLanguage: "English",
+      isMinor: true,
+      phone: "555-participant",
+      email: "participant@example.test",
+      address: "Participant Road",
+    }).returning();
+
+    const response = await request(app).post("/api/referrals").set("Cookie", staffCookie).send({
+      submittedVia: "staff_manual_entry",
+      intakeFields: {
+        ...baseIntake(uci, vendorName),
+        preferredLanguage: "Vietnamese",
+        familyRepName: "Language Guardian",
+      },
+    });
+    expect(response.status).toBe(201);
+
+    const [updated] = await db.select().from(clientsTable).where(eq(clientsTable.id, client.id));
+    expect(updated).toMatchObject({
+      preferredLanguage: "Vietnamese",
+      phone: "555-participant",
+      email: "participant@example.test",
+      address: "Participant Road",
+    });
+    const languageAudits = await db.select().from(auditLogTable).where(and(
+      eq(auditLogTable.userId, staffId),
+      eq(auditLogTable.entityId, client.id),
+      eq(auditLogTable.action, "update_client_contact_from_referral"),
+    ));
+    expect(languageAudits).toHaveLength(1);
+    expect(languageAudits[0].detail).toContain('preferredLanguage: "English" -> "Vietnamese"');
+  });
+
+  it("rejects missing, empty, or whitespace-only preferred language before writing", async () => {
+    for (const [suffix, preferredLanguage] of [
+      ["missing", undefined],
+      ["empty", ""],
+      ["whitespace", " \t\n "],
+    ] as const) {
+      const uci = `${nonce}-blank-language-${suffix}`;
+      const vendorName = `${nonce} Blank Language ${suffix}`;
+      createdClientUcis.push(uci);
+      const intakeFields = {
+        ...baseIntake(uci, vendorName),
+        preferredLanguage,
+      };
+      if (preferredLanguage === undefined) delete (intakeFields as { preferredLanguage?: string }).preferredLanguage;
+      const response = await request(app).post("/api/referrals").set("Cookie", staffCookie).send({
+        submittedVia: "staff_manual_entry",
+        intakeFields,
+      });
+
+      expect(response.status).toBe(400);
+      expect(response.body.error).toContain("Preferred language is required");
+      expect(await db.select().from(clientsTable).where(eq(clientsTable.uciNumber, uci))).toHaveLength(0);
+      expect(await db.select().from(vendorsTable).where(eq(vendorsTable.name, vendorName))).toHaveLength(0);
+      expect(await db.select().from(referralsTable).where(
+        sql`client_id in (select id from clients where uci_number = ${uci})`,
+      )).toHaveLength(0);
+    }
+  });
+
   it("backfills blank contact fields, overwrites differing values with an audit, and does not erase on blank intake", async () => {
     const uci = `${nonce}-existing-contact`;
     const vendorName = `${nonce} Existing Contact Vendor`;

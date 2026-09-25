@@ -22,6 +22,8 @@ import {
 } from '@/components/ui/select';
 import { useToast } from '@/hooks/use-toast';
 import { Pencil } from 'lucide-react';
+import { PreferredLanguageField } from '@/components/preferred-language-field';
+import { languageChoice, validLanguage } from '@/lib/preferred-language';
 
 type ClientLike = {
   firstName: string;
@@ -46,6 +48,8 @@ export function EditClientDialog({ id, client, onSaved }: Props) {
   const { toast } = useToast();
   const updateClient = useUpdateClient();
   const [open, setOpen] = useState(false);
+  const [languageError, setLanguageError] = useState('');
+  const [otherSelected, setOtherSelected] = useState(() => languageChoice(client.preferredLanguage) === 'Other');
   const [form, setForm] = useState({
     firstName: client.firstName,
     lastName: client.lastName,
@@ -62,8 +66,12 @@ export function EditClientDialog({ id, client, onSaved }: Props) {
   const set = (k: string, v: string) => setForm((p) => ({ ...p, [k]: v }));
 
   const handleSave = () => {
+    if (otherSelected && !validLanguage(form.preferredLanguage)) {
+      setLanguageError('Specify a language other than Other');
+      return;
+    }
     updateClient.mutate(
-      { id, data: form as any },
+      { id, data: { ...form, preferredLanguage: form.preferredLanguage.trim() } as any },
       {
         onSuccess: () => {
           toast({ title: 'Participant updated' });
@@ -76,7 +84,19 @@ export function EditClientDialog({ id, client, onSaved }: Props) {
   };
 
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
+    <Dialog open={open} onOpenChange={(next) => {
+      setOpen(next);
+      if (next) {
+        setForm({
+          firstName: client.firstName, lastName: client.lastName, dateOfBirth: client.dateOfBirth,
+          uciNumber: client.uciNumber, address: client.address ?? '', phone: client.phone ?? '',
+          email: client.email ?? '', status: client.status, regionalCenter: client.regionalCenter ?? '',
+          preferredLanguage: client.preferredLanguage ?? '',
+        });
+        setOtherSelected(languageChoice(client.preferredLanguage) === 'Other');
+        setLanguageError('');
+      }
+    }}>
       <DialogTrigger asChild>
         <Button variant="outline" size="sm" data-testid="button-edit-client">
           <Pencil className="w-4 h-4 mr-2" /> Edit
@@ -121,8 +141,15 @@ export function EditClientDialog({ id, client, onSaved }: Props) {
             <Input value={form.regionalCenter} onChange={(e) => set('regionalCenter', e.target.value)} />
           </div>
           <div className="space-y-2">
-            <Label>Preferred Language</Label>
-            <Input value={form.preferredLanguage} onChange={(e) => set('preferredLanguage', e.target.value)} />
+            <PreferredLanguageField
+              value={form.preferredLanguage}
+              onChange={(value, isOther) => {
+                set('preferredLanguage', value);
+                setOtherSelected(isOther);
+                setLanguageError('');
+              }}
+              error={languageError}
+            />
           </div>
           <div className="space-y-2">
             <Label>Status</Label>

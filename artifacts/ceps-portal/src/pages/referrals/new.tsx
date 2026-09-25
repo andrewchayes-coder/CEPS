@@ -18,6 +18,8 @@ import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { FileUpload } from '@/components/file-upload';
 import { trackAnalyticsEvent } from '@/lib/analytics';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { PreferredLanguageField } from '@/components/preferred-language-field';
+import { validLanguage } from '@/lib/preferred-language';
 
 // -----------------------------------------------------------------------------
 // Validation Schemas (Step by Step to manage complex conditional logic)
@@ -73,7 +75,7 @@ const clientSchemaBase = {
   clientLastName: z.string().min(1, 'Last name is required'),
   clientDob: z.string().min(1, 'Date of birth is required'),
   clientUci: z.string().min(1, 'UCI number is required'),
-  preferredLanguage: z.string().min(1, 'Preferred language is required'),
+  preferredLanguage: z.string().trim().min(1, 'Preferred language is required').refine(validLanguage, 'Specify a language other than Other'),
   clientIsMinor: z.boolean(),
   familyRepName: z.string().optional(),
   familyRepRelationship: z.string().optional(),
@@ -177,7 +179,7 @@ export default function ReferralNewPage() {
       clientLastName: '',
       clientDob: '',
       clientUci: '',
-      preferredLanguage: 'English',
+      preferredLanguage: '',
       clientIsMinor: false,
       familyRepName: '',
       familyRepRelationship: '',
@@ -223,7 +225,7 @@ export default function ReferralNewPage() {
 
   const onSubmit = (data: FormValues) => {
     // Map flat form data to the nested API shape
-    const intakeFields = { ...data };
+    const intakeFields = { ...data, preferredLanguage: data.preferredLanguage.trim() };
     // Remove fields that go at the top level
     const serviceFrequency = intakeFields.serviceFrequency;
     delete (intakeFields as any).serviceFrequency;
@@ -548,6 +550,12 @@ export default function ReferralNewPage() {
                 <CardTitle>Participant Information</CardTitle>
               </CardHeader>
               <CardContent className="space-y-6">
+                <PreferredLanguageField
+                  value={watch('preferredLanguage')}
+                  onChange={(value) => form.setValue('preferredLanguage', value, { shouldValidate: true, shouldDirty: true })}
+                  error={errors.preferredLanguage?.message}
+                  required
+                />
                 <div className="grid grid-cols-2 gap-4">
                   <FormField control={form.control} name="clientFirstName" render={({ field }) => (
                     <FormItem><FormLabel>First Name</FormLabel><FormControl><Input {...field} /></FormControl><FormMessage /></FormItem>
@@ -768,6 +776,7 @@ export default function ReferralNewPage() {
                       <dl className="grid grid-cols-3 gap-1">
                         <dt className="text-muted-foreground">Name:</dt><dd className="col-span-2">{watch('clientFirstName')} {watch('clientLastName')}</dd>
                         <dt className="text-muted-foreground">UCI:</dt><dd className="col-span-2">{watch('clientUci')}</dd>
+                        <dt className="text-muted-foreground">Preferred Language:</dt><dd className="col-span-2" data-testid="review-preferred-language">{watch('preferredLanguage')?.trim()}</dd>
                         <dt className="text-muted-foreground">Contact Email:</dt><dd className="col-span-2 font-medium">{watch('contactEmail')}</dd>
                         {supportingDocumentUrl && (<><dt className="text-muted-foreground">Document:</dt><dd className="col-span-2">Attached</dd></>)}
                       </dl>

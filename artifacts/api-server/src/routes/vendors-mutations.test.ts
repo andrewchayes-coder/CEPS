@@ -56,7 +56,19 @@ describe("vendor mutations", () => {
   });
   it("does not let the contact endpoint update preferred", async () => {
     await request(app).patch(`/api/vendors/${existingId}`).set("Cookie", staffCookie).send({ preferred: false });
-    const res = await request(app).patch(`/api/vendors/${existingId}/contact`).set("Cookie", vendorCookie).send({ preferred: true, email: "contact@test.local" });
-    expect(res.status).toBe(200); expect(res.body.preferred).toBe(false);
+    const forbiddenAlias = await request(app).patch(`/api/vendors/${existingId}/contact`).set("Cookie", vendorCookie).send({
+      email: "contact@test.local", qbPayeeName: "QuickBooks Alias",
+    });
+    expect(forbiddenAlias.status).toBe(403);
+    const res = await request(app).patch(`/api/vendors/${existingId}/contact`).set("Cookie", vendorCookie).send({
+      preferred: true, email: "contact@test.local",
+    });
+    expect(res.status).toBe(200);
+    expect(res.body.preferred).toBe(false);
+    expect(res.body.email).toBe("contact@test.local");
+    const staffUpdate = await request(app).patch(`/api/vendors/${existingId}`).set("Cookie", staffCookie)
+      .send({ qbPayeeName: " QuickBooks Alias " });
+    expect(staffUpdate.status).toBe(200);
+    expect(staffUpdate.body.qbPayeeName).toBe("QuickBooks Alias");
   });
 });

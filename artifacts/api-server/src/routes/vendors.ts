@@ -21,7 +21,7 @@ import { sortedOrder } from "../lib/sorting";
 const router: IRouter = Router();
 
 const nullableVendorFields = [
-  "altaVendorNumber", "ein", "billingAddress", "serviceAddress",
+  "qbPayeeName", "altaVendorNumber", "ein", "billingAddress", "serviceAddress",
   "phone", "email", "contactPerson", "w9DocumentUrl",
 ] as const;
 
@@ -29,7 +29,10 @@ function normalizeVendorData(data: Record<string, unknown>): Record<string, unkn
   const normalized = { ...data };
   if (typeof normalized.name === "string") normalized.name = normalized.name.trim();
   for (const field of nullableVendorFields) {
-    if (typeof normalized[field] === "string" && normalized[field].trim() === "") normalized[field] = null;
+    if (typeof normalized[field] === "string") {
+      if (field === "qbPayeeName") normalized[field] = normalized[field].trim();
+      if ((normalized[field] as string).trim() === "") normalized[field] = null;
+    }
   }
   return normalized;
 }
@@ -261,6 +264,10 @@ router.patch("/vendors/:id/contact", requireAuth, async (req, res): Promise<void
   const isOwnVendor = u.role === "vendor" && u.linkedRecordType === "vendor" && u.linkedRecordId === id;
   if (u.role !== "staff" && !isOwnVendor) {
     res.status(403).json({ error: "Forbidden" });
+    return;
+  }
+  if (u.role !== "staff" && Object.prototype.hasOwnProperty.call(req.body ?? {}, "qbPayeeName")) {
+    res.status(403).json({ error: "Only staff may update the QuickBooks payee name." });
     return;
   }
   const parsed = UpdateVendorContactBody.safeParse(req.body);

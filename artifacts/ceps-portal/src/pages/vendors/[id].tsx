@@ -66,6 +66,7 @@ export default function VendorDetailPage() {
 
   const vendorForm = (value: any) => ({
     name: value.name, ein: value.ein || '',
+    qbPayeeName: value.qbPayeeName || '',
     w9Status: value.w9Status, contactPerson: value.contactPerson || '', email: value.email || '',
     phone: value.phone || '', billingAddress: value.billingAddress || '', serviceAddress: value.serviceAddress || '',
     preferred: value.preferred, active: value.active,
@@ -137,7 +138,20 @@ export default function VendorDetailPage() {
         { onSuccess, onError },
       );
     } else {
-      updateVendor.mutate({ id, data: formData }, { onSuccess, onError });
+      // Contact update owns the QuickBooks alias; general vendor update owns the remaining staff fields.
+      updateVendor.mutate({ id, data: {
+        name: formData.name, ein: formData.ein, w9Status: formData.w9Status,
+        preferred: formData.preferred, active: formData.active,
+      } }, {
+        onSuccess: () => updateVendorContact.mutate({
+          id, data: {
+            email: formData.email, phone: formData.phone, contactPerson: formData.contactPerson,
+            billingAddress: formData.billingAddress, serviceAddress: formData.serviceAddress,
+            qbPayeeName: formData.qbPayeeName.trim() || null,
+          },
+        }, { onSuccess, onError }),
+        onError,
+      });
     }
   };
 
@@ -227,6 +241,11 @@ export default function VendorDetailPage() {
                   <div className="space-y-2">
                     <label className="text-sm font-medium">Business Name</label>
                     <Input value={formData.name || ''} onChange={e => handleChange('name', e.target.value)} />
+                  </div>
+                  <div className="space-y-2">
+                    <label htmlFor="input-vendor-qb-payee-name" className="text-sm font-medium">QuickBooks payee name (if different)</label>
+                    <Input id="input-vendor-qb-payee-name" data-testid="input-vendor-qb-payee-name" value={formData.qbPayeeName || ''} onChange={e => handleChange('qbPayeeName', e.target.value)} placeholder="Name printed on Alta FMS checks" />
+                    <p className="text-xs text-muted-foreground">Used as an alternate name when checking imported payments against approved invoices.</p>
                   </div>
 
                   <div className="space-y-2">

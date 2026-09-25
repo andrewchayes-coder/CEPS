@@ -3210,8 +3210,18 @@ export const DeletePaymentResponse = zod.object({
 /**
  * @summary Import raw Alta FMS payment worksheet rows server-side
  */
+export const importAltaFmsPaymentsBodyAcknowledgementsItemRowNumberMin = 2;
+
+
+
+
 export const ImportAltaFmsPaymentsBody = zod.object({
-  "worksheetRows": zod.array(zod.array(zod.string())).describe('Raw rows from the one-sheet Alta FMS payments workbook.')
+  "worksheetRows": zod.array(zod.array(zod.string())).describe('Raw rows from the one-sheet Alta FMS payments workbook.'),
+  "acknowledgements": zod.array(zod.object({
+  "rowNumber": zod.int().min(importAltaFmsPaymentsBodyAcknowledgementsItemRowNumberMin),
+  "note": zod.string().min(1),
+  "invoiceId": zod.uuid().optional().describe('Required to resolve an ambiguous row; must identify one of that row\'s approved invoice candidates.')
+})).optional().describe('Required notes acknowledging actionable audit exceptions before import.')
 })
 
 export const ImportAltaFmsPaymentsResponse = zod.object({
@@ -3229,6 +3239,69 @@ export const ImportAltaFmsPaymentsResponse = zod.object({
   "message": zod.string().nullish(),
   "paymentId": zod.string().nullish()
 }))
+})
+
+
+/**
+ * @summary Audit an Alta FMS payment worksheet without writing data
+ */
+export const auditAltaFmsPaymentsBodyAcknowledgementsItemRowNumberMin = 2;
+
+
+
+
+export const AuditAltaFmsPaymentsBody = zod.object({
+  "worksheetRows": zod.array(zod.array(zod.string())).describe('Raw rows from the one-sheet Alta FMS payments workbook.'),
+  "acknowledgements": zod.array(zod.object({
+  "rowNumber": zod.int().min(auditAltaFmsPaymentsBodyAcknowledgementsItemRowNumberMin),
+  "note": zod.string().min(1),
+  "invoiceId": zod.uuid().optional().describe('Required to resolve an ambiguous row; must identify one of that row\'s approved invoice candidates.')
+})).optional().describe('Required notes acknowledging actionable audit exceptions before import.')
+})
+
+export const AuditAltaFmsPaymentsResponse = zod.object({
+  "summary": zod.object({
+  "match": zod.int(),
+  "payee_mismatch": zod.int(),
+  "amount_mismatch": zod.int(),
+  "no_approved_invoice": zod.int(),
+  "already_paid": zod.int(),
+  "unknown_client": zod.int(),
+  "unknown_authorization": zod.int(),
+  "duplicate_row": zod.int()
+}),
+  "rows": zod.array(zod.object({
+  "rowNumber": zod.int(),
+  "checkNumber": zod.string(),
+  "checkDate": zod.string(),
+  "uciNumber": zod.string(),
+  "participantName": zod.string().nullable(),
+  "payeeName": zod.string(),
+  "checkAmount": zod.string(),
+  "authNumber": zod.string(),
+  "serviceMonth": zod.string(),
+  "result": zod.enum(['match', 'payee_mismatch', 'amount_mismatch', 'no_approved_invoice', 'already_paid', 'unknown_client', 'unknown_authorization', 'duplicate_row']),
+  "reason": zod.string(),
+  "invoiceId": zod.string().nullable(),
+  "invoiceVendor": zod.string().nullable(),
+  "invoiceVendorId": zod.string().nullable(),
+  "approvedAmount": zod.string().nullable(),
+  "remainingAmount": zod.string().nullable(),
+  "reviewedBy": zod.string().nullable(),
+  "reviewedAt": zod.string().nullable(),
+  "candidates": zod.array(zod.object({
+  "invoiceId": zod.uuid(),
+  "vendorName": zod.string().nullable(),
+  "vendorId": zod.uuid().nullable(),
+  "approvedAmount": zod.string(),
+  "remainingAmount": zod.string().nullable().describe('Null when unlinked historical allocations make invoice-specific remaining balance uncertain.'),
+  "reviewedBy": zod.string().nullable(),
+  "reviewedAt": zod.string().nullable()
+})).optional().describe('Approved, nondeleted invoice candidates offered only when the audit cannot safely choose one.')
+})),
+  "parseProblems": zod.array(zod.string()),
+  "headerError": zod.string().nullable(),
+  "ignoredNonCheckRows": zod.int()
 })
 
 
@@ -3763,6 +3836,7 @@ export const ListVendorsResponse = zod.object({
   "items": zod.array(zod.object({
   "id": zod.string(),
   "name": zod.string(),
+  "qbPayeeName": zod.string().nullable(),
   "altaVendorNumber": zod.string().nullish(),
   "ein": zod.string().nullish(),
   "billingAddress": zod.string().nullish(),
@@ -3785,6 +3859,7 @@ export const ListVendorsResponse = zod.object({
  */
 export const CreateVendorBody = zod.object({
   "name": zod.string(),
+  "qbPayeeName": zod.string().nullish().describe('QuickBooks payee name when different from the vendor\'s legal name'),
   "altaVendorNumber": zod.string().optional(),
   "ein": zod.string().optional(),
   "billingAddress": zod.string().optional(),
@@ -3799,6 +3874,7 @@ export const CreateVendorBody = zod.object({
 export const CreateVendorResponse = zod.object({
   "id": zod.string(),
   "name": zod.string(),
+  "qbPayeeName": zod.string().nullable(),
   "altaVendorNumber": zod.string().nullish(),
   "ein": zod.string().nullish(),
   "billingAddress": zod.string().nullish(),
@@ -3824,6 +3900,7 @@ export const GetVendorParams = zod.object({
 export const GetVendorResponse = zod.object({
   "id": zod.string(),
   "name": zod.string(),
+  "qbPayeeName": zod.string().nullable(),
   "altaVendorNumber": zod.string().nullish(),
   "ein": zod.string().nullish(),
   "billingAddress": zod.string().nullish(),
@@ -3848,6 +3925,7 @@ export const UpdateVendorParams = zod.object({
 
 export const UpdateVendorBody = zod.object({
   "name": zod.string().optional(),
+  "qbPayeeName": zod.string().nullish().describe('QuickBooks payee name when different from the vendor\'s legal name'),
   "altaVendorNumber": zod.string().optional(),
   "ein": zod.string().optional(),
   "billingAddress": zod.string().optional(),
@@ -3864,6 +3942,7 @@ export const UpdateVendorBody = zod.object({
 export const UpdateVendorResponse = zod.object({
   "id": zod.string(),
   "name": zod.string(),
+  "qbPayeeName": zod.string().nullable(),
   "altaVendorNumber": zod.string().nullish(),
   "ein": zod.string().nullish(),
   "billingAddress": zod.string().nullish(),
@@ -3893,6 +3972,7 @@ export const UploadVendorW9Body = zod.object({
 export const UploadVendorW9Response = zod.object({
   "id": zod.string(),
   "name": zod.string(),
+  "qbPayeeName": zod.string().nullable(),
   "altaVendorNumber": zod.string().nullish(),
   "ein": zod.string().nullish(),
   "billingAddress": zod.string().nullish(),
@@ -3917,6 +3997,7 @@ export const UpdateVendorContactParams = zod.object({
 
 export const UpdateVendorContactBody = zod.object({
   "email": zod.string().optional(),
+  "qbPayeeName": zod.string().nullish().describe('QuickBooks payee name when different from the vendor\'s legal name'),
   "phone": zod.string().optional(),
   "contactPerson": zod.string().optional(),
   "billingAddress": zod.string().optional(),
@@ -3926,6 +4007,7 @@ export const UpdateVendorContactBody = zod.object({
 export const UpdateVendorContactResponse = zod.object({
   "id": zod.string(),
   "name": zod.string(),
+  "qbPayeeName": zod.string().nullable(),
   "altaVendorNumber": zod.string().nullish(),
   "ein": zod.string().nullish(),
   "billingAddress": zod.string().nullish(),

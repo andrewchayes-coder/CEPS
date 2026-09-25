@@ -1711,6 +1711,37 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/AltaFmsPaymentImportResult"
+        "409":
+          description: Import blocked by actionable unauthenticated audit exceptions
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [error, audit, unacknowledgedRows]
+                properties:
+                  error: { type: string }
+                  audit: { $ref: "#/components/schemas/AltaFmsPaymentAuditResult" }
+                  unacknowledgedRows:
+                    type: array
+                    items: { type: integer }
+  /payments/import/audit:
+    post:
+      operationId: auditAltaFmsPayments
+      tags: [payments]
+      summary: Audit an Alta FMS payment worksheet without writing data
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AltaFmsPaymentImportInput"
+      responses:
+        "200":
+          description: Audit summary and per-check results; this operation performs no writes
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AltaFmsPaymentAuditResult"
   /import/{entity}/template:
     get:
       operationId: getImportTemplate
@@ -3587,6 +3618,79 @@ components:
           items:
             type: array
             items: { type: string }
+        acknowledgements:
+          type: array
+          description: Required notes acknowledging actionable audit exceptions before import.
+          items:
+            type: object
+            required: [rowNumber, note]
+            properties:
+              rowNumber: { type: integer, minimum: 2 }
+              note: { type: string, minLength: 1 }
+              invoiceId: { type: string, format: uuid, description: "Required to resolve an ambiguous row; must identify one of that row's approved invoice candidates." }
+    AltaFmsPaymentAuditResult:
+      type: object
+      required: [summary, rows, parseProblems, headerError, ignoredNonCheckRows]
+      properties:
+        summary:
+          type: object
+          required: [match, payee_mismatch, amount_mismatch, no_approved_invoice, already_paid, unknown_client, unknown_authorization, duplicate_row]
+          properties:
+            match: { type: integer }
+            payee_mismatch: { type: integer }
+            amount_mismatch: { type: integer }
+            no_approved_invoice: { type: integer }
+            already_paid: { type: integer }
+            unknown_client: { type: integer }
+            unknown_authorization: { type: integer }
+            duplicate_row: { type: integer }
+        rows:
+          type: array
+          items: { $ref: "#/components/schemas/AltaFmsPaymentAuditRow" }
+        parseProblems:
+          type: array
+          items: { type: string }
+        headerError: { type: ["string", "null"] }
+        ignoredNonCheckRows: { type: integer }
+    AltaFmsPaymentAuditRow:
+      type: object
+      required: [rowNumber, checkNumber, checkDate, uciNumber, participantName, payeeName, checkAmount, authNumber, serviceMonth, result, reason, invoiceId, invoiceVendor, invoiceVendorId, approvedAmount, remainingAmount, reviewedBy, reviewedAt]
+      properties:
+        rowNumber: { type: integer }
+        checkNumber: { type: string }
+        checkDate: { type: string }
+        uciNumber: { type: string }
+        participantName: { type: ["string", "null"] }
+        payeeName: { type: string }
+        checkAmount: { type: string }
+        authNumber: { type: string }
+        serviceMonth: { type: string }
+        result:
+          type: string
+          enum: [match, payee_mismatch, amount_mismatch, no_approved_invoice, already_paid, unknown_client, unknown_authorization, duplicate_row]
+        reason: { type: string }
+        invoiceId: { type: ["string", "null"] }
+        invoiceVendor: { type: ["string", "null"] }
+        invoiceVendorId: { type: ["string", "null"] }
+        approvedAmount: { type: ["string", "null"] }
+        remainingAmount: { type: ["string", "null"] }
+        reviewedBy: { type: ["string", "null"] }
+        reviewedAt: { type: ["string", "null"] }
+        candidates:
+          type: array
+          description: Approved, nondeleted invoice candidates offered only when the audit cannot safely choose one.
+          items: { $ref: "#/components/schemas/AltaFmsPaymentAuditCandidate" }
+    AltaFmsPaymentAuditCandidate:
+      type: object
+      required: [invoiceId, vendorName, vendorId, approvedAmount, remainingAmount, reviewedBy, reviewedAt]
+      properties:
+        invoiceId: { type: string, format: uuid }
+        vendorName: { type: ["string", "null"] }
+        vendorId: { type: ["string", "null"], format: uuid }
+        approvedAmount: { type: string }
+        remainingAmount: { type: ["string", "null"], description: "Null when unlinked historical allocations make invoice-specific remaining balance uncertain." }
+        reviewedBy: { type: ["string", "null"] }
+        reviewedAt: { type: ["string", "null"] }
     AltaFmsPaymentImportRowResult:
       type: object
       required: [rowNumber, outcome]
@@ -3898,10 +4002,11 @@ components:
         paymentMonth: { type: ["string", "null"] }
     Vendor:
       type: object
-      required: [id, name, w9Status, preferred, active]
+      required: [id, name, qbPayeeName, w9Status, preferred, active]
       properties:
         id: { type: string }
         name: { type: string }
+        qbPayeeName: { type: ["string", "null"] }
         altaVendorNumber: { type: ["string", "null"] }
         ein: { type: ["string", "null"] }
         billingAddress: { type: ["string", "null"] }
@@ -3919,6 +4024,7 @@ components:
       required: [name]
       properties:
         name: { type: string }
+        qbPayeeName: { type: ["string", "null"], description: "QuickBooks payee name when different from the vendor's legal name" }
         altaVendorNumber: { type: string }
         ein: { type: string }
         billingAddress: { type: string }
@@ -3932,6 +4038,7 @@ components:
       type: object
       properties:
         name: { type: string }
+        qbPayeeName: { type: ["string", "null"], description: "QuickBooks payee name when different from the vendor's legal name" }
         altaVendorNumber: { type: string }
         ein: { type: string }
         billingAddress: { type: string }
@@ -3952,6 +4059,7 @@ components:
       type: object
       properties:
         email: { type: string }
+        qbPayeeName: { type: ["string", "null"], description: "QuickBooks payee name when different from the vendor's legal name" }
         phone: { type: string }
         contactPerson: { type: string }
         billingAddress: { type: string }

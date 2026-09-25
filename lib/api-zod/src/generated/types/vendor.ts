@@ -11,6 +11,8 @@ export interface Vendor {
   id: string;
   name: string;
   /** @nullable */
+  qbPayeeName: string | null;
+  /** @nullable */
   altaVendorNumber?: string | null;
   /** @nullable */
   ein?: string | null;

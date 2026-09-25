@@ -5,8 +5,11 @@
  * CEPS Portal API — referral intake, authorizations, invoices, payments, remittances, vendors, reporting
  * OpenAPI spec version: 0.1.0
  */
+import type { AltaFmsPaymentImportInputAcknowledgementsItem } from './altaFmsPaymentImportInputAcknowledgementsItem';
 
 export interface AltaFmsPaymentImportInput {
   /** Raw rows from the one-sheet Alta FMS payments workbook. */
   worksheetRows: string[][];
+  /** Required notes acknowledging actionable audit exceptions before import. */
+  acknowledgements?: AltaFmsPaymentImportInputAcknowledgementsItem[];
 }

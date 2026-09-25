@@ -15,6 +15,7 @@ const MONTHS: Record<string, string> = {
 export interface AltaFmsPaymentRow {
   rowNumber: number;
   uciNumber: string;
+  payeeName: string;
   authNumber: string;
   serviceMonth: string;
   amount: string;
@@ -70,6 +71,7 @@ export function parseAltaFmsPaymentWorksheet(grid: string[][]): AltaFmsPaymentPa
     rows.push({
       rowNumber,
       uciNumber: uci,
+      payeeName: cells[3],
       authNumber,
       serviceMonth: `20${service[2]}-${MONTHS[service[1].toLowerCase()]}`,
       amount,

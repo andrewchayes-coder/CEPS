@@ -1,0 +1,1 @@
+ALTER TABLE "vendors" ADD COLUMN "qb_payee_name" text;

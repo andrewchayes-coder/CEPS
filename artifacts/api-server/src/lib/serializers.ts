@@ -352,6 +352,7 @@ export function vendorJson(v: Vendor) {
   return {
     id: v.id,
     name: v.name,
+    qbPayeeName: v.qbPayeeName,
     altaVendorNumber: v.altaVendorNumber,
     ein: v.ein,
     billingAddress: v.billingAddress,

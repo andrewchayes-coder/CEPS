@@ -9,6 +9,11 @@ import type { VendorUpdateW9Status } from './vendorUpdateW9Status';
 
 export interface VendorUpdate {
   name?: string;
+  /**
+     * QuickBooks payee name when different from the vendor's legal name
+     * @nullable
+     */
+  qbPayeeName?: string | null;
   altaVendorNumber?: string;
   ein?: string;
   billingAddress?: string;

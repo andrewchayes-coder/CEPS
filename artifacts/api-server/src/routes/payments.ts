@@ -28,6 +28,10 @@ import {
   RepairMonthlyFeesResponse,
   ReconcileCheckRunBody,
   ReconcileCheckRunResponse,
+  AuditAltaFmsPaymentsBody,
+  AuditAltaFmsPaymentsResponse,
+  type AltaFmsPaymentAuditRow,
+  type AltaFmsPaymentAuditRowResult,
 } from "@workspace/api-zod";
 import { requireAuth, requireStaff, requirePermission, audit } from "../lib/auth";
 import { paymentJson, remittanceJson, clientNameMap, vendorNameMap, authNumberMap, notDeleted, diffDetail, effectiveAuthStatus } from "../lib/serializers";
@@ -37,7 +41,7 @@ import { parseAltaRemittanceCsv, altaRowFingerprint } from "../lib/altaRemittanc
 import { altaFmsPaymentRowFingerprint, parseAltaFmsPaymentWorksheet } from "../lib/altaFmsPaymentParser";
 import { sortedOrder } from "../lib/sorting";
 import { validateParticipantLinks } from "../lib/participantLinks";
-import { isValidIsoDate, parseCheckRunCsv, reconcileCheckRun } from "../lib/checkRunReconciliation";
+import { isValidIsoDate, normalizeVendor, parseCheckRunCsv, reconcileCheckRun } from "../lib/checkRunReconciliation";
 
 const router: IRouter = Router();
 
@@ -842,6 +846,320 @@ router.post("/payments", requirePermission("check_writing"), async (req, res): P
   res.status(201).json(CreatePaymentResponse.parse((await enrichPayments([payment]))[0]));
 });
 
+const ACTIONABLE_AUDIT_RESULTS = new Set<AltaFmsPaymentAuditRowResult>([
+  "payee_mismatch", "amount_mismatch", "no_approved_invoice", "already_paid",
+]);
+const emptyAuditSummary = () => ({
+  match: 0,
+  payee_mismatch: 0,
+  amount_mismatch: 0,
+  no_approved_invoice: 0,
+  already_paid: 0,
+  unknown_client: 0,
+  unknown_authorization: 0,
+  duplicate_row: 0,
+});
+
+async function auditAltaFmsWorksheet(
+  worksheetRows: string[][],
+  invoiceResolutionByRow: Map<number, string> = new Map(),
+) {
+  const source = parseAltaFmsPaymentWorksheet(worksheetRows);
+  const summary = emptyAuditSummary();
+  if (source.headerError) {
+    return AuditAltaFmsPaymentsResponse.parse({
+      summary, rows: [], parseProblems: [], headerError: source.headerError, ignoredNonCheckRows: 0,
+    });
+  }
+
+  const chunked = <T>(values: T[], size = 1_000): T[][] => {
+    const result: T[][] = [];
+    for (let i = 0; i < values.length; i += size) result.push(values.slice(i, i + size));
+    return result;
+  };
+  const uciNumbers = [...new Set(source.rows.map((row) => row.uciNumber))];
+  const authNumbers = [...new Set(source.rows.map((row) => row.authNumber))];
+  const months = [...new Set(source.rows.map((row) => row.serviceMonth))];
+  const fingerprints = [...new Set(source.rows.map(altaFmsPaymentRowFingerprint))];
+  const clients: (typeof clientsTable.$inferSelect)[] = [];
+  for (const chunk of chunked(uciNumbers)) {
+    clients.push(...await db.select().from(clientsTable).where(and(
+      inArray(clientsTable.uciNumber, chunk), notDeleted(clientsTable),
+    )));
+  }
+  const clientByUci = new Map(clients.map((client) => [client.uciNumber, client]));
+  const auths: (typeof authorizationsTable.$inferSelect)[] = [];
+  for (const clientChunk of chunked(clients.map((client) => client.id), 500)) {
+    for (const authChunk of chunked(authNumbers, 500)) {
+      auths.push(...await db.select().from(authorizationsTable).where(and(
+        inArray(authorizationsTable.clientId, clientChunk),
+        inArray(authorizationsTable.authNumber, authChunk),
+        notDeleted(authorizationsTable),
+      )));
+    }
+  }
+  const authByClientAndNumber = new Map(auths.map((auth) => [`${auth.clientId}::${auth.authNumber}`, auth]));
+  const authIds = [...new Set(auths.map((auth) => auth.id))];
+  const storedFingerprints = new Set<string>();
+  for (const chunk of chunked(fingerprints)) {
+    const existing = await db.select({ fingerprint: paymentsTable.sourceRowFingerprint })
+      .from(paymentsTable)
+      .where(and(inArray(paymentsTable.sourceRowFingerprint, chunk), notDeleted(paymentsTable)));
+    for (const row of existing) if (row.fingerprint) storedFingerprints.add(row.fingerprint);
+  }
+  type Candidate = {
+    invoiceId: string;
+    vendorId: string | null;
+    vendorName: string | null;
+    qbPayeeName: string | null;
+    invoiceStatus: string;
+    reviewedBy: string | null;
+    reviewedAt: Date | null;
+    authorizationId: string;
+    serviceMonth: string;
+    amount: string;
+    remaining: string | null;
+  };
+  const candidateRows = authIds.length && months.length
+    ? await db.select({
+      line: invoiceLineItemsTable,
+      invoice: invoicesTable,
+      vendorName: vendorsTable.name,
+      qbPayeeName: vendorsTable.qbPayeeName,
+    }).from(invoiceLineItemsTable)
+      .innerJoin(invoicesTable, eq(invoicesTable.id, invoiceLineItemsTable.invoiceId))
+      .leftJoin(vendorsTable, eq(vendorsTable.id, invoicesTable.vendorId))
+      .where(and(
+        inArray(invoiceLineItemsTable.authorizationId, authIds),
+        inArray(invoiceLineItemsTable.serviceMonth, months),
+        notDeleted(invoicesTable),
+      ))
+    : [];
+  const invoiceAllocated = new Map<string, ReturnType<typeof money>>();
+  const unlinkedAllocated = new Map<string, ReturnType<typeof money>>();
+  for (const authChunk of chunked(authIds)) {
+    for (const monthChunk of chunked(months)) {
+      const allocations = await db.select({
+        authorizationId: paymentAllocationsTable.authorizationId,
+        serviceMonth: paymentAllocationsTable.serviceMonth,
+        amount: paymentAllocationsTable.amount,
+        invoiceId: paymentsTable.invoiceId,
+      }).from(paymentAllocationsTable)
+        .innerJoin(paymentsTable, eq(paymentsTable.id, paymentAllocationsTable.paymentId))
+        .where(and(
+          inArray(paymentAllocationsTable.authorizationId, authChunk),
+          inArray(paymentAllocationsTable.serviceMonth, monthChunk),
+          notDeleted(paymentsTable),
+        ));
+      for (const allocation of allocations) {
+        if (!allocation.serviceMonth) continue;
+        const key = `${allocation.authorizationId}::${allocation.serviceMonth}`;
+        if (allocation.invoiceId) {
+          const invoiceKey = `${key}::${allocation.invoiceId}`;
+          invoiceAllocated.set(invoiceKey, (invoiceAllocated.get(invoiceKey) ?? money(0)).plus(allocation.amount));
+        } else {
+          unlinkedAllocated.set(key, (unlinkedAllocated.get(key) ?? money(0)).plus(allocation.amount));
+        }
+      }
+    }
+  }
+  const approvedCandidateCountByKey = new Map<string, number>();
+  for (const selected of candidateRows) {
+    if (selected.invoice.status !== "approved") continue;
+    const line = selected.line;
+    const key = `${selected.invoice.clientId}::${line.authorizationId}::${line.serviceMonth}`;
+    approvedCandidateCountByKey.set(key, (approvedCandidateCountByKey.get(key) ?? 0) + 1);
+  }
+  const candidatesByKey = new Map<string, Candidate[]>();
+  for (const selected of candidateRows) {
+    const line = selected.line;
+    const invoice = selected.invoice;
+    const key = `${invoice.clientId}::${line.authorizationId}::${line.serviceMonth}`;
+    const allocationKey = `${line.authorizationId}::${line.serviceMonth}`;
+    const invoiceAllocationKey = `${allocationKey}::${invoice.id}`;
+    let paid = invoiceAllocated.get(invoiceAllocationKey) ?? money(0);
+    const unlinked = unlinkedAllocated.get(allocationKey) ?? money(0);
+    const remainingIsUncertain = invoice.status === "approved" &&
+      approvedCandidateCountByKey.get(key)! > 1 &&
+      unlinked.greaterThan(0);
+    if (invoice.status === "approved" &&
+        approvedCandidateCountByKey.get(key) === 1) {
+      paid = paid.plus(unlinked);
+    }
+    const remaining = money(line.amount).minus(paid);
+    const candidate: Candidate = {
+      invoiceId: invoice.id,
+      vendorId: invoice.vendorId,
+      vendorName: selected.vendorName,
+      qbPayeeName: selected.qbPayeeName,
+      invoiceStatus: invoice.status,
+      reviewedBy: invoice.reviewedBy,
+      reviewedAt: invoice.reviewedAt,
+      authorizationId: line.authorizationId,
+      serviceMonth: line.serviceMonth,
+      amount: line.amount,
+      remaining: remainingIsUncertain
+        ? null
+        : (remaining.lessThan(0) ? money(0) : remaining).toFixed(2),
+    };
+    candidatesByKey.set(key, [...(candidatesByKey.get(key) ?? []), candidate]);
+  }
+  const summaryRows: AltaFmsPaymentAuditRow[] = [];
+  const seenFingerprints = new Set<string>();
+  for (const row of source.rows) {
+    const fingerprint = altaFmsPaymentRowFingerprint(row);
+    let result: AltaFmsPaymentAuditRowResult;
+    let reason: string;
+    let selected: Candidate | undefined;
+    let resolutionCandidates: Candidate[] | undefined;
+    const client = clientByUci.get(row.uciNumber);
+    const authorization = client ? authByClientAndNumber.get(`${client.id}::${row.authNumber}`) : undefined;
+    if (storedFingerprints.has(fingerprint) || seenFingerprints.has(fingerprint)) {
+      result = "duplicate_row";
+      reason = "This Alta FMS line was already imported (matched by source-row fingerprint).";
+    } else if (!client) {
+      result = "unknown_client";
+      reason = `No active client was found for UCI "${row.uciNumber}".`;
+    } else if (!authorization) {
+      result = "unknown_authorization";
+      reason = `Authorization "${row.authNumber}" was not found for this participant.`;
+    } else {
+      const key = `${client.id}::${authorization.id}::${row.serviceMonth}`;
+      const candidates = candidatesByKey.get(key) ?? [];
+      const approved = candidates.filter((candidate) => candidate.invoiceStatus === "approved");
+      const authMonthKey = `${authorization.id}::${row.serviceMonth}`;
+      if (approved.length > 1 && (unlinkedAllocated.get(authMonthKey) ?? money(0)).greaterThan(0)) {
+        result = "amount_mismatch";
+        reason = "Existing allocations are not linked to a specific invoice and multiple approved lines exist; no invoice was selected because the remaining balance is ambiguous.";
+        resolutionCandidates = approved;
+      } else
+      if (!approved.length) {
+        const otherStatuses = [...new Set(candidates.map((candidate) => candidate.invoiceStatus))];
+        result = "no_approved_invoice";
+        reason = otherStatuses.length
+          ? `No approved invoice line exists for this authorization and service month; found but invoice status is ${otherStatuses.join(", ")}.`
+          : "No approved invoice line exists for this participant, authorization, and service month.";
+      } else {
+        const normalizedPayee = normalizeVendor(row.payeeName);
+        const payeeMatches = approved.filter((candidate) => normalizedPayee !== "" && (
+          normalizedPayee === normalizeVendor(candidate.vendorName ?? "") ||
+          normalizedPayee === normalizeVendor(candidate.qbPayeeName ?? "")
+        ));
+        const amountMatches = approved.filter((candidate) =>
+          candidate.remaining !== null && money(candidate.remaining).equals(money(row.amount)),
+        );
+        const exactMatches = payeeMatches.filter((candidate) => amountMatches.includes(candidate));
+        if (payeeMatches.length > 0) {
+          if (exactMatches.length === 1) selected = exactMatches[0];
+          else if (payeeMatches.length === 1) selected = payeeMatches[0];
+        } else if (approved.length === 1) {
+          selected = approved[0];
+        }
+
+        if (!selected) {
+          result = "amount_mismatch";
+          reason = payeeMatches.length > 1
+            ? `Multiple approved invoice lines match the check payee "${row.payeeName}", and the remaining balance does not identify exactly one line; no invoice was selected.`
+            : payeeMatches.length === 0
+              ? `No approved invoice vendor matches the check payee "${row.payeeName}"; amount alone is not sufficient to select among multiple invoice lines.`
+              : `Multiple approved invoice lines could match this check for ${row.amount}; no invoice was selected because the match is ambiguous.`;
+          resolutionCandidates = approved;
+        } else {
+          const payeeMatchesSelected = normalizedPayee !== "" && (
+            normalizedPayee === normalizeVendor(selected.vendorName ?? "") ||
+            normalizedPayee === normalizeVendor(selected.qbPayeeName ?? "")
+          );
+          if (!payeeMatchesSelected) {
+            result = "payee_mismatch";
+            reason = `Check payee "${row.payeeName}" does not match approved vendor "${selected.vendorName ?? "unknown"}"${selected.qbPayeeName ? ` or QuickBooks payee "${selected.qbPayeeName}"` : ""}.`;
+          } else if (money(selected.remaining).isZero()) {
+            result = "already_paid";
+            reason = `The approved invoice line for ${selected.amount} is already fully covered by payment allocations.`;
+          } else if (!money(selected.remaining).equals(money(row.amount))) {
+            result = "amount_mismatch";
+            reason = `Check amount ${row.amount} differs from the approved line amount ${selected.amount} and remaining unpaid amount ${selected.remaining}.`;
+          } else {
+            result = "match";
+            reason = "Check payee and amount match the approved invoice line's remaining balance.";
+          }
+        }
+      }
+    }
+    seenFingerprints.add(fingerprint);
+    summary[result]++;
+    summaryRows.push({
+      rowNumber: row.rowNumber,
+      checkNumber: row.checkNumber,
+      checkDate: row.checkDate,
+      uciNumber: row.uciNumber,
+      participantName: client ? `${client.firstName} ${client.lastName}` : null,
+      payeeName: row.payeeName,
+      checkAmount: row.amount,
+      authNumber: row.authNumber,
+      serviceMonth: row.serviceMonth,
+      result,
+      reason,
+      invoiceId: selected?.invoiceId ?? null,
+      invoiceVendor: selected?.vendorName ?? null,
+      invoiceVendorId: selected?.vendorId ?? null,
+      approvedAmount: selected?.amount ?? null,
+      remainingAmount: selected?.remaining ?? null,
+      reviewedBy: selected?.reviewedBy ?? null,
+      reviewedAt: selected?.reviewedAt?.toISOString() ?? null,
+      ...(resolutionCandidates ? {
+        candidates: resolutionCandidates.map((candidate) => ({
+          invoiceId: candidate.invoiceId,
+          vendorName: candidate.vendorName,
+          vendorId: candidate.vendorId,
+          approvedAmount: candidate.amount,
+          remainingAmount: candidate.remaining,
+          reviewedBy: candidate.reviewedBy,
+          reviewedAt: candidate.reviewedAt?.toISOString() ?? null,
+        })),
+      } : {}),
+    });
+    const consumePotentialPayment = (candidate: Candidate) => {
+      if (candidate.remaining === null) {
+        candidate.remaining = "0.00";
+        return;
+      }
+      const remainingAfterCheck = money(candidate.remaining).minus(row.amount);
+      candidate.remaining = (remainingAfterCheck.lessThan(0) ? money(0) : remainingAfterCheck).toFixed(2);
+    };
+    if (selected) {
+      consumePotentialPayment(selected);
+    } else if (resolutionCandidates?.length) {
+      const acknowledgedCandidate = resolutionCandidates.find((candidate) =>
+        candidate.invoiceId === invoiceResolutionByRow.get(row.rowNumber),
+      );
+      if (acknowledgedCandidate) {
+        consumePotentialPayment(acknowledgedCandidate);
+      } else {
+        // Until an ambiguous row is resolved, reserve its possible consumption
+        // against every eligible line so a later row cannot appear safe by
+        // choosing the same line or by selecting an amount-only alternative.
+        for (const candidate of resolutionCandidates) candidate.remaining = "0.00";
+      }
+    }
+  }
+  return AuditAltaFmsPaymentsResponse.parse({
+    summary,
+    rows: summaryRows,
+    parseProblems: source.problems,
+    headerError: null,
+    ignoredNonCheckRows: source.ignoredNonCheckRows,
+  });
+}
+
+router.post("/payments/import/audit", requirePermission("check_writing"), async (req, res): Promise<void> => {
+  const parsed = AuditAltaFmsPaymentsBody.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: parsed.error.message });
+    return;
+  }
+  res.json(await auditAltaFmsWorksheet(parsed.data.worksheetRows));
+});
+
 router.post("/payments/import", requirePermission("check_writing"), async (req, res): Promise<void> => {
   const parsed = ImportAltaFmsPaymentsBody.safeParse(req.body);
   if (!parsed.success) {
@@ -849,57 +1167,75 @@ router.post("/payments/import", requirePermission("check_writing"), async (req, 
     return;
   }
   const source = parseAltaFmsPaymentWorksheet(parsed.data.worksheetRows);
-  if (source.headerError) {
-    res.json(ImportAltaFmsPaymentsResponse.parse({ imported: 0, skippedDuplicate: 0, flaggedDuplicate: 0, errored: 0, ignoredNonCheckRows: 0, headerError: source.headerError, parseProblems: [], results: [] }));
+  const invoiceResolutionByRow = new Map<number, string>();
+  for (const acknowledgement of parsed.data.acknowledgements ?? []) {
+    if (acknowledgement.invoiceId) invoiceResolutionByRow.set(acknowledgement.rowNumber, acknowledgement.invoiceId);
+  }
+  const auditReport = await auditAltaFmsWorksheet(parsed.data.worksheetRows, invoiceResolutionByRow);
+  if (auditReport.headerError) {
+    res.json(ImportAltaFmsPaymentsResponse.parse({
+      imported: 0, skippedDuplicate: 0, flaggedDuplicate: 0, errored: 0,
+      ignoredNonCheckRows: 0, headerError: auditReport.headerError, parseProblems: [], results: [],
+    }));
     return;
   }
-  // Resolve only natural keys present in this workbook. Import history and the
-  // participant/authorization tables can grow indefinitely without increasing
-  // the preload cost of one monthly file.
+  const ackByRow = new Map<number, { note: string; invoiceId?: string }>();
+  for (const acknowledgement of parsed.data.acknowledgements ?? []) {
+    const note = acknowledgement.note.trim();
+    const row = auditReport.rows.find((candidate) => candidate.rowNumber === acknowledgement.rowNumber);
+    if (!note || ackByRow.has(acknowledgement.rowNumber) || !row || !ACTIONABLE_AUDIT_RESULTS.has(row.result)) {
+      res.status(400).json({ error: `Invalid acknowledgement for worksheet row ${acknowledgement.rowNumber}; a non-empty note is required for an actionable audit exception.` });
+      return;
+    }
+    const requiresInvoiceResolution = (row.candidates?.length ?? 0) > 1 && row.invoiceId === null;
+    const candidateInvoiceIds = row.candidates?.map((candidate) => candidate.invoiceId) ?? [];
+    if (requiresInvoiceResolution && (!acknowledgement.invoiceId || !candidateInvoiceIds.includes(acknowledgement.invoiceId))) {
+      res.status(400).json({ error: `Acknowledgement for worksheet row ${row.rowNumber} must select an invoice from the audit's approved candidates.` });
+      return;
+    }
+    if (acknowledgement.invoiceId &&
+        !candidateInvoiceIds.includes(acknowledgement.invoiceId) &&
+        acknowledgement.invoiceId !== row.invoiceId) {
+      res.status(400).json({ error: `Invoice ${acknowledgement.invoiceId} is not an audited candidate for worksheet row ${row.rowNumber}.` });
+      return;
+    }
+    ackByRow.set(acknowledgement.rowNumber, { note, invoiceId: acknowledgement.invoiceId });
+  }
+  const unacknowledged = auditReport.rows.filter((row) =>
+    ACTIONABLE_AUDIT_RESULTS.has(row.result) && !ackByRow.has(row.rowNumber));
+  if (unacknowledged.length) {
+    res.status(409).json({
+      error: "Import blocked: acknowledge every actionable payment audit exception with a note or correct the worksheet.",
+      audit: auditReport,
+      unacknowledgedRows: unacknowledged.map((row) => row.rowNumber),
+    });
+    return;
+  }
+
+  // The audit is recomputed above on the import request, before any writes. Only
+  // keys in this workbook are preloaded; a row is rechecked under transaction
+  // locks immediately before its payment and allocation are inserted.
   const uciNumbers = [...new Set(source.rows.map((row) => row.uciNumber))];
   const authNumbers = [...new Set(source.rows.map((row) => row.authNumber))];
-  const rowFingerprints = [...new Set(source.rows.map(altaFmsPaymentRowFingerprint))];
-  const LOOKUP_CHUNK_SIZE = 1_000;
-  const chunks = <T>(values: T[], size = LOOKUP_CHUNK_SIZE): T[][] => {
-    const result: T[][] = [];
-    for (let index = 0; index < values.length; index += size) result.push(values.slice(index, index + size));
-    return result;
-  };
   const clients: (typeof clientsTable.$inferSelect)[] = [];
-  for (const uciChunk of chunks(uciNumbers)) {
+  for (let index = 0; index < uciNumbers.length; index += 1_000) {
     clients.push(...await db.select().from(clientsTable).where(and(
-      inArray(clientsTable.uciNumber, uciChunk),
+      inArray(clientsTable.uciNumber, uciNumbers.slice(index, index + 1_000)),
       notDeleted(clientsTable),
     )));
   }
   const clientByUci = new Map(clients.map((client) => [client.uciNumber, client]));
-  const clientIds = clients.map((client) => client.id);
   const auths: (typeof authorizationsTable.$inferSelect)[] = [];
-  // Each authorization query has two IN clauses, so keep each side below half
-  // the overall lookup budget.
-  for (const clientIdChunk of chunks(clientIds, LOOKUP_CHUNK_SIZE / 2)) {
-    for (const authNumberChunk of chunks(authNumbers, LOOKUP_CHUNK_SIZE / 2)) {
+  for (let ci = 0; ci < clients.length; ci += 500) {
+    for (let ai = 0; ai < authNumbers.length; ai += 500) {
       auths.push(...await db.select().from(authorizationsTable).where(and(
-        inArray(authorizationsTable.clientId, clientIdChunk),
-        inArray(authorizationsTable.authNumber, authNumberChunk),
+        inArray(authorizationsTable.clientId, clients.slice(ci, ci + 500).map((client) => client.id)),
+        inArray(authorizationsTable.authNumber, authNumbers.slice(ai, ai + 500)),
         notDeleted(authorizationsTable),
       )));
     }
   }
   const authByClientAndNumber = new Map(auths.map((auth) => [`${auth.clientId}::${auth.authNumber}`, auth]));
-  const fingerprints = new Set<string>();
-  for (const fingerprintChunk of chunks(rowFingerprints)) {
-    const existingFingerprints = await db
-      .select({ fingerprint: paymentsTable.sourceRowFingerprint })
-      .from(paymentsTable)
-      .where(and(
-        inArray(paymentsTable.sourceRowFingerprint, fingerprintChunk),
-        notDeleted(paymentsTable),
-      ));
-    for (const row of existingFingerprints) {
-      if (row.fingerprint) fingerprints.add(row.fingerprint);
-    }
-  }
   const results: { rowNumber: number; uciNumber?: string | null; outcome: "imported" | "skipped_duplicate" | "flagged_duplicate" | "errored"; message?: string | null; paymentId?: string | null }[] = [];
   let imported = 0;
   let skippedDuplicate = 0;
@@ -912,9 +1248,10 @@ router.post("/payments/import", requirePermission("check_writing"), async (req, 
 
   for (const row of source.rows) {
     const fingerprint = altaFmsPaymentRowFingerprint(row);
-    if (fingerprints.has(fingerprint)) {
+    const auditRow = auditReport.rows.find((candidate) => candidate.rowNumber === row.rowNumber)!;
+    if (auditRow.result === "duplicate_row") {
       skippedDuplicate++;
-      results.push({ rowNumber: row.rowNumber, uciNumber: row.uciNumber, outcome: "skipped_duplicate", message: "This Alta FMS line was already imported (matched by source-row fingerprint)." });
+      results.push({ rowNumber: row.rowNumber, uciNumber: row.uciNumber, outcome: "skipped_duplicate", message: auditRow.reason });
       continue;
     }
     const client = clientByUci.get(row.uciNumber);
@@ -929,40 +1266,148 @@ router.post("/payments/import", requirePermission("check_writing"), async (req, 
       results.push({ rowNumber: row.rowNumber, uciNumber: row.uciNumber, outcome: "errored", message: `Authorization "${row.authNumber}" not found for UCI "${row.uciNumber}".` });
       continue;
     }
+    const acknowledgement = ackByRow.get(row.rowNumber);
+    const resolvedCandidate = acknowledgement?.invoiceId
+      ? auditRow.candidates?.find((candidate) => candidate.invoiceId === acknowledgement.invoiceId)
+      : undefined;
+    const invoiceId = resolvedCandidate?.invoiceId ?? auditRow.invoiceId;
+    const vendorId = resolvedCandidate?.vendorId ?? auditRow.invoiceVendorId;
+    const approvedAmount = resolvedCandidate?.approvedAmount ?? auditRow.approvedAmount;
+    const auditedRemainingAmount = resolvedCandidate?.remainingAmount ?? auditRow.remainingAmount;
     try {
       const transactionResult = await db.transaction(async (tx) => {
         const txDb = tx as unknown as typeof db;
+        let lineRemainingBalance: ReturnType<typeof money> | null = null;
         await lockDuplicatePaymentKey(txDb, {
-          clientId: client.id,
-          authorizationId: authorization.id,
-          serviceMonth: row.serviceMonth,
+          clientId: client.id, authorizationId: authorization.id, serviceMonth: row.serviceMonth,
         });
-        const [existingSourceRow] = await tx
-          .select({ id: paymentsTable.id })
+        const [existingSourceRow] = await tx.select({ id: paymentsTable.id })
           .from(paymentsTable)
-          .where(eq(paymentsTable.sourceRowFingerprint, fingerprint))
+          .where(and(eq(paymentsTable.sourceRowFingerprint, fingerprint), notDeleted(paymentsTable)))
           .limit(1);
         if (existingSourceRow) return { kind: "source_duplicate" as const };
+        const [lockedAuthorization] = await tx.select().from(authorizationsTable)
+          .where(and(
+            eq(authorizationsTable.id, authorization.id),
+            eq(authorizationsTable.clientId, client.id),
+            notDeleted(authorizationsTable),
+          ))
+          .for("update");
+        if (!lockedAuthorization) throw new Error("The authorization is no longer active; rerun the audit.");
 
-        const duplicate = await checkDuplicatePayment(txDb, {
-          clientId: client.id,
-          authorizationId: authorization.id,
-          serviceMonth: row.serviceMonth,
-        });
-        if (duplicate.isDuplicate) {
-          const existing = duplicate.existingPayments[0];
-          await audit(
-            req.user!.id,
-            "flag_duplicate_payment",
-            "payment",
-            existing.id,
-            `Alta FMS row ${row.rowNumber} held back — check ${row.checkNumber} conflicts with existing check ${existing.qbCheckNumber}.`,
-            txDb,
+        if (invoiceId) {
+          const [lockedInvoice] = await tx.select().from(invoicesTable)
+            .where(and(eq(invoicesTable.id, invoiceId), notDeleted(invoicesTable)))
+            .for("update");
+          if (!lockedInvoice || lockedInvoice.status !== "approved" ||
+              lockedInvoice.clientId !== client.id || lockedInvoice.vendorId !== vendorId) {
+            throw new Error("The selected invoice is no longer approved; rerun the audit.");
+          }
+          const [lockedLine] = await tx.select().from(invoiceLineItemsTable)
+            .where(and(
+              eq(invoiceLineItemsTable.invoiceId, invoiceId),
+              eq(invoiceLineItemsTable.authorizationId, authorization.id),
+              eq(invoiceLineItemsTable.serviceMonth, row.serviceMonth),
+            ))
+            .for("update");
+          if (!lockedLine || !money(lockedLine.amount).equals(money(approvedAmount))) {
+            throw new Error("The approved invoice line changed after audit; rerun the audit.");
+          }
+          const approvedLinesNow = await tx.select({ id: invoiceLineItemsTable.id })
+            .from(invoiceLineItemsTable)
+            .innerJoin(invoicesTable, eq(invoicesTable.id, invoiceLineItemsTable.invoiceId))
+            .where(and(
+              eq(invoicesTable.clientId, client.id),
+              eq(invoicesTable.status, "approved"),
+              notDeleted(invoicesTable),
+              eq(invoiceLineItemsTable.authorizationId, authorization.id),
+              eq(invoiceLineItemsTable.serviceMonth, row.serviceMonth),
+            ))
+            .for("update");
+          const [linkedPaid] = await tx.select({
+            total: sql<string>`coalesce(sum(${paymentAllocationsTable.amount}), 0)`,
+          }).from(paymentAllocationsTable)
+            .innerJoin(paymentsTable, eq(paymentsTable.id, paymentAllocationsTable.paymentId))
+            .where(and(
+              eq(paymentAllocationsTable.authorizationId, authorization.id),
+              eq(paymentAllocationsTable.serviceMonth, row.serviceMonth),
+              eq(paymentsTable.invoiceId, invoiceId),
+              notDeleted(paymentsTable),
+            ));
+          const [unlinkedPaid] = await tx.select({
+            total: sql<string>`coalesce(sum(${paymentAllocationsTable.amount}), 0)`,
+          }).from(paymentAllocationsTable)
+            .innerJoin(paymentsTable, eq(paymentsTable.id, paymentAllocationsTable.paymentId))
+            .where(and(
+              eq(paymentAllocationsTable.authorizationId, authorization.id),
+              eq(paymentAllocationsTable.serviceMonth, row.serviceMonth),
+              isNull(paymentsTable.invoiceId),
+              notDeleted(paymentsTable),
+            ));
+          const unlinkedTotal = money(unlinkedPaid?.total ?? 0);
+          const explicitResolution = Boolean(resolvedCandidate && auditRow.invoiceId === null);
+          if (approvedLinesNow.length > 1 && unlinkedTotal.greaterThan(0) && !explicitResolution) {
+            throw new Error("Unlinked payment allocations make this invoice line ambiguous; rerun the audit.");
+          }
+          const paidForLine = money(linkedPaid?.total ?? 0).plus(
+            approvedLinesNow.length === 1 || explicitResolution ? unlinkedTotal : money(0),
           );
-          return { kind: "business_duplicate" as const, existing };
+          const currentRemaining = money(lockedLine.amount).minus(paidForLine);
+          const safeRemaining = currentRemaining.lessThan(0) ? money(0) : currentRemaining;
+          if (auditedRemainingAmount !== null && !safeRemaining.equals(money(auditedRemainingAmount))) {
+            throw new Error("Payments allocated to this invoice line changed after audit; rerun the audit.");
+          }
+          if (money(row.amount).greaterThan(safeRemaining)) {
+            throw new Error("Check amount exceeds the selected invoice line's remaining approved capacity.");
+          }
+          lineRemainingBalance = safeRemaining;
+          const linkValidation = await validateParticipantLinks(txDb, client.id, {
+            authorizationId: authorization.id, invoiceId, vendorId,
+          });
+          if ("error" in linkValidation) throw new Error(linkValidation.error);
+          const payableError = await assertInvoicePayable(
+            txDb, invoiceId, new Map([[authorization.id, money(row.amount)]],), undefined, [authorization.id],
+          );
+          if (payableError) throw new Error(payableError);
+        } else {
+          const linkValidation = await validateParticipantLinks(txDb, client.id, { authorizationId: authorization.id });
+          if ("error" in linkValidation) throw new Error(linkValidation.error);
         }
 
-        const [inserted] = await tx.insert(paymentsTable).values({ clientId: client.id, authorizationId: null, qbCheckNumber: row.checkNumber, checkDate: row.checkDate, amount: row.amount, paymentMonth: row.serviceMonth, paymentType: row.paymentType, source: "historical_import", loggedBy: req.user!.id, sourceRowFingerprint: fingerprint } as any).onConflictDoNothing().returning();
+        const duplicate = await checkDuplicatePayment(txDb, {
+          clientId: client.id, authorizationId: authorization.id, serviceMonth: row.serviceMonth,
+        });
+        if (duplicate.isDuplicate) {
+          const duplicateCheckNumber = duplicate.existingPayments.find((existing) => existing.qbCheckNumber === row.checkNumber);
+          const hasInvoiceCapacity = Boolean(invoiceId) &&
+            lineRemainingBalance !== null &&
+            lineRemainingBalance.greaterThan(0) &&
+            !duplicateCheckNumber;
+          if (!hasInvoiceCapacity) {
+            const existing = duplicateCheckNumber ?? duplicate.existingPayments[0];
+            await audit(
+              req.user!.id, "flag_duplicate_payment", "payment", existing.id,
+              `Alta FMS row ${row.rowNumber} held back — check ${row.checkNumber} conflicts with existing check ${existing.qbCheckNumber}.`,
+              txDb,
+            );
+            return { kind: "business_duplicate" as const, existing };
+          }
+        }
+
+        const [inserted] = await tx.insert(paymentsTable).values({
+          clientId: client.id,
+          authorizationId: null,
+          vendorId,
+          invoiceId,
+          qbCheckNumber: row.checkNumber,
+          checkDate: row.checkDate,
+          amount: row.amount,
+          paymentMonth: row.serviceMonth,
+          paymentType: row.paymentType,
+          source: "historical_import",
+          loggedBy: req.user!.id,
+          sourceRowFingerprint: fingerprint,
+        }).onConflictDoNothing().returning();
         if (!inserted) return { kind: "source_duplicate" as const };
         await tx.insert(paymentAllocationsTable).values({
           paymentId: inserted.id,
@@ -970,24 +1415,37 @@ router.post("/payments/import", requirePermission("check_writing"), async (req, 
           serviceMonth: row.serviceMonth,
           amount: row.amount,
         });
-        await audit(req.user!.id, "import_alta_fms_payment", "payment", inserted.id, `Alta FMS historical import — check ${inserted.qbCheckNumber}`, tx as unknown as typeof db);
+        const paymentLinkValidation = await validateParticipantLinks(txDb, client.id, {
+          authorizationId: authorization.id,
+          invoiceId,
+          paymentId: inserted.id,
+          vendorId,
+        });
+        if ("error" in paymentLinkValidation) throw new Error(paymentLinkValidation.error);
+        if (acknowledgement) {
+          await audit(
+            req.user!.id,
+            "acknowledge_check_audit_exception",
+            "payment",
+            inserted.id,
+            `Check ${row.checkNumber}; audit result ${auditRow.result};${resolvedCandidate ? ` selected invoice ${resolvedCandidate.invoiceId};` : ""} note: ${acknowledgement.note}`,
+            txDb,
+          );
+        }
+        await audit(req.user!.id, "import_alta_fms_payment", "payment", inserted.id, `Alta FMS historical import — check ${inserted.qbCheckNumber}`, txDb);
         return { kind: "imported" as const, payment: inserted };
       });
       if (transactionResult.kind === "source_duplicate") {
-        fingerprints.add(fingerprint);
         skippedDuplicate++;
         results.push({ rowNumber: row.rowNumber, uciNumber: row.uciNumber, outcome: "skipped_duplicate", message: "This Alta FMS line was already imported (matched by source-row fingerprint)." });
       } else if (transactionResult.kind === "business_duplicate") {
         flaggedDuplicate++;
         results.push({
-          rowNumber: row.rowNumber,
-          uciNumber: row.uciNumber,
-          outcome: "flagged_duplicate",
+          rowNumber: row.rowNumber, uciNumber: row.uciNumber, outcome: "flagged_duplicate",
           paymentId: transactionResult.existing.id,
           message: `Held back: existing check ${transactionResult.existing.qbCheckNumber} already covers this participant, authorization, and service month.`,
         });
       } else {
-        fingerprints.add(fingerprint);
         imported++;
         results.push({ rowNumber: row.rowNumber, uciNumber: row.uciNumber, outcome: "imported", paymentId: transactionResult.payment.id });
       }
@@ -997,7 +1455,11 @@ router.post("/payments/import", requirePermission("check_writing"), async (req, 
     }
   }
   await audit(req.user!.id, "import_alta_fms_payments", "payment", undefined, `${imported} imported, ${skippedDuplicate} source duplicate, ${flaggedDuplicate} business duplicate, ${errored} errored`);
-  res.json(ImportAltaFmsPaymentsResponse.parse({ imported, skippedDuplicate, flaggedDuplicate, errored, ignoredNonCheckRows: source.ignoredNonCheckRows, headerError: null, parseProblems: source.problems, results }));
+  res.json(ImportAltaFmsPaymentsResponse.parse({
+    imported, skippedDuplicate, flaggedDuplicate, errored,
+    ignoredNonCheckRows: source.ignoredNonCheckRows,
+    headerError: null, parseProblems: source.problems, results,
+  }));
 });
 
 router.get("/payments/:id", requireAuth, async (req, res): Promise<void> => {

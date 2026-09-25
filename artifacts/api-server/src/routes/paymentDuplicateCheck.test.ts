@@ -643,6 +643,7 @@ describe("POST /payments/import duplicate flagging", () => {
             `Synthetic, Participant ${uciNumber} (1)`,
           ],
         ],
+        acknowledgements: [{ rowNumber: 2, note: "Existing duplicate test fixture has no invoice." }],
       });
     expect(res.status).toBe(200);
     const row = res.body.results[0];
@@ -684,6 +685,7 @@ describe("POST /payments/import duplicate flagging", () => {
             `Synthetic, Participant ${uciNumber} (1)`,
           ],
         ],
+        acknowledgements: [{ rowNumber: 2, note: "Existing import test fixture has no invoice." }],
       });
     expect(res.status).toBe(200);
     expect(res.body.results[0].outcome).toBe("imported");

@@ -20,6 +20,7 @@ import type {
 } from '@tanstack/react-query';
 
 import type {
+  AltaFmsPaymentAuditResult,
   AltaFmsPaymentImportInput,
   AltaFmsPaymentImportResult,
   AltaRemittanceImportInput,
@@ -60,6 +61,7 @@ import type {
   GetPendingAuthReportParams,
   GetVendorPaymentReportParams,
   HealthStatus,
+  ImportAltaFmsPayments409,
   ImportCommitInput,
   ImportCommitResult,
   ImportValidateInput,
@@ -5637,7 +5639,7 @@ export const importAltaFmsPayments = async (altaFmsPaymentImportInput: AltaFmsPa
 
 
 
-export const getImportAltaFmsPaymentsMutationOptions = <TError = ErrorType<unknown>,
+export const getImportAltaFmsPaymentsMutationOptions = <TError = ErrorType<ImportAltaFmsPayments409>,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof importAltaFmsPayments>>, TError,{data: BodyType<AltaFmsPaymentImportInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
 ): UseMutationOptions<Awaited<ReturnType<typeof importAltaFmsPayments>>, TError,{data: BodyType<AltaFmsPaymentImportInput>}, TContext> => {
 
@@ -5666,12 +5668,12 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
 
     export type ImportAltaFmsPaymentsMutationResult = NonNullable<Awaited<ReturnType<typeof importAltaFmsPayments>>>
     export type ImportAltaFmsPaymentsMutationBody = BodyType<AltaFmsPaymentImportInput>
-    export type ImportAltaFmsPaymentsMutationError = ErrorType<unknown>
+    export type ImportAltaFmsPaymentsMutationError = ErrorType<ImportAltaFmsPayments409>
 
     /**
  * @summary Import raw Alta FMS payment worksheet rows server-side
  */
-export const useImportAltaFmsPayments = <TError = ErrorType<unknown>,
+export const useImportAltaFmsPayments = <TError = ErrorType<ImportAltaFmsPayments409>,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof importAltaFmsPayments>>, TError,{data: BodyType<AltaFmsPaymentImportInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
  ): UseMutationResult<
         Awaited<ReturnType<typeof importAltaFmsPayments>>,
@@ -5680,6 +5682,77 @@ export const useImportAltaFmsPayments = <TError = ErrorType<unknown>,
         TContext
       > => {
       return useMutation(getImportAltaFmsPaymentsMutationOptions(options));
+    }
+
+export const getAuditAltaFmsPaymentsUrl = () => {
+
+
+
+
+  return `/api/payments/import/audit`
+}
+
+/**
+ * @summary Audit an Alta FMS payment worksheet without writing data
+ */
+export const auditAltaFmsPayments = async (altaFmsPaymentImportInput: AltaFmsPaymentImportInput, options?: Parameters<typeof customFetch>[1]): Promise<AltaFmsPaymentAuditResult> => {
+
+  return customFetch<AltaFmsPaymentAuditResult>(getAuditAltaFmsPaymentsUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(altaFmsPaymentImportInput)
+  }
+);}
+
+
+
+
+
+export const getAuditAltaFmsPaymentsMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof auditAltaFmsPayments>>, TError,{data: BodyType<AltaFmsPaymentImportInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof auditAltaFmsPayments>>, TError,{data: BodyType<AltaFmsPaymentImportInput>}, TContext> => {
+
+const mutationKey = ['auditAltaFmsPayments'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof auditAltaFmsPayments>>, {data: BodyType<AltaFmsPaymentImportInput>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  auditAltaFmsPayments(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type AuditAltaFmsPaymentsMutationResult = NonNullable<Awaited<ReturnType<typeof auditAltaFmsPayments>>>
+    export type AuditAltaFmsPaymentsMutationBody = BodyType<AltaFmsPaymentImportInput>
+    export type AuditAltaFmsPaymentsMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Audit an Alta FMS payment worksheet without writing data
+ */
+export const useAuditAltaFmsPayments = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof auditAltaFmsPayments>>, TError,{data: BodyType<AltaFmsPaymentImportInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof auditAltaFmsPayments>>,
+        TError,
+        {data: BodyType<AltaFmsPaymentImportInput>},
+        TContext
+      > => {
+      return useMutation(getAuditAltaFmsPaymentsMutationOptions(options));
     }
 
 export const getGetImportTemplateUrl = (entity: 'clients' | 'vendors' | 'authorizations' | 'remittances',) => {

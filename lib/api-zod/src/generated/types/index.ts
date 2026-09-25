@@ -6,7 +6,13 @@
  * OpenAPI spec version: 0.1.0
  */
 
+export * from './altaFmsPaymentAuditCandidate';
+export * from './altaFmsPaymentAuditResult';
+export * from './altaFmsPaymentAuditResultSummary';
+export * from './altaFmsPaymentAuditRow';
+export * from './altaFmsPaymentAuditRowResult';
 export * from './altaFmsPaymentImportInput';
+export * from './altaFmsPaymentImportInputAcknowledgementsItem';
 export * from './altaFmsPaymentImportResult';
 export * from './altaFmsPaymentImportRowResult';
 export * from './altaFmsPaymentImportRowResultOutcome';
@@ -92,6 +98,7 @@ export * from './getPendingAuthReportSortDirection';
 export * from './getVendorPaymentReportAllTime';
 export * from './getVendorPaymentReportParams';
 export * from './healthStatus';
+export * from './importAltaFmsPayments409';
 export * from './importCommitInput';
 export * from './importCommitResult';
 export * from './importCommitResultEntity';

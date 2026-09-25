@@ -18,7 +18,7 @@
 - [Family representative workflow boundary](family-representative-boundary.md) — account links are invite-managed, intake links are send-managed, and legacy signature links retain an explicit fallback.
 - [Literal wildcard search](literal-wildcard-search.md) — normalize enum separators before ILIKE and avoid raw JSON text, or escaped "_" searches still match stored keys/values.
 - [POS review lifecycle](unmatched-pos-lifecycle.md) — UCI-first matching; retain reviewed rows and filter counts/matching to pending records.
-- [Invoice and payment child rows](invoice-payment-child-rows.md) — financial truth lives in invoice line items and payment allocations; validation and remittance capacity must honor every child.
+- [Invoice and payment child rows](invoice-payment-child-rows.md) — use child rows for financial truth; check audits need payee-first invoice resolution and in-file reservations.
 - [POS amendment invariants](pos-amendment-invariants.md) — exact pair checks must match DB uniqueness; amendments snapshot once, preserve status, and never reuse stale PDF uploads.
 - [Check-run reconciliation](check-run-reconciliation.md) — consume exact vendor-and-amount matches before pairing same-vendor amount mismatches; unknown vendors never match.
 - [Publish and PostgreSQL extensions](publish-postgres-extensions.md) — verify generated Publish SQL; extension-backed indexes may be diffed without the required extension DDL.

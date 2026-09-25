@@ -68,6 +68,16 @@ export const roleDocs: RoleDoc[] = [
         ],
       },
       {
+        name: 'Alta FMS payment import',
+        summary: 'Audit QuickBooks checks against approved invoices before recording payments.',
+        steps: [
+          { title: 'Choose a workbook', description: 'From Payments, select Import Alta FMS Payments and upload the Transaction Detail by Account .xlsx file. No payments are saved during this audit.' },
+          { title: 'Review the audit', description: 'Compare each check’s payee and amount with the approved vendor, approved amount, and remaining unpaid amount. Open linked invoices and review who approved them. Green rows match; flagged rows explain the discrepancy. Download the audit CSV for your records.' },
+          { title: 'Resolve exceptions', description: 'Correct the source workbook and re-upload, or enter an individual acknowledgment note for each actionable exception. When several approved invoices could apply, open them and deliberately choose one as well. Unknown participants, unknown authorizations, and already imported rows cannot be acknowledged and are skipped.' },
+          { title: 'Import reviewed checks', description: 'Import is available only after every actionable flag has a note. Review the post-import results and download the correction or full audit CSV as needed. Check-Run Reconciliation remains a separate workflow.' },
+        ],
+      },
+      {
         name: 'Remittance reconciliation',
         summary: 'Match Remittance Reports against the CEPS check register.',
         steps: [

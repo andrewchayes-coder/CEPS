@@ -2039,9 +2039,103 @@ export interface DuplicatePaymentError {
   existingPayments: Payment[];
 }
 
+export type AltaFmsPaymentImportInputAcknowledgementsItem = {
+  /** @minimum 2 */
+  rowNumber: number;
+  /** @minLength 1 */
+  note: string;
+  /** Required to resolve an ambiguous row; must identify one of that row's approved invoice candidates. */
+  invoiceId?: string;
+};
+
 export interface AltaFmsPaymentImportInput {
   /** Raw rows from the one-sheet Alta FMS payments workbook. */
   worksheetRows: string[][];
+  /** Required notes acknowledging actionable audit exceptions before import. */
+  acknowledgements?: AltaFmsPaymentImportInputAcknowledgementsItem[];
+}
+
+export type AltaFmsPaymentAuditResultSummary = {
+  match: number;
+  payee_mismatch: number;
+  amount_mismatch: number;
+  no_approved_invoice: number;
+  already_paid: number;
+  unknown_client: number;
+  unknown_authorization: number;
+  duplicate_row: number;
+};
+
+export type AltaFmsPaymentAuditRowResult = typeof AltaFmsPaymentAuditRowResult[keyof typeof AltaFmsPaymentAuditRowResult];
+
+
+export const AltaFmsPaymentAuditRowResult = {
+  match: 'match',
+  payee_mismatch: 'payee_mismatch',
+  amount_mismatch: 'amount_mismatch',
+  no_approved_invoice: 'no_approved_invoice',
+  already_paid: 'already_paid',
+  unknown_client: 'unknown_client',
+  unknown_authorization: 'unknown_authorization',
+  duplicate_row: 'duplicate_row',
+} as const;
+
+export interface AltaFmsPaymentAuditCandidate {
+  invoiceId: string;
+  /** @nullable */
+  vendorName: string | null;
+  /** @nullable */
+  vendorId: string | null;
+  approvedAmount: string;
+  /**
+     * Null when unlinked historical allocations make invoice-specific remaining balance uncertain.
+     * @nullable
+     */
+  remainingAmount: string | null;
+  /** @nullable */
+  reviewedBy: string | null;
+  /** @nullable */
+  reviewedAt: string | null;
+}
+
+export interface AltaFmsPaymentAuditRow {
+  rowNumber: number;
+  checkNumber: string;
+  checkDate: string;
+  uciNumber: string;
+  /** @nullable */
+  participantName: string | null;
+  payeeName: string;
+  checkAmount: string;
+  authNumber: string;
+  serviceMonth: string;
+  result: AltaFmsPaymentAuditRowResult;
+  reason: string;
+  /** @nullable */
+  invoiceId: string | null;
+  /** @nullable */
+  invoiceVendor: string | null;
+  /** @nullable */
+  invoiceVendorId: string | null;
+  /** @nullable */
+  approvedAmount: string | null;
+  /** @nullable */
+  remainingAmount: string | null;
+  /** @nullable */
+  reviewedBy: string | null;
+  /** @nullable */
+  reviewedAt: string | null;
+  /** Approved, nondeleted invoice candidates offered only when the audit cannot safely choose one. */
+  candidates?: AltaFmsPaymentAuditCandidate[];
+}
+
+export interface AltaFmsPaymentAuditResult {
+  summary: AltaFmsPaymentAuditResultSummary;
+  rows: AltaFmsPaymentAuditRow[];
+  parseProblems: string[];
+  /** @nullable */
+  headerError: string | null;
+  ignoredNonCheckRows: number;
 }
 
 export type AltaFmsPaymentImportRowResultOutcome = typeof AltaFmsPaymentImportRowResultOutcome[keyof typeof AltaFmsPaymentImportRowResultOutcome];
@@ -2440,6 +2534,8 @@ export interface Vendor {
   id: string;
   name: string;
   /** @nullable */
+  qbPayeeName: string | null;
+  /** @nullable */
   altaVendorNumber?: string | null;
   /** @nullable */
   ein?: string | null;
@@ -2473,6 +2569,11 @@ export const VendorInputW9Status = {
 
 export interface VendorInput {
   name: string;
+  /**
+     * QuickBooks payee name when different from the vendor's legal name
+     * @nullable
+     */
+  qbPayeeName?: string | null;
   altaVendorNumber?: string;
   ein?: string;
   billingAddress?: string;
@@ -2495,6 +2596,11 @@ export const VendorUpdateW9Status = {
 
 export interface VendorUpdate {
   name?: string;
+  /**
+     * QuickBooks payee name when different from the vendor's legal name
+     * @nullable
+     */
+  qbPayeeName?: string | null;
   altaVendorNumber?: string;
   ein?: string;
   billingAddress?: string;
@@ -2515,6 +2621,11 @@ export interface VendorW9Input {
 
 export interface VendorContactInput {
   email?: string;
+  /**
+     * QuickBooks payee name when different from the vendor's legal name
+     * @nullable
+     */
+  qbPayeeName?: string | null;
   phone?: string;
   contactPerson?: string;
   billingAddress?: string;
@@ -2959,6 +3070,12 @@ export type ListPayments200 = {
 
 export type AuditMonthlyFeesParams = {
 clientId?: string;
+};
+
+export type ImportAltaFmsPayments409 = {
+  error: string;
+  audit: AltaFmsPaymentAuditResult;
+  unacknowledgedRows: number[];
 };
 
 export type ListFeesParams = {

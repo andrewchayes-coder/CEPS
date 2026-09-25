@@ -8,6 +8,11 @@
 
 export interface VendorContactInput {
   email?: string;
+  /**
+     * QuickBooks payee name when different from the vendor's legal name
+     * @nullable
+     */
+  qbPayeeName?: string | null;
   phone?: string;
   contactPerson?: string;
   billingAddress?: string;

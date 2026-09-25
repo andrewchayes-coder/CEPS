@@ -9,6 +9,11 @@ import type { VendorInputW9Status } from './vendorInputW9Status';
 
 export interface VendorInput {
   name: string;
+  /**
+     * QuickBooks payee name when different from the vendor's legal name
+     * @nullable
+     */
+  qbPayeeName?: string | null;
   altaVendorNumber?: string;
   ein?: string;
   billingAddress?: string;

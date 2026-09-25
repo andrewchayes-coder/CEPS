@@ -2,7 +2,7 @@ import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { inArray, eq, and } from "drizzle-orm";
 import {
   db, usersTable, sessionsTable, clientsTable, paymentsTable, feesTable, auditLogTable,
-  authorizationsTable, paymentAllocationsTable, invoicesTable, invoiceLineItemsTable, vendorsTable, remittancesTable, staffPermissionsTable,
+  authorizationsTable, paymentAllocationsTable, invoicesTable, invoiceLineItemsTable, vendorsTable, remittancesTable, staffRolesTable, staffRolePermissionsTable,
 } from "@workspace/db";
 import request from "supertest";
 import app from "../app";
@@ -18,6 +18,7 @@ let otherClientId: string;
 let authId: string;
 let otherAuthId: string;
 let cookie: string;
+let staffRoleId: string;
 let checkCounter = 0;
 
 beforeAll(async () => {
@@ -26,7 +27,13 @@ beforeAll(async () => {
     .values({ name: "Pay Staff", email: `${nonce}-staff@test.local`, role: "staff" })
     .returning();
   staffId = staff.id;
-  await db.insert(staffPermissionsTable).values({ userId: staffId, permission: "check_writing" });
+  const [role] = await db.insert(staffRolesTable).values({ name: `${nonce} check writer` }).returning();
+  staffRoleId = role.id;
+  await db.insert(staffRolePermissionsTable).values([
+    { roleId: staffRoleId, permission: "check_writing" },
+    { roleId: staffRoleId, permission: "remittance_entry" },
+  ]);
+  await db.update(usersTable).set({ staffRoleId }).where(eq(usersTable.id, staffId));
 
   const [client] = await db
     .insert(clientsTable)
@@ -64,11 +71,11 @@ afterAll(async () => {
   await db.delete(invoicesTable).where(inArray(invoicesTable.clientId, [clientId, otherClientId]));
   await db.delete(authorizationsTable).where(inArray(authorizationsTable.clientId, [clientId, otherClientId]));
   await db.delete(auditLogTable).where(eq(auditLogTable.userId, staffId));
-  await db.delete(staffPermissionsTable).where(eq(staffPermissionsTable.userId, staffId));
   await db.delete(sessionsTable).where(eq(sessionsTable.userId, staffId));
   await db.delete(clientsTable).where(inArray(clientsTable.id, [clientId, otherClientId]));
   await db.delete(vendorsTable).where(inArray(vendorsTable.name, [`${nonce}-valid-vendor`, `${nonce}-other-vendor`, `${nonce}-other-vendor-2`, `${nonce}-reconcile-vendor`]));
   await db.delete(usersTable).where(inArray(usersTable.id, [staffId]));
+  await db.delete(staffRolesTable).where(eq(staffRolesTable.id, staffRoleId));
 });
 
 async function createPayment(amount: string, checkDate = "2026-01-15", paymentType = "direct_payment", ownerId = clientId) {

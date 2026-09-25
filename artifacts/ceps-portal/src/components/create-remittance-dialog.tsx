@@ -9,6 +9,7 @@ import { Plus } from 'lucide-react';
 import { trackAnalyticsEvent } from '@/lib/analytics';
 import { SearchableSelect } from '@/components/searchable-select';
 import { useDebounce } from '@/hooks/use-debounce';
+import { useAuth } from '@/components/auth/auth-provider';
 
 const emptyForm = { clientId: '', authorizationId: '', altaReference: '', remittanceDate: '', amount: '', paymentMonth: '' };
 
@@ -17,6 +18,8 @@ export function CreateRemittanceDialog({ onSaved, preselectedClientId }: { onSav
   const initialForm = () => ({ ...emptyForm, clientId: preselectedClientId ?? '' });
   const [form, setForm] = useState(initialForm);
   const { toast } = useToast();
+  const { user } = useAuth();
+  const canEnterRemittances = user?.role === 'staff' && (user.permissions ?? []).includes('remittance_entry');
   const createRemittance = useCreateRemittance();
 
   const [clientSearch, setClientSearch] = useState('');
@@ -43,6 +46,7 @@ export function CreateRemittanceDialog({ onSaved, preselectedClientId }: { onSav
   };
 
   const submit = () => {
+    if (!canEnterRemittances) return;
     if (!form.clientId || !form.authorizationId || !form.altaReference.trim() || !form.remittanceDate || !form.amount || !form.paymentMonth) {
       toast({ variant: 'destructive', title: 'Required fields missing', description: 'Participant, authorization, reference, date, amount, and service month are required.' });
       return;
@@ -66,6 +70,8 @@ export function CreateRemittanceDialog({ onSaved, preselectedClientId }: { onSav
       onError: (error: unknown) => toast({ variant: 'destructive', title: 'Could not create remittance', description: (error as { data?: { error?: string } })?.data?.error ?? 'Please review the remittance details and try again.' }),
     });
   };
+
+  if (!canEnterRemittances) return null;
 
   return <Dialog open={open} onOpenChange={(next) => { setOpen(next); reset(); }}>
     <DialogTrigger asChild><Button data-testid="button-create-remittance"><Plus className="mr-2 h-4 w-4" /> Create Remittance</Button></DialogTrigger>

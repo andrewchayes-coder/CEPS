@@ -7,6 +7,7 @@ import { useToast } from '@/hooks/use-toast';
 import { Link2 } from 'lucide-react';
 import { format } from 'date-fns';
 import { trackAnalyticsEvent } from '@/lib/analytics';
+import { useAuth } from '@/components/auth/auth-provider';
 
 export function MatchRemittanceDialog({ remittance, onSaved }: { remittance: Remittance; onSaved?: () => void }) {
   const [open, setOpen] = useState(false);
@@ -14,6 +15,8 @@ export function MatchRemittanceDialog({ remittance, onSaved }: { remittance: Rem
   const [paymentId, setPaymentId] = useState('');
   const [amount, setAmount] = useState(remittance.remainingAmount);
   const { toast } = useToast();
+  const { user } = useAuth();
+  const canEnterRemittances = user?.role === 'staff' && (user.permissions ?? []).includes('remittance_entry');
   const match = useMatchRemittance();
   const { data, isLoading } = useListPayments({
     clientId: remittance.clientId, remitted: false, limit: 100,
@@ -25,6 +28,7 @@ export function MatchRemittanceDialog({ remittance, onSaved }: { remittance: Rem
   const selected = eligiblePayments.find((payment) => payment.id === paymentId);
   const close = () => { setOpen(false); setPaymentId(''); setSearch(''); setAmount(remittance.remainingAmount); };
   const submit = () => {
+    if (!canEnterRemittances) return;
     if (!paymentId) { toast({ variant: 'destructive', title: 'Payment required', description: 'Select an eligible payment before matching.' }); return; }
     if (!amount || Number(amount) <= 0) { toast({ variant: 'destructive', title: 'Allocation required', description: 'Enter an amount greater than zero.' }); return; }
     match.mutate({ id: remittance.id, data: { paymentId, amount } }, {
@@ -37,6 +41,7 @@ export function MatchRemittanceDialog({ remittance, onSaved }: { remittance: Rem
       onError: (error: unknown) => toast({ variant: 'destructive', title: 'Could not match payment', description: (error as { data?: { error?: string } })?.data?.error ?? 'The payment may already be remitted. Refresh and try again.' }),
     });
   };
+  if (!canEnterRemittances) return null;
   return <Dialog open={open} onOpenChange={(next) => next ? setOpen(true) : close()}>
     <DialogTrigger asChild><Button variant="outline" size="sm" data-testid={`button-match-remittance-${remittance.id}`}><Link2 className="mr-1 h-4 w-4" /> Allocate</Button></DialogTrigger>
     <DialogContent className="max-w-2xl"><DialogHeader><DialogTitle>Allocate Remittance</DialogTitle><DialogDescription>Allocate some or all of the ${Number(remittance.remainingAmount).toFixed(2)} remaining remittance balance.</DialogDescription></DialogHeader>

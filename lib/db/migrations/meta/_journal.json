@@ -232,6 +232,13 @@
       "when": 1790294521572,
       "tag": "0032_cold_earthquake",
       "breakpoints": true
+    },
+    {
+      "idx": 33,
+      "version": "7",
+      "when": 1790364764036,
+      "tag": "0033_large_thor",
+      "breakpoints": true
     }
   ]
 }

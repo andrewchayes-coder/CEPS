@@ -15,5 +15,7 @@ export interface UserUpdate {
   role?: UserUpdateRole;
   active?: boolean;
   password?: string;
+  staffRoleId?: string;
+  /** Deprecated and ignored; retained temporarily for old clients. */
   permissions?: UserUpdatePermissionsItem[];
 }

@@ -2,7 +2,7 @@ import { BrandLogo } from '@/components/brand-logo';
 import React from 'react';
 import { useAuth } from '@/components/auth/auth-provider';
 import { Link, useLocation } from 'wouter';
-import { useLogout } from '@workspace/api-client-react';
+import { useLogout, type SessionUser } from '@workspace/api-client-react';
 import {
   LayoutDashboard,
   Users,
@@ -30,6 +30,7 @@ interface NavItem {
   href: string;
   icon: React.ElementType;
   roles: string[];
+  permission?: NonNullable<SessionUser['permissions']>[number];
 }
 
 const navItems: NavItem[] = [
@@ -45,7 +46,8 @@ const navItems: NavItem[] = [
   { title: 'Reports', href: '/reports', icon: PieChart, roles: ['staff', 'service_coordinator', 'vendor'] },
   { title: 'Bulk Import', href: '/admin/import', icon: Upload, roles: ['staff'] },
   { title: 'Fee Cleanup', href: '/admin/monthly-fees', icon: Wrench, roles: ['staff'] },
-  { title: 'Users', href: '/admin/users', icon: Settings, roles: ['staff'] },
+  { title: 'Users', href: '/admin/users', icon: Settings, roles: ['staff'], permission: 'manage_users' },
+  { title: 'Roles', href: '/admin/roles', icon: UserCog, roles: ['staff'], permission: 'manage_users' },
   { title: 'Audit Log', href: '/audit-log', icon: ScrollText, roles: ['staff'] },
   { title: 'Help & Docs', href: '/help', icon: BookOpen, roles: ['staff', 'service_coordinator', 'vendor', 'parent_guardian', 'self'] },
 ];
@@ -64,7 +66,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   };
 
   const filteredNavItems = navItems.filter(item =>
-    user && item.roles.includes(user.role)
+    user && item.roles.includes(user.role) && (!item.permission || (user.permissions ?? []).includes(item.permission))
   );
 
   // Parents/guardians and self-advocates are linked to a single client record;
@@ -115,7 +117,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         <div className="p-4 border-t shrink-0">
           <div className="mb-3">
             <p className="text-sm font-medium text-foreground truncate">{user?.name}</p>
-            <p className="text-xs text-muted-foreground truncate capitalize">{user?.role === 'staff' ? 'admin' : user?.role.replace('_', ' ')}</p>
+            <p className="text-xs text-muted-foreground truncate">{user?.role === 'staff' ? (user.staffRole?.name ?? 'Unassigned staff role') : user?.role.replace('_', ' ')}</p>
           </div>
           <div className="flex flex-col gap-1">
             <Link

@@ -14,3 +14,4 @@ export * from "./fees";
 export * from "./audit";
 export * from "./unmatchedPosDocuments";
 export * from "./staffPermissions";
+export * from "./staffRoles";

@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { and, inArray, eq } from "drizzle-orm";
-import { db, usersTable, sessionsTable, clientsTable, invoicesTable, invoiceLineItemsTable, authorizationsTable, paymentsTable, paymentAllocationsTable, auditLogTable, vendorsTable, referralsTable, staffPermissionsTable, STAFF_PERMISSIONS } from "@workspace/db";
+import { db, usersTable, sessionsTable, clientsTable, invoicesTable, invoiceLineItemsTable, authorizationsTable, paymentsTable, paymentAllocationsTable, auditLogTable, vendorsTable, referralsTable, staffRolesTable, staffRolePermissionsTable, STAFF_PERMISSIONS } from "@workspace/db";
 import request from "supertest";
 import app from "../app";
 import { newToken } from "../lib/auth";
@@ -15,6 +15,7 @@ let coordinatorId: string;
 let cookie: string;
 let otherCookie: string;
 let coordinatorCookie: string;
+const staffRoleIds: string[] = [];
 
 beforeAll(async () => {
   const [staff] = await db
@@ -27,7 +28,12 @@ beforeAll(async () => {
     .values({ name: "Other Inv Staff", email: `${nonce}-other-staff@test.local`, role: "staff" })
     .returning();
   otherStaffId = otherStaff.id;
-  await db.insert(staffPermissionsTable).values([staffId, otherStaffId].flatMap((userId) => STAFF_PERMISSIONS.map((permission) => ({ userId, permission }))));
+  for (const [userId, suffix] of [[staffId, "staff"], [otherStaffId, "other-staff"]] as const) {
+    const [staffRole] = await db.insert(staffRolesTable).values({ name: `${nonce} ${suffix}` }).returning();
+    staffRoleIds.push(staffRole.id);
+    await db.insert(staffRolePermissionsTable).values(STAFF_PERMISSIONS.map((permission) => ({ roleId: staffRole.id, permission })));
+    await db.update(usersTable).set({ staffRoleId: staffRole.id }).where(eq(usersTable.id, userId));
+  }
 
   const [client] = await db
     .insert(clientsTable)
@@ -80,6 +86,7 @@ afterAll(async () => {
   await db.delete(clientsTable).where(eq(clientsTable.id, clientId));
   await db.delete(clientsTable).where(eq(clientsTable.id, otherClientId));
   await db.delete(usersTable).where(inArray(usersTable.id, [staffId, otherStaffId, coordinatorId]));
+  if (staffRoleIds.length) await db.delete(staffRolesTable).where(inArray(staffRolesTable.id, staffRoleIds));
 });
 
 async function makeVendor(active: boolean) {

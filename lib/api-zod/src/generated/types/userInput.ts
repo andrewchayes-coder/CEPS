@@ -18,5 +18,7 @@ export interface UserInput {
   password?: string;
   linkedRecordId?: string;
   linkedRecordType?: UserInputLinkedRecordType;
+  staffRoleId?: string;
+  /** Deprecated and ignored; retained temporarily for old clients. */
   permissions?: UserInputPermissionsItem[];
 }

@@ -1998,7 +1998,7 @@ router.get("/remittances", requireAuth, async (req, res): Promise<void> => {
   res.json(ListRemittancesResponse.parse({ items: await enrichRemittances(rows), total }));
 });
 
-router.post("/remittances", requirePermission("check_writing"), async (req, res): Promise<void> => {
+router.post("/remittances", requirePermission("remittance_entry"), async (req, res): Promise<void> => {
   const parsed = CreateRemittanceBody.safeParse(req.body);
   if (!parsed.success) {
     res.status(400).json({ error: parsed.error.message });
@@ -2104,7 +2104,7 @@ router.post("/remittances", requirePermission("check_writing"), async (req, res)
   res.status(201).json(CreateRemittanceResponse.parse((await enrichRemittances([remittance]))[0]));
 });
 
-router.post("/remittances/:id/match", requirePermission("check_writing"), async (req, res): Promise<void> => {
+router.post("/remittances/:id/match", requirePermission("remittance_entry"), async (req, res): Promise<void> => {
   const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
   const parsed = MatchRemittanceBody.safeParse(req.body);
   if (!parsed.success) {
@@ -2219,7 +2219,7 @@ router.post("/remittances/:id/match", requirePermission("check_writing"), async 
 // guessed. After insert, each row runs the SAME auto-match logic as manual
 // entry (findMatchingPayment) so imported remittances match Payments like
 // manual ones. CSV parsing is isolated in src/lib/altaRemittanceParser.ts.
-router.post("/remittances/import", requirePermission("check_writing"), async (req, res): Promise<void> => {
+router.post("/remittances/import", requirePermission("remittance_entry"), async (req, res): Promise<void> => {
   const parsed = ImportAltaRemittancesBody.safeParse(req.body);
   if (!parsed.success) {
     res.status(400).json({ error: parsed.error.message });
@@ -2498,7 +2498,7 @@ router.get("/remittances/:id", requireAuth, async (req, res): Promise<void> => {
   res.json(GetRemittanceResponse.parse((await enrichRemittances([remittance]))[0]));
 });
 
-router.patch("/remittances/:id", requirePermission("check_writing"), async (req, res): Promise<void> => {
+router.patch("/remittances/:id", requirePermission("remittance_entry"), async (req, res): Promise<void> => {
   const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
   const parsed = UpdateRemittanceBody.safeParse(req.body);
   if (!parsed.success) {
@@ -2549,7 +2549,7 @@ router.patch("/remittances/:id", requirePermission("check_writing"), async (req,
   res.json(UpdateRemittanceResponse.parse((await enrichRemittances([remittance]))[0]));
 });
 
-router.delete("/remittances/:id", requirePermission("check_writing"), async (req, res): Promise<void> => {
+router.delete("/remittances/:id", requirePermission("remittance_entry"), async (req, res): Promise<void> => {
   const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
   const remittance = await db.transaction(async (tx) => {
     await tx.execute(sql`select id from remittances where id = ${id} for update`);

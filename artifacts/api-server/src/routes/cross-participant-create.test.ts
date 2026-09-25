@@ -3,13 +3,14 @@ import { and, eq, inArray } from "drizzle-orm";
 import request from "supertest";
 import {
   auditLogTable, authorizationsTable, clientsTable, db, feesTable, invoicesTable,
-  paymentsTable, paymentAllocationsTable, invoiceLineItemsTable, remittanceAllocationsTable, remittancesTable, sessionsTable, usersTable, vendorsTable, staffPermissionsTable,
+  paymentsTable, paymentAllocationsTable, invoiceLineItemsTable, remittanceAllocationsTable, remittancesTable, sessionsTable, usersTable, vendorsTable, staffRolesTable, staffRolePermissionsTable,
 } from "@workspace/db";
 import app from "../app";
 import { newToken } from "../lib/auth";
 
 const nonce = `links${Date.now().toString(36)}`;
 let staffId: string, clientA: string, clientB: string, deletedClientId: string, authA: string, authB: string, vendorA: string, vendorB: string, invoiceA: string, invoiceB: string, cookie: string;
+let staffRoleId: string;
 let check = 0;
 const paymentBody = (extra: Record<string, unknown> = {}) => ({
   clientId: clientA, qbCheckNumber: `${nonce}-check-${check++}`, checkDate: "2026-03-15",
@@ -20,7 +21,13 @@ const paymentBody = (extra: Record<string, unknown> = {}) => ({
 beforeAll(async () => {
   const [staff] = await db.insert(usersTable).values({ name: "Link Staff", email: `${nonce}@test.local`, role: "staff" }).returning();
   staffId = staff.id;
-  await db.insert(staffPermissionsTable).values({ userId: staffId, permission: "check_writing" });
+  const [role] = await db.insert(staffRolesTable).values({ name: `${nonce} check writer` }).returning();
+  staffRoleId = role.id;
+  await db.insert(staffRolePermissionsTable).values([
+    { roleId: staffRoleId, permission: "check_writing" },
+    { roleId: staffRoleId, permission: "remittance_entry" },
+  ]);
+  await db.update(usersTable).set({ staffRoleId }).where(eq(usersTable.id, staffId));
   const clients = await db.insert(clientsTable).values([
     { firstName: "Link", lastName: "A", dateOfBirth: "2000-01-01", uciNumber: `${nonce}-a` },
     { firstName: "Link", lastName: "B", dateOfBirth: "2000-01-01", uciNumber: `${nonce}-b` },
@@ -60,8 +67,8 @@ afterAll(async () => {
   await db.delete(sessionsTable).where(eq(sessionsTable.userId, staffId));
   await db.delete(clientsTable).where(inArray(clientsTable.id, [clientA, clientB, deletedClientId].filter(Boolean)));
   await db.delete(vendorsTable).where(inArray(vendorsTable.id, [vendorA, vendorB]));
-  await db.delete(staffPermissionsTable).where(eq(staffPermissionsTable.userId, staffId));
   await db.delete(usersTable).where(eq(usersTable.id, staffId));
+  await db.delete(staffRolesTable).where(eq(staffRolesTable.id, staffRoleId));
 });
 
 describe("cross-participant create validation", () => {

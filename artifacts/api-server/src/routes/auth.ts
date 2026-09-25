@@ -22,6 +22,7 @@ import {
   appBaseUrl,
   audit,
   getUserPermissions,
+  getUserStaffRole,
 } from "../lib/auth";
 
 const router: IRouter = Router();
@@ -40,7 +41,11 @@ router.post("/auth/login", async (req, res): Promise<void> => {
   }
   await createSession(res, user.id);
   await db.update(usersTable).set({ lastLogin: new Date() }).where(eq(usersTable.id, user.id));
-  res.json(LoginResponse.parse(sessionUserJson(user, await getUserPermissions(user.id))));
+  res.json(LoginResponse.parse(sessionUserJson(
+    user,
+    await getUserPermissions(user.id, db, req),
+    await getUserStaffRole(user, db, req),
+  )));
 });
 
 router.post("/auth/logout", async (req, res): Promise<void> => {
@@ -54,7 +59,11 @@ router.get("/auth/me", async (req, res): Promise<void> => {
     res.status(401).json({ error: "Not authenticated" });
     return;
   }
-  res.json(GetCurrentUserResponse.parse(sessionUserJson(user, await getUserPermissions(user.id))));
+  res.json(GetCurrentUserResponse.parse(sessionUserJson(
+    user,
+    await getUserPermissions(user.id, db, req),
+    await getUserStaffRole(user, db, req),
+  )));
 });
 
 router.patch("/auth/me", async (req, res): Promise<void> => {
@@ -106,7 +115,11 @@ router.patch("/auth/me", async (req, res): Promise<void> => {
 
   await audit(user.id, "update_self", "user", user.id, JSON.stringify(Object.keys(updates)));
 
-  res.json(UpdateMeResponse.parse(sessionUserJson(updated)));
+  res.json(UpdateMeResponse.parse(sessionUserJson(
+    updated,
+    await getUserPermissions(updated.id, db, req),
+    await getUserStaffRole(updated, db, req),
+  )));
 });
 
 router.post("/auth/magic-link/request", async (req, res): Promise<void> => {
@@ -163,7 +176,11 @@ router.post("/auth/magic-link/consume", async (req, res): Promise<void> => {
   await createSession(res, user.id);
   await db.update(usersTable).set({ lastLogin: new Date() }).where(eq(usersTable.id, user.id));
   await audit(user.id, "magic_link_login", "user", user.id);
-  res.json(ConsumeMagicLinkResponse.parse(sessionUserJson(user)));
+  res.json(ConsumeMagicLinkResponse.parse(sessionUserJson(
+    user,
+    await getUserPermissions(user.id, db, req),
+    await getUserStaffRole(user, db, req),
+  )));
 });
 
 export default router;

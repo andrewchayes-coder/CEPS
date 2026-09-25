@@ -1,9 +1,8 @@
 import { describe, expect, it, beforeAll, afterAll } from "vitest";
-import { readFileSync } from "node:fs";
 import request from "supertest";
-import { and, eq, inArray, sql } from "drizzle-orm";
+import { and, eq, inArray } from "drizzle-orm";
 import {
-  db, usersTable, sessionsTable, staffPermissionsTable, invoicesTable,
+  db, usersTable, sessionsTable, staffRolesTable, staffRolePermissionsTable, invoicesTable,
   invoiceLineItemsTable, authorizationsTable, paymentsTable, paymentAllocationsTable,
   clientsTable, auditLogTable, STAFF_PERMISSIONS,
   feesTable,
@@ -13,6 +12,7 @@ import { newToken } from "../lib/auth";
 
 const nonce = `wf${Date.now().toString(36)}`;
 const ids = { users: [] as string[], clients: [] as string[], invoices: [] as string[], auths: [] as string[], payments: [] as string[] };
+const roleIds: string[] = [];
 const cookies = new Map<string, string>();
 
 async function makeUser(role = "staff") {
@@ -24,8 +24,18 @@ async function makeUser(role = "staff") {
   return user;
 }
 
+async function makeRole(permissions: readonly string[]) {
+  const [role] = await db.insert(staffRolesTable).values({ name: `${nonce}-role-${roleIds.length}` }).returning();
+  roleIds.push(role.id);
+  if (permissions.length) {
+    await db.insert(staffRolePermissionsTable).values(permissions.map((permission) => ({ roleId: role.id, permission })));
+  }
+  return role;
+}
+
 async function grant(userId: string, permissions: readonly string[]) {
-  if (permissions.length) await db.insert(staffPermissionsTable).values(permissions.map((permission) => ({ userId, permission })));
+  const role = await makeRole(permissions);
+  await db.update(usersTable).set({ staffRoleId: role.id }).where(eq(usersTable.id, userId));
 }
 
 async function fixture(status: string, month: string, max = "1000.00") {
@@ -59,11 +69,11 @@ afterAll(async () => {
   if (ids.auths.length) await db.delete(authorizationsTable).where(inArray(authorizationsTable.id, ids.auths));
   if (ids.clients.length) await db.delete(clientsTable).where(inArray(clientsTable.id, ids.clients));
   if (ids.users.length) {
-    await db.delete(staffPermissionsTable).where(inArray(staffPermissionsTable.userId, ids.users));
     await db.delete(sessionsTable).where(inArray(sessionsTable.userId, ids.users));
     await db.delete(auditLogTable).where(inArray(auditLogTable.userId, ids.users));
     await db.delete(usersTable).where(inArray(usersTable.id, ids.users));
   }
+  if (roleIds.length) await db.delete(staffRolesTable).where(inArray(staffRolesTable.id, roleIds));
 });
 
 describe("invoice workflow permissions", () => {
@@ -75,15 +85,19 @@ describe("invoice workflow permissions", () => {
     expect((await request(app).get("/api/invoices").set("Cookie", cookies.get(user.id)!)).status).toBe(200);
   });
 
-  it("creates omitted staff permissions as all, honors [] and subsets, and clears role changes", async () => {
+  it("assigns staff roles with independent permission sets and clears role changes", async () => {
     const admin = await makeUser();
+    await grant(admin.id, ["manage_users"]);
+    const allRole = await makeRole(STAFF_PERMISSIONS);
+    const noneRole = await makeRole([]);
+    const subsetRole = await makeRole(["invoice_approve"]);
     const create = (body: Record<string, unknown>) => request(app).post("/api/users").set("Cookie", cookies.get(admin.id)!).send({
       name: nonce, email: `${nonce}-${Math.random()}@test.local`, role: "staff", ...body,
     });
-    const all = await create({});
-    const none = await create({ permissions: [] });
-    const subset = await create({ permissions: ["invoice_approve"] });
-    expect(all.body.permissions).toHaveLength(3);
+    const all = await create({ staffRoleId: allRole.id });
+    const none = await create({ staffRoleId: noneRole.id });
+    const subset = await create({ staffRoleId: subsetRole.id });
+    expect([...all.body.permissions].sort()).toEqual([...STAFF_PERMISSIONS].sort());
     expect(none.body.permissions).toEqual([]);
     expect(subset.body.permissions).toEqual(["invoice_approve"]);
     const changed = await request(app).patch(`/api/users/${subset.body.id}`).set("Cookie", cookies.get(admin.id)!).send({ role: "service_coordinator" });
@@ -117,31 +131,28 @@ describe("invoice workflow permissions", () => {
     expect(expired.body.error).toContain("2026-02");
   });
 
-  it("contains the normalized migration backfill and only grants all permissions to staff", async () => {
-    const migrationSql = readFileSync("../../lib/db/migrations/0026_staff_permissions.sql", "utf8");
-    expect(migrationSql).toContain("invoice_log_validate");
-    expect(migrationSql).toContain("invoice_approve");
-    expect(migrationSql).toContain("check_writing");
-    expect(migrationSql).toMatch(/where[\s\S]*role[\s\S]*staff/i);
+  it("resolves permissions from roles and ignores a stale role on non-staff users", async () => {
+    const role = await makeRole(STAFF_PERMISSIONS);
     const staff = await makeUser("staff");
     const nonstaff = await makeUser("service_coordinator");
-    await db.delete(staffPermissionsTable).where(inArray(staffPermissionsTable.userId, [staff.id, nonstaff.id]));
-    await db.execute(sql`INSERT INTO staff_permissions (user_id, permission)
-      SELECT u.id, p.permission FROM users u
-      CROSS JOIN (VALUES ('invoice_log_validate'), ('invoice_approve'), ('check_writing')) p(permission)
-      WHERE u.role = 'staff' ON CONFLICT DO NOTHING`);
-    expect((await db.select().from(staffPermissionsTable).where(eq(staffPermissionsTable.userId, staff.id))).map((r) => r.permission).sort()).toEqual([...STAFF_PERMISSIONS].sort());
-    expect(await db.select().from(staffPermissionsTable).where(eq(staffPermissionsTable.userId, nonstaff.id))).toEqual([]);
+    await db.update(usersTable).set({ staffRoleId: role.id }).where(inArray(usersTable.id, [staff.id, nonstaff.id]));
+    const staffMe = await request(app).get("/api/auth/me").set("Cookie", cookies.get(staff.id)!);
+    const nonstaffMe = await request(app).get("/api/auth/me").set("Cookie", cookies.get(nonstaff.id)!);
+    expect([...staffMe.body.permissions].sort()).toEqual([...STAFF_PERMISSIONS].sort());
+    expect(nonstaffMe.body.permissions).toEqual([]);
   });
 
   it("replaces explicit permission subsets and exposes them in the session", async () => {
     const admin = await makeUser();
+    await grant(admin.id, ["manage_users"]);
     const created = await request(app).post("/api/users").set("Cookie", cookies.get(admin.id)!).send({
-      name: nonce, email: `${nonce}-replace-${Date.now()}@test.local`, role: "staff", permissions: ["check_writing"],
+      name: nonce, email: `${nonce}-replace-${Date.now()}@test.local`, role: "staff",
+      staffRoleId: (await makeRole(["check_writing"])).id,
     });
     expect(created.status).toBe(201);
     ids.users.push(created.body.id);
-    const replaced = await request(app).patch(`/api/users/${created.body.id}`).set("Cookie", cookies.get(admin.id)!).send({ name: nonce, permissions: ["invoice_log_validate"] });
+    const replacedRole = await makeRole(["invoice_log_validate"]);
+    const replaced = await request(app).patch(`/api/users/${created.body.id}`).set("Cookie", cookies.get(admin.id)!).send({ name: nonce, staffRoleId: replacedRole.id });
     expect(replaced.status).toBe(200);
     expect(replaced.body.permissions).toEqual(["invoice_log_validate"]);
     const sessionUser = await makeUser();

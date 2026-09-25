@@ -13,4 +13,6 @@ export const UserInputPermissionsItem = {
   invoice_log_validate: 'invoice_log_validate',
   invoice_approve: 'invoice_approve',
   check_writing: 'check_writing',
+  remittance_entry: 'remittance_entry',
+  manage_users: 'manage_users',
 } as const;

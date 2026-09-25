@@ -26,9 +26,9 @@ export interface RoleDoc {
 export const roleDocs: RoleDoc[] = [
   {
     role: 'staff',
-    label: 'CEPS Admin',
+    label: 'CEPS Staff',
     overview:
-      'CEPS staff administer the entire payee support program: intake of new referrals, participant records, vendor management, purchase-of-service authorizations, invoice review, payment recording, Remittance Report reconciliation, and user administration.',
+      'CEPS staff support referrals, participants, vendors, authorizations, invoices, payments, and remittances. Each staff account is assigned a role that determines its permissions. The protected Admin role can manage users and roles; other roles can be configured on the Roles screen.',
     stories: [
       { as: 'a CEPS staff member', want: 'to review incoming referrals from service coordinators', soThat: 'new participants can be onboarded into the program quickly and accurately' },
       { as: 'a CEPS staff member', want: 'to send agreements for e-signature to families and participants', soThat: 'program enrollment is documented without paper forms' },

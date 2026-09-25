@@ -83,7 +83,11 @@ export const LoginResponse = zod.object({
   "role": zod.enum(['staff', 'service_coordinator', 'parent_guardian', 'self', 'vendor']),
   "linkedRecordId": zod.string().nullish(),
   "linkedRecordType": zod.union([zod.literal('client'),zod.literal('vendor'),zod.literal(null)]).nullish(),
-  "permissions": zod.array(zod.enum(['invoice_log_validate', 'invoice_approve', 'check_writing'])).optional()
+  "permissions": zod.array(zod.enum(['invoice_log_validate', 'invoice_approve', 'check_writing', 'remittance_entry', 'manage_users'])).optional(),
+  "staffRole": zod.object({
+  "id": zod.uuid(),
+  "name": zod.string()
+}).nullable()
 })
 
 
@@ -105,7 +109,11 @@ export const GetCurrentUserResponse = zod.object({
   "role": zod.enum(['staff', 'service_coordinator', 'parent_guardian', 'self', 'vendor']),
   "linkedRecordId": zod.string().nullish(),
   "linkedRecordType": zod.union([zod.literal('client'),zod.literal('vendor'),zod.literal(null)]).nullish(),
-  "permissions": zod.array(zod.enum(['invoice_log_validate', 'invoice_approve', 'check_writing'])).optional()
+  "permissions": zod.array(zod.enum(['invoice_log_validate', 'invoice_approve', 'check_writing', 'remittance_entry', 'manage_users'])).optional(),
+  "staffRole": zod.object({
+  "id": zod.uuid(),
+  "name": zod.string()
+}).nullable()
 })
 
 
@@ -127,7 +135,11 @@ export const UpdateMeResponse = zod.object({
   "role": zod.enum(['staff', 'service_coordinator', 'parent_guardian', 'self', 'vendor']),
   "linkedRecordId": zod.string().nullish(),
   "linkedRecordType": zod.union([zod.literal('client'),zod.literal('vendor'),zod.literal(null)]).nullish(),
-  "permissions": zod.array(zod.enum(['invoice_log_validate', 'invoice_approve', 'check_writing'])).optional()
+  "permissions": zod.array(zod.enum(['invoice_log_validate', 'invoice_approve', 'check_writing', 'remittance_entry', 'manage_users'])).optional(),
+  "staffRole": zod.object({
+  "id": zod.uuid(),
+  "name": zod.string()
+}).nullable()
 })
 
 
@@ -158,7 +170,11 @@ export const ConsumeMagicLinkResponse = zod.object({
   "role": zod.enum(['staff', 'service_coordinator', 'parent_guardian', 'self', 'vendor']),
   "linkedRecordId": zod.string().nullish(),
   "linkedRecordType": zod.union([zod.literal('client'),zod.literal('vendor'),zod.literal(null)]).nullish(),
-  "permissions": zod.array(zod.enum(['invoice_log_validate', 'invoice_approve', 'check_writing'])).optional()
+  "permissions": zod.array(zod.enum(['invoice_log_validate', 'invoice_approve', 'check_writing', 'remittance_entry', 'manage_users'])).optional(),
+  "staffRole": zod.object({
+  "id": zod.uuid(),
+  "name": zod.string()
+}).nullable()
 })
 
 
@@ -216,7 +232,11 @@ export const AcceptInviteResponse = zod.object({
   "role": zod.enum(['staff', 'service_coordinator', 'parent_guardian', 'self', 'vendor']),
   "linkedRecordId": zod.string().nullish(),
   "linkedRecordType": zod.union([zod.literal('client'),zod.literal('vendor'),zod.literal(null)]).nullish(),
-  "permissions": zod.array(zod.enum(['invoice_log_validate', 'invoice_approve', 'check_writing'])).optional()
+  "permissions": zod.array(zod.enum(['invoice_log_validate', 'invoice_approve', 'check_writing', 'remittance_entry', 'manage_users'])).optional(),
+  "staffRole": zod.object({
+  "id": zod.uuid(),
+  "name": zod.string()
+}).nullable()
 })
 
 
@@ -241,7 +261,11 @@ export const ListUsersResponseItem = zod.object({
   "active": zod.boolean(),
   "lastLogin": zod.string().nullish(),
   "createdAt": zod.string().nullish(),
-  "permissions": zod.array(zod.enum(['invoice_log_validate', 'invoice_approve', 'check_writing'])).optional()
+  "permissions": zod.array(zod.enum(['invoice_log_validate', 'invoice_approve', 'check_writing', 'remittance_entry', 'manage_users'])).optional(),
+  "staffRole": zod.object({
+  "id": zod.uuid(),
+  "name": zod.string()
+}).nullable()
 })
 export const ListUsersResponse = zod.array(ListUsersResponseItem)
 
@@ -257,7 +281,8 @@ export const CreateUserBody = zod.object({
   "password": zod.string().optional().describe('Initial password for staff\/coordinator accounts'),
   "linkedRecordId": zod.string().optional(),
   "linkedRecordType": zod.enum(['client', 'vendor']).optional(),
-  "permissions": zod.array(zod.enum(['invoice_log_validate', 'invoice_approve', 'check_writing'])).optional()
+  "staffRoleId": zod.uuid().optional(),
+  "permissions": zod.array(zod.enum(['invoice_log_validate', 'invoice_approve', 'check_writing', 'remittance_entry', 'manage_users'])).optional().describe('Deprecated and ignored; retained temporarily for old clients.')
 })
 
 export const CreateUserResponse = zod.object({
@@ -271,8 +296,32 @@ export const CreateUserResponse = zod.object({
   "active": zod.boolean(),
   "lastLogin": zod.string().nullish(),
   "createdAt": zod.string().nullish(),
-  "permissions": zod.array(zod.enum(['invoice_log_validate', 'invoice_approve', 'check_writing'])).optional()
+  "permissions": zod.array(zod.enum(['invoice_log_validate', 'invoice_approve', 'check_writing', 'remittance_entry', 'manage_users'])).optional(),
+  "staffRole": zod.object({
+  "id": zod.uuid(),
+  "name": zod.string()
+}).nullable()
 })
+
+
+/**
+ * Returns only identifiers, display names, roles, and active status for operational pickers.
+ * @summary List minimal user directory entries (staff only)
+ */
+export const ListUserDirectoryQueryParams = zod.object({
+  "role": zod.coerce.string().optional(),
+  "active": zod.coerce.boolean().optional(),
+  "search": zod.coerce.string().optional().describe('Case-insensitive partial match on display name.'),
+  "limit": zod.coerce.number().int().optional()
+})
+
+export const ListUserDirectoryResponseItem = zod.object({
+  "id": zod.string(),
+  "name": zod.string(),
+  "role": zod.enum(['staff', 'service_coordinator', 'parent_guardian', 'self', 'vendor']),
+  "active": zod.boolean()
+})
+export const ListUserDirectoryResponse = zod.array(ListUserDirectoryResponseItem)
 
 
 /**
@@ -289,7 +338,8 @@ export const UpdateUserBody = zod.object({
   "role": zod.enum(['staff', 'service_coordinator', 'parent_guardian', 'self', 'vendor']).optional(),
   "active": zod.boolean().optional(),
   "password": zod.string().optional(),
-  "permissions": zod.array(zod.enum(['invoice_log_validate', 'invoice_approve', 'check_writing'])).optional()
+  "staffRoleId": zod.uuid().optional(),
+  "permissions": zod.array(zod.enum(['invoice_log_validate', 'invoice_approve', 'check_writing', 'remittance_entry', 'manage_users'])).optional().describe('Deprecated and ignored; retained temporarily for old clients.')
 })
 
 export const UpdateUserResponse = zod.object({
@@ -303,7 +353,11 @@ export const UpdateUserResponse = zod.object({
   "active": zod.boolean(),
   "lastLogin": zod.string().nullish(),
   "createdAt": zod.string().nullish(),
-  "permissions": zod.array(zod.enum(['invoice_log_validate', 'invoice_approve', 'check_writing'])).optional()
+  "permissions": zod.array(zod.enum(['invoice_log_validate', 'invoice_approve', 'check_writing', 'remittance_entry', 'manage_users'])).optional(),
+  "staffRole": zod.object({
+  "id": zod.uuid(),
+  "name": zod.string()
+}).nullable()
 })
 
 
@@ -350,6 +404,91 @@ export const ListAuditLogResponse = zod.object({
 })),
   "total": zod.int()
 })
+
+
+/**
+ * @summary List staff roles and assigned active-user counts
+ */
+export const ListStaffRolesResponseItem = zod.object({
+  "id": zod.uuid(),
+  "name": zod.string(),
+  "description": zod.string().nullish(),
+  "isSystem": zod.boolean(),
+  "permissions": zod.array(zod.enum(['invoice_log_validate', 'invoice_approve', 'check_writing', 'remittance_entry', 'manage_users'])),
+  "activeUserCount": zod.int()
+})
+export const ListStaffRolesResponse = zod.array(ListStaffRolesResponseItem)
+
+
+/**
+ * @summary Create a staff role
+ */
+
+
+
+export const CreateStaffRoleBody = zod.object({
+  "name": zod.string().min(1),
+  "description": zod.string().nullish(),
+  "permissions": zod.array(zod.enum(['invoice_log_validate', 'invoice_approve', 'check_writing', 'remittance_entry', 'manage_users']))
+})
+
+export const CreateStaffRoleResponse = zod.object({
+  "id": zod.uuid(),
+  "name": zod.string(),
+  "description": zod.string().nullish(),
+  "isSystem": zod.boolean(),
+  "permissions": zod.array(zod.enum(['invoice_log_validate', 'invoice_approve', 'check_writing', 'remittance_entry', 'manage_users'])),
+  "activeUserCount": zod.int()
+})
+
+
+/**
+ * @summary Update a staff role and its permission set
+ */
+export const UpdateStaffRoleParams = zod.object({
+  "id": zod.uuid()
+})
+
+
+
+
+export const UpdateStaffRoleBody = zod.object({
+  "name": zod.string().min(1).optional(),
+  "description": zod.string().nullish(),
+  "permissions": zod.array(zod.enum(['invoice_log_validate', 'invoice_approve', 'check_writing', 'remittance_entry', 'manage_users'])).optional()
+})
+
+export const UpdateStaffRoleResponse = zod.object({
+  "id": zod.uuid(),
+  "name": zod.string(),
+  "description": zod.string().nullish(),
+  "isSystem": zod.boolean(),
+  "permissions": zod.array(zod.enum(['invoice_log_validate', 'invoice_approve', 'check_writing', 'remittance_entry', 'manage_users'])),
+  "activeUserCount": zod.int()
+})
+
+
+/**
+ * @summary Soft-delete an unused staff role
+ */
+export const DeleteStaffRoleParams = zod.object({
+  "id": zod.uuid()
+})
+
+export const DeleteStaffRoleResponse = zod.object({
+  "ok": zod.boolean()
+})
+
+
+/**
+ * @summary Get the staff permission catalog
+ */
+export const GetStaffPermissionsResponseItem = zod.object({
+  "permission": zod.enum(['invoice_log_validate', 'invoice_approve', 'check_writing', 'remittance_entry', 'manage_users']),
+  "label": zod.string(),
+  "description": zod.string()
+})
+export const GetStaffPermissionsResponse = zod.array(GetStaffPermissionsResponseItem)
 
 
 /**

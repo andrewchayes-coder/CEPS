@@ -15,7 +15,8 @@ import {
   remittancesTable,
   feesTable,
   auditLogTable,
-  staffPermissionsTable,
+  staffRolesTable,
+  staffRolePermissionsTable,
 } from "@workspace/db";
 import request from "supertest";
 import app from "../app";
@@ -33,6 +34,7 @@ let vendorAId: string;
 let authAId: string;
 let cookie: string;
 let coordinatorCookie: string;
+let staffRoleId: string;
 
 const coordEmail = `${nonce}-coord@test.local`;
 const uciA = String(Date.now()).slice(-7);
@@ -46,7 +48,13 @@ beforeAll(async () => {
     .values({ name: "Imp Staff", email: `${nonce}-staff@test.local`, role: "staff" })
     .returning();
   staffId = staff.id;
-  await db.insert(staffPermissionsTable).values({ userId: staffId, permission: "check_writing" });
+  const [staffRole] = await db.insert(staffRolesTable).values({ name: `${nonce} import staff` }).returning();
+  staffRoleId = staffRole.id;
+  await db.insert(staffRolePermissionsTable).values([
+    { roleId: staffRoleId, permission: "check_writing" },
+    { roleId: staffRoleId, permission: "remittance_entry" },
+  ]);
+  await db.update(usersTable).set({ staffRoleId }).where(eq(usersTable.id, staffId));
   const [coord] = await db
     .insert(usersTable)
     .values({ name: "Imp Coord", email: coordEmail, role: "service_coordinator" })
@@ -128,8 +136,8 @@ afterAll(async () => {
     await db.delete(clientsTable).where(inArray(clientsTable.id, importedClientIds));
   }
   await db.delete(vendorsTable).where(inArray(vendorsTable.name, [vendorAName, vendorBName, `${nonce} New Vendor`]));
-  await db.delete(staffPermissionsTable).where(eq(staffPermissionsTable.userId, staffId));
   await db.delete(usersTable).where(inArray(usersTable.id, [staffId, coordId]));
+  await db.delete(staffRolesTable).where(eq(staffRolesTable.id, staffRoleId));
 });
 
 // ── Template generation ──────────────────────────────────────────────────────

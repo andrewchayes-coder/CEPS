@@ -9,6 +9,7 @@ import {
 } from "drizzle-orm/pg-core";
 import { sql } from "drizzle-orm";
 import { familyRepresentativesTable } from "./familyRepresentatives";
+import { staffRolesTable } from "./staffRoles";
 
 export const usersTable = pgTable("users", {
   id: uuid("id").primaryKey().defaultRandom(),
@@ -19,6 +20,7 @@ export const usersTable = pgTable("users", {
   passwordHash: text("password_hash"),
   linkedRecordId: uuid("linked_record_id"),
   linkedRecordType: text("linked_record_type"), // client | vendor
+  staffRoleId: uuid("staff_role_id").references(() => staffRolesTable.id),
   active: boolean("active").notNull().default(true),
   lastLogin: timestamp("last_login", { withTimezone: true }),
   accountCreatedAt: timestamp("account_created_at", { withTimezone: true }),

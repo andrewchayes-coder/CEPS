@@ -5,6 +5,7 @@
  * CEPS Portal API — referral intake, authorizations, invoices, payments, remittances, vendors, reporting
  * OpenAPI spec version: 0.1.0
  */
+import type { StaffRoleSummary } from './staffRoleSummary';
 import type { UserLinkedRecordType } from './userLinkedRecordType';
 import type { UserPermissionsItem } from './userPermissionsItem';
 import type { UserRole } from './userRole';
@@ -26,4 +27,5 @@ export interface User {
   /** @nullable */
   createdAt?: string | null;
   permissions?: UserPermissionsItem[];
+  staffRole: StaffRoleSummary | null;
 }

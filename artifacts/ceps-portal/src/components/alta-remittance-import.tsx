@@ -19,6 +19,7 @@ import { Download, FileUp, Loader2, Upload } from 'lucide-react';
 import { stableSort, useTableSort } from '@/lib/table-sorting';
 import { trackAnalyticsEvent } from '@/lib/analytics';
 import { downloadCSV } from '@/lib/csv';
+import { useAuth } from '@/components/auth/auth-provider';
 
 export function AltaRemittanceImport({ onImported }: { onImported: (result: AltaRemittanceImportResult) => void }) {
   const inputRef = useRef<HTMLInputElement>(null);
@@ -26,6 +27,8 @@ export function AltaRemittanceImport({ onImported }: { onImported: (result: Alta
   const [parseError, setParseError] = useState<string | null>(null);
   const [result, setResult] = useState<AltaRemittanceImportResult | null>(null);
   const importMutation = useImportAltaRemittances();
+  const { user } = useAuth();
+  const canEnterRemittances = user?.role === 'staff' && (user.permissions ?? []).includes('remittance_entry');
   const { toast } = useToast();
   const { sort, onSort } = useTableSort<string>('rowNumber');
   const sortedResults = stableSort(result?.results ?? [], sort, {
@@ -95,6 +98,7 @@ export function AltaRemittanceImport({ onImported }: { onImported: (result: Alta
   };
 
   const handleFile = (file: File) => {
+    if (!canEnterRemittances) return;
     setParseError(null);
     setResult(null);
     const reader = new FileReader();
@@ -137,6 +141,8 @@ export function AltaRemittanceImport({ onImported }: { onImported: (result: Alta
     };
     reader.readAsText(file);
   };
+
+  if (!canEnterRemittances) return null;
 
   const outcomeBadge = (outcome: string) => {
     if (outcome === 'auto_matched') return <Badge className="bg-green-100 text-green-800 hover:bg-green-100">Auto-matched</Badge>;

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { useListAuditLog, useListUsers, listAuditLog } from '@workspace/api-client-react';
+import { useListAuditLog, useListUserDirectory, listAuditLog } from '@workspace/api-client-react';
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHeader, TableRow, SortableTableHead, useTableSort } from '@/components/ui/table';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -50,8 +50,8 @@ export default function AuditLogPage() {
   const { data, isLoading } = useListAuditLog(params, {
     query: { queryKey: ['auditLog', params] },
   });
-  const { data: users } = useListUsers(undefined, {
-    query: { queryKey: ['users'] },
+  const { data: users } = useListUserDirectory(undefined, {
+    query: { queryKey: ['userDirectory'] },
   });
 
   const entries = data?.entries;

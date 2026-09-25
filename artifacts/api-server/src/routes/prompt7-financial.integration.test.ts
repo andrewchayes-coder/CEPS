@@ -1,14 +1,33 @@
-import { describe, expect, it } from "vitest";
-import { eq, sql } from "drizzle-orm";
+import { afterAll, describe, expect, it } from "vitest";
+import { eq, inArray, sql } from "drizzle-orm";
 import {
   db, clientsTable, authorizationsTable, invoicesTable, invoiceLineItemsTable,
   paymentsTable, paymentAllocationsTable, usersTable, sessionsTable,
   vendorsTable, remittancesTable, remittanceAllocationsTable,
-  staffPermissionsTable,
+  staffRolesTable,
+  staffRolePermissionsTable,
 } from "@workspace/db";
 import request from "supertest";
 import app from "../app";
 import { newToken } from "../lib/auth";
+
+const staffRoleIds: string[] = [];
+const staffUserIds: string[] = [];
+
+async function assignStaffRole(userId: string, permissions = ["check_writing", "invoice_log_validate"]) {
+  const [role] = await db.insert(staffRolesTable).values({ name: `p7 role ${userId}` }).returning();
+  staffRoleIds.push(role.id);
+  staffUserIds.push(userId);
+  if (permissions.length) {
+    await db.insert(staffRolePermissionsTable).values(permissions.map((permission) => ({ roleId: role.id, permission })));
+  }
+  await db.update(usersTable).set({ staffRoleId: role.id }).where(eq(usersTable.id, userId));
+}
+
+afterAll(async () => {
+  if (staffUserIds.length) await db.update(usersTable).set({ staffRoleId: null }).where(inArray(usersTable.id, staffUserIds));
+  if (staffRoleIds.length) await db.delete(staffRolesTable).where(inArray(staffRolesTable.id, staffRoleIds));
+});
 
 describe("Prompt 7 financial child rows (database)", () => {
   it("persists three invoice lines and split payment allocations with exact aggregates", async () => {
@@ -21,7 +40,7 @@ describe("Prompt 7 financial child rows (database)", () => {
       { clientId: client.id, authNumber: `${nonce}-b`, serviceCode: "490", paymentType: "direct_payment", servicePeriodStart: "2025-01-01", servicePeriodEnd: "2025-12-31", maxPeriodAmount: "100.00", status: "active" },
     ] as any).returning();
     const [staff] = await db.insert(usersTable).values({ name: "Prompt 7 Staff", email: `${nonce}@test.local`, role: "staff" }).returning();
-    await db.insert(staffPermissionsTable).values([{ userId: staff.id, permission: "check_writing" }, { userId: staff.id, permission: "invoice_log_validate" }]);
+    await assignStaffRole(staff.id);
     const token = newToken();
     await db.insert(sessionsTable).values({ userId: staff.id, token, expiresAt: new Date(Date.now() + 3600000) });
     const [invoice] = await db.insert(invoicesTable).values({
@@ -69,7 +88,7 @@ describe("Prompt 7 financial child rows (database)", () => {
       { clientId: client.id, authNumber: `${nonce}-b`, serviceCode: "490", paymentType: "direct_payment", servicePeriodStart: "2020-01-01", servicePeriodEnd: "2099-12-31", maxPeriodAmount: "50.00", status: "active" },
     ] as any).returning();
     const [staff] = await db.insert(usersTable).values({ name: "Prompt7 totals", email: `${nonce}@test.local`, role: "staff" }).returning();
-    await db.insert(staffPermissionsTable).values([{ userId: staff.id, permission: "check_writing" }, { userId: staff.id, permission: "invoice_log_validate" }]);
+    await assignStaffRole(staff.id);
     const token = newToken();
     await db.insert(sessionsTable).values({ userId: staff.id, token, expiresAt: new Date(Date.now() + 3600000) });
     const [payment] = await db.insert(paymentsTable).values({ clientId: client.id, qbCheckNumber: `${nonce}-check`, checkDate: "2025-02-01", amount: "60.00", paymentType: "direct_payment", source: "manual" } as any).returning();
@@ -113,7 +132,7 @@ describe("Prompt 7 financial child rows (database)", () => {
       { clientId: two.id, authNumber: `${nonce}-two`, serviceCode: "490", paymentType: "direct_payment", servicePeriodStart: "2020-01-01", servicePeriodEnd: "2099-12-31", maxPeriodAmount: "100.00", status: "active" },
     ] as any).returning();
     const [staff] = await db.insert(usersTable).values({ name: "Prompt7 lines", email: `${nonce}@test.local`, role: "staff" }).returning();
-    await db.insert(staffPermissionsTable).values([{ userId: staff.id, permission: "check_writing" }, { userId: staff.id, permission: "invoice_log_validate" }]);
+    await assignStaffRole(staff.id);
     const token = newToken();
     await db.insert(sessionsTable).values({ userId: staff.id, token, expiresAt: new Date(Date.now() + 3600000) });
     const crossInvoice = await request(app).post("/api/invoices").set("Cookie", `ceps_session=${token}`).send({
@@ -149,7 +168,7 @@ describe("Prompt 7 financial child rows (database)", () => {
       servicePeriodStart: "2020-01-01", servicePeriodEnd: "2099-12-31", maxPeriodAmount: "100.00", status: "active",
     } as any).returning();
     const [staff] = await db.insert(usersTable).values({ name: "Prompt7 remittance", email: `${nonce}@test.local`, role: "staff" }).returning();
-    await db.insert(staffPermissionsTable).values([{ userId: staff.id, permission: "check_writing" }, { userId: staff.id, permission: "invoice_log_validate" }]);
+    await assignStaffRole(staff.id, ["check_writing", "invoice_log_validate", "remittance_entry"]);
     const token = newToken();
     await db.insert(sessionsTable).values({ userId: staff.id, token, expiresAt: new Date(Date.now() + 3600000) });
     const [payment] = await db.insert(paymentsTable).values({ clientId: client.id, qbCheckNumber: `${nonce}-check`, checkDate: "2025-04-01", amount: "30.00", paymentMonth: "2025-04", paymentType: "direct_payment", source: "manual" } as any).returning();
@@ -203,7 +222,7 @@ describe("Prompt 7 financial child rows (database)", () => {
       monthlyAmount: "50.00", maxPeriodAmount: "200.00", status: "active",
     } as any).returning();
     const [staff] = await db.insert(usersTable).values({ name: "P7 month staff", email: `${nonce}@test.local`, role: "staff" }).returning();
-    await db.insert(staffPermissionsTable).values([{ userId: staff.id, permission: "check_writing" }, { userId: staff.id, permission: "invoice_log_validate" }]);
+    await assignStaffRole(staff.id);
     const token = newToken();
     await db.insert(sessionsTable).values({ userId: staff.id, token, expiresAt: new Date(Date.now() + 3600000) });
     const [payment] = await db.insert(paymentsTable).values({
@@ -252,7 +271,7 @@ describe("Prompt 7 financial child rows (database)", () => {
       maxPeriodAmount: "100.00", status: "active",
     } as any).returning();
     const [staff] = await db.insert(usersTable).values({ name: "P7 auto staff", email: `${nonce}@test.local`, role: "staff" }).returning();
-    await db.insert(staffPermissionsTable).values([{ userId: staff.id, permission: "check_writing" }, { userId: staff.id, permission: "invoice_log_validate" }]);
+    await assignStaffRole(staff.id, ["check_writing", "invoice_log_validate", "remittance_entry"]);
     const token = newToken();
     await db.insert(sessionsTable).values({ userId: staff.id, token, expiresAt: new Date(Date.now() + 3600000) });
     const [payment] = await db.insert(paymentsTable).values({

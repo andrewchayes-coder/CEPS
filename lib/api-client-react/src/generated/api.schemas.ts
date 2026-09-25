@@ -153,7 +153,17 @@ export const SessionUserPermissionsItem = {
   invoice_log_validate: 'invoice_log_validate',
   invoice_approve: 'invoice_approve',
   check_writing: 'check_writing',
+  remittance_entry: 'remittance_entry',
+  manage_users: 'manage_users',
 } as const;
+
+/**
+ * @nullable
+ */
+export type StaffRoleSummary = {
+  id: string;
+  name: string;
+} | null;
 
 export interface SessionUser {
   id: string;
@@ -165,6 +175,7 @@ export interface SessionUser {
   /** @nullable */
   linkedRecordType?: SessionUserLinkedRecordType;
   permissions?: SessionUserPermissionsItem[];
+  staffRole: StaffRoleSummary | null;
 }
 
 export interface UpdateMeInput {
@@ -329,6 +340,8 @@ export const UserPermissionsItem = {
   invoice_log_validate: 'invoice_log_validate',
   invoice_approve: 'invoice_approve',
   check_writing: 'check_writing',
+  remittance_entry: 'remittance_entry',
+  manage_users: 'manage_users',
 } as const;
 
 export interface User {
@@ -348,6 +361,25 @@ export interface User {
   /** @nullable */
   createdAt?: string | null;
   permissions?: UserPermissionsItem[];
+  staffRole: StaffRoleSummary | null;
+}
+
+export type UserDirectoryEntryRole = typeof UserDirectoryEntryRole[keyof typeof UserDirectoryEntryRole];
+
+
+export const UserDirectoryEntryRole = {
+  staff: 'staff',
+  service_coordinator: 'service_coordinator',
+  parent_guardian: 'parent_guardian',
+  self: 'self',
+  vendor: 'vendor',
+} as const;
+
+export interface UserDirectoryEntry {
+  id: string;
+  name: string;
+  role: UserDirectoryEntryRole;
+  active: boolean;
 }
 
 export type UserInputRole = typeof UserInputRole[keyof typeof UserInputRole];
@@ -376,6 +408,8 @@ export const UserInputPermissionsItem = {
   invoice_log_validate: 'invoice_log_validate',
   invoice_approve: 'invoice_approve',
   check_writing: 'check_writing',
+  remittance_entry: 'remittance_entry',
+  manage_users: 'manage_users',
 } as const;
 
 export interface UserInput {
@@ -387,6 +421,8 @@ export interface UserInput {
   password?: string;
   linkedRecordId?: string;
   linkedRecordType?: UserInputLinkedRecordType;
+  staffRoleId?: string;
+  /** Deprecated and ignored; retained temporarily for old clients. */
   permissions?: UserInputPermissionsItem[];
 }
 
@@ -408,6 +444,8 @@ export const UserUpdatePermissionsItem = {
   invoice_log_validate: 'invoice_log_validate',
   invoice_approve: 'invoice_approve',
   check_writing: 'check_writing',
+  remittance_entry: 'remittance_entry',
+  manage_users: 'manage_users',
 } as const;
 
 export interface UserUpdate {
@@ -417,7 +455,85 @@ export interface UserUpdate {
   role?: UserUpdateRole;
   active?: boolean;
   password?: string;
+  staffRoleId?: string;
+  /** Deprecated and ignored; retained temporarily for old clients. */
   permissions?: UserUpdatePermissionsItem[];
+}
+
+export type StaffRolePermissionsItem = typeof StaffRolePermissionsItem[keyof typeof StaffRolePermissionsItem];
+
+
+export const StaffRolePermissionsItem = {
+  invoice_log_validate: 'invoice_log_validate',
+  invoice_approve: 'invoice_approve',
+  check_writing: 'check_writing',
+  remittance_entry: 'remittance_entry',
+  manage_users: 'manage_users',
+} as const;
+
+export interface StaffRole {
+  id: string;
+  name: string;
+  /** @nullable */
+  description?: string | null;
+  isSystem: boolean;
+  permissions: StaffRolePermissionsItem[];
+  activeUserCount: number;
+}
+
+export type StaffRoleInputPermissionsItem = typeof StaffRoleInputPermissionsItem[keyof typeof StaffRoleInputPermissionsItem];
+
+
+export const StaffRoleInputPermissionsItem = {
+  invoice_log_validate: 'invoice_log_validate',
+  invoice_approve: 'invoice_approve',
+  check_writing: 'check_writing',
+  remittance_entry: 'remittance_entry',
+  manage_users: 'manage_users',
+} as const;
+
+export interface StaffRoleInput {
+  /** @minLength 1 */
+  name: string;
+  /** @nullable */
+  description?: string | null;
+  permissions: StaffRoleInputPermissionsItem[];
+}
+
+export type StaffRoleUpdatePermissionsItem = typeof StaffRoleUpdatePermissionsItem[keyof typeof StaffRoleUpdatePermissionsItem];
+
+
+export const StaffRoleUpdatePermissionsItem = {
+  invoice_log_validate: 'invoice_log_validate',
+  invoice_approve: 'invoice_approve',
+  check_writing: 'check_writing',
+  remittance_entry: 'remittance_entry',
+  manage_users: 'manage_users',
+} as const;
+
+export interface StaffRoleUpdate {
+  /** @minLength 1 */
+  name?: string;
+  /** @nullable */
+  description?: string | null;
+  permissions?: StaffRoleUpdatePermissionsItem[];
+}
+
+export type StaffPermissionCatalogEntryPermission = typeof StaffPermissionCatalogEntryPermission[keyof typeof StaffPermissionCatalogEntryPermission];
+
+
+export const StaffPermissionCatalogEntryPermission = {
+  invoice_log_validate: 'invoice_log_validate',
+  invoice_approve: 'invoice_approve',
+  check_writing: 'check_writing',
+  remittance_entry: 'remittance_entry',
+  manage_users: 'manage_users',
+} as const;
+
+export interface StaffPermissionCatalogEntry {
+  permission: StaffPermissionCatalogEntryPermission;
+  label: string;
+  description: string;
 }
 
 export interface AuditEntry {
@@ -2772,6 +2888,16 @@ search?: string;
 /**
  * Optional capped result count; omitted preserves the administrative full-list behavior.
  */
+limit?: number;
+};
+
+export type ListUserDirectoryParams = {
+role?: string;
+active?: boolean;
+/**
+ * Case-insensitive partial match on display name.
+ */
+search?: string;
 limit?: number;
 };
 

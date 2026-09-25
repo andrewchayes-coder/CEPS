@@ -17,6 +17,7 @@ export default function RemittanceDetailPage() {
   const [, navigate] = useLocation();
   const { user } = useAuth();
   const isStaff = user?.role === 'staff';
+  const canEnterRemittances = isStaff && (user?.permissions ?? []).includes('remittance_entry');
   const deleteRemittance = useDeleteRemittance();
 
   const { data: remittance, isLoading, refetch } = useGetRemittance(id, {
@@ -44,7 +45,7 @@ export default function RemittanceDetailPage() {
           }>
             {remittance.status}
           </Badge>
-          {isStaff && (
+          {canEnterRemittances && (
             <>
               <EditRemittanceDialog id={id} remittance={remittance} onSaved={() => refetch()} />
               <DeleteEntityButton
@@ -57,6 +58,7 @@ export default function RemittanceDetailPage() {
           )}
         </div>
       </div>
+      {isStaff && !canEnterRemittances && <p className="text-sm text-muted-foreground">You don't have permission to enter or match remittances — ask an admin to grant it in Admin &gt; Users.</p>}
 
       {remittance.reviewReason && (
         <div className="flex gap-3 rounded-md border border-destructive/30 bg-destructive/10 p-4 text-sm text-destructive" data-testid="alert-remittance-review">

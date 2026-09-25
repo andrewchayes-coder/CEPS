@@ -18,6 +18,7 @@ import { useToast } from '@/hooks/use-toast';
 import { Pencil } from 'lucide-react';
 import { SearchableSelect } from '@/components/searchable-select';
 import { useDebounce } from '@/hooks/use-debounce';
+import { useAuth } from '@/components/auth/auth-provider';
 
 type RemittanceLike = {
   clientId: string;
@@ -39,6 +40,8 @@ type Props = {
 
 export function EditRemittanceDialog({ id, remittance, onSaved }: Props) {
   const { toast } = useToast();
+  const { user } = useAuth();
+  const canEnterRemittances = user?.role === 'staff' && (user.permissions ?? []).includes('remittance_entry');
   const updateRemittance = useUpdateRemittance();
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState({
@@ -62,6 +65,7 @@ export function EditRemittanceDialog({ id, remittance, onSaved }: Props) {
   const set = (k: string, v: string) => setForm((p) => ({ ...p, [k]: v }));
 
   const handleSave = () => {
+    if (!canEnterRemittances) return;
     const data: RemittanceUpdate = {
       altaReference: form.altaReference === '' ? null : form.altaReference,
       remittanceDate: form.remittanceDate || undefined,
@@ -81,6 +85,8 @@ export function EditRemittanceDialog({ id, remittance, onSaved }: Props) {
       },
     );
   };
+
+  if (!canEnterRemittances) return null;
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>

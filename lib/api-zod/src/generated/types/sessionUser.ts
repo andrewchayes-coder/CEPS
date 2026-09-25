@@ -8,6 +8,7 @@
 import type { SessionUserLinkedRecordType } from './sessionUserLinkedRecordType';
 import type { SessionUserPermissionsItem } from './sessionUserPermissionsItem';
 import type { SessionUserRole } from './sessionUserRole';
+import type { StaffRoleSummary } from './staffRoleSummary';
 
 export interface SessionUser {
   id: string;
@@ -19,4 +20,5 @@ export interface SessionUser {
   /** @nullable */
   linkedRecordType?: SessionUserLinkedRecordType;
   permissions?: SessionUserPermissionsItem[];
+  staffRole: StaffRoleSummary | null;
 }

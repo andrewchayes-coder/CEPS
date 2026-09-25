@@ -49,6 +49,7 @@ export default function RemittancesPage() {
   };
   const { user } = useAuth();
   const isStaff = user?.role === 'staff';
+  const canEnterRemittances = isStaff && (user?.permissions ?? []).includes('remittance_entry');
   // "Needs Manual Match" is a staff-only triage view: imported rows that landed
   // as status "received" without an automatic payment match (autoMatched=false).
   const triage = isStaff && tab === 'needs_manual_match';
@@ -106,8 +107,9 @@ export default function RemittancesPage() {
           <h1 className="text-3xl font-bold tracking-tight">Remittances</h1>
           <p className="text-muted-foreground mt-1">Reconciliation of funds received from Alta Regional Center.</p>
         </div>
-        {isStaff && <div className="flex gap-2"><CreateRemittanceDialog onSaved={() => refetch()} /><AltaRemittanceImport onImported={onImported} /></div>}
+        {canEnterRemittances && <div className="flex gap-2"><CreateRemittanceDialog onSaved={() => refetch()} /><AltaRemittanceImport onImported={onImported} /></div>}
       </div>
+      {isStaff && !canEnterRemittances && <p className="text-sm text-muted-foreground">You don't have permission to enter or match remittances — ask an admin to grant it in Admin &gt; Users.</p>}
 
       {isStaff && (
         <Tabs value={tab} onValueChange={onTabChange}>
@@ -278,20 +280,22 @@ export default function RemittancesPage() {
                           <Button variant="ghost" size="sm" asChild data-testid={`button-view-remittance-${r.id}`}>
                             <Link href={`/remittances/${r.id}`}>View</Link>
                           </Button>
-                          <EditRemittanceDialog
-                            id={r.id}
-                            remittance={r}
-                            onSaved={() => refetch()}
-                          />
-                          {triage && Number(r.remainingAmount) > 0 && <MatchRemittanceDialog remittance={r} onSaved={() => refetch()} />}
-                          <DeleteEntityButton
-                            variant="ghost"
-                            buttonLabel=""
-                            entityLabel="Remittance"
-                            testId="button-delete-remittance"
-                            onDelete={() => deleteRemittance.mutateAsync({ id: r.id })}
-                            onDeleted={() => refetch()}
-                          />
+                          {canEnterRemittances && <>
+                            <EditRemittanceDialog
+                              id={r.id}
+                              remittance={r}
+                              onSaved={() => refetch()}
+                            />
+                            {triage && Number(r.remainingAmount) > 0 && <MatchRemittanceDialog remittance={r} onSaved={() => refetch()} />}
+                            <DeleteEntityButton
+                              variant="ghost"
+                              buttonLabel=""
+                              entityLabel="Remittance"
+                              testId="button-delete-remittance"
+                              onDelete={() => deleteRemittance.mutateAsync({ id: r.id })}
+                              onDeleted={() => refetch()}
+                            />
+                          </>}
                         </div>
                       </TableCell>
                     )}

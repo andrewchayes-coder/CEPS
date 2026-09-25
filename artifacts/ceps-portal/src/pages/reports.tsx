@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { useGetVendorPaymentReport, useGetDashboardSummary, useListClients, useListUsers, useListVendors } from '@workspace/api-client-react';
+import { useGetVendorPaymentReport, useGetDashboardSummary, useListClients, useListUserDirectory, useListVendors } from '@workspace/api-client-react';
 import { useSearchParams } from 'wouter';
 import { useAuth } from '@/components/auth/auth-provider';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
@@ -64,9 +64,9 @@ export default function ReportsPage() {
     search: debouncedCoordSearch,
     limit: 50,
   };
-  const { data: coordsData, isLoading: coordsLoading } = useListUsers(
+  const { data: coordsData, isLoading: coordsLoading } = useListUserDirectory(
     coordinatorParams,
-    { query: { enabled: isStaff, queryKey: ['users', coordinatorParams] } },
+    { query: { enabled: isStaff, queryKey: ['userDirectory', coordinatorParams] } },
   );
 
   const clientOptions = [{ value: '__all__', label: 'All Participants' }].concat(

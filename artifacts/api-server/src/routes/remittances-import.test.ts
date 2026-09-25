@@ -13,7 +13,8 @@ import {
   remittanceAllocationsTable,
   auditLogTable,
   feesTable,
-  staffPermissionsTable,
+  staffRolesTable,
+  staffRolePermissionsTable,
 } from "@workspace/db";
 import request from "supertest";
 import app from "../app";
@@ -28,6 +29,7 @@ let authAId: string;
 let authBId: string;
 let matchPaymentId: string;
 let cookie: string;
+let staffRoleId: string;
 
 beforeAll(async () => {
   const [staff] = await db
@@ -35,7 +37,10 @@ beforeAll(async () => {
     .values({ name: "Rimp Staff", email: `${nonce}-staff@test.local`, role: "staff" })
     .returning();
   staffId = staff.id;
-  await db.insert(staffPermissionsTable).values({ userId: staffId, permission: "check_writing" });
+  const [staffRole] = await db.insert(staffRolesTable).values({ name: `${nonce} remittance staff` }).returning();
+  staffRoleId = staffRole.id;
+  await db.insert(staffRolePermissionsTable).values({ roleId: staffRoleId, permission: "remittance_entry" });
+  await db.update(usersTable).set({ staffRoleId }).where(eq(usersTable.id, staffId));
 
   const [clientA] = await db
     .insert(clientsTable)
@@ -105,14 +110,20 @@ beforeAll(async () => {
 
 afterAll(async () => {
   await db.delete(feesTable).where(inArray(feesTable.clientId, [clientAId, clientBId]));
+  await db.delete(remittanceAllocationsTable).where(inArray(remittanceAllocationsTable.paymentId,
+    (await db.select({ id: paymentsTable.id }).from(paymentsTable).where(inArray(paymentsTable.clientId, [clientAId, clientBId]))).map((payment) => payment.id)));
+  await db.delete(remittanceAllocationsTable).where(inArray(remittanceAllocationsTable.remittanceId,
+    (await db.select({ id: remittancesTable.id }).from(remittancesTable).where(inArray(remittancesTable.clientId, [clientAId, clientBId]))).map((remittance) => remittance.id)));
+  await db.delete(paymentAllocationsTable).where(inArray(paymentAllocationsTable.paymentId,
+    (await db.select({ id: paymentsTable.id }).from(paymentsTable).where(inArray(paymentsTable.clientId, [clientAId, clientBId]))).map((payment) => payment.id)));
   await db.delete(remittancesTable).where(inArray(remittancesTable.clientId, [clientAId, clientBId]));
   await db.delete(paymentsTable).where(inArray(paymentsTable.clientId, [clientAId, clientBId]));
   await db.delete(authorizationsTable).where(inArray(authorizationsTable.clientId, [clientAId, clientBId]));
   await db.delete(auditLogTable).where(eq(auditLogTable.userId, staffId));
-  await db.delete(staffPermissionsTable).where(eq(staffPermissionsTable.userId, staffId));
   await db.delete(sessionsTable).where(eq(sessionsTable.userId, staffId));
   await db.delete(clientsTable).where(inArray(clientsTable.id, [clientAId, clientBId]));
   await db.delete(usersTable).where(inArray(usersTable.id, [staffId]));
+  await db.delete(staffRolesTable).where(eq(staffRolesTable.id, staffRoleId));
 });
 
 const SUMMARY_HEADER = ["Date", "Units", "Amount", "Reference #"];

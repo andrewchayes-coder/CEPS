@@ -1,7 +1,7 @@
 import { randomBytes, scryptSync, timingSafeEqual } from "node:crypto";
 import type { Request, Response, NextFunction } from "express";
 import { eq, and, gt } from "drizzle-orm";
-import { db, usersTable, sessionsTable, auditLogTable, staffPermissionsTable, type User, type StaffPermission } from "@workspace/db";
+import { db, usersTable, sessionsTable, auditLogTable, staffRolesTable, staffRolePermissionsTable, type User, type StaffPermission } from "@workspace/db";
 
 const SESSION_COOKIE = "ceps_session";
 const SESSION_DAYS = 30;
@@ -88,6 +88,8 @@ declare global {
   namespace Express {
     interface Request {
       user?: User;
+      staffPermissionsCache?: Map<string, Promise<StaffPermission[]>>;
+      staffRoleCache?: Map<string, Promise<{ id: string; name: string } | null>>;
     }
   }
 }
@@ -121,10 +123,73 @@ export function requireRole(...roles: string[]) {
 export const requireStaff = requireRole("staff");
 export const requireStaffOrCoordinator = requireRole("staff", "service_coordinator");
 
-export async function getUserPermissions(userId: string, database: typeof db = db): Promise<StaffPermission[]> {
-  const rows = await database.select({ permission: staffPermissionsTable.permission })
-    .from(staffPermissionsTable).where(eq(staffPermissionsTable.userId, userId));
-  return rows.map((row) => row.permission as StaffPermission);
+export async function getUserPermissions(
+  userId: string,
+  database: typeof db = db,
+  request?: Request,
+): Promise<StaffPermission[]> {
+  if (request) {
+    request.staffPermissionsCache ??= new Map();
+    const cached = request.staffPermissionsCache.get(userId);
+    if (cached) return cached;
+  }
+  const lookup = async (): Promise<StaffPermission[]> => {
+    const rows = await database.select({ permission: staffRolePermissionsTable.permission })
+      .from(usersTable)
+      .innerJoin(staffRolesTable, eq(usersTable.staffRoleId, staffRolesTable.id))
+      .innerJoin(staffRolePermissionsTable, eq(staffRolesTable.id, staffRolePermissionsTable.roleId))
+      .where(and(
+        eq(usersTable.id, userId),
+        eq(usersTable.role, "staff"),
+        eq(usersTable.active, true),
+        eq(staffRolesTable.isDeleted, false),
+      ));
+    return rows.map((row) => row.permission as StaffPermission);
+  };
+  const result = lookup();
+  request?.staffPermissionsCache?.set(userId, result);
+  return result;
+}
+
+export async function hasUserPermissionInTransaction(
+  tx: Parameters<Parameters<typeof db.transaction>[0]>[0],
+  userId: string,
+  permission: StaffPermission,
+): Promise<boolean> {
+  const [result] = await tx.select({ id: usersTable.id })
+    .from(usersTable)
+    .innerJoin(staffRolesTable, eq(usersTable.staffRoleId, staffRolesTable.id))
+    .innerJoin(staffRolePermissionsTable, eq(staffRolesTable.id, staffRolePermissionsTable.roleId))
+    .where(and(
+      eq(usersTable.id, userId),
+      eq(usersTable.role, "staff"),
+      eq(usersTable.active, true),
+      eq(staffRolesTable.isDeleted, false),
+      eq(staffRolePermissionsTable.permission, permission),
+    ));
+  return Boolean(result);
+}
+
+export async function getUserStaffRole(
+  user: User,
+  database: typeof db = db,
+  request?: Request,
+): Promise<{ id: string; name: string } | null> {
+  if (request) {
+    request.staffRoleCache ??= new Map();
+    const cached = request.staffRoleCache.get(user.id);
+    if (cached) return cached;
+  }
+  const lookup = async (): Promise<{ id: string; name: string } | null> => {
+    if (user.role !== "staff" || !user.active || !user.staffRoleId) return null;
+    const [role] = await database.select({ id: staffRolesTable.id, name: staffRolesTable.name })
+      .from(staffRolesTable)
+      .where(and(eq(staffRolesTable.id, user.staffRoleId), eq(staffRolesTable.isDeleted, false)));
+    return role ?? null;
+  };
+  const result = lookup();
+  request?.staffRoleCache?.set(user.id, result);
+  return result;
 }
 
 export function requirePermission(permission: StaffPermission) {
@@ -134,7 +199,7 @@ export function requirePermission(permission: StaffPermission) {
       res.status(401).json({ error: "Not authenticated" });
       return;
     }
-    if (user.role !== "staff" || !(await getUserPermissions(user.id)).includes(permission)) {
+    if (user.role !== "staff" || !(await getUserPermissions(user.id, db, req)).includes(permission)) {
       res.status(403).json({ error: "Missing required permission", permission });
       return;
     }
@@ -154,7 +219,11 @@ export async function audit(
   await database.insert(auditLogTable).values({ userId, action, entityType, entityId, detail });
 }
 
-export function sessionUserJson(user: User, permissions: string[] = []) {
+export function sessionUserJson(
+  user: User,
+  permissions: string[] = [],
+  staffRole: { id: string; name: string } | null = null,
+) {
   return {
     id: user.id,
     name: user.name,
@@ -163,6 +232,7 @@ export function sessionUserJson(user: User, permissions: string[] = []) {
     linkedRecordId: user.linkedRecordId,
     linkedRecordType: user.linkedRecordType,
     permissions,
+    staffRole,
   };
 }
 

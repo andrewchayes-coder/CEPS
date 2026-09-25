@@ -11,6 +11,7 @@ tags:
   - name: health
   - name: auth
   - name: users
+  - name: staff-roles
   - name: clients
   - name: referrals
   - name: signature
@@ -342,6 +343,35 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/User"
+  /user-directory:
+    get:
+      operationId: listUserDirectory
+      tags: [users]
+      summary: List minimal user directory entries (staff only)
+      description: Returns only identifiers, display names, roles, and active status for operational pickers.
+      parameters:
+        - name: role
+          in: query
+          schema: { type: string }
+        - name: active
+          in: query
+          schema: { type: boolean }
+        - name: search
+          in: query
+          description: Case-insensitive partial match on display name.
+          schema: { type: string }
+        - name: limit
+          in: query
+          schema: { type: integer }
+      responses:
+        "200":
+          description: Minimal user directory entries
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/UserDirectoryEntry" }
+        "403": { description: Staff access required }
   /users/{id}:
     patch:
       operationId: updateUser
@@ -443,6 +473,89 @@ paths:
                     type: array
                     items: { $ref: "#/components/schemas/AuditEntry" }
                   total: { type: integer }
+  /staff-roles:
+    get:
+      operationId: listStaffRoles
+      tags: [staff-roles]
+      summary: List staff roles and assigned active-user counts
+      responses:
+        "200":
+          description: Staff roles
+          content:
+            application/json:
+              schema: { type: array, items: { $ref: "#/components/schemas/StaffRole" } }
+        "403": { description: Missing manage_users permission }
+    post:
+      operationId: createStaffRole
+      tags: [staff-roles]
+      summary: Create a staff role
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/StaffRoleInput" }
+      responses:
+        "201":
+          description: Created staff role
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/StaffRole" }
+        "400": { description: Invalid role or permission data }
+        "409": { description: Role name already exists }
+  /staff-roles/{id}:
+    patch:
+      operationId: updateStaffRole
+      tags: [staff-roles]
+      summary: Update a staff role and its permission set
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/StaffRoleUpdate" }
+      responses:
+        "200":
+          description: Updated staff role
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/StaffRole" }
+        "400": { description: Protected role cannot be renamed or reduced }
+        "404": { description: Role not found }
+        "409": { description: Name conflict or last manage_users user guardrail }
+    delete:
+      operationId: deleteStaffRole
+      tags: [staff-roles]
+      summary: Soft-delete an unused staff role
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        "200":
+          description: Deleted
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/OkResult" }
+        "400": { description: The system Admin role cannot be deleted }
+        "404": { description: Role not found }
+        "409": { description: Active users are assigned to this role }
+  /staff-permissions:
+    get:
+      operationId: getStaffPermissions
+      tags: [staff-roles]
+      summary: Get the staff permission catalog
+      responses:
+        "200":
+          description: Permission catalog
+          content:
+            application/json:
+              schema: { type: array, items: { $ref: "#/components/schemas/StaffPermissionCatalogEntry" } }
+        "403": { description: Missing manage_users permission }
   /clients:
     get:
       operationId: listClients
@@ -2621,7 +2734,7 @@ components:
         password: { type: string }
     SessionUser:
       type: object
-      required: [id, name, email, role]
+      required: [id, name, email, role, staffRole]
       properties:
         id: { type: string }
         name: { type: string }
@@ -2633,7 +2746,8 @@ components:
         linkedRecordType: { type: ["string", "null"], enum: [client, vendor, null] }
         permissions:
           type: array
-          items: { type: string, enum: [invoice_log_validate, invoice_approve, check_writing] }
+          items: { type: string, enum: [invoice_log_validate, invoice_approve, check_writing, remittance_entry, manage_users] }
+        staffRole: { $ref: "#/components/schemas/StaffRoleSummary" }
     UpdateMeInput:
       type: object
       properties:
@@ -2706,7 +2820,7 @@ components:
         password: { type: string, minLength: 8 }
     User:
       type: object
-      required: [id, name, email, role, active]
+      required: [id, name, email, role, active, staffRole]
       properties:
         id: { type: string }
         name: { type: string }
@@ -2722,7 +2836,18 @@ components:
         createdAt: { type: ["string", "null"] }
         permissions:
           type: array
-          items: { type: string, enum: [invoice_log_validate, invoice_approve, check_writing] }
+          items: { type: string, enum: [invoice_log_validate, invoice_approve, check_writing, remittance_entry, manage_users] }
+        staffRole: { $ref: "#/components/schemas/StaffRoleSummary" }
+    UserDirectoryEntry:
+      type: object
+      required: [id, name, role, active]
+      properties:
+        id: { type: string }
+        name: { type: string }
+        role:
+          type: string
+          enum: [staff, service_coordinator, parent_guardian, self, vendor]
+        active: { type: boolean }
     UserInput:
       type: object
       required: [name, email, role]
@@ -2736,9 +2861,11 @@ components:
         password: { type: string, description: "Initial password for staff/coordinator accounts" }
         linkedRecordId: { type: string }
         linkedRecordType: { type: string, enum: [client, vendor] }
+        staffRoleId: { type: string, format: uuid }
         permissions:
           type: array
-          items: { type: string, enum: [invoice_log_validate, invoice_approve, check_writing] }
+          description: Deprecated and ignored; retained temporarily for old clients.
+          items: { type: string, enum: [invoice_log_validate, invoice_approve, check_writing, remittance_entry, manage_users] }
     UserUpdate:
       type: object
       properties:
@@ -2750,9 +2877,56 @@ components:
           enum: [staff, service_coordinator, parent_guardian, self, vendor]
         active: { type: boolean }
         password: { type: string }
+        staffRoleId: { type: string, format: uuid }
         permissions:
           type: array
-          items: { type: string, enum: [invoice_log_validate, invoice_approve, check_writing] }
+          description: Deprecated and ignored; retained temporarily for old clients.
+          items: { type: string, enum: [invoice_log_validate, invoice_approve, check_writing, remittance_entry, manage_users] }
+    StaffRoleSummary:
+      type: ["object", "null"]
+      required: [id, name]
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string }
+    StaffRole:
+      type: object
+      required: [id, name, isSystem, permissions, activeUserCount]
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string }
+        description: { type: ["string", "null"] }
+        isSystem: { type: boolean }
+        permissions:
+          type: array
+          items: { type: string, enum: [invoice_log_validate, invoice_approve, check_writing, remittance_entry, manage_users] }
+        activeUserCount: { type: integer }
+    StaffRoleInput:
+      type: object
+      required: [name, permissions]
+      properties:
+        name: { type: string, minLength: 1 }
+        description: { type: ["string", "null"] }
+        permissions:
+          type: array
+          uniqueItems: true
+          items: { type: string, enum: [invoice_log_validate, invoice_approve, check_writing, remittance_entry, manage_users] }
+    StaffRoleUpdate:
+      type: object
+      minProperties: 1
+      properties:
+        name: { type: string, minLength: 1 }
+        description: { type: ["string", "null"] }
+        permissions:
+          type: array
+          uniqueItems: true
+          items: { type: string, enum: [invoice_log_validate, invoice_approve, check_writing, remittance_entry, manage_users] }
+    StaffPermissionCatalogEntry:
+      type: object
+      required: [permission, label, description]
+      properties:
+        permission: { type: string, enum: [invoice_log_validate, invoice_approve, check_writing, remittance_entry, manage_users] }
+        label: { type: string }
+        description: { type: string }
     AuditEntry:
       type: object
       required: [id, action, createdAt]

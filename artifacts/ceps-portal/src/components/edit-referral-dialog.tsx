@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { useCreateUser, useListUsers, useUpdateReferral } from '@workspace/api-client-react';
+import { useCreateUser, useListUserDirectory, useUpdateReferral } from '@workspace/api-client-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -23,6 +23,7 @@ import {
 import { useToast } from '@/hooks/use-toast';
 import { Pencil } from 'lucide-react';
 import { apiErrorMessage } from '@/lib/api-error';
+import { useAuth } from '@/components/auth/auth-provider';
 
 const STATUSES = [
   'intake',
@@ -48,12 +49,14 @@ type Props = {
 
 export function EditReferralDialog({ id, referral, onSaved }: Props) {
   const { toast } = useToast();
+  const { user } = useAuth();
+  const canManageUsers = user?.role === 'staff' && (user.permissions ?? []).includes('manage_users');
   const updateReferral = useUpdateReferral();
   const createUser = useCreateUser();
   const [open, setOpen] = useState(false);
-  const { data: coordinators, refetch: refetchCoordinators } = useListUsers(
+  const { data: coordinators, refetch: refetchCoordinators } = useListUserDirectory(
     { role: 'service_coordinator', active: true },
-    { query: { enabled: open, queryKey: ['users', 'active-service-coordinators'] } },
+    { query: { enabled: open, queryKey: ['userDirectory', 'active-service-coordinators'] } },
   );
   const [form, setForm] = useState({
     status: referral.status,
@@ -79,6 +82,7 @@ export function EditReferralDialog({ id, referral, onSaved }: Props) {
   };
 
   const handleCreateCoordinator = () => {
+    if (!canManageUsers) return;
     const name = coordinatorForm.name.trim();
     const email = coordinatorForm.email.trim();
     if (!name || !email) {
@@ -160,7 +164,7 @@ export function EditReferralDialog({ id, referral, onSaved }: Props) {
                 ))}
               </SelectContent>
             </Select>
-            {!addingCoordinator ? (
+            {canManageUsers && (!addingCoordinator ? (
               <Button type="button" variant="link" className="h-auto p-0" onClick={() => setAddingCoordinator(true)} data-testid="button-add-referral-coordinator">
                 Add new coordinator
               </Button>
@@ -186,7 +190,7 @@ export function EditReferralDialog({ id, referral, onSaved }: Props) {
                   <Button type="button" size="sm" variant="ghost" onClick={() => setAddingCoordinator(false)}>Cancel</Button>
                 </div>
               </div>
-            )}
+            ))}
           </div>
           <div className="space-y-2">
             <Label>Notes</Label>

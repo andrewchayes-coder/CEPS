@@ -10,7 +10,8 @@ import {
   paymentAllocationsTable,
   feesTable,
   auditLogTable,
-  staffPermissionsTable,
+  staffRolesTable,
+  staffRolePermissionsTable,
 } from "@workspace/db";
 import request from "supertest";
 import app from "../app";
@@ -23,6 +24,7 @@ let staffId: string;
 let clientId: string;
 let authId: string;
 let cookie: string;
+let staffRoleId: string;
 let checkCounter = 0;
 const uciNumber = String(1_000_000 + (Date.now() % 9_000_000));
 
@@ -34,7 +36,10 @@ beforeAll(async () => {
     .values({ name: "Dup Staff", email: `${nonce}-staff@test.local`, role: "staff" })
     .returning();
   staffId = staff.id;
-  await db.insert(staffPermissionsTable).values({ userId: staffId, permission: "check_writing" });
+  const [role] = await db.insert(staffRolesTable).values({ name: `${nonce} check writer` }).returning();
+  staffRoleId = role.id;
+  await db.insert(staffRolePermissionsTable).values({ roleId: staffRoleId, permission: "check_writing" });
+  await db.update(usersTable).set({ staffRoleId }).where(eq(usersTable.id, staffId));
 
   const [client] = await db
     .insert(clientsTable)
@@ -71,10 +76,10 @@ afterAll(async () => {
   await db.delete(paymentsTable).where(eq(paymentsTable.clientId, clientId));
   await db.delete(authorizationsTable).where(eq(authorizationsTable.clientId, clientId));
   await db.delete(auditLogTable).where(eq(auditLogTable.userId, staffId));
-  await db.delete(staffPermissionsTable).where(eq(staffPermissionsTable.userId, staffId));
   await db.delete(sessionsTable).where(eq(sessionsTable.userId, staffId));
   await db.delete(clientsTable).where(eq(clientsTable.id, clientId));
   await db.delete(usersTable).where(inArray(usersTable.id, [staffId]));
+  await db.delete(staffRolesTable).where(eq(staffRolesTable.id, staffRoleId));
 });
 
 // Insert a payment directly (bypassing the route's duplicate guard) so tests

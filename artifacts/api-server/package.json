@@ -10,6 +10,7 @@
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run --maxWorkers=1",
     "grant-staff-permissions": "pnpm --filter @workspace/db exec tsx ../../artifacts/api-server/src/scripts/grant-missing-staff-permissions.ts",
+    "seed-staff-roles": "pnpm --filter @workspace/db exec tsx ../../artifacts/api-server/src/scripts/seed-staff-roles.ts",
     "backfill-payment-allocation-service-month": "pnpm --filter @workspace/db exec tsx ../../artifacts/api-server/src/scripts/backfill-payment-allocation-service-month.ts",
     "backfill-referral-vendor-id": "pnpm --filter @workspace/db exec tsx ../../artifacts/api-server/src/scripts/backfill-referral-vendor-id.ts"
   },

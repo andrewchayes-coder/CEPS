@@ -133,6 +133,7 @@ export default function ClientDetailPage() {
   const search = useSearch();
   const { user } = useAuth();
   const isStaff = user?.role === 'staff';
+  const canEnterRemittances = isStaff && (user?.permissions ?? []).includes('remittance_entry');
   const isFamily = user?.role === 'parent_guardian' || user?.role === 'self';
   const requestedTab = new URLSearchParams(search).get('tab');
   const activeTab = ['overview', 'authorizations', 'invoices', 'payments', 'fees', 'referrals', 'documents'].includes(requestedTab ?? '')
@@ -589,7 +590,8 @@ export default function ClientDetailPage() {
                  <CardTitle className="text-lg">Remittances</CardTitle>
                  <CardDescription>Participant reimbursements and their current matching status.</CardDescription>
                </div>
-               {isStaff && <CreateRemittanceDialog preselectedClientId={id} onSaved={() => refetch()} />}
+               {canEnterRemittances && <CreateRemittanceDialog preselectedClientId={id} onSaved={() => refetch()} />}
+               {isStaff && !canEnterRemittances && <p className="text-sm text-muted-foreground">You don't have permission to enter or match remittances — ask an admin to grant it in Admin &gt; Users.</p>}
              </CardHeader>
              <CardContent className="p-0">
                <Table>

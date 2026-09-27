@@ -3800,7 +3800,7 @@ components:
           items: { $ref: "#/components/schemas/PaymentAllocation" }
     PaymentAllocation:
       type: object
-      required: [id, authorizationId, serviceMonth, amount, remittedAmount, remitted]
+      required: [id, authorizationId, serviceMonth, amount, remittedAmount, remitted, remittanceLinks]
       properties:
         id: { type: string }
         authorizationId: { type: string }
@@ -3809,6 +3809,18 @@ components:
         amount: { type: string, pattern: '^\d+(\.\d{1,2})?$' }
         remittedAmount: { type: string, pattern: '^\d+(\.\d{1,2})?$' }
         remitted: { type: string, enum: [full, partial, none] }
+        remittanceLinks:
+          type: array
+          description: Remittances allocated to this payment line and visible to the requesting role.
+          items: { $ref: "#/components/schemas/PaymentRemittanceLink" }
+    PaymentRemittanceLink:
+      type: object
+      required: [id, reference, date, amount]
+      properties:
+        id: { type: string, format: uuid }
+        reference: { type: ["string", "null"], description: Alta reference, then report reference when available. }
+        date: { type: string, description: Remittance date in YYYY-MM-DD format. }
+        amount: { type: string, pattern: '^\d+(\.\d{1,2})?$' }
     PaymentInput:
       type: object
       required: [clientId, qbCheckNumber, checkDate, amount, paymentType, allocations]

@@ -687,6 +687,7 @@ export const getClientCaseResponseInvoicesItemLineItemsItemAmountRegExp = new Re
 export const getClientCaseResponsePaymentsItemAllocationsItemServiceMonthRegExp = new RegExp('^\\d{4}-(0[1-9]|1[0-2])$');
 export const getClientCaseResponsePaymentsItemAllocationsItemAmountRegExp = new RegExp('^\\d+(\\.\\d{1,2})?$');
 export const getClientCaseResponsePaymentsItemAllocationsItemRemittedAmountRegExp = new RegExp('^\\d+(\\.\\d{1,2})?$');
+export const getClientCaseResponsePaymentsItemAllocationsItemRemittanceLinksItemAmountRegExp = new RegExp('^\\d+(\\.\\d{1,2})?$');
 
 
 export const GetClientCaseResponse = zod.object({
@@ -900,7 +901,13 @@ export const GetClientCaseResponse = zod.object({
   "authNumber": zod.string().nullish(),
   "amount": zod.string().regex(getClientCaseResponsePaymentsItemAllocationsItemAmountRegExp),
   "remittedAmount": zod.string().regex(getClientCaseResponsePaymentsItemAllocationsItemRemittedAmountRegExp),
-  "remitted": zod.enum(['full', 'partial', 'none'])
+  "remitted": zod.enum(['full', 'partial', 'none']),
+  "remittanceLinks": zod.array(zod.object({
+  "id": zod.uuid(),
+  "reference": zod.string().nullable().describe('Alta reference'),
+  "date": zod.string().describe('Remittance date in YYYY-MM-DD format.'),
+  "amount": zod.string().regex(getClientCaseResponsePaymentsItemAllocationsItemRemittanceLinksItemAmountRegExp)
+})).describe('Remittances allocated to this payment line and visible to the requesting role.')
 }))
 })),
   "remittances": zod.array(zod.object({
@@ -3047,6 +3054,7 @@ export const ListPaymentsQueryParams = zod.object({
 export const listPaymentsResponseItemsItemAllocationsItemServiceMonthRegExp = new RegExp('^\\d{4}-(0[1-9]|1[0-2])$');
 export const listPaymentsResponseItemsItemAllocationsItemAmountRegExp = new RegExp('^\\d+(\\.\\d{1,2})?$');
 export const listPaymentsResponseItemsItemAllocationsItemRemittedAmountRegExp = new RegExp('^\\d+(\\.\\d{1,2})?$');
+export const listPaymentsResponseItemsItemAllocationsItemRemittanceLinksItemAmountRegExp = new RegExp('^\\d+(\\.\\d{1,2})?$');
 
 
 export const ListPaymentsResponse = zod.object({
@@ -3077,7 +3085,13 @@ export const ListPaymentsResponse = zod.object({
   "authNumber": zod.string().nullish(),
   "amount": zod.string().regex(listPaymentsResponseItemsItemAllocationsItemAmountRegExp),
   "remittedAmount": zod.string().regex(listPaymentsResponseItemsItemAllocationsItemRemittedAmountRegExp),
-  "remitted": zod.enum(['full', 'partial', 'none'])
+  "remitted": zod.enum(['full', 'partial', 'none']),
+  "remittanceLinks": zod.array(zod.object({
+  "id": zod.uuid(),
+  "reference": zod.string().nullable().describe('Alta reference'),
+  "date": zod.string().describe('Remittance date in YYYY-MM-DD format.'),
+  "amount": zod.string().regex(listPaymentsResponseItemsItemAllocationsItemRemittanceLinksItemAmountRegExp)
+})).describe('Remittances allocated to this payment line and visible to the requesting role.')
 }))
 })),
   "total": zod.int()
@@ -3115,6 +3129,7 @@ export const CreatePaymentBody = zod.object({
 export const createPaymentResponseAllocationsItemServiceMonthRegExp = new RegExp('^\\d{4}-(0[1-9]|1[0-2])$');
 export const createPaymentResponseAllocationsItemAmountRegExp = new RegExp('^\\d+(\\.\\d{1,2})?$');
 export const createPaymentResponseAllocationsItemRemittedAmountRegExp = new RegExp('^\\d+(\\.\\d{1,2})?$');
+export const createPaymentResponseAllocationsItemRemittanceLinksItemAmountRegExp = new RegExp('^\\d+(\\.\\d{1,2})?$');
 
 
 export const CreatePaymentResponse = zod.object({
@@ -3144,7 +3159,13 @@ export const CreatePaymentResponse = zod.object({
   "authNumber": zod.string().nullish(),
   "amount": zod.string().regex(createPaymentResponseAllocationsItemAmountRegExp),
   "remittedAmount": zod.string().regex(createPaymentResponseAllocationsItemRemittedAmountRegExp),
-  "remitted": zod.enum(['full', 'partial', 'none'])
+  "remitted": zod.enum(['full', 'partial', 'none']),
+  "remittanceLinks": zod.array(zod.object({
+  "id": zod.uuid(),
+  "reference": zod.string().nullable().describe('Alta reference'),
+  "date": zod.string().describe('Remittance date in YYYY-MM-DD format.'),
+  "amount": zod.string().regex(createPaymentResponseAllocationsItemRemittanceLinksItemAmountRegExp)
+})).describe('Remittances allocated to this payment line and visible to the requesting role.')
 }))
 })
 
@@ -3335,6 +3356,7 @@ export const GetPaymentParams = zod.object({
 export const getPaymentResponseAllocationsItemServiceMonthRegExp = new RegExp('^\\d{4}-(0[1-9]|1[0-2])$');
 export const getPaymentResponseAllocationsItemAmountRegExp = new RegExp('^\\d+(\\.\\d{1,2})?$');
 export const getPaymentResponseAllocationsItemRemittedAmountRegExp = new RegExp('^\\d+(\\.\\d{1,2})?$');
+export const getPaymentResponseAllocationsItemRemittanceLinksItemAmountRegExp = new RegExp('^\\d+(\\.\\d{1,2})?$');
 
 
 export const GetPaymentResponse = zod.object({
@@ -3364,7 +3386,13 @@ export const GetPaymentResponse = zod.object({
   "authNumber": zod.string().nullish(),
   "amount": zod.string().regex(getPaymentResponseAllocationsItemAmountRegExp),
   "remittedAmount": zod.string().regex(getPaymentResponseAllocationsItemRemittedAmountRegExp),
-  "remitted": zod.enum(['full', 'partial', 'none'])
+  "remitted": zod.enum(['full', 'partial', 'none']),
+  "remittanceLinks": zod.array(zod.object({
+  "id": zod.uuid(),
+  "reference": zod.string().nullable().describe('Alta reference'),
+  "date": zod.string().describe('Remittance date in YYYY-MM-DD format.'),
+  "amount": zod.string().regex(getPaymentResponseAllocationsItemRemittanceLinksItemAmountRegExp)
+})).describe('Remittances allocated to this payment line and visible to the requesting role.')
 }))
 })
 
@@ -3403,6 +3431,7 @@ export const UpdatePaymentBody = zod.object({
 export const updatePaymentResponseAllocationsItemServiceMonthRegExp = new RegExp('^\\d{4}-(0[1-9]|1[0-2])$');
 export const updatePaymentResponseAllocationsItemAmountRegExp = new RegExp('^\\d+(\\.\\d{1,2})?$');
 export const updatePaymentResponseAllocationsItemRemittedAmountRegExp = new RegExp('^\\d+(\\.\\d{1,2})?$');
+export const updatePaymentResponseAllocationsItemRemittanceLinksItemAmountRegExp = new RegExp('^\\d+(\\.\\d{1,2})?$');
 
 
 export const UpdatePaymentResponse = zod.object({
@@ -3432,7 +3461,13 @@ export const UpdatePaymentResponse = zod.object({
   "authNumber": zod.string().nullish(),
   "amount": zod.string().regex(updatePaymentResponseAllocationsItemAmountRegExp),
   "remittedAmount": zod.string().regex(updatePaymentResponseAllocationsItemRemittedAmountRegExp),
-  "remitted": zod.enum(['full', 'partial', 'none'])
+  "remitted": zod.enum(['full', 'partial', 'none']),
+  "remittanceLinks": zod.array(zod.object({
+  "id": zod.uuid(),
+  "reference": zod.string().nullable().describe('Alta reference'),
+  "date": zod.string().describe('Remittance date in YYYY-MM-DD format.'),
+  "amount": zod.string().regex(updatePaymentResponseAllocationsItemRemittanceLinksItemAmountRegExp)
+})).describe('Remittances allocated to this payment line and visible to the requesting role.')
 }))
 })
 

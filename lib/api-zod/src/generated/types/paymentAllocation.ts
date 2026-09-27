@@ -6,6 +6,7 @@
  * OpenAPI spec version: 0.1.0
  */
 import type { PaymentAllocationRemitted } from './paymentAllocationRemitted';
+import type { PaymentRemittanceLink } from './paymentRemittanceLink';
 
 export interface PaymentAllocation {
   id: string;
@@ -19,4 +20,6 @@ export interface PaymentAllocation {
   /** @pattern ^\d+(\.\d{1,2})?$ */
   remittedAmount: string;
   remitted: PaymentAllocationRemitted;
+  /** Remittances allocated to this payment line and visible to the requesting role. */
+  remittanceLinks: PaymentRemittanceLink[];
 }

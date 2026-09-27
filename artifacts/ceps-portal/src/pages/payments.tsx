@@ -135,7 +135,14 @@ export default function PaymentsPage() {
                     <TableCell className="whitespace-nowrap" data-testid={`text-payment-service-month-${p.id}`}>{formatPaymentServiceMonths(p)}</TableCell>
                     <TableCell className="text-right font-medium">${parseFloat(p.amount).toFixed(2)}</TableCell>
                     <TableCell>
-                      {p.remitted ? <CheckCircle2 className="w-5 h-5 text-chart-5" /> : <span className="text-xs text-muted-foreground">${parseFloat(p.allocatedAmount ?? '0').toFixed(2)} allocated<br />${parseFloat(p.remainingAmount ?? p.amount).toFixed(2)} remaining</span>}
+                      {p.remitted ? <CheckCircle2 className="w-5 h-5 text-chart-5" aria-label="Fully remitted" /> : (
+                        <span className="text-xs text-muted-foreground">
+                          {p.allocations?.some((line) => line.remitted === 'full') && p.allocations.some((line) => line.remitted !== 'full') && (
+                            <span className="block font-semibold text-amber-700 dark:text-amber-300">Partial</span>
+                          )}
+                          ${parseFloat(p.allocatedAmount ?? '0').toFixed(2)} allocated<br />${parseFloat(p.remainingAmount ?? p.amount).toFixed(2)} remaining
+                        </span>
+                      )}
                     </TableCell>
                     {isStaff && (
                       <TableCell className="text-right">

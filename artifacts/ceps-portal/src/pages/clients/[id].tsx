@@ -1,6 +1,6 @@
 import React from 'react';
 import { useLocation, useParams, useSearch } from 'wouter';
-import { useGetClientCase, useListFees, useDeleteClient, useDeleteFee, useListFamilyRepresentatives, getListFamilyRepresentativesQueryKey, type CaseDocument } from '@workspace/api-client-react';
+import { useGetClientCase, useListFees, useDeleteClient, useDeleteFee, useListFamilyRepresentatives, getListFamilyRepresentativesQueryKey, type CaseDocument, type Payment, type PaymentAllocation } from '@workspace/api-client-react';
 import { useAuth } from '@/components/auth/auth-provider';
 import { InvitePortalDialog } from '@/components/invite-portal-dialog';
 import { EditClientDialog } from '@/components/edit-client-dialog';
@@ -24,6 +24,41 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { DocumentPreview } from '@/components/document-preview';
 import { getInvoiceDisplayMonth } from '@/lib/invoice-utils';
 import { earliestPaymentServiceMonth, formatPaymentServiceMonths } from '@/lib/payment-utils';
+import { PaymentRemittedState } from '@/components/payment-remitted-state';
+
+type PaymentRow = { payment: Payment; line: PaymentAllocation | null };
+type PaymentSortKey = 'checkDate' | 'qbCheckNumber' | 'vendorName' | 'authNumber' | 'serviceMonth' | 'amount' | 'remitted';
+
+const paymentRowValues: Record<PaymentSortKey, (row: PaymentRow) => string | number | null | undefined> = {
+  checkDate: ({ payment }) => payment.checkDate,
+  qbCheckNumber: ({ payment }) => payment.qbCheckNumber,
+  vendorName: ({ payment }) => payment.vendorName,
+  authNumber: ({ payment, line }) => line?.authNumber ?? payment.authNumber,
+  serviceMonth: ({ payment, line }) => line?.serviceMonth ?? earliestPaymentServiceMonth(payment),
+  amount: ({ payment, line }) => Number(line?.amount ?? payment.amount),
+  remitted: ({ payment, line }) => line ? { full: 2, partial: 1, none: 0 }[line.remitted] : Number(!!payment.remitted) * 2,
+};
+
+function groupedPaymentRows(payments: Payment[], sort: { key: PaymentSortKey; direction: 'asc' | 'desc' }): PaymentRow[] {
+  const groups = payments.map((payment) => {
+    const rows: PaymentRow[] = payment.allocations?.length
+      ? payment.allocations.map((line) => ({ payment, line }))
+      : [{ payment, line: null }];
+    rows.sort((a, b) => (a.line?.serviceMonth ?? '').localeCompare(b.line?.serviceMonth ?? '') || (a.line?.id ?? '').localeCompare(b.line?.id ?? ''));
+    return { payment, rows: stableSort(rows, sort, paymentRowValues) };
+  });
+  groups.sort((a, b) => a.payment.qbCheckNumber.localeCompare(b.payment.qbCheckNumber, undefined, { numeric: true }) || a.payment.id.localeCompare(b.payment.id));
+  return stableSort(groups, sort, Object.fromEntries(
+    (Object.keys(paymentRowValues) as PaymentSortKey[]).map((key) => [key, (group: typeof groups[number]) => paymentRowValues[key](group.rows[0])]),
+  ) as Record<PaymentSortKey, (group: typeof groups[number]) => string | number | null | undefined>)
+    .flatMap((group) => group.rows);
+}
+
+function serviceMonthLabel(month: string | null | undefined): string {
+  return month && /^\d{4}-(0[1-9]|1[0-2])$/.test(month)
+    ? format(new Date(`${month}-01T12:00:00`), 'MMM yyyy')
+    : '-';
+}
 
 const documentStatusPresentation: Record<string, { label: string; className: string }> = {
   pending: {
@@ -159,7 +194,7 @@ export default function ClientDetailPage() {
   const authorizationsSort = useTableSort<string>('authNumber');
   const invoicesSort = useTableSort<string>('serviceMonth');
   const paymentsSort = useTableSort<string>('checkDate', 'desc');
-  const feesSort = useTableSort<string>('createdAt', 'desc');
+  const feesSort = useTableSort<string>('feeMonth', 'desc');
   const referralsSort = useTableSort<string>('referralDate', 'desc');
 
   if (isLoading) return <div className="p-8 text-center">Loading case record...</div>;
@@ -194,18 +229,12 @@ export default function ClientDetailPage() {
     amountRequested: (invoice) => Number(invoice.amountRequested),
     status: (invoice) => invoice.status,
   });
-  const sortedPayments = stableSort(payments, paymentsSort.sort, {
-    checkDate: (payment) => new Date(payment.checkDate),
-    qbCheckNumber: (payment) => payment.qbCheckNumber,
-    vendorName: (payment) => payment.vendorName,
-    authNumber: (payment) => payment.authNumber,
-    serviceMonth: (payment) => earliestPaymentServiceMonth(payment),
-    amount: (payment) => Number(payment.amount),
-    remitted: (payment) => payment.remitted,
-  });
+  const sortedPayments = groupedPaymentRows(payments, paymentsSort.sort as { key: PaymentSortKey; direction: 'asc' | 'desc' });
   const sortedFees = stableSort(feeList, feesSort.sort, {
-    createdAt: (fee) => fee.createdAt ? new Date(fee.createdAt) : null,
+    feeMonth: (fee) => fee.feeMonth ?? null,
+    authNumber: (fee) => fee.authNumber,
     amount: (fee) => Number(fee.amount),
+    remittedAmount: (fee) => Number(fee.remittedAmount),
     ruleApplied: (fee) => fee.ruleApplied,
     status: (fee) => fee.status,
   });
@@ -548,33 +577,26 @@ export default function ClientDetailPage() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {sortedPayments.map(p => (
-                    <TableRow key={p.id}>
+                  {sortedPayments.map(({ payment: p, line }, index) => (
+                    <TableRow key={line?.id ?? p.id} data-testid={`participant-payment-row-${line?.id ?? p.id}`}>
                       <TableCell className="whitespace-nowrap">{format(new Date(p.checkDate), 'MMM d, yyyy')}</TableCell>
                       <TableCell className="font-mono text-sm">
                         <Link href={`/payments/${p.id}`} className="text-primary hover:underline" data-testid="link-client-payment">
                           {p.qbCheckNumber}
                         </Link>
-                      </TableCell>
-                      <TableCell><VendorLink id={p.vendorId} name={p.vendorName} /></TableCell>
-                      <TableCell className="text-muted-foreground text-xs space-y-1">
-                        {p.allocations && p.allocations.length > 0 ? (
-                          Array.from(new Set(p.allocations.filter(a => a.authorizationId).map(a =>
-                            JSON.stringify({ id: a.authorizationId, num: a.authNumber })
-                          ))).map(str => JSON.parse(str)).map((auth: any, idx: number) => (
-                            <div key={`${auth.id}-${idx}`}>
-                              <Link href={`/authorizations/${auth.id}`} className="text-primary hover:underline">{auth.num}</Link>
-                            </div>
-                          ))
-                        ) : (
-                          p.authorizationId ? (
-                            <Link href={`/authorizations/${p.authorizationId}`} className="text-primary hover:underline">{p.authNumber}</Link>
-                          ) : p.authNumber || '-'
+                        {(index === 0 || sortedPayments[index - 1].payment.id !== p.id) && !!line && (
+                          <div className="text-xs font-sans text-muted-foreground whitespace-nowrap">Check total ${Number(p.amount).toFixed(2)}</div>
                         )}
                       </TableCell>
-                      <TableCell className="whitespace-nowrap" data-testid={`text-client-payment-service-month-${p.id}`}>{formatPaymentServiceMonths(p)}</TableCell>
-                      <TableCell className="text-right font-medium">${parseFloat(p.amount).toFixed(2)}</TableCell>
-                      <TableCell>{p.remitted ? <CheckCircle2 className="w-4 h-4 text-chart-5" /> : '-'}</TableCell>
+                      <TableCell><VendorLink id={p.vendorId} name={p.vendorName} /></TableCell>
+                      <TableCell className="text-muted-foreground text-xs">
+                        {(line?.authorizationId ?? p.authorizationId) ? (
+                          <Link href={`/authorizations/${line?.authorizationId ?? p.authorizationId}`} className="text-primary hover:underline">{line?.authNumber ?? p.authNumber ?? '-'}</Link>
+                        ) : (line?.authNumber ?? p.authNumber ?? '-')}
+                      </TableCell>
+                      <TableCell className="whitespace-nowrap" data-testid={`text-client-payment-service-month-${line?.id ?? p.id}`}>{line ? serviceMonthLabel(line.serviceMonth) : formatPaymentServiceMonths(p)}</TableCell>
+                      <TableCell className="text-right font-medium">${Number(line?.amount ?? p.amount).toFixed(2)}</TableCell>
+                      <TableCell><PaymentRemittedState line={line} legacyRemitted={!!p.remitted} /></TableCell>
                     </TableRow>
                   ))}
                   {payments.length === 0 && (
@@ -623,16 +645,17 @@ export default function ClientDetailPage() {
             <CardHeader>
               <CardTitle className="text-lg">Fees</CardTitle>
               <CardDescription>
-                Fees auto-generated when payments are logged. The current 5% rule is an interim
-                placeholder pending CEPS confirmation.
+                A $160 fee is generated once per participant per service month when a direct-payment or reimbursement check is logged for that month. It&apos;s marked Paid when an Alta remittance on the fee authorization is matched to it.
               </CardDescription>
             </CardHeader>
             <CardContent className="p-0">
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <SortableTableHead sortDirection={feesSort.sort.key === 'createdAt' ? feesSort.sort.direction : null} onSort={() => feesSort.onSort('createdAt')}>Date</SortableTableHead>
+                    <SortableTableHead sortDirection={feesSort.sort.key === 'feeMonth' ? feesSort.sort.direction : null} onSort={() => feesSort.onSort('feeMonth')}>Service Month</SortableTableHead>
+                    <SortableTableHead sortDirection={feesSort.sort.key === 'authNumber' ? feesSort.sort.direction : null} onSort={() => feesSort.onSort('authNumber')}>Auth #</SortableTableHead>
                     <SortableTableHead className="text-right" sortDirection={feesSort.sort.key === 'amount' ? feesSort.sort.direction : null} onSort={() => feesSort.onSort('amount')}>Amount</SortableTableHead>
+                    <SortableTableHead sortDirection={feesSort.sort.key === 'remittedAmount' ? feesSort.sort.direction : null} onSort={() => feesSort.onSort('remittedAmount')}>Remitted</SortableTableHead>
                     <SortableTableHead sortDirection={feesSort.sort.key === 'ruleApplied' ? feesSort.sort.direction : null} onSort={() => feesSort.onSort('ruleApplied')}>Rule</SortableTableHead>
                     <SortableTableHead sortDirection={feesSort.sort.key === 'status' ? feesSort.sort.direction : null} onSort={() => feesSort.onSort('status')}>Status</SortableTableHead>
                     {isStaff && <TableHead className="text-right">Actions</TableHead>}
@@ -642,11 +665,16 @@ export default function ClientDetailPage() {
                   {sortedFees.map(fee => (
                     <TableRow key={fee.id}>
                       <TableCell className="whitespace-nowrap">
-                        {fee.createdAt ? format(new Date(fee.createdAt), 'MMM d, yyyy') : '-'}
+                        <span title={fee.createdAt ? `Created ${format(new Date(fee.createdAt), 'MMM d, yyyy')}` : 'Created date unavailable'}>{serviceMonthLabel(fee.feeMonth)}</span>
+                      </TableCell>
+                      <TableCell>
+                        {fee.authorizationId ? <Link href={`/authorizations/${fee.authorizationId}`} className="text-primary hover:underline">{fee.authNumber || 'View authorization'}</Link> : '-'}
+                        {fee.feeAuthorizationMissing && <Badge variant="outline" className="ml-2 border-amber-500/50 bg-amber-500/10 text-amber-700 dark:text-amber-300">No fee authorization</Badge>}
                       </TableCell>
                       <TableCell className="text-right font-medium">${parseFloat(fee.amount).toFixed(2)}</TableCell>
+                      <TableCell className="whitespace-nowrap">${Number(fee.remittedAmount).toFixed(2)} of ${Number(fee.amount).toFixed(2)}</TableCell>
                       <TableCell className="text-xs text-muted-foreground font-mono">{fee.ruleApplied || '-'}</TableCell>
-                      <TableCell><Badge variant="outline">{fee.status}</Badge></TableCell>
+                      <TableCell><Badge variant="outline">{fee.status === 'collected' ? 'Paid' : fee.status === 'pending' ? 'Pending' : fee.status === 'waived' ? 'Waived' : fee.status}</Badge></TableCell>
                       {isStaff && (
                         <TableCell className="text-right">
                           <div className="flex items-center justify-end gap-2">
@@ -663,7 +691,7 @@ export default function ClientDetailPage() {
                     </TableRow>
                   ))}
                   {feeList.length === 0 && (
-                    <TableRow><TableCell colSpan={isStaff ? 5 : 4} className="text-center py-8 text-muted-foreground">No fees found.</TableCell></TableRow>
+                    <TableRow><TableCell colSpan={isStaff ? 7 : 6} className="text-center py-8 text-muted-foreground">No fees found.</TableCell></TableRow>
                   )}
                 </TableBody>
               </Table>

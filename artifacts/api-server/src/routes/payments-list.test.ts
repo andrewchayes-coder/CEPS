@@ -10,6 +10,7 @@ import {
   authorizationsTable,
   paymentsTable,
   paymentAllocationsTable,
+  remittanceAllocationsTable,
   feesTable,
   remittancesTable,
 } from "@workspace/db";
@@ -514,5 +515,97 @@ describe("GET /payments date bounds", () => {
     const res = await get(staffCookie, { startDate: "2026-05-01", endDate: "2026-05-31", limit: 100 });
     expect(res.body.items.map((p: any) => p.id)).toEqual(expect.arrayContaining([first.id, last.id]));
     expect((await get(staffCookie, { startDate: "2026-06-01", endDate: "2026-05-01", limit: 10 })).status).toBe(400);
+  });
+});
+
+describe("GET /payments/:id line remittance links", () => {
+  let linkedPaymentId: string;
+  let legacyPaymentId: string;
+  let authId: string;
+  let lineIds: string[];
+  let remittanceIds: string[];
+
+  beforeAll(async () => {
+    const [auth] = await db.insert(authorizationsTable).values({
+      clientId: clientA,
+      vendorId,
+      authNumber: `${nonce}-remittance-links-auth`,
+      serviceCode: "459",
+      paymentType: "direct_payment",
+      servicePeriodStart: "2026-01-01",
+      servicePeriodEnd: "2026-12-31",
+      maxPeriodAmount: "1000.00",
+      status: "active",
+    }).returning();
+    authId = auth.id;
+    const linkedPayment = await insertPayment({ clientId: clientA, vendorId, amount: "100.00" });
+    linkedPaymentId = linkedPayment.id;
+    const legacyPayment = await insertPayment({ clientId: clientA, vendorId, amount: "25.00" });
+    legacyPaymentId = legacyPayment.id;
+    const lines = await db.insert(paymentAllocationsTable).values([
+      { paymentId: linkedPaymentId, authorizationId: authId, serviceMonth: "2026-01", amount: "60.00" },
+      { paymentId: linkedPaymentId, authorizationId: authId, serviceMonth: "2026-02", amount: "40.00" },
+    ]).returning();
+    lineIds = lines.map((line) => line.id);
+
+    const remittances = await db.insert(remittancesTable).values([
+      { clientId: clientA, authorizationId: authId, paymentMonth: "2026-01", amount: "60.00", remittanceDate: "2026-03-01", altaReference: `${nonce}-alta-1`, status: "received", source: "manual" },
+      { clientId: clientA, authorizationId: authId, paymentMonth: "2026-02", amount: "40.00", remittanceDate: "2026-04-01", reportReference: `${nonce}-report-2`, status: "received", source: "manual" },
+    ]).returning();
+    remittanceIds = remittances.map((remittance) => remittance.id);
+    await db.insert(remittanceAllocationsTable).values([
+      { remittanceId: remittances[0].id, paymentId: linkedPaymentId, paymentAllocationId: lineIds[0], amount: "60.00" },
+      { remittanceId: remittances[1].id, paymentId: linkedPaymentId, paymentAllocationId: lineIds[1], amount: "40.00" },
+    ]);
+  });
+
+  afterAll(async () => {
+    await db.delete(paymentsTable).where(inArray(paymentsTable.id, [linkedPaymentId, legacyPaymentId]));
+    await db.delete(remittancesTable).where(inArray(remittancesTable.id, remittanceIds));
+    await db.delete(authorizationsTable).where(eq(authorizationsTable.id, authId));
+  });
+
+  const getDetail = (cookie: string, id: string) =>
+    request(app).get(`/api/payments/${id}`).set("Cookie", cookie);
+
+  it("returns each remittance link only on its allocated payment line", async () => {
+    const res = await getDetail(staffCookie, linkedPaymentId);
+    expect(res.status).toBe(200);
+    expect(res.body.allocations).toHaveLength(2);
+    expect(res.body.allocations[0].remittanceLinks).toEqual([{
+      id: remittanceIds[0],
+      reference: `${nonce}-alta-1`,
+      date: "2026-03-01",
+      amount: "60.00",
+    }]);
+    expect(res.body.allocations[1].remittanceLinks).toEqual([{
+      id: remittanceIds[1],
+      reference: `${nonce}-report-2`,
+      date: "2026-04-01",
+      amount: "40.00",
+    }]);
+  });
+
+  it("returns no links for legacy payments without allocation lines", async () => {
+    const res = await getDetail(staffCookie, legacyPaymentId);
+    expect(res.status).toBe(200);
+    expect(res.body.allocations).toEqual([]);
+  });
+
+  it("withholds remittance links from vendor roles that cannot view remittances", async () => {
+    const res = await getDetail(vendorCookie, linkedPaymentId);
+    expect(res.status).toBe(200);
+    expect(res.body.allocations).toHaveLength(2);
+    expect(res.body.allocations.every((allocation: { remittanceLinks: unknown[] }) =>
+      allocation.remittanceLinks.length === 0)).toBe(true);
+  });
+
+  it("shows only the linked client's remittance links to parent roles", async () => {
+    const res = await getDetail(parentCookie, linkedPaymentId);
+    expect(res.status).toBe(200);
+    expect(res.body.allocations[0].remittanceLinks.map((link: { id: string }) => link.id))
+      .toEqual([remittanceIds[0]]);
+    expect(res.body.allocations[1].remittanceLinks.map((link: { id: string }) => link.id))
+      .toEqual([remittanceIds[1]]);
   });
 });

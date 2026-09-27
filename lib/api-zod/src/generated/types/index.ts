@@ -203,6 +203,7 @@ export * from './paymentAllocationRemitted';
 export * from './paymentInput';
 export * from './paymentInputPaymentType';
 export * from './paymentPaymentType';
+export * from './paymentRemittanceLink';
 export * from './paymentSource';
 export * from './paymentUpdate';
 export * from './paymentUpdatePaymentType';

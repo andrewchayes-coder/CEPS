@@ -12,6 +12,7 @@ import { ArrowLeft, CheckCircle2 } from 'lucide-react';
 import { format } from 'date-fns';
 import { MetricHelp } from '@/components/metric-help';
 import { formatPaymentServiceMonths } from '@/lib/payment-utils';
+import { PaymentRemittedState } from '@/components/payment-remitted-state';
 
 export default function PaymentDetailPage() {
   const { id } = useParams<{ id: string }>();
@@ -119,7 +120,19 @@ export default function PaymentDetailPage() {
                     </span>
                   </div>
                   <div className="text-xs text-muted-foreground">Service Month: {formatPaymentServiceMonths({ allocations: [alloc], paymentMonth: payment.paymentMonth })}</div>
-                  <div className="text-xs text-muted-foreground">Remitted: ${parseFloat(alloc.remittedAmount ?? '0').toFixed(2)} of ${parseFloat(alloc.amount).toFixed(2)}</div>
+                  <div className="text-xs">Remitted: <PaymentRemittedState line={alloc} /></div>
+                  {alloc.remittanceLinks.length > 0 && (
+                    <div className="text-xs">
+                      Paid by: {alloc.remittanceLinks.map((remittance, remittanceIndex) => (
+                        <React.Fragment key={remittance.id}>
+                          {remittanceIndex > 0 && ', '}
+                          <Link href={`/remittances/${remittance.id}`} className="text-primary hover:underline" data-testid={`link-payment-line-remittance-${alloc.id}-${remittance.id}`}>
+                            {remittance.reference || `Remittance ${format(new Date(remittance.date), 'MMM d, yyyy')}`} (${Number(remittance.amount).toFixed(2)})
+                          </Link>
+                        </React.Fragment>
+                      ))}
+                    </div>
+                  )}
                 </div>
               )) : (
                 <div className="p-3 bg-muted/30 rounded-md border text-sm text-muted-foreground">

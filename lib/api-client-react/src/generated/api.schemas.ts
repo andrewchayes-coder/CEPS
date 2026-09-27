@@ -1148,6 +1148,19 @@ export const PaymentAllocationRemitted = {
   none: 'none',
 } as const;
 
+export interface PaymentRemittanceLink {
+  id: string;
+  /**
+     * Alta reference
+     * @nullable
+     */
+  reference: string | null;
+  /** Remittance date in YYYY-MM-DD format. */
+  date: string;
+  /** @pattern ^\d+(\.\d{1,2})?$ */
+  amount: string;
+}
+
 export interface PaymentAllocation {
   id: string;
   authorizationId: string;
@@ -1160,6 +1173,8 @@ export interface PaymentAllocation {
   /** @pattern ^\d+(\.\d{1,2})?$ */
   remittedAmount: string;
   remitted: PaymentAllocationRemitted;
+  /** Remittances allocated to this payment line and visible to the requesting role. */
+  remittanceLinks: PaymentRemittanceLink[];
 }
 
 export interface Payment {

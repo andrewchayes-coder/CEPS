@@ -64,7 +64,8 @@ export const roleDocs: RoleDoc[] = [
         steps: [
           { title: 'Review submitted invoices', description: 'Check each invoice line against the matching authorization: service dates, units, and rate.' },
           { title: 'Approve or reject', description: 'Approve valid invoices; reject with a note when something doesn\u2019t match so the vendor can correct it.' },
-          { title: 'Record the payment', description: 'Record the check or EFT against the approved invoice. The CEPS administrative fee is tracked alongside the service payment.' },
+          { title: 'Record the payment', description: 'Record each check line against its authorization and service month. On the participant Payments tab, each line shows its own amount and remittance state, while the Payments Log remains one row per check.' },
+          { title: 'Review monthly fees', description: 'The participant Fees tab groups the $160 administrative fee by service month, shows its 490 fee authorization, and marks it Paid only when a fee remittance is matched.' },
         ],
       },
       {
@@ -82,7 +83,7 @@ export const roleDocs: RoleDoc[] = [
         summary: 'Match Remittance Reports against the CEPS check register.',
         steps: [
           { title: 'Import the remittance', description: 'From Remittances, add the Remittance Report for the funding period.' },
-          { title: 'Match line items', description: 'Match remittance lines to recorded payments; investigate any unmatched or partially funded lines.' },
+          { title: 'Match line items', description: 'Match each remittance to a check line or monthly fee. Open a payment to see which remittance paid each line; investigate unmatched or partially funded lines.' },
           { title: 'Close the period', description: 'When all lines are matched or explained, mark the remittance reconciled.' },
         ],
       },
@@ -155,7 +156,7 @@ export const roleDocs: RoleDoc[] = [
         summary: 'Stay informed about services billed and paid.',
         steps: [
           { title: 'Check invoices', description: 'Open Invoices to see what each vendor has billed, including service dates and amounts.' },
-          { title: 'Check payments', description: 'Open Payments to see what CEPS has paid each vendor from your family member\u2019s funding.' },
+          { title: 'Check payments', description: 'Open a participant’s Payments tab to see each check line by service month, what has been remitted, and the monthly fee status on the Fees tab.' },
           { title: 'Ask questions', description: 'If something looks wrong, contact CEPS staff \u2014 invoices can be corrected before payment.' },
         ],
       },
@@ -187,7 +188,7 @@ export const roleDocs: RoleDoc[] = [
         summary: 'Monitor billing and payments for your services.',
         steps: [
           { title: 'Review invoices', description: 'Open Invoices to see each vendor\u2019s charges for your services.' },
-          { title: 'Review payments', description: 'Open Payments to confirm what has been paid and when.' },
+          { title: 'Review payments', description: 'Open your Payments tab to see each check line, service month, and remittance status; open Fees to see monthly fee authorizations and whether they are Paid.' },
           { title: 'Raise concerns', description: 'Contact CEPS staff if a charge doesn\u2019t look right.' },
         ],
       },

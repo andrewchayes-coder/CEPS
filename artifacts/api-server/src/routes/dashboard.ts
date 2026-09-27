@@ -60,6 +60,10 @@ router.get("/dashboard/summary", requireAuth, async (req, res): Promise<void> =>
         .where(eq(unmatchedPosDocumentsTable.reviewStatus, "pending"))
         .orderBy(asc(unmatchedPosDocumentsTable.createdAt), asc(unmatchedPosDocumentsTable.id))
     : [];
+  const pendingCoordinatorReviewCount = u.role === "staff"
+    ? (await db.select({ total: count() }).from(referralsTable)
+        .where(eq(referralsTable.coordinatorReviewStatus, "pending")))[0]?.total ?? 0
+    : 0;
 
   // Role scoping
   if (u.role === "service_coordinator") {
@@ -129,6 +133,14 @@ router.get("/dashboard/summary", requireAuth, async (req, res): Promise<void> =>
   }
   if (u.role === "staff" || u.role === "service_coordinator") {
     if (u.role === "staff") {
+      if (pendingCoordinatorReviewCount > 0) {
+        alerts.push({
+          kind: "coordinator_review",
+          message: `${pendingCoordinatorReviewCount} referral${pendingCoordinatorReviewCount === 1 ? "" : "s"} awaiting coordinator review.`,
+          entityType: "referral",
+          entityId: null,
+        });
+      }
     const recentSignedReferrals = referrals
       .filter((r) => r.parentSignedAt && r.parentSignedAt.getTime() >= Date.now() - 7 * 86400000)
       .sort((a, b) => (b.parentSignedAt?.getTime() ?? 0) - (a.parentSignedAt?.getTime() ?? 0));
@@ -247,6 +259,7 @@ router.get("/dashboard/summary", requireAuth, async (req, res): Promise<void> =>
         pendingPosReview: unmatchedPosRows.length,
         oldestPendingPosDate: unmatchedPosRows[0]?.createdAt.toISOString() ?? null,
         pendingPosWithoutClient: unmatchedPosRows.filter((row) => row.suggestedClientId === null).length,
+        pendingCoordinatorReview: pendingCoordinatorReviewCount,
       },
       // Keep the existing cap for general alerts while ensuring every
       // exhausted-active authorization remains visible for staff review.

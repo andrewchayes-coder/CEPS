@@ -707,6 +707,10 @@ paths:
         - name: coordinatorId
           in: query
           schema: { type: string }
+        - name: coordinatorReviewStatus
+          in: query
+          description: Staff-only filter for coordinator-review status.
+          schema: { type: string, enum: [pending, approved, rejected] }
         - name: clientId
           in: query
           schema: { type: string }
@@ -763,6 +767,12 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Referral"
+        "202":
+          description: Held for CEPS review; intentionally contains no participant or referral identifiers.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ReferralPendingReview"
   /family-representatives:
     get:
       operationId: listFamilyRepresentatives
@@ -892,6 +902,47 @@ paths:
                 $ref: "#/components/schemas/OkResult"
         "404": { description: Not found }
         "409": { description: Cannot delete a converted referral }
+  /referrals/{id}/coordinator-review:
+    get:
+      operationId: getCoordinatorReview
+      tags: [referrals]
+      summary: Get staff-only comparison details for a held coordinator referral
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        "200":
+          description: Intake and current participant values for staff review.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CoordinatorReviewDetails" }
+        "403": { description: Staff access required }
+        "404": { description: Referral is not awaiting review }
+    post:
+      operationId: reviewCoordinatorReferral
+      tags: [referrals]
+      summary: Approve or reject a held coordinator referral (staff only)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CoordinatorReviewInput" }
+      responses:
+        "200":
+          description: Review decision recorded.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CoordinatorReviewResult" }
+        "400": { description: Invalid review decision or rejection note missing }
+        "404": { description: Referral not found }
+        "409": { description: Referral has already been reviewed }
   /referrals/{id}/send-intake:
     post:
       operationId: sendIntake
@@ -3105,6 +3156,7 @@ components:
         participantEmail: { type: ["string", "null"] }
         familyRepEmail: { type: ["string", "null"] }
         serviceCoordinatorId: { type: ["string", "null"] }
+        coordinatorReviewStatus: { type: ["string", "null"], enum: [pending, approved, rejected, null] }
         coordinatorName: { type: ["string", "null"] }
         referralDate: { type: string }
         status:
@@ -3143,6 +3195,66 @@ components:
         paymentTypeRequested: { type: string, enum: [service_payment, reimbursement] }
         supportingDocumentUrl: { type: string }
         notes: { type: string }
+    ReferralPendingReview:
+      type: object
+      required: [status, message]
+      properties:
+        status: { type: string, enum: [pending_review] }
+        message: { type: string }
+    ReferralReviewValue:
+      type: object
+      required: [phone, email, address, preferredLanguage, isMinor, familyRepresentative]
+      properties:
+        phone: { type: ["string", "null"] }
+        email: { type: ["string", "null"] }
+        address: { type: ["string", "null"] }
+        preferredLanguage: { type: ["string", "null"] }
+        isMinor: { type: ["boolean", "null"] }
+        familyRepresentative:
+          oneOf:
+            - $ref: "#/components/schemas/ReferralReviewRepresentative"
+            - type: "null"
+    ReferralReviewRepresentative:
+      type: object
+      required: [name, relationship, phone, email, address]
+      properties:
+        name: { type: ["string", "null"] }
+        relationship: { type: ["string", "null"] }
+        phone: { type: ["string", "null"] }
+        email: { type: ["string", "null"] }
+        address: { type: ["string", "null"] }
+    CoordinatorReviewDetails:
+      type: object
+      required: [referralId, clientId, status, submittedByName, intake, current, currentFamilyRepresentatives]
+      properties:
+        referralId: { type: string, format: uuid }
+        clientId: { type: string, format: uuid }
+        status: { type: string, enum: [pending] }
+        submittedByName: { type: string }
+        intake: { $ref: "#/components/schemas/ReferralReviewValue" }
+        current: { $ref: "#/components/schemas/ReferralReviewValue" }
+        currentFamilyRepresentatives:
+          type: array
+          items: { $ref: "#/components/schemas/ReferralReviewRepresentative" }
+        reviewNote: { type: ["string", "null"] }
+    CoordinatorReviewInput:
+      type: object
+      required: [decision, applyPhone, applyEmail, applyAddress, applyPreferredLanguage, applyMinorStatus, applyFamilyRepresentative, reassignAsAssignedCoordinator]
+      properties:
+        decision: { type: string, enum: [approve, reject] }
+        applyPhone: { type: boolean }
+        applyEmail: { type: boolean }
+        applyAddress: { type: boolean }
+        applyPreferredLanguage: { type: boolean }
+        applyMinorStatus: { type: boolean }
+        applyFamilyRepresentative: { type: boolean }
+        reassignAsAssignedCoordinator: { type: boolean }
+        note: { type: string }
+    CoordinatorReviewResult:
+      type: object
+      required: [status]
+      properties:
+        status: { type: string, enum: [approved, rejected] }
     ReferralUpdate:
       type: object
       properties:
@@ -4253,7 +4365,7 @@ components:
           items: { $ref: "#/components/schemas/StatusCount" }
         totals:
           type: object
-          required: [activeClients, activeAuthorizations, pendingInvoices, needsEntryInvoices, vendorsMissingW9, pendingPosReview, oldestPendingPosDate, pendingPosWithoutClient]
+          required: [activeClients, activeAuthorizations, pendingInvoices, needsEntryInvoices, vendorsMissingW9, pendingPosReview, oldestPendingPosDate, pendingPosWithoutClient, pendingCoordinatorReview]
           properties:
             activeClients: { type: integer }
             activeAuthorizations: { type: integer }
@@ -4266,13 +4378,14 @@ components:
             pendingPosReview: { type: integer }
             oldestPendingPosDate: { type: ["string", "null"], format: date-time }
             pendingPosWithoutClient: { type: integer }
+            pendingCoordinatorReview: { type: integer }
         alerts:
           type: array
           items:
             type: object
             required: [kind, message]
             properties:
-              kind: { type: string, enum: [expiring_authorization, missing_document, pending_w9, unmatched_remittance, authorization_exhausted_active, unmatched_pos, unmatched_pos_possible_match, pending_signature, recently_completed, family_updated_participant] }
+              kind: { type: string, enum: [expiring_authorization, missing_document, pending_w9, unmatched_remittance, authorization_exhausted_active, unmatched_pos, unmatched_pos_possible_match, pending_signature, recently_completed, family_updated_participant, coordinator_review] }
               message: { type: string }
               entityType: { type: ["string", "null"] }
               entityId: { type: ["string", "null"] }

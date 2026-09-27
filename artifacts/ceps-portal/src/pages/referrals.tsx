@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useListReferrals } from '@workspace/api-client-react';
 import { useAuth } from '@/components/auth/auth-provider';
-import { Link } from 'wouter';
+import { Link, useLocation, useSearch } from 'wouter';
 import { format } from 'date-fns';
 import { 
   Table, 
@@ -28,6 +28,9 @@ const PAGE_SIZE = 50;
 
 export default function ReferralsPage() {
   const { user } = useAuth();
+  const [, navigate] = useLocation();
+  const searchParams = useSearch();
+  const reviewFilter = user?.role === 'staff' && new URLSearchParams(searchParams).get('coordinatorReviewStatus') === 'pending' ? 'pending' : 'all';
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [search, setSearch] = useState('');
   const debouncedSearch = useDebounce(search, 300);
@@ -43,6 +46,7 @@ export default function ReferralsPage() {
   // Server-driven status filter, search, and pagination.
   const params = {
     ...(statusFilter !== 'all' ? { status: statusFilter } : {}),
+    ...(reviewFilter === 'pending' ? { coordinatorReviewStatus: 'pending' as const } : {}),
     ...(debouncedSearch ? { search: debouncedSearch } : {}),
     ...(startDate ? { startDate } : {}),
     ...(endDate ? { endDate } : {}),
@@ -50,7 +54,7 @@ export default function ReferralsPage() {
     offset: page * PAGE_SIZE,
     ...(sort.sortBy ? { sortBy: sort.sortBy, sortDirection: sort.sortDirection } : {}),
   };
-  const { data, isLoading } = useListReferrals(params, {
+  const { data, isLoading, isError, refetch } = useListReferrals(params, {
     query: {
       queryKey: ['referrals', params],
     },
@@ -63,6 +67,10 @@ export default function ReferralsPage() {
   const onStatusChange = (value: string) => {
     setStatusFilter(value);
     setPage(0);
+  };
+  const onReviewChange = (value: string) => {
+    setPage(0);
+    navigate(value === 'pending' ? '/referrals?coordinatorReviewStatus=pending' : '/referrals');
   };
 
   return (
@@ -123,6 +131,17 @@ export default function ReferralsPage() {
                   </SelectContent>
                 </Select>
               </div>
+              {user?.role === 'staff' && (
+                <Select value={reviewFilter} onValueChange={onReviewChange}>
+                  <SelectTrigger className="w-full sm:w-[190px]" aria-label="Coordinator review filter" data-testid="select-coordinator-review-filter">
+                    <SelectValue placeholder="All reviews" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All reviews</SelectItem>
+                    <SelectItem value="pending">Needs CEPS review</SelectItem>
+                  </SelectContent>
+                </Select>
+              )}
             </div>
           </div>
         </CardHeader>
@@ -141,10 +160,12 @@ export default function ReferralsPage() {
             <TableBody>
               {isLoading ? (
                 <ReferralsTableSkeleton />
+              ) : isError ? (
+                <TableRow><TableCell colSpan={6} className="h-32 text-center"><div role="alert" className="space-y-2"><p>Could not load referrals.</p><Button variant="outline" size="sm" onClick={() => void refetch()}>Retry</Button></div></TableCell></TableRow>
               ) : referrals?.length === 0 ? (
                 <TableRow>
                   <TableCell colSpan={6} className="h-24 text-center text-muted-foreground">
-                    No referrals found.
+                    {reviewFilter === 'pending' ? 'No referrals are waiting for CEPS review.' : 'No referrals found.'}
                   </TableCell>
                 </TableRow>
               ) : (
@@ -167,7 +188,7 @@ export default function ReferralsPage() {
                           : 'Unknown'}
                     </TableCell>
                     <TableCell>
-                      <StatusBadge status={referral.status} />
+                      <div className="flex flex-wrap items-center gap-2"><StatusBadge status={referral.status} />{referral.coordinatorReviewStatus === 'pending' && <Badge variant="outline" className="border-primary/30 bg-primary/10 text-primary">Needs CEPS review</Badge>}</div>
                     </TableCell>
                     <TableCell className="text-right">
                       <Button variant="ghost" size="sm" asChild>

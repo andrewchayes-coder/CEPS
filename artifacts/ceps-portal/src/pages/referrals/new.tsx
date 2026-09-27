@@ -20,6 +20,9 @@ import { trackAnalyticsEvent } from '@/lib/analytics';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { PreferredLanguageField } from '@/components/preferred-language-field';
 import { validLanguage } from '@/lib/preferred-language';
+import { useAuth } from '@/components/auth/auth-provider';
+import { useQueryClient } from '@tanstack/react-query';
+import { Link } from 'wouter';
 
 // -----------------------------------------------------------------------------
 // Validation Schemas (Step by Step to manage complex conditional logic)
@@ -144,8 +147,11 @@ const STEPS = ['Coordinator', 'Vendor', 'Activity', 'Participant', 'Documents', 
 
 export default function ReferralNewPage() {
   const [, setLocation] = useLocation();
+  const { user } = useAuth();
+  const queryClient = useQueryClient();
   const { toast } = useToast();
   const createReferral = useCreateReferral();
+  const [confirmation, setConfirmation] = useState<string | null>(null);
   const [currentStep, setCurrentStep] = useState(0);
   const [supportingDocumentUrl, setSupportingDocumentUrl] = useState<string | undefined>(undefined);
   const [familyRepOpen, setFamilyRepOpen] = useState(false);
@@ -252,11 +258,18 @@ export default function ReferralNewPage() {
         trackAnalyticsEvent('referral_submitted', {
           supporting_document_supplied: Boolean(supportingDocumentUrl),
         });
+        void queryClient.invalidateQueries({ queryKey: ['/api/referrals'] });
+        void queryClient.invalidateQueries({ queryKey: ['/api/dashboard'] });
+        if ('status' in res && res.status === 'pending_review') {
+          setConfirmation(res.message);
+          window.scrollTo(0, 0);
+          return;
+        }
         toast({
           title: "Referral Submitted",
           description: "The referral has been saved. Choose the agreement recipient on the referral page.",
         });
-        setLocation(`/referrals/${res.id}`);
+        if ('id' in res && typeof res.id === 'string') setLocation(`/referrals/${res.id}`);
       },
       onError: (err: any) => {
         toast({
@@ -267,6 +280,26 @@ export default function ReferralNewPage() {
       }
     });
   };
+
+  if (confirmation) {
+    return (
+      <div className="max-w-2xl mx-auto py-10 md:py-20">
+        <Card className="border-primary/30 overflow-hidden">
+          <div className="h-2 bg-primary" />
+          <CardHeader className="space-y-4">
+            <div className="flex h-12 w-12 items-center justify-center rounded-full bg-primary/10 text-primary"><CheckCircle2 className="h-6 w-6" /></div>
+            <CardTitle className="text-2xl">Referral submitted for review</CardTitle>
+            <CardDescription className="text-base" role="status" data-testid="status-referral-pending-review">{confirmation}</CardDescription>
+          </CardHeader>
+          <CardContent className="text-sm text-muted-foreground">No further action is needed right now. CEPS will review the participant information before the referral can proceed.</CardContent>
+          <CardFooter className="flex flex-col sm:flex-row gap-3">
+            <Button onClick={() => { form.reset(); setSupportingDocumentUrl(undefined); setFamilyRepOpen(false); setCurrentStep(0); setConfirmation(null); }} data-testid="button-submit-another-referral">Submit another referral</Button>
+            <Button variant="outline" asChild><Link href="/referrals">Back to referrals</Link></Button>
+          </CardFooter>
+        </Card>
+      </div>
+    );
+  }
 
   return (
     <div className="max-w-3xl mx-auto space-y-6 pb-20">
@@ -750,7 +783,7 @@ export default function ReferralNewPage() {
             <Card>
               <CardHeader>
                 <CardTitle>Review & Submit</CardTitle>
-                <CardDescription>Verify all information before creating the referral.</CardDescription>
+                <CardDescription>Verify all information before submitting the referral.</CardDescription>
               </CardHeader>
               <CardContent className="space-y-6">
                 <div className="grid md:grid-cols-2 gap-8 text-sm">
@@ -794,7 +827,9 @@ export default function ReferralNewPage() {
                 <Alert className="bg-primary/5 border-primary/20">
                   <AlertTitle className="text-primary">Next Steps</AlertTitle>
                   <AlertDescription>
-                    After saving the referral, choose the agreement recipient on the referral page to send the signature link to <strong>{watch('contactEmail')}</strong> or another recipient.
+                    {user?.role === 'service_coordinator'
+                      ? 'CEPS will review this referral and follow up with you. Participant information will not be changed automatically.'
+                      : <>After saving the referral, choose the agreement recipient on the referral page to send the signature link to <strong>{watch('contactEmail')}</strong> or another recipient.</>}
                   </AlertDescription>
                 </Alert>
 

@@ -656,6 +656,18 @@ export interface ClientUpdate {
   familyRepAddress?: string;
 }
 
+/**
+ * @nullable
+ */
+export type ReferralCoordinatorReviewStatus = typeof ReferralCoordinatorReviewStatus[keyof typeof ReferralCoordinatorReviewStatus] | null;
+
+
+export const ReferralCoordinatorReviewStatus = {
+  pending: 'pending',
+  approved: 'approved',
+  rejected: 'rejected',
+} as const;
+
 export type ReferralStatus = typeof ReferralStatus[keyof typeof ReferralStatus];
 
 
@@ -919,6 +931,8 @@ export interface Referral {
   familyRepEmail?: string | null;
   /** @nullable */
   serviceCoordinatorId?: string | null;
+  /** @nullable */
+  coordinatorReviewStatus?: ReferralCoordinatorReviewStatus;
   /** @nullable */
   coordinatorName?: string | null;
   referralDate: string;
@@ -1345,6 +1359,96 @@ export interface ReferralInput {
   paymentTypeRequested?: ReferralInputPaymentTypeRequested;
   supportingDocumentUrl?: string;
   notes?: string;
+}
+
+export type ReferralPendingReviewStatus = typeof ReferralPendingReviewStatus[keyof typeof ReferralPendingReviewStatus];
+
+
+export const ReferralPendingReviewStatus = {
+  pending_review: 'pending_review',
+} as const;
+
+export interface ReferralPendingReview {
+  status: ReferralPendingReviewStatus;
+  message: string;
+}
+
+export interface ReferralReviewRepresentative {
+  /** @nullable */
+  name: string | null;
+  /** @nullable */
+  relationship: string | null;
+  /** @nullable */
+  phone: string | null;
+  /** @nullable */
+  email: string | null;
+  /** @nullable */
+  address: string | null;
+}
+
+export interface ReferralReviewValue {
+  /** @nullable */
+  phone: string | null;
+  /** @nullable */
+  email: string | null;
+  /** @nullable */
+  address: string | null;
+  /** @nullable */
+  preferredLanguage: string | null;
+  /** @nullable */
+  isMinor: boolean | null;
+  familyRepresentative: ReferralReviewRepresentative | null;
+}
+
+export type CoordinatorReviewDetailsStatus = typeof CoordinatorReviewDetailsStatus[keyof typeof CoordinatorReviewDetailsStatus];
+
+
+export const CoordinatorReviewDetailsStatus = {
+  pending: 'pending',
+} as const;
+
+export interface CoordinatorReviewDetails {
+  referralId: string;
+  clientId: string;
+  status: CoordinatorReviewDetailsStatus;
+  submittedByName: string;
+  intake: ReferralReviewValue;
+  current: ReferralReviewValue;
+  currentFamilyRepresentatives: ReferralReviewRepresentative[];
+  /** @nullable */
+  reviewNote?: string | null;
+}
+
+export type CoordinatorReviewInputDecision = typeof CoordinatorReviewInputDecision[keyof typeof CoordinatorReviewInputDecision];
+
+
+export const CoordinatorReviewInputDecision = {
+  approve: 'approve',
+  reject: 'reject',
+} as const;
+
+export interface CoordinatorReviewInput {
+  decision: CoordinatorReviewInputDecision;
+  applyPhone: boolean;
+  applyEmail: boolean;
+  applyAddress: boolean;
+  applyPreferredLanguage: boolean;
+  applyMinorStatus: boolean;
+  applyFamilyRepresentative: boolean;
+  reassignAsAssignedCoordinator: boolean;
+  note?: string;
+}
+
+export type CoordinatorReviewResultStatus = typeof CoordinatorReviewResultStatus[keyof typeof CoordinatorReviewResultStatus];
+
+
+export const CoordinatorReviewResultStatus = {
+  approved: 'approved',
+  rejected: 'rejected',
+} as const;
+
+export interface CoordinatorReviewResult {
+  status: CoordinatorReviewResultStatus;
 }
 
 export type ReferralUpdateStatus = typeof ReferralUpdateStatus[keyof typeof ReferralUpdateStatus];
@@ -2767,6 +2871,7 @@ export type DashboardSummaryTotals = {
   /** @nullable */
   oldestPendingPosDate: string | null;
   pendingPosWithoutClient: number;
+  pendingCoordinatorReview: number;
 };
 
 export type DashboardSummaryAlertsItemKind = typeof DashboardSummaryAlertsItemKind[keyof typeof DashboardSummaryAlertsItemKind];
@@ -2783,6 +2888,7 @@ export const DashboardSummaryAlertsItemKind = {
   pending_signature: 'pending_signature',
   recently_completed: 'recently_completed',
   family_updated_participant: 'family_updated_participant',
+  coordinator_review: 'coordinator_review',
 } as const;
 
 export type DashboardSummaryAlertsItem = {
@@ -2990,6 +3096,10 @@ export type ListClients200 = {
 export type ListReferralsParams = {
 status?: string;
 coordinatorId?: string;
+/**
+ * Staff-only filter for coordinator-review status.
+ */
+coordinatorReviewStatus?: ListReferralsCoordinatorReviewStatus;
 clientId?: string;
 search?: string;
 startDate?: string;
@@ -2999,6 +3109,15 @@ offset?: number;
 sortBy?: ListReferralsSortBy;
 sortDirection?: ListReferralsSortDirection;
 };
+
+export type ListReferralsCoordinatorReviewStatus = typeof ListReferralsCoordinatorReviewStatus[keyof typeof ListReferralsCoordinatorReviewStatus];
+
+
+export const ListReferralsCoordinatorReviewStatus = {
+  pending: 'pending',
+  approved: 'approved',
+  rejected: 'rejected',
+} as const;
 
 export type ListReferralsSortBy = typeof ListReferralsSortBy[keyof typeof ListReferralsSortBy];
 

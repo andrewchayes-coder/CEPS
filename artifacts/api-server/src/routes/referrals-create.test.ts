@@ -10,6 +10,7 @@ import {
   referralsTable,
   auditLogTable,
   familyRepresentativesTable,
+  magicLinksTable,
   unmatchedPosDocumentsTable,
 } from "@workspace/db";
 import app from "../app";
@@ -260,12 +261,13 @@ describe("POST /referrals supporting documents", () => {
 });
 
 describe("POST /referrals client contact and family representative carryover", () => {
-  it("rejects a coordinator's unrelated existing-client UCI before making any writes", async () => {
+  it("holds a coordinator's unrelated existing-client UCI for staff review without exposing or mutating client data", async () => {
     const coordinator = await makeCoordinator("Unauthorized Coordinator");
     const assignedCoordinator = await makeCoordinator("Different Assigned Coordinator");
     const uci = `${nonce}-unauthorized-existing-client`;
     const vendorName = `${nonce} Unauthorized Existing Client Vendor`;
     createdClientUcis.push(uci);
+    createdVendorNames.push(vendorName);
     const [client] = await db.insert(clientsTable).values({
       firstName: "Protected",
       lastName: "Participant",
@@ -274,6 +276,15 @@ describe("POST /referrals client contact and family representative carryover", (
       preferredLanguage: "English",
       assignedCoordinatorId: assignedCoordinator.id,
       isMinor: true,
+    }).returning();
+    const [existingRep] = await db.insert(familyRepresentativesTable).values({
+      clientId: client.id,
+      name: "Existing Representative",
+      relationship: "guardian",
+      phone: "555-existing",
+      email: "old@example.test",
+      address: "Old address",
+      createdBy: assignedCoordinator.id,
     }).returning();
 
     const response = await request(app).post("/api/referrals").set("Cookie", coordinator.cookie).send({
@@ -284,15 +295,43 @@ describe("POST /referrals client contact and family representative carryover", (
       },
     });
 
-    expect(response.status).toBe(403);
+    expect(response.status).toBe(202);
+    expect(response.body).toEqual({
+      status: "pending_review",
+      message: "Referral submitted. CEPS will review it and follow up with you.",
+    });
+    expect(response.body).not.toHaveProperty("id");
+    expect(JSON.stringify(response.body)).not.toContain(client.id);
+    expect(JSON.stringify(response.body)).not.toContain(uci);
+    const [heldReferral] = await db.select().from(referralsTable).where(eq(referralsTable.clientId, client.id));
+    createdReferralIds.push(heldReferral.id);
+    expect(heldReferral).toMatchObject({
+      serviceCoordinatorId: null,
+      submittedByUserId: coordinator.id,
+      coordinatorReviewStatus: "pending",
+      status: "intake",
+    });
     const [unchanged] = await db.select().from(clientsTable).where(eq(clientsTable.id, client.id));
-    expect(unchanged.preferredLanguage).toBe("English");
-    expect(await db.select().from(referralsTable).where(eq(referralsTable.clientId, client.id))).toHaveLength(0);
+    expect(unchanged).toMatchObject({
+      preferredLanguage: "English",
+      phone: null,
+      email: null,
+      address: null,
+      isMinor: true,
+      assignedCoordinatorId: assignedCoordinator.id,
+    });
     expect(await db.select().from(familyRepresentativesTable).where(
       eq(familyRepresentativesTable.clientId, client.id),
-    )).toHaveLength(0);
-    expect(await db.select().from(vendorsTable).where(eq(vendorsTable.name, vendorName))).toHaveLength(0);
-    expect(await db.select().from(auditLogTable).where(eq(auditLogTable.userId, coordinator.id))).toHaveLength(0);
+    )).toEqual([expect.objectContaining({ id: existingRep.id })]);
+    expect(await db.select().from(vendorsTable).where(eq(vendorsTable.name, vendorName))).toHaveLength(1);
+    expect(await db.select().from(auditLogTable).where(and(
+      eq(auditLogTable.userId, coordinator.id),
+      eq(auditLogTable.action, "referral_held_for_coordinator_review"),
+    ))).toHaveLength(1);
+    expect(await db.select().from(magicLinksTable).where(eq(magicLinksTable.referralId, heldReferral.id))).toHaveLength(0);
+    expect((await request(app).get(`/api/referrals/${heldReferral.id}`).set("Cookie", coordinator.cookie)).status).toBe(403);
+    expect((await request(app).get(`/api/clients/${client.id}`).set("Cookie", coordinator.cookie)).status).toBe(403);
+    expect((await request(app).get("/api/referrals").query({ search: uci }).set("Cookie", coordinator.cookie)).body.total).toBe(0);
   });
 
   it("allows a coordinator assigned to an existing client to submit the referral", async () => {

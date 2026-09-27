@@ -41,6 +41,9 @@ import type {
   ClientInput,
   ClientUpdate,
   CompleteUnmatchedPosInput,
+  CoordinatorReviewDetails,
+  CoordinatorReviewInput,
+  CoordinatorReviewResult,
   DashboardSummary,
   DuplicatePaymentError,
   ErrorEnvelope,
@@ -118,6 +121,7 @@ import type {
   PosPdfInput,
   Referral,
   ReferralInput,
+  ReferralPendingReview,
   ReferralUpdate,
   Remittance,
   RemittanceInput,
@@ -2520,9 +2524,9 @@ export const getCreateReferralUrl = () => {
 /**
  * @summary Submit referral (coordinator portal form or staff manual entry)
  */
-export const createReferral = async (referralInput: ReferralInput, options?: Parameters<typeof customFetch>[1]): Promise<Referral> => {
+export const createReferral = async (referralInput: ReferralInput, options?: Parameters<typeof customFetch>[1]): Promise<Referral | ReferralPendingReview> => {
 
-  return customFetch<Referral>(getCreateReferralUrl(),
+  return customFetch<Referral | ReferralPendingReview>(getCreateReferralUrl(),
   {
     ...options,
     method: 'POST',
@@ -3155,6 +3159,155 @@ export const useDeleteReferral = <TError = ErrorType<void>,
         TContext
       > => {
       return useMutation(getDeleteReferralMutationOptions(options));
+    }
+
+export const getGetCoordinatorReviewUrl = (id: string,) => {
+
+
+
+
+  return `/api/referrals/${id}/coordinator-review`
+}
+
+/**
+ * @summary Get staff-only comparison details for a held coordinator referral
+ */
+export const getCoordinatorReview = async (id: string, options?: Parameters<typeof customFetch>[1]): Promise<CoordinatorReviewDetails> => {
+
+  return customFetch<CoordinatorReviewDetails>(getGetCoordinatorReviewUrl(id),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetCoordinatorReviewQueryKey = (id: string,) => {
+    return [
+    `/api/referrals/${id}/coordinator-review`
+    ] as const;
+    }
+
+
+export const getGetCoordinatorReviewQueryOptions = <TData = Awaited<ReturnType<typeof getCoordinatorReview>>, TError = ErrorType<void>>(id: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getCoordinatorReview>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetCoordinatorReviewQueryKey(id);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getCoordinatorReview>>> = ({ signal }) => getCoordinatorReview(id, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: id !== null && id !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getCoordinatorReview>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetCoordinatorReviewQueryResult = NonNullable<Awaited<ReturnType<typeof getCoordinatorReview>>>
+export type GetCoordinatorReviewQueryError = ErrorType<void>
+
+
+/**
+ * @summary Get staff-only comparison details for a held coordinator referral
+ */
+
+export function useGetCoordinatorReview<TData = Awaited<ReturnType<typeof getCoordinatorReview>>, TError = ErrorType<void>>(
+ id: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getCoordinatorReview>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetCoordinatorReviewQueryOptions(id,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getReviewCoordinatorReferralUrl = (id: string,) => {
+
+
+
+
+  return `/api/referrals/${id}/coordinator-review`
+}
+
+/**
+ * @summary Approve or reject a held coordinator referral (staff only)
+ */
+export const reviewCoordinatorReferral = async (id: string,
+    coordinatorReviewInput: CoordinatorReviewInput, options?: Parameters<typeof customFetch>[1]): Promise<CoordinatorReviewResult> => {
+
+  return customFetch<CoordinatorReviewResult>(getReviewCoordinatorReferralUrl(id),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(coordinatorReviewInput)
+  }
+);}
+
+
+
+
+
+export const getReviewCoordinatorReferralMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof reviewCoordinatorReferral>>, TError,{id: string;data: BodyType<CoordinatorReviewInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof reviewCoordinatorReferral>>, TError,{id: string;data: BodyType<CoordinatorReviewInput>}, TContext> => {
+
+const mutationKey = ['reviewCoordinatorReferral'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof reviewCoordinatorReferral>>, {id: string;data: BodyType<CoordinatorReviewInput>}> = (props) => {
+          const {id,data} = props ?? {};
+
+          return  reviewCoordinatorReferral(id,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type ReviewCoordinatorReferralMutationResult = NonNullable<Awaited<ReturnType<typeof reviewCoordinatorReferral>>>
+    export type ReviewCoordinatorReferralMutationBody = BodyType<CoordinatorReviewInput>
+    export type ReviewCoordinatorReferralMutationError = ErrorType<void>
+
+    /**
+ * @summary Approve or reject a held coordinator referral (staff only)
+ */
+export const useReviewCoordinatorReferral = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof reviewCoordinatorReferral>>, TError,{id: string;data: BodyType<CoordinatorReviewInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof reviewCoordinatorReferral>>,
+        TError,
+        {id: string;data: BodyType<CoordinatorReviewInput>},
+        TContext
+      > => {
+      return useMutation(getReviewCoordinatorReferralMutationOptions(options));
     }
 
 export const getSendIntakeUrl = (id: string,) => {

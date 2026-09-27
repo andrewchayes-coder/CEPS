@@ -239,6 +239,13 @@
       "when": 1790364764036,
       "tag": "0033_large_thor",
       "breakpoints": true
+    },
+    {
+      "idx": 34,
+      "version": "7",
+      "when": 1790471789124,
+      "tag": "0034_wet_queen_noir",
+      "breakpoints": true
     }
   ]
 }

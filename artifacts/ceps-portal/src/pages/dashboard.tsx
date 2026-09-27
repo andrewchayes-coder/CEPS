@@ -147,6 +147,20 @@ export default function DashboardPage() {
 
       {/* KPI Cards */}
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+        {user?.role === 'staff' && (
+          <Link href="/referrals?coordinatorReviewStatus=pending" className="block rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary" data-testid="link-tile-coordinator-review">
+            <Card className="h-full border-primary/30 transition-colors hover:bg-primary/5">
+              <CardHeader className="flex flex-row items-center justify-between pb-2 space-y-0">
+                <CardTitle className="text-sm font-medium">Referrals awaiting coordinator review ({summary.totals.pendingCoordinatorReview})</CardTitle>
+                <FileText className="h-4 w-4 text-primary" />
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold" data-testid="text-pending-coordinator-reviews">{summary.totals.pendingCoordinatorReview}</div>
+                <p className="text-xs text-muted-foreground mt-1">Held for CEPS decision</p>
+              </CardContent>
+            </Card>
+          </Link>
+        )}
         {(user?.role === 'staff' || user?.role === 'service_coordinator') && (
           <Card
             className="cursor-pointer transition-colors hover:bg-accent/50"
@@ -414,6 +428,7 @@ function groupAlerts(alerts: DashboardAlert[]): { kind: string; alerts: Dashboar
 
 function getAlertGroupTitle(type: string) {
   switch (type) {
+    case 'coordinator_review': return 'coordinator referrals awaiting CEPS review';
     case 'expiring_authorization': return 'authorizations expiring soon';
     case 'missing_document': return 'cases missing documents';
     case 'pending_w9': return 'vendors missing a W-9 — payments blocked';
@@ -464,6 +479,7 @@ function getAlertIconColor(type: string) {
 }
 
 function getAlertLink(group: { kind: string; alerts: DashboardAlert[] }) {
+  if (group.kind === 'coordinator_review') return '/referrals?coordinatorReviewStatus=pending';
   if (group.alerts.length === 1 && group.alerts[0].entityId && group.alerts[0].entityType === 'referral') {
     return `/referrals/${group.alerts[0].entityId}`;
   }

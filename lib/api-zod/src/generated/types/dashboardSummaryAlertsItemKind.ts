@@ -20,4 +20,5 @@ export const DashboardSummaryAlertsItemKind = {
   pending_signature: 'pending_signature',
   recently_completed: 'recently_completed',
   family_updated_participant: 'family_updated_participant',
+  coordinator_review: 'coordinator_review',
 } as const;

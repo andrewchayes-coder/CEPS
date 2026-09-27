@@ -720,6 +720,7 @@ export const GetClientCaseResponse = zod.object({
   "participantEmail": zod.string().nullish(),
   "familyRepEmail": zod.string().nullish(),
   "serviceCoordinatorId": zod.string().nullish(),
+  "coordinatorReviewStatus": zod.union([zod.literal('pending'),zod.literal('approved'),zod.literal('rejected'),zod.literal(null)]).nullish(),
   "coordinatorName": zod.string().nullish(),
   "referralDate": zod.string(),
   "status": zod.enum(['intake', 'pending_signature', 'pending_auth', 'pending_w9', 'pending_invoice', 'active', 'closed']),
@@ -948,6 +949,7 @@ export const GetClientCaseResponse = zod.object({
 export const ListReferralsQueryParams = zod.object({
   "status": zod.coerce.string().optional(),
   "coordinatorId": zod.coerce.string().optional(),
+  "coordinatorReviewStatus": zod.enum(['pending', 'approved', 'rejected']).optional().describe('Staff-only filter for coordinator-review status.'),
   "clientId": zod.coerce.string().optional(),
   "search": zod.coerce.string().optional(),
   "startDate": zod.coerce.string().optional(),
@@ -967,6 +969,7 @@ export const ListReferralsResponse = zod.object({
   "participantEmail": zod.string().nullish(),
   "familyRepEmail": zod.string().nullish(),
   "serviceCoordinatorId": zod.string().nullish(),
+  "coordinatorReviewStatus": zod.union([zod.literal('pending'),zod.literal('approved'),zod.literal('rejected'),zod.literal(null)]).nullish(),
   "coordinatorName": zod.string().nullish(),
   "referralDate": zod.string(),
   "status": zod.enum(['intake', 'pending_signature', 'pending_auth', 'pending_w9', 'pending_invoice', 'active', 'closed']),
@@ -1137,6 +1140,7 @@ export const CreateReferralResponse = zod.object({
   "participantEmail": zod.string().nullish(),
   "familyRepEmail": zod.string().nullish(),
   "serviceCoordinatorId": zod.string().nullish(),
+  "coordinatorReviewStatus": zod.union([zod.literal('pending'),zod.literal('approved'),zod.literal('rejected'),zod.literal(null)]).nullish(),
   "coordinatorName": zod.string().nullish(),
   "referralDate": zod.string(),
   "status": zod.enum(['intake', 'pending_signature', 'pending_auth', 'pending_w9', 'pending_invoice', 'active', 'closed']),
@@ -1382,6 +1386,7 @@ export const GetReferralResponse = zod.object({
   "participantEmail": zod.string().nullish(),
   "familyRepEmail": zod.string().nullish(),
   "serviceCoordinatorId": zod.string().nullish(),
+  "coordinatorReviewStatus": zod.union([zod.literal('pending'),zod.literal('approved'),zod.literal('rejected'),zod.literal(null)]).nullish(),
   "coordinatorName": zod.string().nullish(),
   "referralDate": zod.string(),
   "status": zod.enum(['intake', 'pending_signature', 'pending_auth', 'pending_w9', 'pending_invoice', 'active', 'closed']),
@@ -1513,6 +1518,7 @@ export const UpdateReferralResponse = zod.object({
   "participantEmail": zod.string().nullish(),
   "familyRepEmail": zod.string().nullish(),
   "serviceCoordinatorId": zod.string().nullish(),
+  "coordinatorReviewStatus": zod.union([zod.literal('pending'),zod.literal('approved'),zod.literal('rejected'),zod.literal(null)]).nullish(),
   "coordinatorName": zod.string().nullish(),
   "referralDate": zod.string(),
   "status": zod.enum(['intake', 'pending_signature', 'pending_auth', 'pending_w9', 'pending_invoice', 'active', 'closed']),
@@ -1622,6 +1628,81 @@ export const DeleteReferralParams = zod.object({
 
 export const DeleteReferralResponse = zod.object({
   "ok": zod.boolean()
+})
+
+
+/**
+ * @summary Get staff-only comparison details for a held coordinator referral
+ */
+export const GetCoordinatorReviewParams = zod.object({
+  "id": zod.uuid()
+})
+
+export const GetCoordinatorReviewResponse = zod.object({
+  "referralId": zod.uuid(),
+  "clientId": zod.uuid(),
+  "status": zod.enum(['pending']),
+  "submittedByName": zod.string(),
+  "intake": zod.object({
+  "phone": zod.string().nullable(),
+  "email": zod.string().nullable(),
+  "address": zod.string().nullable(),
+  "preferredLanguage": zod.string().nullable(),
+  "isMinor": zod.boolean().nullable(),
+  "familyRepresentative": zod.union([zod.object({
+  "name": zod.string().nullable(),
+  "relationship": zod.string().nullable(),
+  "phone": zod.string().nullable(),
+  "email": zod.string().nullable(),
+  "address": zod.string().nullable()
+}),zod.null()])
+}),
+  "current": zod.object({
+  "phone": zod.string().nullable(),
+  "email": zod.string().nullable(),
+  "address": zod.string().nullable(),
+  "preferredLanguage": zod.string().nullable(),
+  "isMinor": zod.boolean().nullable(),
+  "familyRepresentative": zod.union([zod.object({
+  "name": zod.string().nullable(),
+  "relationship": zod.string().nullable(),
+  "phone": zod.string().nullable(),
+  "email": zod.string().nullable(),
+  "address": zod.string().nullable()
+}),zod.null()])
+}),
+  "currentFamilyRepresentatives": zod.array(zod.object({
+  "name": zod.string().nullable(),
+  "relationship": zod.string().nullable(),
+  "phone": zod.string().nullable(),
+  "email": zod.string().nullable(),
+  "address": zod.string().nullable()
+})),
+  "reviewNote": zod.string().nullish()
+})
+
+
+/**
+ * @summary Approve or reject a held coordinator referral (staff only)
+ */
+export const ReviewCoordinatorReferralParams = zod.object({
+  "id": zod.uuid()
+})
+
+export const ReviewCoordinatorReferralBody = zod.object({
+  "decision": zod.enum(['approve', 'reject']),
+  "applyPhone": zod.boolean(),
+  "applyEmail": zod.boolean(),
+  "applyAddress": zod.boolean(),
+  "applyPreferredLanguage": zod.boolean(),
+  "applyMinorStatus": zod.boolean(),
+  "applyFamilyRepresentative": zod.boolean(),
+  "reassignAsAssignedCoordinator": zod.boolean(),
+  "note": zod.string().optional()
+})
+
+export const ReviewCoordinatorReferralResponse = zod.object({
+  "status": zod.enum(['approved', 'rejected'])
 })
 
 
@@ -4181,10 +4262,11 @@ export const GetDashboardSummaryResponse = zod.object({
   "unmatchedPosDocuments": zod.int().optional(),
   "pendingPosReview": zod.int(),
   "oldestPendingPosDate": zod.coerce.date().nullable(),
-  "pendingPosWithoutClient": zod.int()
+  "pendingPosWithoutClient": zod.int(),
+  "pendingCoordinatorReview": zod.int()
 }),
   "alerts": zod.array(zod.object({
-  "kind": zod.enum(['expiring_authorization', 'missing_document', 'pending_w9', 'unmatched_remittance', 'authorization_exhausted_active', 'unmatched_pos', 'unmatched_pos_possible_match', 'pending_signature', 'recently_completed', 'family_updated_participant']),
+  "kind": zod.enum(['expiring_authorization', 'missing_document', 'pending_w9', 'unmatched_remittance', 'authorization_exhausted_active', 'unmatched_pos', 'unmatched_pos_possible_match', 'pending_signature', 'recently_completed', 'family_updated_participant', 'coordinator_review']),
   "message": zod.string(),
   "entityType": zod.string().nullish(),
   "entityId": zod.string().nullish()

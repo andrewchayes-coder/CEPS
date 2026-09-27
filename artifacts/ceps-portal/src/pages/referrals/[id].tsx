@@ -1,6 +1,8 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { useLocation, useParams } from 'wouter';
-import { useGetReferral, useDeleteReferral } from '@workspace/api-client-react';
+import { useGetReferral, useDeleteReferral, useGetCoordinatorReview, useReviewCoordinatorReferral, getGetCoordinatorReviewQueryKey } from '@workspace/api-client-react';
+import type { ReferralReviewRepresentative, ReferralReviewValue, CoordinatorReviewInput, CoordinatorReviewDetails } from '@workspace/api-client-react';
+import { useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/components/auth/auth-provider';
 import { EditReferralDialog } from '@/components/edit-referral-dialog';
 import { DeleteEntityButton } from '@/components/delete-entity-button';
@@ -15,6 +17,113 @@ import { format } from 'date-fns';
 import { Link } from 'wouter';
 import { ClientLink } from '@/components/entity-links';
 import { AgreementReview } from '@/components/agreement-review';
+import { Skeleton } from '@/components/ui/skeleton';
+import { Textarea } from '@/components/ui/textarea';
+import { Checkbox } from '@/components/ui/checkbox';
+import { apiErrorMessage } from '@/lib/api-error';
+
+const reviewFields = [
+  { key: 'applyPhone', label: 'Phone', value: 'phone' },
+  { key: 'applyEmail', label: 'Email', value: 'email' },
+  { key: 'applyAddress', label: 'Address', value: 'address' },
+  { key: 'applyPreferredLanguage', label: 'Preferred language', value: 'preferredLanguage' },
+  { key: 'applyMinorStatus', label: 'Minor status', value: 'isMinor' },
+  { key: 'applyFamilyRepresentative', label: 'Family representative', value: 'familyRepresentative' },
+] as const;
+type ApplyKey = typeof reviewFields[number]['key'];
+const initialApply = Object.fromEntries(reviewFields.map(({ key }) => [key, false])) as Record<ApplyKey, boolean>;
+
+function displayReviewValue(value: ReferralReviewValue[keyof ReferralReviewValue]) {
+  if (value === null || value === undefined || value === '') return 'Not provided';
+  if (typeof value === 'boolean') return value ? 'Yes' : 'No';
+  if (typeof value === 'object') {
+    const rep = value as ReferralReviewRepresentative;
+    return [rep.name, rep.relationship, rep.phone, rep.email, rep.address].filter(Boolean).join(' · ') || 'Not provided';
+  }
+  return value;
+}
+
+function CoordinatorReview({ id, review, onReviewed }: { id: string; review: CoordinatorReviewDetails; onReviewed: () => void }) {
+  const mutation = useReviewCoordinatorReferral();
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
+  const [apply, setApply] = useState(initialApply);
+  const [assignCoordinator, setAssignCoordinator] = useState(false);
+  const [note, setNote] = useState('');
+  const [decision, setDecision] = useState<'approve' | 'reject' | null>(null);
+  const [message, setMessage] = useState('');
+
+  const submit = async (choice: 'approve' | 'reject') => {
+    if (choice === 'reject' && !note.trim()) {
+      setMessage('Add a review note before rejecting this referral.');
+      return;
+    }
+    setMessage('');
+    const data: CoordinatorReviewInput = {
+      decision: choice,
+      ...apply,
+      reassignAsAssignedCoordinator: choice === 'approve' && assignCoordinator,
+      ...(note.trim() ? { note: note.trim() } : {}),
+    };
+    try {
+      await mutation.mutateAsync({ id, data });
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['/api/referrals'] }),
+        queryClient.invalidateQueries({ queryKey: ['/api/referrals', id] }),
+        queryClient.invalidateQueries({ queryKey: ['/api/dashboard'] }),
+      ]);
+      toast({ title: choice === 'approve' ? 'Referral approved' : 'Referral rejected' });
+      onReviewed();
+    } catch (err) {
+      setMessage(apiErrorMessage(err, 'Could not save this review. Please try again.'));
+    }
+  };
+
+  return (
+    <Card className="border-primary/40" data-testid="card-coordinator-review">
+      <CardHeader className="bg-primary/5 border-b">
+        <CardTitle>Coordinator referral review</CardTitle>
+        <CardDescription>Review each proposed change before updating the participant record. Nothing is applied unless selected.</CardDescription>
+      </CardHeader>
+      <CardContent className="pt-6 space-y-5">
+        <>
+            <p className="text-sm">Submitted by <strong data-testid="text-referral-submitter">{review.submittedByName}</strong></p>
+            <div className="space-y-3">
+              <div className="hidden sm:grid grid-cols-[minmax(8rem,1fr)_minmax(0,2fr)_minmax(0,2fr)] gap-4 px-4 text-xs font-semibold uppercase tracking-wide text-muted-foreground"><span>Field</span><span>Referral intake</span><span>Current participant record</span></div>
+              {reviewFields.map(({ key, label, value }) => (
+                <div key={key} className="rounded-lg border p-4 space-y-3" data-testid={`row-review-${value}`}>
+                  <div className="grid sm:grid-cols-[minmax(8rem,1fr)_minmax(0,2fr)_minmax(0,2fr)] gap-3 text-sm">
+                    <strong>{label}</strong>
+                    <div className="min-w-0 break-words"><span className="sm:hidden block text-xs text-muted-foreground">Referral intake</span>{displayReviewValue(review.intake[value])}</div>
+                    <div className="min-w-0 break-words text-muted-foreground"><span className="sm:hidden block text-xs">Current record</span>{value === 'familyRepresentative' && review.currentFamilyRepresentatives.length > 0
+                      ? review.currentFamilyRepresentatives.map((rep, index) => <p key={`${rep.name}-${index}`} className="mb-1">{displayReviewValue(rep)}</p>)
+                      : displayReviewValue(review.current[value])}</div>
+                  </div>
+                  <label className="flex items-center gap-2 text-sm cursor-pointer w-fit">
+                    <Checkbox checked={apply[key]} onCheckedChange={(checked) => setApply(previous => ({ ...previous, [key]: checked === true }))} disabled={mutation.isPending} data-testid={`checkbox-apply-${value}`} />
+                    Apply intake {label.toLowerCase()} to participant
+                  </label>
+                </div>
+              ))}
+            </div>
+            <label className="flex items-center gap-2 text-sm cursor-pointer">
+              <Checkbox checked={assignCoordinator} onCheckedChange={(checked) => setAssignCoordinator(checked === true)} disabled={mutation.isPending} data-testid="checkbox-assign-submitting-coordinator" />
+              Assign the submitting coordinator to this participant on approval
+            </label>
+            <div className="space-y-2">
+              <label htmlFor="review-note" className="text-sm font-medium">Review note <span className="text-muted-foreground font-normal">(required when rejecting)</span></label>
+              <Textarea id="review-note" value={note} onChange={event => { setNote(event.target.value); setMessage(''); }} disabled={mutation.isPending} placeholder="Add context for this decision" data-testid="input-review-note" />
+            </div>
+            {message && <p role="alert" className="text-sm text-destructive" data-testid="error-review">{message}</p>}
+            <div className="flex flex-col sm:flex-row gap-2">
+              <Button onClick={() => { setDecision('approve'); void submit('approve'); }} disabled={mutation.isPending} data-testid="button-approve-referral">{mutation.isPending && decision === 'approve' ? 'Approving…' : 'Approve referral'}</Button>
+              <Button variant="destructive" onClick={() => { setDecision('reject'); void submit('reject'); }} disabled={mutation.isPending} data-testid="button-reject-referral">{mutation.isPending && decision === 'reject' ? 'Rejecting…' : 'Reject referral'}</Button>
+            </div>
+          </>
+      </CardContent>
+    </Card>
+  );
+}
 
 export default function ReferralDetailPage() {
   const { id } = useParams<{ id: string }>();
@@ -31,11 +140,20 @@ export default function ReferralDetailPage() {
       queryKey: ['referrals', id]
     }
   });
+  // Fetch participant comparisons only for pending referrals and staff.
+  const { data: review, isLoading: isReviewLoading, isError: reviewError, error: reviewFailure, refetch: refetchReview } = useGetCoordinatorReview(id, {
+    query: { enabled: !!id && referral?.coordinatorReviewStatus === 'pending' && isStaff, queryKey: getGetCoordinatorReviewQueryKey(id), retry: false },
+  });
 
-  if (isLoading) return <div className="p-8 text-center">Loading referral...</div>;
-  if (!referral) return <div className="p-8 text-center">Referral not found.</div>;
+  if (isLoading) return <div className="max-w-4xl mx-auto space-y-5"><Skeleton className="h-10 w-64" /><Skeleton className="h-60 w-full" /><Skeleton className="h-40 w-full" /></div>;
+  if (!referral) return <div role="alert" className="p-8 text-center">Referral not found. <Button variant="outline" onClick={() => void refetch()}>Retry</Button></div>;
+  if (isStaff && referral.coordinatorReviewStatus === 'pending' && isReviewLoading) return <div className="max-w-4xl mx-auto space-y-5"><Skeleton className="h-10 w-64" /><Skeleton className="h-60 w-full" /><Skeleton className="h-40 w-full" /></div>;
+  if (isStaff && referral.coordinatorReviewStatus === 'pending' && reviewError) {
+    return <div role="alert" className="p-8 text-center space-y-3">Could not verify this referral’s review status. <Button variant="outline" onClick={() => void refetchReview()}>Retry</Button></div>;
+  }
 
   const intake = referral.intakeFields;
+  const isPendingReview = referral.coordinatorReviewStatus === 'pending';
 
   return (
     <div className="max-w-4xl mx-auto space-y-6">
@@ -54,7 +172,7 @@ export default function ReferralDetailPage() {
           <Badge variant="outline" className="text-sm px-3 py-1">
             Status: <span className="font-semibold ml-1 capitalize">{referral.status.replace('_', ' ')}</span>
           </Badge>
-          {isStaff && (
+          {isStaff && !isPendingReview && (
             <>
               <EditReferralDialog id={id} referral={referral} onSaved={() => refetch()} />
               <DeleteEntityButton
@@ -80,6 +198,14 @@ export default function ReferralDetailPage() {
           )}
         </div>
       </div>
+
+      {isPendingReview && (
+        <div role="status" className="rounded-lg border border-primary/30 bg-primary/5 p-4 text-sm">
+          <p className="font-semibold">Pending CEPS review</p>
+          <p className="text-muted-foreground mt-1">Submitted by {review?.submittedByName ?? 'a service coordinator'} — they are not currently linked to this participant. Intake agreements and status changes are unavailable until staff make a decision.</p>
+        </div>
+      )}
+      {isStaff && isPendingReview && review && <CoordinatorReview id={id} review={review} onReviewed={() => { void refetch(); }} />}
 
       <div className="grid md:grid-cols-3 gap-6">
         {/* Main Info */}
@@ -190,7 +316,7 @@ export default function ReferralDetailPage() {
                   </div>
                 </div>
               )}
-              {canSendIntake && (
+              {canSendIntake && !isPendingReview && referral.coordinatorReviewStatus !== 'rejected' && (
                 <div className="pt-2">
                   <SendIntakeDialog referral={referral} onSent={() => refetch()} />
                 </div>

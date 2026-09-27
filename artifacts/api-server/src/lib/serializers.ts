@@ -144,6 +144,7 @@ export function referralJson(
     participantEmail: recipientEmails?.participant ?? null,
     familyRepEmail: recipientEmails?.familyRep ?? null,
     serviceCoordinatorId: r.serviceCoordinatorId,
+    coordinatorReviewStatus: r.coordinatorReviewStatus,
     coordinatorName: coordinatorName ?? null,
     referralDate: r.referralDate,
     status: r.status,

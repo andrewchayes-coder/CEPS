@@ -20,4 +20,5 @@ export type DashboardSummaryTotals = {
   /** @nullable */
   oldestPendingPosDate: Date | null;
   pendingPosWithoutClient: number;
+  pendingCoordinatorReview: number;
 };

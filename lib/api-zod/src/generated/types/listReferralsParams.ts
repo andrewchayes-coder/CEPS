@@ -5,12 +5,17 @@
  * CEPS Portal API — referral intake, authorizations, invoices, payments, remittances, vendors, reporting
  * OpenAPI spec version: 0.1.0
  */
+import type { ListReferralsCoordinatorReviewStatus } from './listReferralsCoordinatorReviewStatus';
 import type { ListReferralsSortBy } from './listReferralsSortBy';
 import type { ListReferralsSortDirection } from './listReferralsSortDirection';
 
 export type ListReferralsParams = {
 status?: string;
 coordinatorId?: string;
+/**
+ * Staff-only filter for coordinator-review status.
+ */
+coordinatorReviewStatus?: ListReferralsCoordinatorReviewStatus;
 clientId?: string;
 search?: string;
 startDate?: string;

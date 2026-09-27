@@ -8,6 +8,7 @@ import {
   numeric,
   index,
   foreignKey,
+  check,
 } from "drizzle-orm/pg-core";
 import { sql } from "drizzle-orm";
 import { clientsTable } from "./clients";
@@ -24,6 +25,11 @@ export const referralsTable = pgTable("referrals", {
   serviceCoordinatorId: uuid("service_coordinator_id").references(
     () => usersTable.id,
   ),
+  submittedByUserId: uuid("submitted_by_user_id").references(() => usersTable.id),
+  coordinatorReviewStatus: text("coordinator_review_status"),
+  coordinatorReviewedBy: uuid("coordinator_reviewed_by").references(() => usersTable.id),
+  coordinatorReviewedAt: timestamp("coordinator_reviewed_at", { withTimezone: true }),
+  coordinatorReviewNote: text("coordinator_review_note"),
   referralDate: date("referral_date", { mode: "string" }).notNull(),
   // intake | pending_signature | pending_auth | pending_w9 | pending_invoice | active | closed
   status: text("status").notNull().default("intake"),
@@ -55,6 +61,10 @@ export const referralsTable = pgTable("referrals", {
     .notNull()
     .defaultNow(),
 }, (table) => ({
+  coordinatorReviewStatusCheck: check(
+    "referrals_coordinator_review_status_check",
+    sql`${table.coordinatorReviewStatus} is null or ${table.coordinatorReviewStatus} in ('pending', 'approved', 'rejected')`,
+  ),
   intakeFamilyRepresentativeFk: foreignKey({
     columns: [table.intakeSentToFamilyRepId],
     foreignColumns: [familyRepresentativesTable.id],

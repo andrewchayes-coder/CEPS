@@ -7,6 +7,7 @@ import {
   db,
   feesTable,
   invoicesTable,
+  paymentAllocationsTable,
   paymentsTable,
   pool,
   remittanceAllocationsTable,
@@ -42,6 +43,20 @@ async function makeAuthorization(clientId: string, label: string) {
     status: "active",
   }).returning();
   return authorization;
+}
+
+async function makePaymentLine(
+  payment: typeof paymentsTable.$inferSelect,
+  authorizationId?: string,
+) {
+  const authId = authorizationId ?? (await makeAuthorization(payment.clientId, `line-${payment.id}`)).id;
+  const [line] = await db.insert(paymentAllocationsTable).values({
+    paymentId: payment.id,
+    authorizationId: authId,
+    serviceMonth: "2026-01",
+    amount: "100.00",
+  }).returning();
+  return line;
 }
 
 async function makeInvoice(clientId: string, authorizationId?: string) {
@@ -302,6 +317,7 @@ describe("database financial-link soft-delete guards", () => {
       paymentType: "direct_payment",
       source: "manual",
     }).returning();
+    const otherLine = await makePaymentLine(otherPayment, otherAuthorization.id);
 
     await expectGuardedUpdate(
       db.insert(remittancesTable).values({
@@ -329,10 +345,39 @@ describe("database financial-link soft-delete guards", () => {
       db.insert(remittanceAllocationsTable).values({
         remittanceId: remittance.id,
         paymentId: otherPayment.id,
+        paymentAllocationId: otherLine.id,
         amount: "50.00",
       }),
-      "remittance_allocations_active_payment_link",
-      "Allocation payment must be active and belong to the remittance client and authorization",
+      "remittance_allocations_active_payment_line_link",
+      "Allocation payment line must belong to an active payment for the remittance client, authorization, and month",
+    );
+  });
+
+  it("rejects a fee allocation belonging to another participant", async () => {
+    const client = await makeClient("fee-allocation-client");
+    const otherClient = await makeClient("fee-allocation-other");
+    const [fee] = await db.insert(feesTable).values({
+      clientId: otherClient.id,
+      feeMonth: "2026-01",
+      amount: "160.00",
+      status: "pending",
+    }).returning();
+    const [remittance] = await db.insert(remittancesTable).values({
+      clientId: client.id,
+      remittanceDate: "2026-01-15",
+      amount: "160.00",
+      status: "received",
+      source: "manual",
+    }).returning();
+
+    await expectGuardedUpdate(
+      db.insert(remittanceAllocationsTable).values({
+        remittanceId: remittance.id,
+        feeId: fee.id,
+        amount: "50.00",
+      }),
+      "remittance_allocations_active_fee_link",
+      "Allocation fee must be active, non-waived, and belong to the remittance client and authorization",
     );
   });
 
@@ -352,6 +397,7 @@ describe("database financial-link soft-delete guards", () => {
     };
 
     const matchedPayment = await makePayment("matched-parent-payment");
+    await makePaymentLine(matchedPayment);
     await db.insert(remittancesTable).values({
       clientId: client.id,
       matchedPaymentId: matchedPayment.id,
@@ -362,6 +408,7 @@ describe("database financial-link soft-delete guards", () => {
     });
 
     const allocatedPayment = await makePayment("allocated-parent-payment");
+    const allocatedLine = await makePaymentLine(allocatedPayment);
     const [remittance] = await db.insert(remittancesTable).values({
       clientId: client.id,
       remittanceDate: "2026-01-15",
@@ -372,6 +419,7 @@ describe("database financial-link soft-delete guards", () => {
     await db.insert(remittanceAllocationsTable).values({
       remittanceId: remittance.id,
       paymentId: allocatedPayment.id,
+      paymentAllocationId: allocatedLine.id,
       amount: "50.00",
     });
 
@@ -397,6 +445,7 @@ describe("database financial-link soft-delete guards", () => {
       paymentType: "direct_payment",
       source: "manual",
     }).returning();
+    const line = await makePaymentLine(payment, otherAuthorization.id);
     const [remittance] = await db.insert(remittancesTable).values({
       clientId: client.id,
       remittanceDate: "2026-01-15",
@@ -407,6 +456,7 @@ describe("database financial-link soft-delete guards", () => {
     await db.insert(remittanceAllocationsTable).values({
       remittanceId: remittance.id,
       paymentId: payment.id,
+      paymentAllocationId: line.id,
       amount: "50.00",
     });
 
@@ -418,12 +468,12 @@ describe("database financial-link soft-delete guards", () => {
     await expectGuardedUpdate(
       db.update(remittancesTable).set({ clientId: otherClient.id }).where(eq(remittancesTable.id, remittance.id)),
       "remittances_active_allocation_links",
-      "Remittance client or authorization cannot change while allocations would become invalid",
+      "Remittance client, authorization, or month cannot change while allocations would become invalid",
     );
     await expectGuardedUpdate(
       db.update(remittancesTable).set({ authorizationId: authorization.id }).where(eq(remittancesTable.id, remittance.id)),
       "remittances_active_allocation_links",
-      "Remittance client or authorization cannot change while allocations would become invalid",
+      "Remittance client, authorization, or month cannot change while allocations would become invalid",
     );
     expect(otherAuthorization.id).not.toBe(authorization.id);
   });
@@ -448,6 +498,7 @@ describe("database financial-link soft-delete guards", () => {
     };
 
     const matchedPayment = await makeLinkedPayment("matched-mutation-payment");
+    await makePaymentLine(matchedPayment);
     await db.insert(remittancesTable).values({
       clientId: client.id,
       matchedPaymentId: matchedPayment.id,
@@ -458,6 +509,7 @@ describe("database financial-link soft-delete guards", () => {
     });
 
     const allocatedPayment = await makeLinkedPayment("allocated-mutation-payment");
+    const allocatedLine = await makePaymentLine(allocatedPayment);
     const [allocatedRemittance] = await db.insert(remittancesTable).values({
       clientId: client.id,
       remittanceDate: "2026-01-15",
@@ -468,6 +520,7 @@ describe("database financial-link soft-delete guards", () => {
     await db.insert(remittanceAllocationsTable).values({
       remittanceId: allocatedRemittance.id,
       paymentId: allocatedPayment.id,
+      paymentAllocationId: allocatedLine.id,
       amount: "50.00",
     });
 
@@ -488,6 +541,7 @@ describe("database financial-link soft-delete guards", () => {
     }
 
     const authMatchedPayment = await makeLinkedPayment("auth-matched-mutation-payment", authorization.id);
+    await makePaymentLine(authMatchedPayment, authorization.id);
     await db.insert(remittancesTable).values({
       clientId: client.id,
       authorizationId: authorization.id,
@@ -498,6 +552,7 @@ describe("database financial-link soft-delete guards", () => {
       source: "manual",
     });
     const authAllocatedPayment = await makeLinkedPayment("auth-allocated-mutation-payment", authorization.id);
+    const authAllocatedLine = await makePaymentLine(authAllocatedPayment, authorization.id);
     const [authAllocatedRemittance] = await db.insert(remittancesTable).values({
       clientId: client.id,
       authorizationId: authorization.id,
@@ -509,6 +564,7 @@ describe("database financial-link soft-delete guards", () => {
     await db.insert(remittanceAllocationsTable).values({
       remittanceId: authAllocatedRemittance.id,
       paymentId: authAllocatedPayment.id,
+      paymentAllocationId: authAllocatedLine.id,
       amount: "50.00",
     });
     for (const payment of [authMatchedPayment, authAllocatedPayment]) {
@@ -566,6 +622,7 @@ describe("database financial-link soft-delete guards", () => {
         paymentType: "direct_payment",
         source: "manual",
       }).returning();
+      const line = await makePaymentLine(payment);
       const [remittance] = await db.insert(remittancesTable).values({
         clientId: client.id,
         remittanceDate: "2026-01-15",
@@ -579,8 +636,8 @@ describe("database financial-link soft-delete guards", () => {
       try {
         await childConnection.query("begin");
         await childConnection.query(
-          "insert into remittance_allocations (remittance_id, payment_id, amount) values ($1, $2, $3)",
-          [remittance.id, payment.id, "50.00"],
+          "insert into remittance_allocations (remittance_id, payment_id, payment_allocation_id, amount) values ($1, $2, $3, $4)",
+          [remittance.id, payment.id, line.id, "50.00"],
         );
         const parentPid = (await parentConnection.query<{ pid: number }>("select pg_backend_pid() pid")).rows[0].pid;
         const parentUpdate = parent === "remittance"

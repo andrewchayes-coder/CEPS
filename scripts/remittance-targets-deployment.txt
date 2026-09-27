@@ -2,7 +2,7 @@ Remittance allocation-target deployment notes
 
 Scope
 
-This deliverable covers the schema target model, database guards, and Option A/Option B database backfills only. Application routes, serializers, generated API artifacts, and fee lifecycle writers are outside this change.
+Prompt 3 covers the schema target model, database guards, Option A/Option B database backfills, application routes, serializers, generated API artifacts, portal UI, and fee lifecycle writers. The Prompt 3b follow-up changes only database-guard test fixtures and this description; it requires no additional schema, data, function, or trigger changes.
 
 Schema generation
 

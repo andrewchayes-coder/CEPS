@@ -173,8 +173,8 @@ describe("Prompt 7 financial child rows (database)", () => {
     await db.insert(sessionsTable).values({ userId: staff.id, token, expiresAt: new Date(Date.now() + 3600000) });
     const [payment] = await db.insert(paymentsTable).values({ clientId: client.id, qbCheckNumber: `${nonce}-check`, checkDate: "2025-04-01", amount: "30.00", paymentMonth: "2025-04", paymentType: "direct_payment", source: "manual" } as any).returning();
     await db.insert(paymentAllocationsTable).values([
-      { paymentId: payment.id, authorizationId: a.id, amount: "20.00" },
-      { paymentId: payment.id, authorizationId: b.id, amount: "10.00" },
+      { paymentId: payment.id, authorizationId: a.id, serviceMonth: "2025-04", amount: "20.00" },
+      { paymentId: payment.id, authorizationId: b.id, serviceMonth: "2025-04", amount: "10.00" },
     ]);
     const wrong = await request(app).post("/api/remittances").set("Cookie", `ceps_session=${token}`).send({
       clientId: client.id, authorizationId: wrongAuth.id, altaReference: `${nonce}-wrong`, remittanceDate: "2025-04-15", amount: "20.00", paymentMonth: "2025-04",

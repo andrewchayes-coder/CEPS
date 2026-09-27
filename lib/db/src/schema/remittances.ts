@@ -8,12 +8,15 @@ import {
   timestamp,
   index,
   uniqueIndex,
+  foreignKey,
   check,
 } from "drizzle-orm/pg-core";
 import { sql } from "drizzle-orm";
 import { clientsTable } from "./clients";
 import { authorizationsTable } from "./authorizations";
 import { paymentsTable } from "./payments";
+import { paymentAllocationsTable } from "./paymentAllocations";
+import { feesTable } from "./fees";
 
 export const remittancesTable = pgTable("remittances", {
   id: uuid("id").primaryKey().defaultRandom(),
@@ -96,15 +99,32 @@ export const remittanceAllocationsTable = pgTable("remittance_allocations", {
     .notNull()
     .references(() => remittancesTable.id, { onDelete: "cascade" }),
   paymentId: uuid("payment_id")
-    .notNull()
     .references(() => paymentsTable.id, { onDelete: "cascade" }),
+  paymentAllocationId: uuid("payment_allocation_id"),
+  feeId: uuid("fee_id").references(() => feesTable.id),
   amount: numeric("amount", { precision: 12, scale: 2 }).notNull(),
   autoMatched: boolean("auto_matched").notNull().default(false),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 }, (table) => ({
   remittanceIdIdx: index("remittance_allocations_remittance_id_idx").on(table.remittanceId),
   paymentIdIdx: index("remittance_allocations_payment_id_idx").on(table.paymentId),
-  pairUnique: uniqueIndex("remittance_allocations_pair_unique").on(table.remittanceId, table.paymentId),
+  paymentAllocationIdIdx: index("remittance_allocations_payment_allocation_id_idx").on(table.paymentAllocationId),
+  feeIdIdx: index("remittance_allocations_fee_id_idx").on(table.feeId),
+  paymentAllocationFk: foreignKey({
+    columns: [table.paymentAllocationId],
+    foreignColumns: [paymentAllocationsTable.id],
+    name: "remittance_allocations_payment_line_fk",
+  }).onDelete("cascade"),
+  paymentAllocationUnique: uniqueIndex("remittance_allocations_payment_allocation_unique")
+    .on(table.remittanceId, table.paymentAllocationId)
+    .where(sql`${table.paymentAllocationId} IS NOT NULL`),
+  feeUnique: uniqueIndex("remittance_allocations_fee_unique")
+    .on(table.remittanceId, table.feeId)
+    .where(sql`${table.feeId} IS NOT NULL`),
+  oneTarget: check(
+    "remittance_allocations_one_target",
+    sql`(${table.feeId} IS NULL) <> (${table.paymentId} IS NULL)`,
+  ),
   positiveAmount: check(
     "remittance_allocations_positive_amount",
     sql`${table.amount} > 0 AND ${table.amount} <> 'NaN'::numeric`,

@@ -6,8 +6,14 @@
  * OpenAPI spec version: 0.1.0
  */
 
+/**
+ * Provide exactly one of paymentAllocationId or feeId. Legacy paymentId is accepted only when that check has exactly one eligible payment line.
+ */
 export interface RemittanceMatchInput {
-  paymentId: string;
+  paymentAllocationId?: string;
+  feeId?: string;
+  /** Legacy parent-check target; accepted only when exactly one eligible line exists. */
+  paymentId?: string;
   /** @pattern ^\d+(\.\d{1,2})?$ */
   amount: string;
 }

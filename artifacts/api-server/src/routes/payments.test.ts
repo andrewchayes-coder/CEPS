@@ -2,7 +2,7 @@ import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { inArray, eq, and } from "drizzle-orm";
 import {
   db, usersTable, sessionsTable, clientsTable, paymentsTable, feesTable, auditLogTable,
-  authorizationsTable, paymentAllocationsTable, invoicesTable, invoiceLineItemsTable, vendorsTable, remittancesTable, staffRolesTable, staffRolePermissionsTable,
+  authorizationsTable, paymentAllocationsTable, remittanceAllocationsTable, invoicesTable, invoiceLineItemsTable, vendorsTable, remittancesTable, staffRolesTable, staffRolePermissionsTable,
 } from "@workspace/db";
 import request from "supertest";
 import app from "../app";
@@ -65,6 +65,11 @@ beforeAll(async () => {
   cookie = `ceps_session=${token}`;
 });
 afterAll(async () => {
+  await db.delete(remittanceAllocationsTable).where(inArray(
+    remittanceAllocationsTable.remittanceId,
+    (await db.select({ id: remittancesTable.id }).from(remittancesTable)
+      .where(inArray(remittancesTable.clientId, [clientId, otherClientId]))).map((remittance) => remittance.id),
+  ));
   await db.delete(feesTable).where(inArray(feesTable.clientId, [clientId, otherClientId]));
   await db.delete(remittancesTable).where(inArray(remittancesTable.clientId, [clientId, otherClientId]));
   await db.delete(paymentsTable).where(inArray(paymentsTable.clientId, [clientId, otherClientId]));
@@ -158,6 +163,49 @@ describe("monthly payment fees", () => {
     expect(feeAudits).toHaveLength(1);
   });
 
+  it("links a generated monthly fee to the fee authorization covering that month", async () => {
+    const [feeAuthorization] = await db.insert(authorizationsTable).values({
+      clientId,
+      authNumber: `${nonce}-fee-auth-month`,
+      serviceCode: "490",
+      paymentType: "fee",
+      servicePeriodStart: "2028-02-01",
+      servicePeriodEnd: "2028-11-30",
+      maxPeriodAmount: "1600.00",
+      monthlyAmount: "160.00",
+      status: "active",
+    }).returning();
+    await createPayment("100.00", "2028-06-15");
+    const fees = await monthlyFees("2028-06");
+    expect(fees).toHaveLength(1);
+    expect(fees[0].authorizationId).toBe(feeAuthorization.id);
+  });
+
+  it("relinks a pending monthly fee when its authorization is stale", async () => {
+    const [feeAuthorization] = await db.insert(authorizationsTable).values({
+      clientId,
+      authNumber: `${nonce}-fee-auth-relink`,
+      serviceCode: "490",
+      paymentType: "fee",
+      servicePeriodStart: "2029-02-01",
+      servicePeriodEnd: "2029-02-28",
+      maxPeriodAmount: "160.00",
+      monthlyAmount: "160.00",
+      status: "active",
+    }).returning();
+    const [fee] = await db.insert(feesTable).values({
+      clientId,
+      feeMonth: "2029-02",
+      authorizationId: authId,
+      amount: "160.00",
+      ruleApplied: MONTHLY_FEE_RULE,
+      status: "pending",
+    }).returning();
+    await createPayment("100.00", "2029-02-15");
+    const [relinked] = await db.select().from(feesTable).where(eq(feesTable.id, fee.id));
+    expect(relinked.authorizationId).toBe(feeAuthorization.id);
+  });
+
   it("keeps one fee and the original trigger for a second same-month payment", async () => {
     const first = await createPayment("100.00", "2026-04-15");
     const second = await createPayment("200.00", "2026-04-20");
@@ -201,6 +249,39 @@ describe("monthly payment fees", () => {
     expect(await monthlyFees("2026-07")).toEqual(before);
   });
 
+  it("preserves remittance-linked payment-line IDs by blocking allocation replacement", async () => {
+    const payment = await createPayment("100.00", "2026-09-15");
+    const [lineBefore] = await db.select().from(paymentAllocationsTable)
+      .where(eq(paymentAllocationsTable.paymentId, payment.id));
+    const remittance = await request(app).post("/api/remittances").set("Cookie", cookie).send({
+      clientId,
+      authorizationId: lineBefore.authorizationId,
+      altaReference: `${nonce}-linked-line`,
+      remittanceDate: "2026-09-20",
+      amount: "100.00",
+      paymentMonth: "2026-09",
+    });
+    expect(remittance.status).toBe(201);
+    const [allocationBefore] = await db.select().from(remittanceAllocationsTable)
+      .where(eq(remittanceAllocationsTable.remittanceId, remittance.body.id));
+    expect(allocationBefore.paymentAllocationId).toBe(lineBefore.id);
+
+    const edit = await request(app).patch(`/api/payments/${payment.id}`).set("Cookie", cookie).send({
+      allocations: [{
+        authorizationId: lineBefore.authorizationId,
+        serviceMonth: lineBefore.serviceMonth,
+        amount: lineBefore.amount,
+      }],
+    });
+    expect(edit.status).toBe(409);
+    const [lineAfter] = await db.select().from(paymentAllocationsTable)
+      .where(eq(paymentAllocationsTable.paymentId, payment.id));
+    const [allocationAfter] = await db.select().from(remittanceAllocationsTable)
+      .where(eq(remittanceAllocationsTable.remittanceId, remittance.body.id));
+    expect(lineAfter.id).toBe(lineBefore.id);
+    expect(allocationAfter.paymentAllocationId).toBe(lineBefore.id);
+  });
+
   it("moves the fee when the only qualifying payment moves months", async () => {
     const payment = await createPayment("100.00", "2026-08-15");
     const res = await request(app).patch(`/api/payments/${payment.id}`)
@@ -233,6 +314,48 @@ describe("monthly payment fees", () => {
       eq(auditLogTable.entityId, reversed.id),
     ));
     expect(reversalAudits).toHaveLength(1);
+  });
+
+  it("protects partially remitted pending fees from payment reversal and repair", async () => {
+    const deletionPayment = await createPayment("100.00", "2032-01-15");
+    const [deletionFee] = await monthlyFees("2032-01");
+    const [deletionRemittance] = await db.insert(remittancesTable).values({
+      clientId, remittanceDate: "2032-01-20", amount: "20.00",
+      paymentMonth: "2032-01", status: "received", source: "manual",
+    }).returning();
+    await db.insert(remittanceAllocationsTable).values({
+      remittanceId: deletionRemittance.id, paymentId: null, feeId: deletionFee.id,
+      amount: "20.00", autoMatched: false,
+    });
+    expect((await request(app).delete(`/api/payments/${deletionPayment.id}`).set("Cookie", cookie)).status).toBe(200);
+    const [retainedAfterDelete] = await db.select().from(feesTable).where(eq(feesTable.id, deletionFee.id));
+    expect(retainedAfterDelete).toMatchObject({ isDeleted: false, status: "pending" });
+
+    const repairPayment = await createPayment("100.00", "2032-02-15");
+    const [repairFee] = await monthlyFees("2032-02");
+    await db.update(feesTable).set({ ruleApplied: "legacy_obsolete_rule" }).where(eq(feesTable.id, repairFee.id));
+    const [repairRemittance] = await db.insert(remittancesTable).values({
+      clientId, remittanceDate: "2032-02-20", amount: "20.00",
+      paymentMonth: "2032-02", status: "received", source: "manual",
+    }).returning();
+    await db.insert(remittanceAllocationsTable).values({
+      remittanceId: repairRemittance.id, paymentId: null, feeId: repairFee.id,
+      amount: "20.00", autoMatched: false,
+    });
+    await db.update(paymentsTable).set({
+      isDeleted: true, deletedAt: new Date(), deletedBy: staffId,
+    }).where(eq(paymentsTable.id, repairPayment.id));
+
+    const auditReport = await request(app).get(`/api/payments/monthly-fees/audit?clientId=${clientId}`)
+      .set("Cookie", cookie);
+    expect(auditReport.body.items).toEqual(expect.arrayContaining([
+      expect.objectContaining({ feeMonth: "2032-02", protected: true, repairAction: "none" }),
+    ]));
+    const repaired = await request(app).post("/api/payments/monthly-fees/repair")
+      .set("Cookie", cookie).send({ confirm: true, clientIds: [clientId] });
+    expect(repaired.status).toBe(200);
+    const [retainedAfterRepair] = await db.select().from(feesTable).where(eq(feesTable.id, repairFee.id));
+    expect(retainedAfterRepair).toMatchObject({ isDeleted: false, status: "pending" });
   });
 
   it("keeps the fee while another qualifying payment remains", async () => {
@@ -379,7 +502,7 @@ describe("monthly payment fees", () => {
       eq(auditLogTable.userId, staffId),
       eq(auditLogTable.action, "repair_monthly_fees"),
     ));
-    expect(repairAudits).toHaveLength(2);
+    expect(repairAudits).toHaveLength(3);
   });
 });
 

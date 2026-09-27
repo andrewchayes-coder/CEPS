@@ -1,6 +1,6 @@
 import { Router, type IRouter } from "express";
-import { eq, desc, and, ne } from "drizzle-orm";
-import { db, feesTable } from "@workspace/db";
+import { eq, desc, and, ne, sql } from "drizzle-orm";
+import { db, feesTable, remittanceAllocationsTable } from "@workspace/db";
 import {
   ListFeesQueryParams,
   ListFeesResponse,
@@ -12,16 +12,41 @@ import {
   CorrectFeeCollectionBody,
 } from "@workspace/api-zod";
 import { requireAuth, requireStaff, audit } from "../lib/auth";
-import { feeJson, clientNameMap, notDeleted, diffDetail } from "../lib/serializers";
+import { feeJson, clientNameMap, authNumberMap, notDeleted, diffDetail } from "../lib/serializers";
 import { validateParticipantLinks } from "../lib/participantLinks";
+import {
+  lockRemittancesForFeeAllocations,
+  recomputeRemittanceAllocationState,
+  updateFeeCollectionStatus,
+} from "../lib/feeRemittance";
 
 const router: IRouter = Router();
 const MONTHLY_FEE_RULE = "flat_160_per_client_month";
 const MANUALLY_ADJUSTED_MONTHLY_FEE_RULE = "flat_160_per_client_month_manually_adjusted";
 
 async function enrichFees(fees: (typeof feesTable.$inferSelect)[]) {
-  const clientNames = await clientNameMap(fees.map((f) => f.clientId));
-  return fees.map((f) => feeJson(f, { clientName: clientNames.get(f.clientId) }));
+  const [clientNames, authNumbers] = await Promise.all([
+    clientNameMap(fees.map((f) => f.clientId)),
+    authNumberMap(fees.map((f) => f.authorizationId)),
+  ]);
+  const remittedAmounts = new Map<string, string>();
+  if (fees.length) {
+    const ids = fees.map((fee) => fee.id);
+    const rows = await db.execute(sql`
+      select fee_id as "feeId", coalesce(sum(amount), 0)::text as total
+      from remittance_allocations
+      where fee_id in (${sql.join(ids.map((id) => sql`${id}`), sql`, `)})
+      group by fee_id
+    `);
+    for (const row of rows.rows as Array<{ feeId: string; total: string }>) {
+      remittedAmounts.set(row.feeId, row.total);
+    }
+  }
+  return fees.map((fee) => feeJson(fee, {
+    clientName: clientNames.get(fee.clientId),
+    authNumber: fee.authorizationId ? authNumbers.get(fee.authorizationId) : null,
+    remittedAmount: remittedAmounts.get(fee.id) ?? "0.00",
+  }));
 }
 
 router.get("/fees", requireAuth, async (req, res): Promise<void> => {
@@ -175,6 +200,11 @@ router.post("/fees/:id/waive", requireStaff, async (req, res): Promise<void> => 
       .where(and(eq(feesTable.id, id), notDeleted(feesTable))).for("update");
     if (!before) return { kind: "not_found" as const };
     if (before.status === "collected") return { kind: "collected" as const };
+    const [allocation] = await tx.select({ id: remittanceAllocationsTable.id })
+      .from(remittanceAllocationsTable)
+      .where(eq(remittanceAllocationsTable.feeId, id))
+      .limit(1);
+    if (allocation) return { kind: "allocated" as const };
     const [fee] = await tx.update(feesTable)
       .set({ status: "waived", waiverReason: parsed.data.reason.trim() })
       .where(and(eq(feesTable.id, id), notDeleted(feesTable))).returning();
@@ -183,6 +213,7 @@ router.post("/fees/:id/waive", requireStaff, async (req, res): Promise<void> => 
   });
   if (result.kind === "not_found") { res.status(404).json({ error: "Fee not found" }); return; }
   if (result.kind === "collected") { res.status(400).json({ error: "Correct the collection before waiving a collected fee" }); return; }
+  if (result.kind === "allocated") { res.status(400).json({ error: "Remove remittance allocations before waiving a fee" }); return; }
   res.json((await enrichFees([result.fee]))[0]);
 });
 
@@ -194,17 +225,38 @@ router.post("/fees/:id/correct-collection", requireStaff, async (req, res): Prom
     return;
   }
   const result = await db.transaction(async (tx) => {
+    const lockedRemittanceIds = await lockRemittancesForFeeAllocations(tx as unknown as typeof db, id);
     const [before] = await tx.select().from(feesTable)
       .where(and(eq(feesTable.id, id), notDeleted(feesTable))).for("update");
     if (!before) return { kind: "not_found" as const };
     if (before.status !== "collected") return { kind: "not_collected" as const };
-    const [fee] = await tx.update(feesTable).set({ status: "pending" })
-      .where(and(eq(feesTable.id, id), eq(feesTable.status, "collected"), notDeleted(feesTable))).returning();
+    const currentAllocations = await tx.select({
+      id: remittanceAllocationsTable.id,
+      remittanceId: remittanceAllocationsTable.remittanceId,
+    }).from(remittanceAllocationsTable)
+      .where(eq(remittanceAllocationsTable.feeId, id));
+    const lockedIds = new Set(lockedRemittanceIds);
+    if (currentAllocations.some(({ remittanceId }) => !lockedIds.has(remittanceId))) {
+      return { kind: "concurrent_change" as const };
+    }
+    // Correct the collection at its source: remove all allocations from the
+    // fee, then let the same lifecycle helper used by remittance writes reset
+    // status and record the remittance-linked audit event.
+    const remittanceIds = [...new Set(currentAllocations.map(({ remittanceId }) => remittanceId))].sort();
+    await tx.delete(remittanceAllocationsTable).where(eq(remittanceAllocationsTable.feeId, id));
+    await updateFeeCollectionStatus(tx as unknown as typeof db, before.id, req.user!.id, remittanceIds[0] ?? null);
+    await recomputeRemittanceAllocationState(tx as unknown as typeof db, remittanceIds);
+    const [fee] = await tx.select().from(feesTable).where(eq(feesTable.id, before.id));
+    if (!fee) return { kind: "not_found" as const };
     await audit(req.user!.id, "correct_fee_collection", "fee", fee.id, parsed.data.reason.trim(), tx as unknown as typeof db);
     return { kind: "updated" as const, fee };
   });
   if (result.kind === "not_found") { res.status(404).json({ error: "Fee not found" }); return; }
   if (result.kind === "not_collected") { res.status(400).json({ error: "Fee is not collected" }); return; }
+  if (result.kind === "concurrent_change") {
+    res.status(409).json({ error: "Fee allocations changed concurrently. Retry the correction." });
+    return;
+  }
   res.json((await enrichFees([result.fee]))[0]);
 });
 
@@ -224,16 +276,31 @@ function isFeeMonthConflict(error: unknown): boolean {
 
 router.delete("/fees/:id", requireStaff, async (req, res): Promise<void> => {
   const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
-  const [fee] = await db
-    .update(feesTable)
-    .set({ isDeleted: true, deletedAt: new Date(), deletedBy: req.user!.id })
-    .where(and(eq(feesTable.id, id), notDeleted(feesTable)))
-    .returning();
-  if (!fee) {
+  const result = await db.transaction(async (tx) => {
+    const [before] = await tx.select().from(feesTable)
+      .where(and(eq(feesTable.id, id), notDeleted(feesTable))).for("update");
+    if (!before) return { kind: "not_found" as const };
+    const [allocation] = await tx.select({ id: remittanceAllocationsTable.id })
+      .from(remittanceAllocationsTable)
+      .where(eq(remittanceAllocationsTable.feeId, id))
+      .limit(1);
+    if (allocation) return { kind: "allocated" as const };
+    const [fee] = await tx.update(feesTable)
+      .set({ isDeleted: true, deletedAt: new Date(), deletedBy: req.user!.id })
+      .where(and(eq(feesTable.id, id), notDeleted(feesTable)))
+      .returning();
+    if (!fee) return { kind: "not_found" as const };
+    await audit(req.user!.id, "delete_fee", "fee", fee.id, `$${fee.amount}`, tx as unknown as typeof db);
+    return { kind: "deleted" as const };
+  });
+  if (result.kind === "not_found") {
     res.status(404).json({ error: "Fee not found" });
     return;
   }
-  await audit(req.user!.id, "delete_fee", "fee", fee.id, `$${fee.amount}`);
+  if (result.kind === "allocated") {
+    res.status(409).json({ error: "Remove remittance allocations before deleting a fee" });
+    return;
+  }
   res.json({ ok: true });
 });
 

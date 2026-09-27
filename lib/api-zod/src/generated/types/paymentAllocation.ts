@@ -5,6 +5,7 @@
  * CEPS Portal API — referral intake, authorizations, invoices, payments, remittances, vendors, reporting
  * OpenAPI spec version: 0.1.0
  */
+import type { PaymentAllocationRemitted } from './paymentAllocationRemitted';
 
 export interface PaymentAllocation {
   id: string;
@@ -15,4 +16,7 @@ export interface PaymentAllocation {
   authNumber?: string | null;
   /** @pattern ^\d+(\.\d{1,2})?$ */
   amount: string;
+  /** @pattern ^\d+(\.\d{1,2})?$ */
+  remittedAmount: string;
+  remitted: PaymentAllocationRemitted;
 }

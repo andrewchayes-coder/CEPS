@@ -246,6 +246,20 @@
       "when": 1790471789124,
       "tag": "0034_wet_queen_noir",
       "breakpoints": true
+    },
+    {
+      "idx": 35,
+      "version": "7",
+      "when": 1790473040909,
+      "tag": "0035_remittance_line_and_fee_targets",
+      "breakpoints": true
+    },
+    {
+      "idx": 36,
+      "version": "7",
+      "when": 1790473500000,
+      "tag": "0036_remittance_target_guards",
+      "breakpoints": true
     }
   ]
 }

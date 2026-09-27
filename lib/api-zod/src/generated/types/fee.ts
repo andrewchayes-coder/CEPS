@@ -16,6 +16,10 @@ export interface Fee {
   paymentId?: string | null;
   /** @nullable */
   authorizationId?: string | null;
+  /** @nullable */
+  authNumber: string | null;
+  remittedAmount: string;
+  feeAuthorizationMissing: boolean;
   /**
      * @nullable
      * @pattern ^\d{4}-(0[1-9]|1[0-2])$

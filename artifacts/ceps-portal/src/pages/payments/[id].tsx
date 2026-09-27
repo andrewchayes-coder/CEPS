@@ -107,9 +107,19 @@ export default function PaymentDetailPage() {
                         <span className="italic">Manual / No Auth</span>
                       )}
                     </span>
-                    <span>${parseFloat(alloc.amount).toFixed(2)}</span>
+                    <span className="flex items-center gap-2">
+                      ${parseFloat(alloc.amount).toFixed(2)}
+                      <Badge variant="outline" className={
+                        alloc.remitted === 'full' ? 'border-chart-5/30 bg-chart-5/10 text-chart-5' :
+                        alloc.remitted === 'partial' ? 'border-chart-2/30 bg-chart-2/10 text-chart-2' :
+                        'text-muted-foreground'
+                      }>
+                        {alloc.remitted === 'full' ? 'Remitted' : alloc.remitted === 'partial' ? 'Partially remitted' : 'Not remitted'}
+                      </Badge>
+                    </span>
                   </div>
                   <div className="text-xs text-muted-foreground">Service Month: {formatPaymentServiceMonths({ allocations: [alloc], paymentMonth: payment.paymentMonth })}</div>
+                  <div className="text-xs text-muted-foreground">Remitted: ${parseFloat(alloc.remittedAmount ?? '0').toFixed(2)} of ${parseFloat(alloc.amount).toFixed(2)}</div>
                 </div>
               )) : (
                 <div className="p-3 bg-muted/30 rounded-md border text-sm text-muted-foreground">

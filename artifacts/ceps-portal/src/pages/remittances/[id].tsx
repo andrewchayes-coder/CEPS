@@ -3,6 +3,7 @@ import { useLocation, useParams, Link } from 'wouter';
 import { useGetRemittance, useDeleteRemittance } from '@workspace/api-client-react';
 import { useAuth } from '@/components/auth/auth-provider';
 import { EditRemittanceDialog } from '@/components/edit-remittance-dialog';
+import { MatchRemittanceDialog } from '@/components/match-remittance-dialog';
 import { DeleteEntityButton } from '@/components/delete-entity-button';
 import { ClientLink } from '@/components/entity-links';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -47,6 +48,9 @@ export default function RemittanceDetailPage() {
           </Badge>
           {canEnterRemittances && (
             <>
+              {Number(remittance.remainingAmount) > 0 && (
+                <MatchRemittanceDialog remittance={remittance} onSaved={() => { void refetch(); }} />
+              )}
               <EditRemittanceDialog id={id} remittance={remittance} onSaved={() => refetch()} />
               <DeleteEntityButton
                 entityLabel="Remittance"
@@ -114,8 +118,17 @@ export default function RemittanceDetailPage() {
             <dt className="text-muted-foreground"><MetricHelp label="Remaining" explanation="Amount not yet matched to a payment." /></dt>
             <dd className="col-span-2">${parseFloat(remittance.remainingAmount ?? remittance.amount).toFixed(2)}</dd>
             {(remittance.allocations ?? []).map((allocation) => <React.Fragment key={allocation.id}>
-              <dt className="text-muted-foreground">Allocated Payment:</dt>
-              <dd className="col-span-2"><Link href={`/payments/${allocation.paymentId}`} className="text-primary hover:underline">${parseFloat(allocation.amount).toFixed(2)} — view payment</Link></dd>
+              <dt className="text-muted-foreground">Allocation ({allocation.targetKind === 'fee' ? 'Fee' : 'Payment line'}):</dt>
+              <dd className="col-span-2">
+                {allocation.targetKind === 'fee' ? (
+                  <span>${parseFloat(allocation.amount).toFixed(2)} — Fee {allocation.feeMonth ?? '-'} · Auth {allocation.authNumber ?? '—'}</span>
+                ) : (
+                  <>
+                    {allocation.paymentId ? <Link href={`/payments/${allocation.paymentId}`} className="text-primary hover:underline">${parseFloat(allocation.amount).toFixed(2)} — Check #{allocation.checkNumber ?? '—'}</Link> : <span>${parseFloat(allocation.amount).toFixed(2)} — Check #{allocation.checkNumber ?? '—'}</span>}
+                    <span className="text-muted-foreground"> · {allocation.serviceMonth ?? '-'} · Auth {allocation.authNumber ?? '—'}</span>
+                  </>
+                )}
+              </dd>
             </React.Fragment>)}
             {remittance.expectedAmount && (
               <>

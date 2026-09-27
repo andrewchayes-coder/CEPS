@@ -1,4 +1,4 @@
-import { inArray, eq, and, sql, type Column, type SQL } from "drizzle-orm";
+import { inArray, eq, and, ne, sql, type Column, type SQL } from "drizzle-orm";
 import Decimal from "decimal.js";
 import { money } from "./money";
 import {
@@ -7,6 +7,7 @@ import {
   vendorsTable,
   usersTable,
   authorizationsTable,
+  feesTable,
   paymentsTable,
   paymentAllocationsTable,
   type Client,
@@ -174,19 +175,39 @@ export function referralJson(
 // cent values through Number().
 export async function authorizationTotalsPaid(ids: string[]): Promise<Map<string, Decimal>> {
   if (ids.length === 0) return new Map();
-  const rows = await db
+  const paymentRows = await db
     .select({
       authorizationId: paymentAllocationsTable.authorizationId,
-        total: sql<string>`coalesce(sum(${paymentAllocationsTable.amount}), 0)`,
+      total: sql<string>`coalesce(sum(${paymentAllocationsTable.amount}), 0)`,
     })
     .from(paymentAllocationsTable)
+    .innerJoin(authorizationsTable, eq(authorizationsTable.id, paymentAllocationsTable.authorizationId))
     .innerJoin(paymentsTable, eq(paymentsTable.id, paymentAllocationsTable.paymentId))
-    .where(and(inArray(paymentAllocationsTable.authorizationId, ids), notDeleted(paymentsTable)))
+    .where(and(
+      inArray(paymentAllocationsTable.authorizationId, ids),
+      ne(authorizationsTable.paymentType, "fee"),
+      notDeleted(paymentsTable),
+    ))
     .groupBy(paymentAllocationsTable.authorizationId);
   const map = new Map<string, Decimal>();
-  for (const row of rows) {
+  for (const row of paymentRows) {
     if (!row.authorizationId) continue;
     map.set(row.authorizationId, money(row.total));
+  }
+  const feeRows = await db
+    .select({
+      authorizationId: feesTable.authorizationId,
+      total: sql<string>`coalesce(sum(${feesTable.amount}), 0)`,
+    })
+    .from(feesTable)
+    .where(and(
+      inArray(feesTable.authorizationId, ids),
+      notDeleted(feesTable),
+      ne(feesTable.status, "waived"),
+    ))
+    .groupBy(feesTable.authorizationId);
+  for (const row of feeRows) {
+    if (row.authorizationId) map.set(row.authorizationId, money(row.total));
   }
   return map;
 }
@@ -304,7 +325,20 @@ export function remittanceJson(
     authNumber?: string | null;
     allocatedAmount?: string;
     remainingAmount?: string;
-    allocations?: { id: string; paymentId: string; amount: string; autoMatched: boolean; createdAt: string | null }[];
+    allocations?: {
+      id: string;
+      targetKind: "line" | "fee";
+      paymentId: string | null;
+      paymentAllocationId: string | null;
+      feeId: string | null;
+      checkNumber: string | null;
+      serviceMonth: string | null;
+      feeMonth: string | null;
+      authNumber: string | null;
+      amount: string;
+      autoMatched: boolean;
+      createdAt: string | null;
+    }[];
   } = {},
 ) {
   return {
@@ -331,15 +365,21 @@ export function remittanceJson(
   };
 }
 
-export function feeJson(f: Fee, opts: { clientName?: string | null } = {}) {
+export function feeJson(
+  f: Fee,
+  opts: { clientName?: string | null; authNumber?: string | null; remittedAmount?: string } = {},
+) {
   return {
     id: f.id,
     clientId: f.clientId,
     clientName: opts.clientName ?? null,
     paymentId: f.paymentId,
     authorizationId: f.authorizationId,
+    authNumber: opts.authNumber ?? null,
+    feeAuthorizationMissing: f.authorizationId === null,
     feeMonth: f.feeMonth,
     amount: f.amount,
+    remittedAmount: opts.remittedAmount ?? "0.00",
     ruleApplied: f.ruleApplied,
     status: f.status,
     notes: f.notes,

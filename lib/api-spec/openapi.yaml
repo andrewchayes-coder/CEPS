@@ -3800,13 +3800,15 @@ components:
           items: { $ref: "#/components/schemas/PaymentAllocation" }
     PaymentAllocation:
       type: object
-      required: [id, authorizationId, serviceMonth, amount]
+      required: [id, authorizationId, serviceMonth, amount, remittedAmount, remitted]
       properties:
         id: { type: string }
         authorizationId: { type: string }
         serviceMonth: { type: string, pattern: '^\d{4}-(0[1-9]|1[0-2])$' }
         authNumber: { type: ["string", "null"] }
         amount: { type: string, pattern: '^\d+(\.\d{1,2})?$' }
+        remittedAmount: { type: string, pattern: '^\d+(\.\d{1,2})?$' }
+        remitted: { type: string, enum: [full, partial, none] }
     PaymentInput:
       type: object
       required: [clientId, qbCheckNumber, checkDate, amount, paymentType, allocations]
@@ -4096,28 +4098,40 @@ components:
           items: { $ref: "#/components/schemas/RemittanceAllocation" }
     RemittanceAllocation:
       type: object
-      required: [id, paymentId, amount, autoMatched]
+      required: [id, targetKind, paymentId, paymentAllocationId, feeId, checkNumber, serviceMonth, feeMonth, authNumber, amount, autoMatched]
       properties:
         id: { type: string }
-        paymentId: { type: string }
+        targetKind: { type: string, enum: [line, fee] }
+        paymentId: { type: ["string", "null"], description: "Parent check id for a line allocation; null for fee allocations." }
+        paymentAllocationId: { type: ["string", "null"] }
+        feeId: { type: ["string", "null"] }
+        checkNumber: { type: ["string", "null"] }
+        serviceMonth: { type: ["string", "null"] }
+        feeMonth: { type: ["string", "null"] }
+        authNumber: { type: ["string", "null"] }
         amount: { type: string }
         autoMatched: { type: boolean }
         createdAt: { type: ["string", "null"] }
     RemittanceInput:
       type: object
-      required: [clientId, authorizationId, remittanceDate, amount]
+      required: [clientId, remittanceDate, amount]
       properties:
         clientId: { type: string }
-        authorizationId: { type: string }
+        authorizationId: { type: ["string", "null"] }
         altaReference: { type: ["string", "null"] }
         remittanceDate: { type: string }
         amount: { type: string }
         paymentMonth: { type: ["string", "null"] }
     RemittanceMatchInput:
       type: object
-      required: [paymentId, amount]
+      description: >-
+        Provide exactly one of paymentAllocationId or feeId. Legacy paymentId is
+        accepted only when that check has exactly one eligible payment line.
+      required: [amount]
       properties:
-        paymentId: { type: string }
+        paymentAllocationId: { type: string }
+        feeId: { type: string }
+        paymentId: { type: string, description: "Legacy parent-check target; accepted only when exactly one eligible line exists." }
         amount: { type: string, pattern: '^\d+(\.\d{1,2})?$' }
     AltaRemittanceImportInput:
       type: object
@@ -4166,13 +4180,16 @@ components:
           items: { $ref: "#/components/schemas/AltaRemittanceImportRowResult" }
     Fee:
       type: object
-      required: [id, clientId, amount, status]
+      required: [id, clientId, amount, status, authNumber, remittedAmount, feeAuthorizationMissing]
       properties:
         id: { type: string }
         clientId: { type: string }
         clientName: { type: ["string", "null"] }
         paymentId: { type: ["string", "null"] }
         authorizationId: { type: ["string", "null"] }
+        authNumber: { type: ["string", "null"] }
+        remittedAmount: { type: string }
+        feeAuthorizationMissing: { type: boolean }
         feeMonth:
           type: ["string", "null"]
           pattern: '^\d{4}-(0[1-9]|1[0-2])$'

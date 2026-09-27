@@ -1,7 +1,7 @@
 import { Router, type IRouter } from "express";
 import { eq, desc, asc, and, count, sql, ilike, or, lte, gte, inArray, type SQL } from "drizzle-orm";
 import { randomUUID } from "crypto";
-import { db, authorizationsTable, authorizationVersionsTable, paymentsTable, paymentAllocationsTable, usersTable, unmatchedPosDocumentsTable, clientsTable, vendorsTable } from "@workspace/db";
+import { db, authorizationsTable, authorizationVersionsTable, paymentsTable, paymentAllocationsTable, feesTable, usersTable, unmatchedPosDocumentsTable, clientsTable, vendorsTable } from "@workspace/db";
 import {
   ListAuthorizationsQueryParams,
   ListAuthorizationsResponse,
@@ -51,6 +51,7 @@ import {
 } from "../lib/serializers";
 import { sortedOrder } from "../lib/sorting";
 import { softDeleteAuthorization, validateParticipantLinks } from "../lib/participantLinks";
+import { relinkPendingFeesToFeeAuthorizations } from "../lib/feeAuthorization";
 import { advanceReferralForAuthorization } from "../lib/advanceReferralForAuthorization";
 import { findPosClient } from "../lib/posMatching";
 import { parsePosPdf } from "../lib/posPdfParser";
@@ -232,10 +233,12 @@ router.get("/authorizations", requireAuth, async (req, res): Promise<void> => {
   // effective status / days-until-expiry (see effectiveAuthStatus &
   // authorizationJson). We replicate that derivation in SQL so filtering and
   // pagination stay at the DB level with identical semantics.
-  //   totalPaid  = coalesce(sum(non-deleted payments for this auth), 0)
+  //   totalPaid  = fee total for 490 authorizations, otherwise payment total
   //   effective  = pending | expired (period end past) | exhausted (paid ≥ max) | status
   //   days       = ceil((servicePeriodEnd@00:00Z − now) / 1 day)
-  const totalPaidSql = sql`coalesce((select sum(${paymentAllocationsTable.amount}) from ${paymentAllocationsTable} inner join ${paymentsTable} on ${paymentsTable.id} = ${paymentAllocationsTable.paymentId} where ${paymentAllocationsTable.authorizationId} = ${authorizationsTable.id} and ${paymentsTable.isDeleted} = false), 0)`;
+  const paymentTotalSql = sql`coalesce((select sum(${paymentAllocationsTable.amount}) from ${paymentAllocationsTable} inner join ${paymentsTable} on ${paymentsTable.id} = ${paymentAllocationsTable.paymentId} where ${paymentAllocationsTable.authorizationId} = ${authorizationsTable.id} and ${paymentsTable.isDeleted} = false), 0)`;
+  const feeTotalSql = sql`coalesce((select sum(${feesTable.amount}) from ${feesTable} where ${feesTable.authorizationId} = ${authorizationsTable.id} and ${feesTable.isDeleted} = false and ${feesTable.status} <> 'waived'), 0)`;
+  const totalPaidSql = sql`case when ${authorizationsTable.paymentType} = 'fee' then ${feeTotalSql} else ${paymentTotalSql} end`;
   const effectiveStatusSql = sql`case when ${authorizationsTable.status} = 'canceled' then 'canceled' when ${authorizationsTable.servicePeriodStart} > (now() at time zone 'utc')::date then 'pending' when ${authorizationsTable.status} = 'pending' then 'pending' when ${authorizationsTable.servicePeriodEnd} < (now() at time zone 'utc')::date then 'expired' when ${totalPaidSql} >= ${authorizationsTable.maxPeriodAmount} then 'exhausted' else ${authorizationsTable.status} end`;
   const daysUntilExpirySql = sql`ceil(extract(epoch from ((${authorizationsTable.servicePeriodEnd} || 'T00:00:00Z')::timestamptz - now())) / 86400)`;
   if (query.data.status) {
@@ -334,6 +337,9 @@ router.post("/authorizations", requireStaff, async (req, res): Promise<void> => 
         .returning();
       if (created) {
         await advanceReferralForAuthorization(txDb, created, req.user!.id);
+        if (created.paymentType === "fee") {
+          await relinkPendingFeesToFeeAuthorizations(txDb, created.clientId);
+        }
       }
       return created;
     });
@@ -493,6 +499,9 @@ router.patch("/authorizations/:id", requireStaff, async (req, res): Promise<void
       .where(and(eq(authorizationsTable.id, id), notDeleted(authorizationsTable)))
       .returning();
     if (!updated) return undefined;
+    if (before.paymentType === "fee" || updated.paymentType === "fee") {
+      await relinkPendingFeesToFeeAuthorizations(tx as unknown as typeof db, updated.clientId);
+    }
     await tx.insert(authorizationVersionsTable).values({
       authorizationId: before.id,
       clientId: before.clientId,
@@ -584,6 +593,9 @@ router.post("/authorizations/:id/amend", requireStaff, async (req, res): Promise
     const [updated] = await tx.update(authorizationsTable).set(updates)
       .where(and(eq(authorizationsTable.id, before.id), notDeleted(authorizationsTable))).returning();
     if (!updated) return undefined;
+    if (updated.paymentType === "fee") {
+      await relinkPendingFeesToFeeAuthorizations(tx as unknown as typeof db, updated.clientId);
+    }
     await tx.insert(authorizationVersionsTable).values({
       authorizationId: before.id, clientId: before.clientId, vendorId: before.vendorId,
       authNumber: before.authNumber, serviceCode: before.serviceCode, paymentType: before.paymentType,

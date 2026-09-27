@@ -8,7 +8,8 @@
 
 export interface RemittanceInput {
   clientId: string;
-  authorizationId: string;
+  /** @nullable */
+  authorizationId?: string | null;
   /** @nullable */
   altaReference?: string | null;
   remittanceDate: string;

@@ -20,6 +20,38 @@ const balanceMigrationStatements = readFileSync(balanceMigrationPath, "utf8")
   .map((statement) => statement.trim())
   .filter(Boolean);
 
+const targetSchemaMigrationPath = fileURLToPath(
+  new URL("../../../../lib/db/migrations/0035_remittance_line_and_fee_targets.sql", import.meta.url),
+);
+const targetSchemaMigrationStatements = readFileSync(targetSchemaMigrationPath, "utf8")
+  .split("--> statement-breakpoint")
+  .map((statement) => statement.trim())
+  .filter(Boolean);
+
+const targetGuardMigrationPath = fileURLToPath(
+  new URL("../../../../lib/db/migrations/0036_remittance_target_guards.sql", import.meta.url),
+);
+const targetGuardMigrationStatements = readFileSync(targetGuardMigrationPath, "utf8")
+  .split("--> statement-breakpoint")
+  .map((statement) => statement.trim())
+  .filter(Boolean);
+
+const optionABackfillPath = fileURLToPath(
+  new URL("../../../../scripts/remittance-backfill-option-a-production.sql", import.meta.url),
+);
+const optionABackfillStatements = readFileSync(optionABackfillPath, "utf8")
+  .split(";")
+  .map((statement) => statement.trim())
+  .filter(Boolean);
+
+const optionACheckPath = fileURLToPath(
+  new URL("../../../../scripts/remittance-backfill-check.sql", import.meta.url),
+);
+const optionACheckStatements = readFileSync(optionACheckPath, "utf8")
+  .split(";")
+  .map((statement) => statement.trim())
+  .filter(Boolean);
+
 const schemasToDrop: string[] = [];
 
 afterAll(async () => {
@@ -336,6 +368,253 @@ describe("migration 0010 remittance allocation balance guards", () => {
         payment_b: "50.00",
       });
     } finally {
+      client.release();
+    }
+  });
+});
+
+describe("migration 0035/0036 remittance line targets and Option A backfill", () => {
+  it("backfills a unique eligible line, leaves ambiguous history unresolved, and reports it", async () => {
+    const schema = `migration_remittance_targets_${randomUUID().replaceAll("-", "")}`;
+    schemasToDrop.push(schema);
+    const client = await pool.connect();
+
+    try {
+      await client.query(`CREATE SCHEMA "${schema}"`);
+      await client.query(`SET search_path TO "${schema}"`);
+      await client.query(`
+        CREATE TABLE authorizations (
+          id uuid PRIMARY KEY,
+          client_id uuid NOT NULL,
+          payment_type text NOT NULL,
+          is_deleted boolean NOT NULL DEFAULT false,
+          status text NOT NULL,
+          service_period_start date NOT NULL,
+          service_period_end date NOT NULL
+        );
+        CREATE TABLE payments (
+          id uuid PRIMARY KEY,
+          client_id uuid NOT NULL,
+          amount numeric(12, 2) NOT NULL,
+          is_deleted boolean NOT NULL DEFAULT false,
+          remitted boolean NOT NULL DEFAULT false
+        );
+        CREATE TABLE remittances (
+          id uuid PRIMARY KEY,
+          client_id uuid NOT NULL,
+          authorization_id uuid,
+          payment_month text,
+          remittance_date date NOT NULL,
+          amount numeric(12, 2) NOT NULL,
+          is_deleted boolean NOT NULL DEFAULT false
+        );
+        CREATE TABLE payment_allocations (
+          id uuid PRIMARY KEY,
+          payment_id uuid NOT NULL REFERENCES payments(id),
+          authorization_id uuid NOT NULL,
+          service_month text,
+          amount numeric(12, 2) NOT NULL
+        );
+        CREATE TABLE fees (
+          id uuid PRIMARY KEY,
+          client_id uuid NOT NULL,
+          authorization_id uuid,
+          amount numeric(12, 2) NOT NULL,
+          fee_month text,
+          is_deleted boolean NOT NULL DEFAULT false,
+          status text NOT NULL DEFAULT 'pending'
+        );
+        CREATE TABLE audit_log (
+          action text NOT NULL,
+          entity_type text,
+          entity_id text,
+          detail text
+        );
+        CREATE TABLE remittance_allocations (
+          id uuid PRIMARY KEY,
+          remittance_id uuid NOT NULL REFERENCES remittances(id),
+          payment_id uuid NOT NULL REFERENCES payments(id),
+          amount numeric(12, 2) NOT NULL,
+          auto_matched boolean NOT NULL DEFAULT false,
+          created_at timestamp with time zone NOT NULL DEFAULT now()
+        );
+        CREATE UNIQUE INDEX remittance_allocations_pair_unique
+          ON remittance_allocations (remittance_id, payment_id)
+      `);
+
+      const ids = {
+        client: randomUUID(),
+        singleAuthorization: randomUUID(),
+        ambiguousAuthorizationA: randomUUID(),
+        ambiguousAuthorizationB: randomUUID(),
+        singlePayment: randomUUID(),
+        ambiguousPayment: randomUUID(),
+        capacityPayment: randomUUID(),
+        singleLine: randomUUID(),
+        ambiguousLineA: randomUUID(),
+        ambiguousLineB: randomUUID(),
+        capacityLine: randomUUID(),
+        singleRemittance: randomUUID(),
+        ambiguousRemittance: randomUUID(),
+        firstCapacityRemittance: randomUUID(),
+        secondCapacityRemittance: randomUUID(),
+        singleLegacyAllocation: randomUUID(),
+        ambiguousLegacyAllocation: randomUUID(),
+        firstCapacityLegacyAllocation: randomUUID(),
+        secondCapacityLegacyAllocation: randomUUID(),
+      };
+
+      await client.query(
+        `INSERT INTO payments (id, client_id, amount)
+         VALUES ($1, $4, 100.00), ($2, $4, 100.00), ($3, $4, 200.00)`,
+        [ids.singlePayment, ids.ambiguousPayment, ids.capacityPayment, ids.client],
+      );
+      await client.query(
+        `INSERT INTO remittances (
+           id, client_id, authorization_id, payment_month, remittance_date, amount
+         )
+         VALUES ($1, $5, $6, '2026-05', '2026-05-31', 100.00),
+                ($2, $5, NULL, NULL, '2026-07-01', 25.00),
+                ($3, $5, $6, '2026-05', '2026-06-01', 70.00),
+                ($4, $5, $6, '2026-05', '2026-06-02', 50.00)`,
+        [
+          ids.singleRemittance,
+          ids.ambiguousRemittance,
+          ids.firstCapacityRemittance,
+          ids.secondCapacityRemittance,
+          ids.client,
+          ids.singleAuthorization,
+        ],
+      );
+      await client.query(
+        `INSERT INTO payment_allocations (id, payment_id, authorization_id, service_month, amount)
+         VALUES ($1, $4, $5, '2026-05', 100.00),
+                ($2, $6, $7, '2026-05', 50.00),
+                ($3, $6, $8, '2026-06', 50.00),
+                ($9, $10, $5, '2026-05', 100.00)`,
+        [
+          ids.singleLine,
+          ids.ambiguousLineA,
+          ids.ambiguousLineB,
+          ids.singlePayment,
+          ids.singleAuthorization,
+          ids.ambiguousPayment,
+          ids.ambiguousAuthorizationA,
+          ids.ambiguousAuthorizationB,
+          ids.capacityLine,
+          ids.capacityPayment,
+        ],
+      );
+      await client.query(
+        `INSERT INTO remittance_allocations (id, remittance_id, payment_id, amount)
+         VALUES ($1, $5, $9, 100.00),
+                ($2, $6, $10, 25.00),
+                ($3, $7, $11, 70.00),
+                ($4, $8, $11, 50.00)`,
+        [
+          ids.singleLegacyAllocation,
+          ids.ambiguousLegacyAllocation,
+          ids.firstCapacityLegacyAllocation,
+          ids.secondCapacityLegacyAllocation,
+          ids.singleRemittance,
+          ids.ambiguousRemittance,
+          ids.firstCapacityRemittance,
+          ids.secondCapacityRemittance,
+          ids.singlePayment,
+          ids.ambiguousPayment,
+          ids.capacityPayment,
+        ],
+      );
+
+      for (const statement of targetSchemaMigrationStatements) {
+        await client.query(statement.replaceAll('"public".', `"${schema}".`));
+      }
+      for (const statement of targetGuardMigrationStatements) {
+        await client.query(statement);
+      }
+      for (const statement of optionABackfillStatements) {
+        await client.query(statement);
+      }
+
+      const mapped = await client.query(
+        `SELECT payment_allocation_id
+         FROM remittance_allocations
+         WHERE id = $1`,
+        [ids.singleLegacyAllocation],
+      );
+      expect(mapped.rows[0].payment_allocation_id).toBe(ids.singleLine);
+
+      const capacityWinner = await client.query(
+        `SELECT payment_allocation_id
+         FROM remittance_allocations
+         WHERE id = $1`,
+        [ids.firstCapacityLegacyAllocation],
+      );
+      expect(capacityWinner.rows[0].payment_allocation_id).toBe(ids.capacityLine);
+      const capacityTotals = await client.query(
+        `SELECT sum(ra.amount)::text AS allocated, pa.amount::text AS line_amount
+         FROM payment_allocations pa
+         JOIN remittance_allocations ra ON ra.payment_allocation_id = pa.id
+         WHERE pa.id = $1
+         GROUP BY pa.id, pa.amount`,
+        [ids.capacityLine],
+      );
+      expect(capacityTotals.rows[0]).toEqual({
+        allocated: "70.00",
+        line_amount: "100.00",
+      });
+
+      const unresolved = await client.query(
+        `SELECT id, payment_allocation_id
+         FROM remittance_allocations
+         WHERE id IN ($1, $2)`,
+        [ids.ambiguousLegacyAllocation, ids.secondCapacityLegacyAllocation],
+      );
+      expect(unresolved.rows).toHaveLength(2);
+      expect(unresolved.rows.every((row) => row.payment_allocation_id === null)).toBe(true);
+
+      const paymentStatuses = await client.query(
+        `SELECT id, remitted FROM payments WHERE id IN ($1, $2) ORDER BY id`,
+        [ids.singlePayment, ids.ambiguousPayment],
+      );
+      expect(paymentStatuses.rows).toContainEqual({
+        id: ids.singlePayment,
+        remitted: true,
+      });
+      expect(paymentStatuses.rows).toContainEqual({
+        id: ids.ambiguousPayment,
+        remitted: false,
+      });
+
+      const checkResults = [];
+      for (const statement of optionACheckStatements) {
+        checkResults.push(await client.query(statement));
+      }
+      expect(checkResults[0].rows[0]).toEqual({
+        payment_allocations_missing_line: "2",
+        collected_fees_not_fully_allocated: "0",
+        payment_remitted_flag_disagreements: "0",
+      });
+      expect(checkResults[1].rows).toHaveLength(2);
+      const unresolvedById = new Map(
+        checkResults[1].rows.map((row) => [row.remittance_allocation_id, row]),
+      );
+      expect(unresolvedById.get(ids.ambiguousLegacyAllocation)).toMatchObject({
+        remittance_allocation_id: ids.ambiguousLegacyAllocation,
+        payment_id: ids.ambiguousPayment,
+        payment_line_count: "2",
+        remittance_compatible_line_count: "2",
+      });
+      expect(unresolvedById.get(ids.secondCapacityLegacyAllocation)).toMatchObject({
+        remittance_allocation_id: ids.secondCapacityLegacyAllocation,
+        payment_id: ids.capacityPayment,
+        payment_line_count: "1",
+        compatible_lines_with_balance: "0",
+        payment_balance_fits: true,
+        remittance_balance_fits: true,
+      });
+    } finally {
+      await client.query("SET search_path TO public");
       client.release();
     }
   });

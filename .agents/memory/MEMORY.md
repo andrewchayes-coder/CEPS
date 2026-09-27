@@ -24,3 +24,4 @@
 - [Publish and PostgreSQL extensions](publish-postgres-extensions.md) — verify generated Publish SQL; extension-backed indexes may be diffed without the required extension DDL.
 - [Database migration boundary](db-migrations.md) — dev can use migrate/push; Publish syncs only production schema, so backfills are separate and deploy must not run db:migrate.
 - [GitHub push authentication](github-push-auth.md) — stale Git CLI credentials need not mean a broken connector; preserve exact Git objects and fast-forward only after verification.
+- [PostgreSQL constraint names](postgres-constraint-names.md) — generated FK names over 63 bytes get truncated and cause endless schema push diffs; name long FKs explicitly.

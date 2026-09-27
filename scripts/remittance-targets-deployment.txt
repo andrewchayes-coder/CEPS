@@ -1,0 +1,42 @@
+Remittance allocation-target deployment notes
+
+Scope
+
+This deliverable covers the schema target model, database guards, and Option A/Option B database backfills only. Application routes, serializers, generated API artifacts, and fee lifecycle writers are outside this change.
+
+Schema generation
+
+The schema-only migration is lib/db/migrations/0035_remittance_line_and_fee_targets.sql. It makes payment_id nullable, adds payment_allocation_id and fee_id, replaces the remittance/payment unique key with target-specific partial unique indexes, and adds the XOR target constraint and indexes. It intentionally does not require payment_allocation_id on legacy payment targets.
+
+The function/trigger migration is separate at lib/db/migrations/0036_remittance_target_guards.sql. It replaces the balance and active-link guards, updates require_matching_remittance_payment from 0021, updates the remittance parent-link guard for fee and line targets, and adds the fee amount guard.
+
+Production ordering
+
+1. Apply the schema-only migration 0035 to the production database as part of schema deployment. The guard functions depend on its new columns. Publish does not run migration SQL.
+2. After publishing the compatible application version and confirming schema 0035 is present, run scripts/remittance-target-guards-production.sql. Paste/run each function or trigger statement separately in the Replit Database tool. The final two SELECT statements list installed function/trigger names and report the count of distinct expected trigger names, which must be 5, including the existing remittances_active_parent_guard that invokes require_matching_remittance_payment.
+3. Choose exactly one data path. Option A is the data-preserving backfill in scripts/remittance-backfill-option-a-production.sql. Option B is destructive test-data cleanup in scripts/remittance-option-b-delete-test-data.sql. Do not run both.
+4. Run scripts/remittance-backfill-check.sql after Option A. The first result row must show zero in all three count columns. Its second result lists payment allocations intentionally left unresolved because neither the one-line nor unique authorization/month rule selected one line; investigate and resolve those rows before considering the backfill complete.
+
+Option A has a transaction-wrapped run-once SQL script at scripts/remittance-backfill-option-a.sql. It backfills only uniquely-identifiable payment lines that also satisfy installed guard checks and aggregate balance limits, links every active fee to the latest eligible fee authorization (or null), changes collected fees to pending unless fee allocations fully cover them and writes one uncollect audit row per changed fee, then recomputes payment remitted flags. Rows that are uniquely identifiable but fail active-client, authorization/month, or balance checks are left unchanged and listed by the read-only check query for manual resolution. Do not execute both Option A files; use the production version in the Database tool or run the transaction-wrapped script once in a SQL client, not both.
+
+Option B is destructive and intended only if all remittance data is disposable test data. It hard-deletes all remittance allocations and remittances, resets remitted and collected flags, and re-links active fees. It does not soft-delete rows. The SQL reports counts before and after. Do not run it against production data unless explicitly selected and confirmed.
+
+Required Option A check conditions
+
+The check query returns zero for payment targets without a payment line, active collected fees whose allocations do not equal the fee amount, and payment remitted flags inconsistent with line-level completion (or the legacy whole-check rule when no payment lines exist). Unmatched payment allocation details are returned separately by the second query.
+
+Schema preview and validation commands
+
+Do not run db:push or push-force. The generated migration is the non-mutating preview of schema changes: it proposes only the target columns/FKs, nullable payment_id, target uniqueness/indexes, and one-target check described above. If the development push or Publish preview proposes any drop, recreation, or alteration outside this task, stop and inspect before applying anything.
+
+The schema migration was generated with:
+
+  cd lib/db && DATABASE_URL=postgres://unused:unused@localhost:5432/unused pnpm exec drizzle-kit generate --config ./drizzle.config.ts --name remittance_line_and_fee_targets
+
+Type-check the schema package with:
+
+  pnpm --filter @workspace/db exec tsc --noEmit
+
+Regenerate schema SQL for comparison only, without applying it, with:
+
+  cd lib/db && DATABASE_URL=postgres://unused:unused@localhost:5432/unused pnpm exec drizzle-kit generate --config ./drizzle.config.ts --name remittance_schema_preview

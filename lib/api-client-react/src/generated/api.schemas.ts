@@ -1139,6 +1139,15 @@ export const PaymentSource = {
   historical_import: 'historical_import',
 } as const;
 
+export type PaymentAllocationRemitted = typeof PaymentAllocationRemitted[keyof typeof PaymentAllocationRemitted];
+
+
+export const PaymentAllocationRemitted = {
+  full: 'full',
+  partial: 'partial',
+  none: 'none',
+} as const;
+
 export interface PaymentAllocation {
   id: string;
   authorizationId: string;
@@ -1148,6 +1157,9 @@ export interface PaymentAllocation {
   authNumber?: string | null;
   /** @pattern ^\d+(\.\d{1,2})?$ */
   amount: string;
+  /** @pattern ^\d+(\.\d{1,2})?$ */
+  remittedAmount: string;
+  remitted: PaymentAllocationRemitted;
 }
 
 export interface Payment {
@@ -1203,9 +1215,34 @@ export const RemittanceSource = {
   manual: 'manual',
 } as const;
 
+export type RemittanceAllocationTargetKind = typeof RemittanceAllocationTargetKind[keyof typeof RemittanceAllocationTargetKind];
+
+
+export const RemittanceAllocationTargetKind = {
+  line: 'line',
+  fee: 'fee',
+} as const;
+
 export interface RemittanceAllocation {
   id: string;
-  paymentId: string;
+  targetKind: RemittanceAllocationTargetKind;
+  /**
+     * Parent check id for a line allocation; null for fee allocations.
+     * @nullable
+     */
+  paymentId: string | null;
+  /** @nullable */
+  paymentAllocationId: string | null;
+  /** @nullable */
+  feeId: string | null;
+  /** @nullable */
+  checkNumber: string | null;
+  /** @nullable */
+  serviceMonth: string | null;
+  /** @nullable */
+  feeMonth: string | null;
+  /** @nullable */
+  authNumber: string | null;
   amount: string;
   autoMatched: boolean;
   /** @nullable */
@@ -2483,7 +2520,8 @@ export interface ImportCommitResult {
 
 export interface RemittanceInput {
   clientId: string;
-  authorizationId: string;
+  /** @nullable */
+  authorizationId?: string | null;
   /** @nullable */
   altaReference?: string | null;
   remittanceDate: string;
@@ -2492,8 +2530,14 @@ export interface RemittanceInput {
   paymentMonth?: string | null;
 }
 
+/**
+ * Provide exactly one of paymentAllocationId or feeId. Legacy paymentId is accepted only when that check has exactly one eligible payment line.
+ */
 export interface RemittanceMatchInput {
-  paymentId: string;
+  paymentAllocationId?: string;
+  feeId?: string;
+  /** Legacy parent-check target; accepted only when exactly one eligible line exists. */
+  paymentId?: string;
   /** @pattern ^\d+(\.\d{1,2})?$ */
   amount: string;
 }
@@ -2567,6 +2611,10 @@ export interface Fee {
   paymentId?: string | null;
   /** @nullable */
   authorizationId?: string | null;
+  /** @nullable */
+  authNumber: string | null;
+  remittedAmount: string;
+  feeAuthorizationMissing: boolean;
   /**
      * @nullable
      * @pattern ^\d{4}-(0[1-9]|1[0-2])$

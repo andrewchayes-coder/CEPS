@@ -686,6 +686,7 @@ export const getClientCaseResponseInvoicesItemLineItemsItemServiceMonthRegExp = 
 export const getClientCaseResponseInvoicesItemLineItemsItemAmountRegExp = new RegExp('^\\d+(\\.\\d{1,2})?$');
 export const getClientCaseResponsePaymentsItemAllocationsItemServiceMonthRegExp = new RegExp('^\\d{4}-(0[1-9]|1[0-2])$');
 export const getClientCaseResponsePaymentsItemAllocationsItemAmountRegExp = new RegExp('^\\d+(\\.\\d{1,2})?$');
+export const getClientCaseResponsePaymentsItemAllocationsItemRemittedAmountRegExp = new RegExp('^\\d+(\\.\\d{1,2})?$');
 
 
 export const GetClientCaseResponse = zod.object({
@@ -897,7 +898,9 @@ export const GetClientCaseResponse = zod.object({
   "authorizationId": zod.string(),
   "serviceMonth": zod.string().regex(getClientCaseResponsePaymentsItemAllocationsItemServiceMonthRegExp),
   "authNumber": zod.string().nullish(),
-  "amount": zod.string().regex(getClientCaseResponsePaymentsItemAllocationsItemAmountRegExp)
+  "amount": zod.string().regex(getClientCaseResponsePaymentsItemAllocationsItemAmountRegExp),
+  "remittedAmount": zod.string().regex(getClientCaseResponsePaymentsItemAllocationsItemRemittedAmountRegExp),
+  "remitted": zod.enum(['full', 'partial', 'none'])
 }))
 })),
   "remittances": zod.array(zod.object({
@@ -922,7 +925,14 @@ export const GetClientCaseResponse = zod.object({
   "remainingAmount": zod.string(),
   "allocations": zod.array(zod.object({
   "id": zod.string(),
-  "paymentId": zod.string(),
+  "targetKind": zod.enum(['line', 'fee']),
+  "paymentId": zod.string().nullable().describe('Parent check id for a line allocation; null for fee allocations.'),
+  "paymentAllocationId": zod.string().nullable(),
+  "feeId": zod.string().nullable(),
+  "checkNumber": zod.string().nullable(),
+  "serviceMonth": zod.string().nullable(),
+  "feeMonth": zod.string().nullable(),
+  "authNumber": zod.string().nullable(),
   "amount": zod.string(),
   "autoMatched": zod.boolean(),
   "createdAt": zod.string().nullish()
@@ -3036,6 +3046,7 @@ export const ListPaymentsQueryParams = zod.object({
 
 export const listPaymentsResponseItemsItemAllocationsItemServiceMonthRegExp = new RegExp('^\\d{4}-(0[1-9]|1[0-2])$');
 export const listPaymentsResponseItemsItemAllocationsItemAmountRegExp = new RegExp('^\\d+(\\.\\d{1,2})?$');
+export const listPaymentsResponseItemsItemAllocationsItemRemittedAmountRegExp = new RegExp('^\\d+(\\.\\d{1,2})?$');
 
 
 export const ListPaymentsResponse = zod.object({
@@ -3064,7 +3075,9 @@ export const ListPaymentsResponse = zod.object({
   "authorizationId": zod.string(),
   "serviceMonth": zod.string().regex(listPaymentsResponseItemsItemAllocationsItemServiceMonthRegExp),
   "authNumber": zod.string().nullish(),
-  "amount": zod.string().regex(listPaymentsResponseItemsItemAllocationsItemAmountRegExp)
+  "amount": zod.string().regex(listPaymentsResponseItemsItemAllocationsItemAmountRegExp),
+  "remittedAmount": zod.string().regex(listPaymentsResponseItemsItemAllocationsItemRemittedAmountRegExp),
+  "remitted": zod.enum(['full', 'partial', 'none'])
 }))
 })),
   "total": zod.int()
@@ -3101,6 +3114,7 @@ export const CreatePaymentBody = zod.object({
 
 export const createPaymentResponseAllocationsItemServiceMonthRegExp = new RegExp('^\\d{4}-(0[1-9]|1[0-2])$');
 export const createPaymentResponseAllocationsItemAmountRegExp = new RegExp('^\\d+(\\.\\d{1,2})?$');
+export const createPaymentResponseAllocationsItemRemittedAmountRegExp = new RegExp('^\\d+(\\.\\d{1,2})?$');
 
 
 export const CreatePaymentResponse = zod.object({
@@ -3128,7 +3142,9 @@ export const CreatePaymentResponse = zod.object({
   "authorizationId": zod.string(),
   "serviceMonth": zod.string().regex(createPaymentResponseAllocationsItemServiceMonthRegExp),
   "authNumber": zod.string().nullish(),
-  "amount": zod.string().regex(createPaymentResponseAllocationsItemAmountRegExp)
+  "amount": zod.string().regex(createPaymentResponseAllocationsItemAmountRegExp),
+  "remittedAmount": zod.string().regex(createPaymentResponseAllocationsItemRemittedAmountRegExp),
+  "remitted": zod.enum(['full', 'partial', 'none'])
 }))
 })
 
@@ -3318,6 +3334,7 @@ export const GetPaymentParams = zod.object({
 
 export const getPaymentResponseAllocationsItemServiceMonthRegExp = new RegExp('^\\d{4}-(0[1-9]|1[0-2])$');
 export const getPaymentResponseAllocationsItemAmountRegExp = new RegExp('^\\d+(\\.\\d{1,2})?$');
+export const getPaymentResponseAllocationsItemRemittedAmountRegExp = new RegExp('^\\d+(\\.\\d{1,2})?$');
 
 
 export const GetPaymentResponse = zod.object({
@@ -3345,7 +3362,9 @@ export const GetPaymentResponse = zod.object({
   "authorizationId": zod.string(),
   "serviceMonth": zod.string().regex(getPaymentResponseAllocationsItemServiceMonthRegExp),
   "authNumber": zod.string().nullish(),
-  "amount": zod.string().regex(getPaymentResponseAllocationsItemAmountRegExp)
+  "amount": zod.string().regex(getPaymentResponseAllocationsItemAmountRegExp),
+  "remittedAmount": zod.string().regex(getPaymentResponseAllocationsItemRemittedAmountRegExp),
+  "remitted": zod.enum(['full', 'partial', 'none'])
 }))
 })
 
@@ -3383,6 +3402,7 @@ export const UpdatePaymentBody = zod.object({
 
 export const updatePaymentResponseAllocationsItemServiceMonthRegExp = new RegExp('^\\d{4}-(0[1-9]|1[0-2])$');
 export const updatePaymentResponseAllocationsItemAmountRegExp = new RegExp('^\\d+(\\.\\d{1,2})?$');
+export const updatePaymentResponseAllocationsItemRemittedAmountRegExp = new RegExp('^\\d+(\\.\\d{1,2})?$');
 
 
 export const UpdatePaymentResponse = zod.object({
@@ -3410,7 +3430,9 @@ export const UpdatePaymentResponse = zod.object({
   "authorizationId": zod.string(),
   "serviceMonth": zod.string().regex(updatePaymentResponseAllocationsItemServiceMonthRegExp),
   "authNumber": zod.string().nullish(),
-  "amount": zod.string().regex(updatePaymentResponseAllocationsItemAmountRegExp)
+  "amount": zod.string().regex(updatePaymentResponseAllocationsItemAmountRegExp),
+  "remittedAmount": zod.string().regex(updatePaymentResponseAllocationsItemRemittedAmountRegExp),
+  "remitted": zod.enum(['full', 'partial', 'none'])
 }))
 })
 
@@ -3610,6 +3632,9 @@ export const ListFeesResponseItem = zod.object({
   "clientName": zod.string().nullish(),
   "paymentId": zod.string().nullish(),
   "authorizationId": zod.string().nullish(),
+  "authNumber": zod.string().nullable(),
+  "remittedAmount": zod.string(),
+  "feeAuthorizationMissing": zod.boolean(),
   "feeMonth": zod.string().regex(listFeesResponseFeeMonthRegExp).nullish(),
   "amount": zod.string(),
   "ruleApplied": zod.string().nullish(),
@@ -3648,6 +3673,9 @@ export const CreateFeeResponse = zod.object({
   "clientName": zod.string().nullish(),
   "paymentId": zod.string().nullish(),
   "authorizationId": zod.string().nullish(),
+  "authNumber": zod.string().nullable(),
+  "remittedAmount": zod.string(),
+  "feeAuthorizationMissing": zod.boolean(),
   "feeMonth": zod.string().regex(createFeeResponseFeeMonthRegExp).nullish(),
   "amount": zod.string(),
   "ruleApplied": zod.string().nullish(),
@@ -3684,6 +3712,9 @@ export const UpdateFeeResponse = zod.object({
   "clientName": zod.string().nullish(),
   "paymentId": zod.string().nullish(),
   "authorizationId": zod.string().nullish(),
+  "authNumber": zod.string().nullable(),
+  "remittedAmount": zod.string(),
+  "feeAuthorizationMissing": zod.boolean(),
   "feeMonth": zod.string().regex(updateFeeResponseFeeMonthRegExp).nullish(),
   "amount": zod.string(),
   "ruleApplied": zod.string().nullish(),
@@ -3730,6 +3761,9 @@ export const WaiveFeeResponse = zod.object({
   "clientName": zod.string().nullish(),
   "paymentId": zod.string().nullish(),
   "authorizationId": zod.string().nullish(),
+  "authNumber": zod.string().nullable(),
+  "remittedAmount": zod.string(),
+  "feeAuthorizationMissing": zod.boolean(),
   "feeMonth": zod.string().regex(waiveFeeResponseFeeMonthRegExp).nullish(),
   "amount": zod.string(),
   "ruleApplied": zod.string().nullish(),
@@ -3764,6 +3798,9 @@ export const CorrectFeeCollectionResponse = zod.object({
   "clientName": zod.string().nullish(),
   "paymentId": zod.string().nullish(),
   "authorizationId": zod.string().nullish(),
+  "authNumber": zod.string().nullable(),
+  "remittedAmount": zod.string(),
+  "feeAuthorizationMissing": zod.boolean(),
   "feeMonth": zod.string().regex(correctFeeCollectionResponseFeeMonthRegExp).nullish(),
   "amount": zod.string(),
   "ruleApplied": zod.string().nullish(),
@@ -3815,7 +3852,14 @@ export const ListRemittancesResponse = zod.object({
   "remainingAmount": zod.string(),
   "allocations": zod.array(zod.object({
   "id": zod.string(),
-  "paymentId": zod.string(),
+  "targetKind": zod.enum(['line', 'fee']),
+  "paymentId": zod.string().nullable().describe('Parent check id for a line allocation; null for fee allocations.'),
+  "paymentAllocationId": zod.string().nullable(),
+  "feeId": zod.string().nullable(),
+  "checkNumber": zod.string().nullable(),
+  "serviceMonth": zod.string().nullable(),
+  "feeMonth": zod.string().nullable(),
+  "authNumber": zod.string().nullable(),
   "amount": zod.string(),
   "autoMatched": zod.boolean(),
   "createdAt": zod.string().nullish()
@@ -3830,7 +3874,7 @@ export const ListRemittancesResponse = zod.object({
  */
 export const CreateRemittanceBody = zod.object({
   "clientId": zod.string(),
-  "authorizationId": zod.string(),
+  "authorizationId": zod.string().nullish(),
   "altaReference": zod.string().nullish(),
   "remittanceDate": zod.string(),
   "amount": zod.string(),
@@ -3859,7 +3903,14 @@ export const CreateRemittanceResponse = zod.object({
   "remainingAmount": zod.string(),
   "allocations": zod.array(zod.object({
   "id": zod.string(),
-  "paymentId": zod.string(),
+  "targetKind": zod.enum(['line', 'fee']),
+  "paymentId": zod.string().nullable().describe('Parent check id for a line allocation; null for fee allocations.'),
+  "paymentAllocationId": zod.string().nullable(),
+  "feeId": zod.string().nullable(),
+  "checkNumber": zod.string().nullable(),
+  "serviceMonth": zod.string().nullable(),
+  "feeMonth": zod.string().nullable(),
+  "authNumber": zod.string().nullable(),
   "amount": zod.string(),
   "autoMatched": zod.boolean(),
   "createdAt": zod.string().nullish()
@@ -3896,7 +3947,14 @@ export const GetRemittanceResponse = zod.object({
   "remainingAmount": zod.string(),
   "allocations": zod.array(zod.object({
   "id": zod.string(),
-  "paymentId": zod.string(),
+  "targetKind": zod.enum(['line', 'fee']),
+  "paymentId": zod.string().nullable().describe('Parent check id for a line allocation; null for fee allocations.'),
+  "paymentAllocationId": zod.string().nullable(),
+  "feeId": zod.string().nullable(),
+  "checkNumber": zod.string().nullable(),
+  "serviceMonth": zod.string().nullable(),
+  "feeMonth": zod.string().nullable(),
+  "authNumber": zod.string().nullable(),
   "amount": zod.string(),
   "autoMatched": zod.boolean(),
   "createdAt": zod.string().nullish()
@@ -3941,7 +3999,14 @@ export const UpdateRemittanceResponse = zod.object({
   "remainingAmount": zod.string(),
   "allocations": zod.array(zod.object({
   "id": zod.string(),
-  "paymentId": zod.string(),
+  "targetKind": zod.enum(['line', 'fee']),
+  "paymentId": zod.string().nullable().describe('Parent check id for a line allocation; null for fee allocations.'),
+  "paymentAllocationId": zod.string().nullable(),
+  "feeId": zod.string().nullable(),
+  "checkNumber": zod.string().nullable(),
+  "serviceMonth": zod.string().nullable(),
+  "feeMonth": zod.string().nullable(),
+  "authNumber": zod.string().nullable(),
   "amount": zod.string(),
   "autoMatched": zod.boolean(),
   "createdAt": zod.string().nullish()
@@ -3972,9 +4037,11 @@ export const matchRemittanceBodyAmountRegExp = new RegExp('^\\d+(\\.\\d{1,2})?$'
 
 
 export const MatchRemittanceBody = zod.object({
-  "paymentId": zod.string(),
+  "paymentAllocationId": zod.string().optional(),
+  "feeId": zod.string().optional(),
+  "paymentId": zod.string().optional().describe('Legacy parent-check target; accepted only when exactly one eligible line exists.'),
   "amount": zod.string().regex(matchRemittanceBodyAmountRegExp)
-})
+}).describe('Provide exactly one of paymentAllocationId or feeId. Legacy paymentId is accepted only when that check has exactly one eligible payment line.')
 
 export const MatchRemittanceResponse = zod.object({
   "id": zod.string(),
@@ -3998,7 +4065,14 @@ export const MatchRemittanceResponse = zod.object({
   "remainingAmount": zod.string(),
   "allocations": zod.array(zod.object({
   "id": zod.string(),
-  "paymentId": zod.string(),
+  "targetKind": zod.enum(['line', 'fee']),
+  "paymentId": zod.string().nullable().describe('Parent check id for a line allocation; null for fee allocations.'),
+  "paymentAllocationId": zod.string().nullable(),
+  "feeId": zod.string().nullable(),
+  "checkNumber": zod.string().nullable(),
+  "serviceMonth": zod.string().nullable(),
+  "feeMonth": zod.string().nullable(),
+  "authNumber": zod.string().nullable(),
   "amount": zod.string(),
   "autoMatched": zod.boolean(),
   "createdAt": zod.string().nullish()

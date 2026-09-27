@@ -5,10 +5,28 @@
  * CEPS Portal API — referral intake, authorizations, invoices, payments, remittances, vendors, reporting
  * OpenAPI spec version: 0.1.0
  */
+import type { RemittanceAllocationTargetKind } from './remittanceAllocationTargetKind';
 
 export interface RemittanceAllocation {
   id: string;
-  paymentId: string;
+  targetKind: RemittanceAllocationTargetKind;
+  /**
+     * Parent check id for a line allocation; null for fee allocations.
+     * @nullable
+     */
+  paymentId: string | null;
+  /** @nullable */
+  paymentAllocationId: string | null;
+  /** @nullable */
+  feeId: string | null;
+  /** @nullable */
+  checkNumber: string | null;
+  /** @nullable */
+  serviceMonth: string | null;
+  /** @nullable */
+  feeMonth: string | null;
+  /** @nullable */
+  authNumber: string | null;
   amount: string;
   autoMatched: boolean;
   /** @nullable */

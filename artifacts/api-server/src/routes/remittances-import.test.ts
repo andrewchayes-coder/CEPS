@@ -27,6 +27,7 @@ let clientAId: string;
 let clientBId: string;
 let authAId: string;
 let authBId: string;
+let feeAuthAId: string;
 let matchPaymentId: string;
 let cookie: string;
 let staffRoleId: string;
@@ -66,6 +67,17 @@ beforeAll(async () => {
     })
     .returning();
   authAId = authA.id;
+  const [feeAuthA] = await db.insert(authorizationsTable).values({
+    clientId: clientAId,
+    authNumber: `${nonce}-FEE-AUTH`,
+    serviceCode: "490",
+    paymentType: "fee",
+    servicePeriodStart: "2026-01-01",
+    servicePeriodEnd: "2026-12-31",
+    maxPeriodAmount: "1920.00",
+    monthlyAmount: "160.00",
+  } as any).returning();
+  feeAuthAId = feeAuthA.id;
   const [authB] = await db
     .insert(authorizationsTable)
     .values({
@@ -109,11 +121,11 @@ beforeAll(async () => {
 });
 
 afterAll(async () => {
-  await db.delete(feesTable).where(inArray(feesTable.clientId, [clientAId, clientBId]));
   await db.delete(remittanceAllocationsTable).where(inArray(remittanceAllocationsTable.paymentId,
     (await db.select({ id: paymentsTable.id }).from(paymentsTable).where(inArray(paymentsTable.clientId, [clientAId, clientBId]))).map((payment) => payment.id)));
   await db.delete(remittanceAllocationsTable).where(inArray(remittanceAllocationsTable.remittanceId,
     (await db.select({ id: remittancesTable.id }).from(remittancesTable).where(inArray(remittancesTable.clientId, [clientAId, clientBId]))).map((remittance) => remittance.id)));
+  await db.delete(feesTable).where(inArray(feesTable.clientId, [clientAId, clientBId]));
   await db.delete(paymentAllocationsTable).where(inArray(paymentAllocationsTable.paymentId,
     (await db.select({ id: paymentsTable.id }).from(paymentsTable).where(inArray(paymentsTable.clientId, [clientAId, clientBId]))).map((payment) => payment.id)));
   await db.delete(remittancesTable).where(inArray(remittancesTable.clientId, [clientAId, clientBId]));
@@ -201,7 +213,7 @@ describe("POST /remittances/import (Alta batch import)", () => {
     const [payAfter] = await db.select().from(paymentsTable).where(eq(paymentsTable.id, matchPaymentId));
     expect(payAfter.remitted).toBe(true);
     const [collectedFee] = await db.select().from(feesTable).where(eq(feesTable.paymentId, matchPaymentId));
-    expect(collectedFee.status).toBe("collected");
+    expect(collectedFee.status).toBe("pending");
     const matched = inserted.find((r) => r.matchedPaymentId === matchPaymentId);
     expect(matched?.status).toBe("matched");
     expect(matched?.autoMatched).toBe(true);
@@ -222,6 +234,341 @@ describe("POST /remittances/import (Alta batch import)", () => {
     const importAudit = audits.find((a) => a.action === "import_remittance_report");
     expect(importAudit).toBeTruthy();
     expect(importAudit?.detail).toContain(body.remittanceBatchId);
+  });
+
+  it("auto-matches a 490 remittance to its fee and uncollects it when the remittance is removed", async () => {
+    const [fee] = await db.insert(feesTable).values({
+      clientId: clientAId,
+      feeMonth: "2026-03",
+      authorizationId: feeAuthAId,
+      amount: "160.00",
+      ruleApplied: "flat_160_per_client_month",
+      status: "pending",
+    }).returning();
+    const created = await request(app).post("/api/remittances").set("Cookie", cookie).send({
+      clientId: clientAId,
+      authorizationId: feeAuthAId,
+      altaReference: `${nonce}-FEE-REMIT`,
+      remittanceDate: "2026-03-20",
+      amount: "160.00",
+      paymentMonth: "2026-03",
+    });
+    expect(created.status).toBe(201);
+    expect(created.body.status).toBe("matched");
+    expect(created.body.allocations).toEqual(expect.arrayContaining([
+      expect.objectContaining({ targetKind: "fee", feeId: fee.id, feeMonth: "2026-03", paymentId: null }),
+    ]));
+    const [allocation] = await db.select().from(remittanceAllocationsTable)
+      .where(eq(remittanceAllocationsTable.remittanceId, created.body.id));
+    expect(allocation).toMatchObject({ feeId: fee.id, paymentId: null, amount: "160.00" });
+    const [collected] = await db.select().from(feesTable).where(eq(feesTable.id, fee.id));
+    expect(collected.status).toBe("collected");
+
+    const removed = await request(app).delete(`/api/remittances/${created.body.id}`).set("Cookie", cookie);
+    expect(removed.status).toBe(200);
+    const [pending] = await db.select().from(feesTable).where(eq(feesTable.id, fee.id));
+    expect(pending.status).toBe("pending");
+  });
+
+  it("auto-matches imported fee rows and preserves the target in the allocation ledger", async () => {
+    const [fee] = await db.insert(feesTable).values({
+      clientId: clientAId,
+      feeMonth: "2026-04",
+      authorizationId: feeAuthAId,
+      amount: "160.00",
+      ruleApplied: "flat_160_per_client_month",
+      status: "pending",
+    }).returning();
+    const imported = await request(app).post("/api/remittances/import").set("Cookie", cookie).send({
+      reportReference: `${nonce}-FEE-IMPORT`,
+      csvText: altaReport(`${nonce}-FEE-IMPORT`, "2026-04-20", [
+        { uci: `${nonce}-UCI-A`, auth: `${nonce}-FEE-AUTH`, month: "2026-04", amount: "160.00" },
+      ]),
+    });
+    expect(imported.status).toBe(200);
+    expect(imported.body.autoMatched).toBe(1);
+    const [allocation] = await db.select().from(remittanceAllocationsTable)
+      .where(eq(remittanceAllocationsTable.feeId, fee.id));
+    expect(allocation).toBeTruthy();
+    const [savedFee] = await db.select().from(feesTable).where(eq(feesTable.id, fee.id));
+    expect(savedFee.status).toBe("collected");
+  });
+
+  it("requires the fee authorization and linked fee month to cover an automatic or manual match", async () => {
+    const [outOfPeriodFee] = await db.insert(feesTable).values({
+      clientId: clientAId, feeMonth: "2027-01", authorizationId: feeAuthAId,
+      amount: "160.00", ruleApplied: "flat_160_per_client_month", status: "pending",
+    }).returning();
+    const imported = await request(app).post("/api/remittances/import").set("Cookie", cookie).send({
+      reportReference: `${nonce}-OUT-OF-PERIOD-FEE`,
+      csvText: altaReport(`${nonce}-OUT-OF-PERIOD-FEE`, "2027-01-20", [
+        { uci: `${nonce}-UCI-A`, auth: `${nonce}-FEE-AUTH`, month: "2027-01", amount: "160.00" },
+      ]),
+    });
+    expect(imported.status).toBe(200);
+    expect(imported.body.autoMatched).toBe(0);
+    const [outOfPeriodRemittance] = await db.select().from(remittancesTable)
+      .where(eq(remittancesTable.remittanceBatchId, imported.body.remittanceBatchId));
+    const outOfPeriodMatch = await request(app).post(`/api/remittances/${outOfPeriodRemittance.id}/match`)
+      .set("Cookie", cookie).send({ feeId: outOfPeriodFee.id, amount: "160.00" });
+    expect(outOfPeriodMatch.status).toBe(400);
+    expect(outOfPeriodMatch.body.error).toContain("Fee authorization must be active");
+
+    const [monthFee] = await db.insert(feesTable).values({
+      clientId: clientAId, feeMonth: "2026-07", authorizationId: feeAuthAId,
+      amount: "160.00", ruleApplied: "flat_160_per_client_month", status: "pending",
+    }).returning();
+    const noMonth = await request(app).post("/api/remittances").set("Cookie", cookie).send({
+      clientId: clientAId, authorizationId: feeAuthAId,
+      altaReference: `${nonce}-FEE-NO-MONTH`, remittanceDate: "2026-07-20", amount: "160.00",
+    });
+    expect(noMonth.status).toBe(201);
+    expect(noMonth.body.autoMatched).toBe(false);
+    const noMonthMatch = await request(app).post(`/api/remittances/${noMonth.body.id}/match`)
+      .set("Cookie", cookie).send({ feeId: monthFee.id, amount: "160.00" });
+    expect(noMonthMatch.status).toBe(400);
+    expect(noMonthMatch.body.error).toBe("A service month is required to allocate a fee");
+
+    const [wrongMonthFee] = await db.insert(feesTable).values({
+      clientId: clientAId, feeMonth: "2026-08", authorizationId: feeAuthAId,
+      amount: "160.00", ruleApplied: "flat_160_per_client_month", status: "pending",
+    }).returning();
+    const wrongMonth = await request(app).post("/api/remittances").set("Cookie", cookie).send({
+      clientId: clientAId, authorizationId: feeAuthAId,
+      altaReference: `${nonce}-FEE-WRONG-MONTH`, remittanceDate: "2026-09-20",
+      amount: "160.00", paymentMonth: "2026-09",
+    });
+    expect(wrongMonth.status).toBe(201);
+    const wrongMonthMatch = await request(app).post(`/api/remittances/${wrongMonth.body.id}/match`)
+      .set("Cookie", cookie).send({ feeId: wrongMonthFee.id, amount: "160.00" });
+    expect(wrongMonthMatch.status).toBe(400);
+    expect(wrongMonthMatch.body.error).toBe("Fee is for a different month");
+
+    const [wrongTypeFee] = await db.insert(feesTable).values({
+      clientId: clientAId, feeMonth: "2026-10", authorizationId: authAId,
+      amount: "160.00", ruleApplied: "flat_160_per_client_month", status: "pending",
+    }).returning();
+    const foreignAuthRemittance = await request(app).post("/api/remittances").set("Cookie", cookie).send({
+      clientId: clientAId, altaReference: `${nonce}-FEE-FOREIGN-AUTH`,
+      remittanceDate: "2026-10-20", amount: "160.00", paymentMonth: "2026-10",
+    });
+    expect(foreignAuthRemittance.status).toBe(201);
+    expect(foreignAuthRemittance.body.autoMatched).toBe(false);
+    const foreignAuthMatch = await request(app).post(`/api/remittances/${foreignAuthRemittance.body.id}/match`)
+      .set("Cookie", cookie).send({ feeId: wrongTypeFee.id, amount: "160.00" });
+    expect(foreignAuthMatch.status).toBe(400);
+    expect(foreignAuthMatch.body.error).toContain("Fee authorization must be active");
+  });
+
+  it("rejects allocation to a waived fee", async () => {
+    const [fee] = await db.insert(feesTable).values({
+      clientId: clientAId,
+      feeMonth: "2026-05",
+      authorizationId: feeAuthAId,
+      amount: "160.00",
+      ruleApplied: "flat_160_per_client_month",
+      status: "waived",
+    }).returning();
+    const created = await request(app).post("/api/remittances").set("Cookie", cookie).send({
+      clientId: clientAId, authorizationId: feeAuthAId, altaReference: `${nonce}-WAIVED-FEE`,
+      remittanceDate: "2026-05-20", amount: "160.00", paymentMonth: "2026-05",
+    });
+    expect(created.status).toBe(201);
+    const match = await request(app).post(`/api/remittances/${created.body.id}/match`).set("Cookie", cookie).send({
+      feeId: fee.id, amount: "160.00",
+    });
+    expect(match.status).toBe(400);
+    expect(match.body.error).toBe("Fee is not eligible for remittance");
+  });
+
+  it("database guards reject payment-line and fee over-allocation plus a cross-client fee target", async () => {
+    const [payment] = await db.insert(paymentsTable).values({
+      clientId: clientAId,
+      authorizationId: authAId,
+      qbCheckNumber: `${nonce}-GUARD-LINE`,
+      checkDate: "2026-02-15",
+      amount: "200.00",
+      paymentMonth: "2026-02",
+      paymentType: "direct_payment",
+      source: "manual",
+    }).returning();
+    const [line] = await db.insert(paymentAllocationsTable).values({
+      paymentId: payment.id,
+      authorizationId: authAId,
+      serviceMonth: "2026-02",
+      amount: "100.00",
+    }).returning();
+    const [firstLineRemittance, secondLineRemittance] = await db.insert(remittancesTable).values([
+      { clientId: clientAId, authorizationId: authAId, remittanceDate: "2026-02-20", amount: "60.00", paymentMonth: "2026-02", status: "received", source: "manual" },
+      { clientId: clientAId, authorizationId: authAId, remittanceDate: "2026-02-21", amount: "50.00", paymentMonth: "2026-02", status: "received", source: "manual" },
+    ]).returning();
+    await db.insert(remittanceAllocationsTable).values({
+      remittanceId: firstLineRemittance.id, paymentId: payment.id,
+      paymentAllocationId: line.id, amount: "60.00", autoMatched: false,
+    });
+    await expect(db.insert(remittanceAllocationsTable).values({
+      remittanceId: secondLineRemittance.id, paymentId: payment.id,
+      paymentAllocationId: line.id, amount: "50.00", autoMatched: false,
+    })).rejects.toThrow();
+
+    const [fee] = await db.insert(feesTable).values({
+      clientId: clientAId,
+      feeMonth: "2098-02",
+      amount: "160.00",
+      ruleApplied: "flat_160_per_client_month",
+      status: "pending",
+    }).returning();
+    const [firstFeeRemittance, secondFeeRemittance] = await db.insert(remittancesTable).values([
+      { clientId: clientAId, remittanceDate: "2098-02-20", amount: "100.00", status: "received", source: "manual" },
+      { clientId: clientAId, remittanceDate: "2098-02-21", amount: "61.00", status: "received", source: "manual" },
+    ]).returning();
+    await db.insert(remittanceAllocationsTable).values({
+      remittanceId: firstFeeRemittance.id, paymentId: null,
+      feeId: fee.id, amount: "100.00", autoMatched: false,
+    });
+    await expect(db.insert(remittanceAllocationsTable).values({
+      remittanceId: secondFeeRemittance.id, paymentId: null,
+      feeId: fee.id, amount: "61.00", autoMatched: false,
+    })).rejects.toThrow();
+
+    const [foreignClientFee] = await db.insert(feesTable).values({
+      clientId: clientBId,
+      feeMonth: "2098-03",
+      amount: "50.00",
+      ruleApplied: "flat_160_per_client_month",
+      status: "pending",
+    }).returning();
+    const [clientARemittance] = await db.insert(remittancesTable).values({
+      clientId: clientAId, remittanceDate: "2098-03-20",
+      amount: "50.00", status: "received", source: "manual",
+    }).returning();
+    await expect(db.insert(remittanceAllocationsTable).values({
+      remittanceId: clientARemittance.id, paymentId: null,
+      feeId: foreignClientFee.id, amount: "50.00", autoMatched: false,
+    })).rejects.toThrow();
+  });
+
+  it("auto-matches remittances to the exact payment line rather than the whole check", async () => {
+    const [payment] = await db.insert(paymentsTable).values({
+      clientId: clientAId,
+      authorizationId: authAId,
+      qbCheckNumber: `${nonce}-SPLIT-CHECK`,
+      checkDate: "2026-08-15",
+      amount: "900.00",
+      paymentMonth: "2026-08",
+      paymentType: "direct_payment",
+      source: "manual",
+      remitted: false,
+    }).returning();
+    const [aug, sep, oct] = await db.insert(paymentAllocationsTable).values([
+      { paymentId: payment.id, authorizationId: authAId, serviceMonth: "2026-08", amount: "300.00" },
+      { paymentId: payment.id, authorizationId: authAId, serviceMonth: "2026-09", amount: "300.00" },
+      { paymentId: payment.id, authorizationId: authAId, serviceMonth: "2026-10", amount: "300.00" },
+    ]).returning();
+    const created = await request(app).post("/api/remittances").set("Cookie", cookie).send({
+      clientId: clientAId,
+      authorizationId: authAId,
+      altaReference: `${nonce}-AUG-REMIT`,
+      remittanceDate: "2026-08-20",
+      amount: "300.00",
+      paymentMonth: "2026-08",
+    });
+    expect(created.status).toBe(201);
+    const [allocation] = await db.select().from(remittanceAllocationsTable)
+      .where(eq(remittanceAllocationsTable.remittanceId, created.body.id));
+    expect(allocation.paymentAllocationId).toBe(aug.id);
+    expect([sep.id, oct.id]).not.toContain(allocation.paymentAllocationId);
+    const [savedPayment] = await db.select().from(paymentsTable).where(eq(paymentsTable.id, payment.id));
+    expect(savedPayment.remitted).toBe(false);
+    const listed = await request(app).get(`/api/payments?clientId=${clientAId}`).set("Cookie", cookie);
+    expect(listed.status).toBe(200);
+    const listedPayment = listed.body.items.find((item: { id: string }) => item.id === payment.id);
+    expect(listedPayment.allocations).toEqual(expect.arrayContaining([
+      expect.objectContaining({ serviceMonth: "2026-08", remittedAmount: "300.00", remitted: "full" }),
+      expect.objectContaining({ serviceMonth: "2026-09", remittedAmount: "0.00", remitted: "none" }),
+      expect.objectContaining({ serviceMonth: "2026-10", remittedAmount: "0.00", remitted: "none" }),
+    ]));
+  });
+
+  it("allows one remittance to fund two lines of the same check", async () => {
+    const [secondAuth] = await db.insert(authorizationsTable).values({
+      clientId: clientAId,
+      authNumber: `${nonce}-TWO-LINES-AUTH`,
+      serviceCode: "459",
+      paymentType: "direct_payment",
+      servicePeriodStart: "2026-01-01",
+      servicePeriodEnd: "2027-12-31",
+      maxPeriodAmount: "10000.00",
+    }).returning();
+    const [payment] = await db.insert(paymentsTable).values({
+      clientId: clientAId,
+      authorizationId: authAId,
+      qbCheckNumber: `${nonce}-TWO-LINES`,
+      checkDate: "2026-12-15",
+      amount: "600.00",
+      paymentMonth: "2026-12",
+      paymentType: "direct_payment",
+      source: "manual",
+      remitted: false,
+    }).returning();
+    const [firstLine, secondLine] = await db.insert(paymentAllocationsTable).values([
+      { paymentId: payment.id, authorizationId: authAId, serviceMonth: "2026-12", amount: "300.00" },
+      { paymentId: payment.id, authorizationId: secondAuth.id, serviceMonth: "2027-01", amount: "300.00" },
+    ]).returning();
+    const created = await request(app).post("/api/remittances").set("Cookie", cookie).send({
+      clientId: clientAId, altaReference: `${nonce}-TWO-LINES-REMIT`,
+      remittanceDate: "2026-12-20", amount: "600.00",
+    });
+    expect(created.status).toBe(201);
+    const first = await request(app).post(`/api/remittances/${created.body.id}/match`).set("Cookie", cookie).send({
+      paymentAllocationId: firstLine.id, amount: "300.00",
+    });
+    expect(first.status).toBe(200);
+    expect(first.body.status).toBe("received");
+    const second = await request(app).post(`/api/remittances/${created.body.id}/match`).set("Cookie", cookie).send({
+      paymentAllocationId: secondLine.id, amount: "300.00",
+    });
+    expect(second.status).toBe(200);
+    expect(second.body.status).toBe("matched");
+    const allocations = await db.select().from(remittanceAllocationsTable)
+      .where(eq(remittanceAllocationsTable.remittanceId, created.body.id));
+    expect(allocations).toHaveLength(2);
+    expect(new Set(allocations.map((allocation) => allocation.paymentAllocationId)))
+      .toEqual(new Set([firstLine.id, secondLine.id]));
+    const [savedPayment] = await db.select().from(paymentsTable).where(eq(paymentsTable.id, payment.id));
+    expect(savedPayment.remitted).toBe(true);
+  });
+
+  it("does not auto-match ambiguous line candidates and rejects a legacy whole-check choice when multiple lines qualify", async () => {
+    const [secondAuth] = await db.insert(authorizationsTable).values({
+      clientId: clientAId,
+      authNumber: `${nonce}-AMBIG-AUTH`,
+      serviceCode: "459",
+      paymentType: "direct_payment",
+      servicePeriodStart: "2026-01-01",
+      servicePeriodEnd: "2027-12-31",
+      maxPeriodAmount: "10000.00",
+    }).returning();
+    const [payment] = await db.insert(paymentsTable).values({
+      clientId: clientAId, authorizationId: authAId, qbCheckNumber: `${nonce}-AMBIG-CHECK`,
+      checkDate: "2026-11-15", amount: "600.00", paymentMonth: "2026-11",
+      paymentType: "direct_payment", source: "manual", remitted: false,
+    }).returning();
+    await db.insert(paymentAllocationsTable).values([
+      { paymentId: payment.id, authorizationId: authAId, serviceMonth: "2026-11", amount: "300.00" },
+      { paymentId: payment.id, authorizationId: secondAuth.id, serviceMonth: "2026-11", amount: "300.00" },
+    ]);
+    const created = await request(app).post("/api/remittances").set("Cookie", cookie).send({
+      clientId: clientAId, altaReference: `${nonce}-AMBIG`,
+      remittanceDate: "2026-11-20", amount: "300.00", paymentMonth: "2026-11",
+    });
+    expect(created.status).toBe(201);
+    expect(created.body.reviewReason).toBe("ambiguous_match");
+    const match = await request(app).post(`/api/remittances/${created.body.id}/match`).set("Cookie", cookie).send({
+      paymentId: payment.id, amount: "300.00",
+    });
+    expect(match.status).toBe(400);
+    expect(match.body.error).toBe("Choose which line of this check was remitted");
   });
 
   it("filters the remittances list by remittanceBatchId", async () => {
@@ -352,25 +699,37 @@ describe("POST /remittances/import (Alta batch import)", () => {
     const [crossAllocationMonth] = await makePayment({ paymentMonth: "2026-07" });
     const [wrongAmount] = await makePayment({ amount: "98.00" });
     const [valid] = await makePayment({});
-    await db.insert(paymentAllocationsTable).values([
+    const [crossClientLine] = await db.insert(paymentAllocationsTable).values({
+      paymentId: crossClient.id, authorizationId: authBId, serviceMonth: "2026-07", amount: "99.00",
+    }).returning();
+    const [crossAuthLine] = await db.insert(paymentAllocationsTable).values({
+      paymentId: crossAuth.id, authorizationId: otherAuth.id, serviceMonth: "2026-07", amount: "99.00",
+    }).returning();
+    const [crossMonthLine] = await db.insert(paymentAllocationsTable).values({
+      paymentId: crossMonth.id, authorizationId: authAId, serviceMonth: "2026-08", amount: "99.00",
+    }).returning();
+    const [wrongAmountLine] = await db.insert(paymentAllocationsTable).values({
+      paymentId: wrongAmount.id, authorizationId: authAId, serviceMonth: "2026-07", amount: "98.00",
+    }).returning();
+    const [crossAllocationMonthLine, validLine] = await db.insert(paymentAllocationsTable).values([
       { paymentId: crossAllocationMonth.id, authorizationId: authAId, serviceMonth: "2026-08", amount: "99.00" },
       { paymentId: valid.id, authorizationId: authAId, serviceMonth: "2026-07", amount: "99.00" },
-    ]);
+    ]).returning();
     const [remittance] = await db.insert(remittancesTable).values({
       clientId: clientAId, authorizationId: authAId, remittanceDate: "2026-07-20",
       amount: "99.00", paymentMonth: "2026-07", status: "received", source: "manual",
     }).returning();
-    for (const payment of [crossClient, crossAuth, crossMonth]) {
-      const response = await request(app).post(`/api/remittances/${remittance.id}/match`).set("Cookie", cookie).send({ paymentId: payment.id, amount: "99.00" });
+    for (const paymentAllocationId of [crossClientLine.id, crossAuthLine.id, crossMonthLine.id]) {
+      const response = await request(app).post(`/api/remittances/${remittance.id}/match`).set("Cookie", cookie).send({ paymentAllocationId, amount: "99.00" });
       expect(response.status).toBe(400);
     }
     const wrongAllocationMonth = await request(app)
       .post(`/api/remittances/${remittance.id}/match`)
       .set("Cookie", cookie)
-      .send({ paymentId: crossAllocationMonth.id, amount: "99.00" });
+      .send({ paymentAllocationId: crossAllocationMonthLine.id, amount: "99.00" });
     expect(wrongAllocationMonth.status).toBe(400);
     expect(wrongAllocationMonth.body.error).toContain("different service month");
-    const tooLargeForPayment = await request(app).post(`/api/remittances/${remittance.id}/match`).set("Cookie", cookie).send({ paymentId: wrongAmount.id, amount: "99.00" });
+    const tooLargeForPayment = await request(app).post(`/api/remittances/${remittance.id}/match`).set("Cookie", cookie).send({ paymentAllocationId: wrongAmountLine.id, amount: "99.00" });
     expect(tooLargeForPayment.status).toBe(409);
     const success = await request(app).post(`/api/remittances/${remittance.id}/match`).set("Cookie", cookie).send({ paymentId: valid.id, amount: "99.00" });
     expect(success.status).toBe(200);
@@ -382,11 +741,22 @@ describe("POST /remittances/import (Alta batch import)", () => {
     expect(released.remitted).toBe(false);
 
     const [claimed] = await makePayment({ remitted: true });
+    const [claimedLine] = await db.insert(paymentAllocationsTable).values({
+      paymentId: claimed.id, authorizationId: authAId, serviceMonth: "2026-07", amount: "99.00",
+    }).returning();
+    const [claimingRemittance] = await db.insert(remittancesTable).values({
+      clientId: clientAId, authorizationId: authAId, remittanceDate: "2026-07-21",
+      amount: "99.00", paymentMonth: "2026-07", status: "received", source: "manual",
+    }).returning();
+    await db.insert(remittanceAllocationsTable).values({
+      remittanceId: claimingRemittance.id, paymentId: claimed.id,
+      paymentAllocationId: claimedLine.id, amount: "99.00", autoMatched: false,
+    });
     const [unmatched] = await db.insert(remittancesTable).values({
       clientId: clientAId, authorizationId: authAId, remittanceDate: "2026-07-21",
       amount: "99.00", paymentMonth: "2026-07", status: "received", source: "manual",
     }).returning();
-    const alreadyClaimed = await request(app).post(`/api/remittances/${unmatched.id}/match`).set("Cookie", cookie).send({ paymentId: claimed.id, amount: "99.00" });
+    const alreadyClaimed = await request(app).post(`/api/remittances/${unmatched.id}/match`).set("Cookie", cookie).send({ paymentAllocationId: claimedLine.id, amount: "99.00" });
     expect(alreadyClaimed.status).toBe(409);
   });
 
@@ -471,7 +841,7 @@ describe("POST /remittances/import (Alta batch import)", () => {
     expect(finalAllocation.body.allocatedAmount).toBe("40.00");
     expect(finalAllocation.body.remainingAmount).toBe("10.00");
     expect((await db.select().from(paymentsTable).where(eq(paymentsTable.id, payment.id)))[0].remitted).toBe(true);
-    expect((await db.select().from(feesTable).where(eq(feesTable.id, partialFee.id)))[0].status).toBe("collected");
+    expect((await db.select().from(feesTable).where(eq(feesTable.id, partialFee.id)))[0].status).toBe("pending");
 
     const detail = await request(app).get(`/api/payments/${payment.id}`).set("Cookie", cookie);
     expect(detail.body.allocatedAmount).toBe("100.00");
@@ -529,7 +899,7 @@ describe("POST /remittances/import (Alta batch import)", () => {
     }
   });
 
-  it("matches remittances by allocation month and collects every fee on a fully remitted multi-month check", async () => {
+  it("matches remittances by allocation month without collecting fees from the trigger check", async () => {
     const [splitAuth] = await db.insert(authorizationsTable).values({
       clientId: clientAId, authNumber: `${nonce}-SPLIT-B`, serviceCode: "490",
       paymentType: "direct_payment", servicePeriodStart: "2026-01-01",
@@ -594,12 +964,12 @@ describe("POST /remittances/import (Alta batch import)", () => {
     [saved] = await db.select().from(paymentsTable).where(eq(paymentsTable.id, splitPayment.id));
     expect(saved.remitted).toBe(true);
     expect((await db.select().from(feesTable).where(inArray(feesTable.id, fees.map((fee) => fee.id))))
-      .every((fee) => fee.status === "collected")).toBe(true);
+      .every((fee) => fee.status === "pending")).toBe(true);
     const feeAudits = await db.select().from(auditLogTable).where(and(
       eq(auditLogTable.action, "collect_fee"),
       inArray(auditLogTable.entityId, fees.map((fee) => fee.id)),
     ));
-    expect(feeAudits).toHaveLength(2);
+    expect(feeAudits).toHaveLength(0);
     const [sum] = await db.select({ total: sql<string>`sum(${remittanceAllocationsTable.amount})` })
       .from(remittanceAllocationsTable).where(eq(remittanceAllocationsTable.paymentId, splitPayment.id));
     expect(sum.total).toBe("40.00");

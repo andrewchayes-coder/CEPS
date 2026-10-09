@@ -40,7 +40,7 @@ export const roleDocs: RoleDoc[] = [
     ],
     workflows: [
       {
-        name: 'Referral intake & participant onboarding',
+        name: 'Referrals & participant onboarding',
         summary: 'Turn a new referral from a service coordinator into an active participant.',
         steps: [
           { title: 'Review the referral', description: 'Open Referrals, review participant details, UCI number, and the coordinator\u2019s notes.' },

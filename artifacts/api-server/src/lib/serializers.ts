@@ -136,7 +136,9 @@ export function referralJson(
   coordinatorName?: string | null,
   clientIsMinor?: boolean | null,
   recipientEmails?: { participant: string | null; familyRep: string | null } | null,
+  metadata: { vendorName?: string | null; submittedByName?: string | null; submittedByRole?: string | null } = {},
 ) {
+  const intake = (r.intakeFields ?? {}) as Record<string, unknown>;
   return {
     id: r.id,
     clientId: r.clientId,
@@ -147,6 +149,11 @@ export function referralJson(
     serviceCoordinatorId: r.serviceCoordinatorId,
     coordinatorReviewStatus: r.coordinatorReviewStatus,
     coordinatorName: coordinatorName ?? null,
+    vendorName: r.vendorId ? metadata.vendorName ?? null
+      : typeof intake.vendorName === "string" ? intake.vendorName : null,
+    submittedByUserId: r.submittedByUserId,
+    submittedByName: metadata.submittedByName ?? null,
+    submittedByRole: metadata.submittedByRole ?? null,
     referralDate: r.referralDate,
     status: r.status,
     submittedVia: r.submittedVia,

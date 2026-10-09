@@ -437,7 +437,7 @@ function getAlertGroupTitle(type: string) {
     case 'unmatched_pos': return 'unmatched POS documents awaiting review';
     case 'unmatched_pos_possible_match': return 'possible POS participant matches';
     case 'authorization_exhausted_active': return 'authorizations needing review';
-    case 'recently_completed': return 'recently completed intakes';
+    case 'recently_completed': return 'recently completed referrals';
     default: return 'alerts';
   }
 }

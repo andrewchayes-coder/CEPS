@@ -935,6 +935,14 @@ export interface Referral {
   coordinatorReviewStatus?: ReferralCoordinatorReviewStatus;
   /** @nullable */
   coordinatorName?: string | null;
+  /** @nullable */
+  vendorName?: string | null;
+  /** @nullable */
+  submittedByUserId?: string | null;
+  /** @nullable */
+  submittedByName?: string | null;
+  /** @nullable */
+  submittedByRole?: string | null;
   referralDate: string;
   status: ReferralStatus;
   /** @nullable */
@@ -3182,6 +3190,7 @@ export type ListReferralsSortBy = typeof ListReferralsSortBy[keyof typeof ListRe
 export const ListReferralsSortBy = {
   referralDate: 'referralDate',
   clientName: 'clientName',
+  vendorName: 'vendorName',
   coordinatorName: 'coordinatorName',
   serviceType: 'serviceType',
   status: 'status',

@@ -724,6 +724,10 @@ export const GetClientCaseResponse = zod.object({
   "serviceCoordinatorId": zod.string().nullish(),
   "coordinatorReviewStatus": zod.union([zod.literal('pending'),zod.literal('approved'),zod.literal('rejected'),zod.literal(null)]).nullish(),
   "coordinatorName": zod.string().nullish(),
+  "vendorName": zod.string().nullish(),
+  "submittedByUserId": zod.string().nullish(),
+  "submittedByName": zod.string().nullish(),
+  "submittedByRole": zod.string().nullish(),
   "referralDate": zod.string(),
   "status": zod.enum(['intake', 'pending_signature', 'pending_auth', 'pending_w9', 'pending_invoice', 'active', 'closed']),
   "submittedVia": zod.union([zod.literal('portal'),zod.literal('staff_manual_entry'),zod.literal(null)]).nullish(),
@@ -973,7 +977,7 @@ export const ListReferralsQueryParams = zod.object({
   "endDate": zod.coerce.string().optional(),
   "limit": zod.coerce.number().int().optional(),
   "offset": zod.coerce.number().int().optional(),
-  "sortBy": zod.enum(['referralDate', 'clientName', 'coordinatorName', 'serviceType', 'status', 'createdAt']).optional(),
+  "sortBy": zod.enum(['referralDate', 'clientName', 'vendorName', 'coordinatorName', 'serviceType', 'status', 'createdAt']).optional(),
   "sortDirection": zod.enum(['asc', 'desc']).optional()
 })
 
@@ -988,6 +992,10 @@ export const ListReferralsResponse = zod.object({
   "serviceCoordinatorId": zod.string().nullish(),
   "coordinatorReviewStatus": zod.union([zod.literal('pending'),zod.literal('approved'),zod.literal('rejected'),zod.literal(null)]).nullish(),
   "coordinatorName": zod.string().nullish(),
+  "vendorName": zod.string().nullish(),
+  "submittedByUserId": zod.string().nullish(),
+  "submittedByName": zod.string().nullish(),
+  "submittedByRole": zod.string().nullish(),
   "referralDate": zod.string(),
   "status": zod.enum(['intake', 'pending_signature', 'pending_auth', 'pending_w9', 'pending_invoice', 'active', 'closed']),
   "submittedVia": zod.union([zod.literal('portal'),zod.literal('staff_manual_entry'),zod.literal(null)]).nullish(),
@@ -1159,6 +1167,10 @@ export const CreateReferralResponse = zod.object({
   "serviceCoordinatorId": zod.string().nullish(),
   "coordinatorReviewStatus": zod.union([zod.literal('pending'),zod.literal('approved'),zod.literal('rejected'),zod.literal(null)]).nullish(),
   "coordinatorName": zod.string().nullish(),
+  "vendorName": zod.string().nullish(),
+  "submittedByUserId": zod.string().nullish(),
+  "submittedByName": zod.string().nullish(),
+  "submittedByRole": zod.string().nullish(),
   "referralDate": zod.string(),
   "status": zod.enum(['intake', 'pending_signature', 'pending_auth', 'pending_w9', 'pending_invoice', 'active', 'closed']),
   "submittedVia": zod.union([zod.literal('portal'),zod.literal('staff_manual_entry'),zod.literal(null)]).nullish(),
@@ -1405,6 +1417,10 @@ export const GetReferralResponse = zod.object({
   "serviceCoordinatorId": zod.string().nullish(),
   "coordinatorReviewStatus": zod.union([zod.literal('pending'),zod.literal('approved'),zod.literal('rejected'),zod.literal(null)]).nullish(),
   "coordinatorName": zod.string().nullish(),
+  "vendorName": zod.string().nullish(),
+  "submittedByUserId": zod.string().nullish(),
+  "submittedByName": zod.string().nullish(),
+  "submittedByRole": zod.string().nullish(),
   "referralDate": zod.string(),
   "status": zod.enum(['intake', 'pending_signature', 'pending_auth', 'pending_w9', 'pending_invoice', 'active', 'closed']),
   "submittedVia": zod.union([zod.literal('portal'),zod.literal('staff_manual_entry'),zod.literal(null)]).nullish(),
@@ -1537,6 +1553,10 @@ export const UpdateReferralResponse = zod.object({
   "serviceCoordinatorId": zod.string().nullish(),
   "coordinatorReviewStatus": zod.union([zod.literal('pending'),zod.literal('approved'),zod.literal('rejected'),zod.literal(null)]).nullish(),
   "coordinatorName": zod.string().nullish(),
+  "vendorName": zod.string().nullish(),
+  "submittedByUserId": zod.string().nullish(),
+  "submittedByName": zod.string().nullish(),
+  "submittedByRole": zod.string().nullish(),
   "referralDate": zod.string(),
   "status": zod.enum(['intake', 'pending_signature', 'pending_auth', 'pending_w9', 'pending_invoice', 'active', 'closed']),
   "submittedVia": zod.union([zod.literal('portal'),zod.literal('staff_manual_entry'),zod.literal(null)]).nullish(),
@@ -1646,6 +1666,26 @@ export const DeleteReferralParams = zod.object({
 export const DeleteReferralResponse = zod.object({
   "ok": zod.boolean()
 })
+
+
+/**
+ * @summary Get referral history (staff only)
+ */
+export const GetReferralHistoryParams = zod.object({
+  "id": zod.uuid()
+})
+
+export const GetReferralHistoryResponseItem = zod.object({
+  "id": zod.string(),
+  "userId": zod.string().nullish(),
+  "userName": zod.string().nullish(),
+  "action": zod.string(),
+  "entityType": zod.string().nullish(),
+  "entityId": zod.string().nullish(),
+  "detail": zod.string().nullish(),
+  "createdAt": zod.string()
+})
+export const GetReferralHistoryResponse = zod.array(GetReferralHistoryResponseItem)
 
 
 /**

@@ -32,6 +32,14 @@ export interface Referral {
   coordinatorReviewStatus?: ReferralCoordinatorReviewStatus;
   /** @nullable */
   coordinatorName?: string | null;
+  /** @nullable */
+  vendorName?: string | null;
+  /** @nullable */
+  submittedByUserId?: string | null;
+  /** @nullable */
+  submittedByName?: string | null;
+  /** @nullable */
+  submittedByRole?: string | null;
   referralDate: string;
   status: ReferralStatus;
   /** @nullable */

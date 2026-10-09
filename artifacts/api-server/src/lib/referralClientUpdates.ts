@@ -57,11 +57,11 @@ export async function applyReferralClientUpdates(
   const changes: string[] = [];
   if (reclassifyAsAdult) {
     clientUpdates.isMinor = false;
-    changes.push("isMinor: true -> false (explicit adult referral intake)");
+    changes.push("isMinor: true -> false (explicit adult referral)");
   }
   if (reclassifyAsMinor) {
     clientUpdates.isMinor = true;
-    changes.push("isMinor: false -> true (approved coordinator referral intake)");
+    changes.push("isMinor: false -> true (approved coordinator referral)");
   }
   if (!contactIsFamily) {
     for (const field of ["phone", "email", "address"] as const) {
@@ -141,7 +141,7 @@ export async function applyReferralClientUpdates(
         "create_family_representative",
         "family_representative",
         familyRepresentative.id,
-        `Created ${repName} from referral intake`,
+        `Created ${repName} from referral details`,
         tx as unknown as typeof db,
       );
     }

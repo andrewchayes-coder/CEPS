@@ -229,13 +229,13 @@ test('minor cannot choose participant and missing family email displays the API 
   await page.route(`**/api/referrals/${referralId}/agreement-preview`, (route) =>
     route.fulfill({
       status: 400,
-      json: { error: 'Add an email to the family rep record before sending the intake agreement' },
+      json: { error: 'Add an email to the family rep record before sending the referral agreement' },
     }),
   );
   await page.route(`**/api/referrals/${referralId}/send-intake`, (route) =>
     route.fulfill({
       status: 400,
-      json: { error: 'Add an email to the family rep record before sending the intake agreement' },
+      json: { error: 'Add an email to the family rep record before sending the referral agreement' },
     }),
   );
   await page.route(`**/api/referrals/${referralId}`, (route) =>
@@ -250,7 +250,7 @@ test('minor cannot choose participant and missing family email displays the API 
   await page.getByTestId('select-recipient-family').click();
   await page.getByTestId('button-preview-agreement').click();
   await expect(
-    page.getByText('Add an email to the family rep record before sending the intake agreement', { exact: true }),
+    page.getByText('Add an email to the family rep record before sending the referral agreement', { exact: true }),
   ).toBeVisible();
 });
 

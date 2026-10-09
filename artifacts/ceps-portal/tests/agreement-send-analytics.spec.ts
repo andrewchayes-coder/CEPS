@@ -150,7 +150,7 @@ for (const scenario of [
 for (const validation of [
   {
     stage: 'preview' as const,
-    message: 'Add an email to the participant record before sending the intake agreement',
+    message: 'Add an email to the participant record before sending the referral agreement',
     reason: 'missing_recipient_email',
   },
   {

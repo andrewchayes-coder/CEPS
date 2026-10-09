@@ -151,6 +151,7 @@ export default function ReferralsPage() {
               <TableRow>
                 <SortableTableHead label="Date" sortKey="referralDate" activeSortBy={sort.sortBy} sortDirection={sort.sortDirection} onSort={onSort} />
                 <SortableTableHead label="Participant" sortKey="clientName" activeSortBy={sort.sortBy} sortDirection={sort.sortDirection} onSort={onSort} />
+                <SortableTableHead label="Vendor" sortKey="vendorName" activeSortBy={sort.sortBy} sortDirection={sort.sortDirection} onSort={onSort} />
                 <SortableTableHead label="Coordinator" sortKey="coordinatorName" activeSortBy={sort.sortBy} sortDirection={sort.sortDirection} onSort={onSort} />
                 <SortableTableHead label="Service Type" sortKey="serviceType" activeSortBy={sort.sortBy} sortDirection={sort.sortDirection} onSort={onSort} />
                 <SortableTableHead label="Status" sortKey="status" activeSortBy={sort.sortBy} sortDirection={sort.sortDirection} onSort={onSort} />
@@ -164,7 +165,7 @@ export default function ReferralsPage() {
                 <TableRow><TableCell colSpan={6} className="h-32 text-center"><div role="alert" className="space-y-2"><p>Could not load referrals.</p><Button variant="outline" size="sm" onClick={() => void refetch()}>Retry</Button></div></TableCell></TableRow>
               ) : referrals?.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={6} className="h-24 text-center text-muted-foreground">
+                  <TableCell colSpan={7} className="h-24 text-center text-muted-foreground">
                     {reviewFilter === 'pending' ? 'No referrals are waiting for CEPS review.' : 'No referrals found.'}
                   </TableCell>
                 </TableRow>
@@ -177,6 +178,7 @@ export default function ReferralsPage() {
                     <TableCell>
                       <ClientLink id={referral.clientId} name={referral.clientName || 'Unknown Participant'} />
                     </TableCell>
+                    <TableCell>{referral.vendorName || '—'}</TableCell>
                     <TableCell className="text-muted-foreground">
                       {referral.coordinatorName || 'Unassigned'}
                     </TableCell>
@@ -261,6 +263,7 @@ function ReferralsTableSkeleton() {
       {[1, 2, 3, 4, 5].map((i) => (
         <TableRow key={i}>
           <TableCell><Skeleton className="h-4 w-24" /></TableCell>
+          <TableCell><Skeleton className="h-4 w-32" /></TableCell>
           <TableCell><Skeleton className="h-4 w-32" /></TableCell>
           <TableCell><Skeleton className="h-4 w-32" /></TableCell>
           <TableCell><Skeleton className="h-4 w-28" /></TableCell>

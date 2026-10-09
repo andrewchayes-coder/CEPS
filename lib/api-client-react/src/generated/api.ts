@@ -25,6 +25,7 @@ import type {
   AltaFmsPaymentImportResult,
   AltaRemittanceImportInput,
   AltaRemittanceImportResult,
+  AuditEntry,
   AuditMonthlyFeesParams,
   Authorization,
   AuthorizationAmendInput,
@@ -3160,6 +3161,83 @@ export const useDeleteReferral = <TError = ErrorType<void>,
       > => {
       return useMutation(getDeleteReferralMutationOptions(options));
     }
+
+export const getGetReferralHistoryUrl = (id: string,) => {
+
+
+
+
+  return `/api/referrals/${id}/history`
+}
+
+/**
+ * @summary Get referral history (staff only)
+ */
+export const getReferralHistory = async (id: string, options?: Parameters<typeof customFetch>[1]): Promise<AuditEntry[]> => {
+
+  return customFetch<AuditEntry[]>(getGetReferralHistoryUrl(id),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetReferralHistoryQueryKey = (id: string,) => {
+    return [
+    `/api/referrals/${id}/history`
+    ] as const;
+    }
+
+
+export const getGetReferralHistoryQueryOptions = <TData = Awaited<ReturnType<typeof getReferralHistory>>, TError = ErrorType<void>>(id: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getReferralHistory>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetReferralHistoryQueryKey(id);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getReferralHistory>>> = ({ signal }) => getReferralHistory(id, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: id !== null && id !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getReferralHistory>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetReferralHistoryQueryResult = NonNullable<Awaited<ReturnType<typeof getReferralHistory>>>
+export type GetReferralHistoryQueryError = ErrorType<void>
+
+
+/**
+ * @summary Get referral history (staff only)
+ */
+
+export function useGetReferralHistory<TData = Awaited<ReturnType<typeof getReferralHistory>>, TError = ErrorType<void>>(
+ id: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getReferralHistory>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetReferralHistoryQueryOptions(id,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
 
 export const getGetCoordinatorReviewUrl = (id: string,) => {
 

@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useLocation, useParams } from 'wouter';
-import { useGetReferral, useDeleteReferral, useGetCoordinatorReview, useReviewCoordinatorReferral, getGetCoordinatorReviewQueryKey } from '@workspace/api-client-react';
+import { useGetReferral, useGetReferralHistory, getGetReferralHistoryQueryKey, useDeleteReferral, useGetCoordinatorReview, useReviewCoordinatorReferral, getGetCoordinatorReviewQueryKey } from '@workspace/api-client-react';
 import type { ReferralReviewRepresentative, ReferralReviewValue, CoordinatorReviewInput, CoordinatorReviewDetails } from '@workspace/api-client-react';
 import { useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/components/auth/auth-provider';
@@ -13,7 +13,7 @@ import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
 import { useToast } from '@/hooks/use-toast';
 import { CheckCircle2, AlertTriangle, FileText, ArrowLeft } from 'lucide-react';
-import { format } from 'date-fns';
+import { format, parseISO } from 'date-fns';
 import { Link } from 'wouter';
 import { ClientLink } from '@/components/entity-links';
 import { AgreementReview } from '@/components/agreement-review';
@@ -89,19 +89,19 @@ function CoordinatorReview({ id, review, onReviewed }: { id: string; review: Coo
         <>
             <p className="text-sm">Submitted by <strong data-testid="text-referral-submitter">{review.submittedByName}</strong></p>
             <div className="space-y-3">
-              <div className="hidden sm:grid grid-cols-[minmax(8rem,1fr)_minmax(0,2fr)_minmax(0,2fr)] gap-4 px-4 text-xs font-semibold uppercase tracking-wide text-muted-foreground"><span>Field</span><span>Referral intake</span><span>Current participant record</span></div>
+              <div className="hidden sm:grid grid-cols-[minmax(8rem,1fr)_minmax(0,2fr)_minmax(0,2fr)] gap-4 px-4 text-xs font-semibold uppercase tracking-wide text-muted-foreground"><span>Field</span><span>Referral details</span><span>Current participant record</span></div>
               {reviewFields.map(({ key, label, value }) => (
                 <div key={key} className="rounded-lg border p-4 space-y-3" data-testid={`row-review-${value}`}>
                   <div className="grid sm:grid-cols-[minmax(8rem,1fr)_minmax(0,2fr)_minmax(0,2fr)] gap-3 text-sm">
                     <strong>{label}</strong>
-                    <div className="min-w-0 break-words"><span className="sm:hidden block text-xs text-muted-foreground">Referral intake</span>{displayReviewValue(review.intake[value])}</div>
+                    <div className="min-w-0 break-words"><span className="sm:hidden block text-xs text-muted-foreground">Referral details</span>{displayReviewValue(review.intake[value])}</div>
                     <div className="min-w-0 break-words text-muted-foreground"><span className="sm:hidden block text-xs">Current record</span>{value === 'familyRepresentative' && review.currentFamilyRepresentatives.length > 0
                       ? review.currentFamilyRepresentatives.map((rep, index) => <p key={`${rep.name}-${index}`} className="mb-1">{displayReviewValue(rep)}</p>)
                       : displayReviewValue(review.current[value])}</div>
                   </div>
                   <label className="flex items-center gap-2 text-sm cursor-pointer w-fit">
                     <Checkbox checked={apply[key]} onCheckedChange={(checked) => setApply(previous => ({ ...previous, [key]: checked === true }))} disabled={mutation.isPending} data-testid={`checkbox-apply-${value}`} />
-                    Apply intake {label.toLowerCase()} to participant
+                    Apply referral {label.toLowerCase()} to participant
                   </label>
                 </div>
               ))}
@@ -133,6 +133,7 @@ export default function ReferralDetailPage() {
   const canSendIntake = isStaff || user?.role === 'service_coordinator';
   const { toast } = useToast();
   const deleteReferral = useDeleteReferral();
+  const queryClient = useQueryClient();
 
   const { data: referral, isLoading, refetch } = useGetReferral(id, {
     query: {
@@ -145,6 +146,10 @@ export default function ReferralDetailPage() {
     query: { enabled: !!id && referral?.coordinatorReviewStatus === 'pending' && isStaff, queryKey: getGetCoordinatorReviewQueryKey(id), retry: false },
   });
 
+  const refreshReferral = () => {
+    void refetch();
+    void queryClient.invalidateQueries({ queryKey: getGetReferralHistoryQueryKey(id) });
+  };
   if (isLoading) return <div className="max-w-4xl mx-auto space-y-5"><Skeleton className="h-10 w-64" /><Skeleton className="h-60 w-full" /><Skeleton className="h-40 w-full" /></div>;
   if (!referral) return <div role="alert" className="p-8 text-center">Referral not found. <Button variant="outline" onClick={() => void refetch()}>Retry</Button></div>;
   if (isStaff && referral.coordinatorReviewStatus === 'pending' && isReviewLoading) return <div className="max-w-4xl mx-auto space-y-5"><Skeleton className="h-10 w-64" /><Skeleton className="h-60 w-full" /><Skeleton className="h-40 w-full" /></div>;
@@ -174,7 +179,7 @@ export default function ReferralDetailPage() {
           </Badge>
           {isStaff && !isPendingReview && (
             <>
-              <EditReferralDialog id={id} referral={referral} onSaved={() => refetch()} />
+              <EditReferralDialog id={id} referral={referral} onSaved={refreshReferral} />
               <DeleteEntityButton
                 entityLabel="Referral"
                 testId="button-delete-referral"
@@ -202,10 +207,10 @@ export default function ReferralDetailPage() {
       {isPendingReview && (
         <div role="status" className="rounded-lg border border-primary/30 bg-primary/5 p-4 text-sm">
           <p className="font-semibold">Pending CEPS review</p>
-          <p className="text-muted-foreground mt-1">Submitted by {review?.submittedByName ?? 'a service coordinator'} — they are not currently linked to this participant. Intake agreements and status changes are unavailable until staff make a decision.</p>
+          <p className="text-muted-foreground mt-1">Submitted by {review?.submittedByName ?? 'a service coordinator'} — they are not currently linked to this participant. Referral agreements and status changes are unavailable until staff make a decision.</p>
         </div>
       )}
-      {isStaff && isPendingReview && review && <CoordinatorReview id={id} review={review} onReviewed={() => { void refetch(); }} />}
+      {isStaff && isPendingReview && review && <CoordinatorReview id={id} review={review} onReviewed={refreshReferral} />}
 
       <div className="grid md:grid-cols-3 gap-6">
         {/* Main Info */}
@@ -214,7 +219,7 @@ export default function ReferralDetailPage() {
             <CardHeader className="pb-3 border-b">
               <CardTitle className="text-lg flex items-center gap-2">
                 <FileText className="w-5 h-5 text-primary" />
-                Intake Details
+                Referral Details
               </CardTitle>
             </CardHeader>
             <CardContent className="pt-4 grid sm:grid-cols-2 gap-y-6 gap-x-8 text-sm">
@@ -254,8 +259,13 @@ export default function ReferralDetailPage() {
               <div className="space-y-1">
                 <p className="text-muted-foreground font-medium">Service Coordinator</p>
                 <p className="font-semibold" data-testid="text-referral-assigned-coordinator">{referral.coordinatorName || 'Unassigned'}</p>
+                <p className="text-xs text-muted-foreground" data-testid="text-referral-original-submitter">
+                  Submitted by: {referral.submittedByName || 'Not recorded'}
+                  {referral.submittedByRole === 'staff' ? ' (Staff)' : referral.submittedByRole === 'service_coordinator' ? ' (Service Coordinator)' : ''}
+                  {' '}on {format(parseISO(referral.referralDate), 'MMM d, yyyy')}
+                </p>
                 <p>{intake?.regionalCenterName}</p>
-                {intake?.coordinatorName && <p className="text-xs text-muted-foreground">Referral contact: {intake.coordinatorName} · {intake.coordinatorEmail}</p>}
+                {intake?.coordinatorName && <p className="text-xs text-muted-foreground">Referral contact (as entered on the form): {intake.coordinatorName} · {intake.coordinatorEmail}</p>}
               </div>
             </CardContent>
           </Card>
@@ -281,7 +291,7 @@ export default function ReferralDetailPage() {
         <div className="space-y-6">
           <Card>
             <CardHeader>
-              <CardTitle className="text-lg">Intake Status</CardTitle>
+              <CardTitle className="text-lg">Referral Status</CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
               {referral.parentSignedAt ? (
@@ -312,13 +322,13 @@ export default function ReferralDetailPage() {
                   <AlertTriangle className="w-5 h-5 shrink-0" />
                   <div className="text-sm space-y-1">
                     <p className="font-semibold">Not Started</p>
-                    <p className="opacity-90">Intake agreement has not been sent.</p>
+                    <p className="opacity-90">Referral agreement has not been sent.</p>
                   </div>
                 </div>
               )}
               {canSendIntake && !isPendingReview && referral.coordinatorReviewStatus !== 'rejected' && (
                 <div className="pt-2">
-                  <SendIntakeDialog referral={referral} onSent={() => refetch()} />
+                  <SendIntakeDialog referral={referral} onSent={refreshReferral} />
                 </div>
               )}
             </CardContent>
@@ -341,6 +351,30 @@ export default function ReferralDetailPage() {
           </Card>
         </div>
       </div>
+      {isStaff && <ReferralHistory id={id} />}
     </div>
+  );
+}
+
+function ReferralHistory({ id }: { id: string }) {
+  const { data: entries, isLoading, error, refetch } = useGetReferralHistory(id, {
+    query: { queryKey: getGetReferralHistoryQueryKey(id), staleTime: 0, refetchInterval: 30000 },
+  });
+  return (
+    <Card data-testid="referral-history">
+      <CardHeader><CardTitle className="text-lg">History</CardTitle></CardHeader>
+      <CardContent>
+        {isLoading ? <p className="text-sm text-muted-foreground">Loading history…</p>
+          : error ? <div role="alert" className="text-sm text-destructive">{apiErrorMessage(error, 'Could not load referral history.')} <Button variant="outline" size="sm" onClick={() => void refetch()}>Retry</Button></div>
+          : !entries?.length ? <p className="text-sm text-muted-foreground">No history recorded.</p>
+          : <ol className="space-y-3 max-h-80 overflow-y-auto">
+            {entries.map(entry => <li key={entry.id} className="border-b pb-3 last:border-b-0 text-sm">
+              <p className="text-xs text-muted-foreground">{format(new Date(entry.createdAt), 'MMM d, yyyy h:mm a')} · {entry.userName || 'Unknown user'}</p>
+              <p className="font-medium">{entry.action.replaceAll('_', ' ')}</p>
+              {entry.detail && <p className="text-muted-foreground break-words">{entry.detail}</p>}
+            </li>)}
+          </ol>}
+      </CardContent>
+    </Card>
   );
 }

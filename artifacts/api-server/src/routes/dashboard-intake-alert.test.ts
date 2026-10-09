@@ -130,7 +130,7 @@ describe("GET /dashboard/summary recently completed intake alerts", () => {
     );
     expect(completed).toContainEqual({
       kind: "recently_completed",
-      message: `Recent ${nonce} completed their intake agreement.`,
+      message: `Recent ${nonce} completed their referral agreement.`,
       entityType: "referral",
       entityId: recentReferralId,
     });

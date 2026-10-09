@@ -150,7 +150,7 @@ router.get("/dashboard/summary", requireAuth, async (req, res): Promise<void> =>
     alerts.unshift(
       ...recentSignedReferrals.map((r) => ({
         kind: "recently_completed",
-        message: `${recentSignedClientNames.get(r.clientId) ?? "A participant"} completed their intake agreement.`,
+        message: `${recentSignedClientNames.get(r.clientId) ?? "A participant"} completed their referral agreement.`,
         entityType: "referral",
         entityId: r.id,
       })),

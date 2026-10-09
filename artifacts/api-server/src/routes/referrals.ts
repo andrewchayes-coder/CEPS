@@ -1,5 +1,5 @@
 import { Router, type IRouter } from "express";
-import { eq, and, isNull, gt, desc, count, ilike, or, sql, ne, gte, lte, type SQL } from "drizzle-orm";
+import { eq, and, isNull, gt, desc, count, ilike, or, sql, ne, gte, lte, inArray, type SQL } from "drizzle-orm";
 import {
   db,
   clientsTable,
@@ -16,6 +16,7 @@ import {
   CreateReferralBody,
   CreateReferralResponse,
   GetReferralResponse,
+  GetReferralHistoryResponse,
   UpdateReferralBody,
   UpdateReferralResponse,
   SendIntakeBody,
@@ -43,6 +44,29 @@ import { sortedOrder } from "../lib/sorting";
 import { logger } from "../lib/logger";
 import { suggestUnmatchedPosForClient } from "../lib/posMatching";
 import { applyReferralClientUpdates } from "../lib/referralClientUpdates";
+
+// One display-name rule for sorting/search and response enrichment.
+const referralVendorNameSql = sql<string | null>`case when ${referralsTable.vendorId} is null
+  then ${referralsTable.intakeFields}->>'vendorName'
+  else (select name from vendors where id = ${referralsTable.vendorId}) end`;
+
+async function referralMetadata(rows: (typeof referralsTable.$inferSelect)[]) {
+  const vendorIds = [...new Set(rows.flatMap(row => row.vendorId ? [row.vendorId] : []))];
+  const submitterIds = [...new Set(rows.flatMap(row => row.submittedByUserId ? [row.submittedByUserId] : []))];
+  const [vendors, submitters] = await Promise.all([
+    vendorIds.length ? db.select({ id: vendorsTable.id, name: vendorsTable.name }).from(vendorsTable)
+      .where(inArray(vendorsTable.id, vendorIds)) : [],
+    submitterIds.length ? db.select({ id: usersTable.id, name: usersTable.name, role: usersTable.role }).from(usersTable)
+      .where(inArray(usersTable.id, submitterIds)) : [],
+  ]);
+  const vendorNames = new Map(vendors.map(vendor => [vendor.id, vendor.name]));
+  const people = new Map(submitters.map(person => [person.id, person]));
+  return new Map(rows.map(row => [row.id, {
+    vendorName: row.vendorId ? vendorNames.get(row.vendorId) ?? null : null,
+    submittedByName: row.submittedByUserId ? people.get(row.submittedByUserId)?.name ?? null : null,
+    submittedByRole: row.submittedByUserId ? people.get(row.submittedByUserId)?.role ?? null : null,
+  }]));
+}
 
 class DeletedParticipantError extends Error {
   constructor() {
@@ -130,7 +154,7 @@ async function buildAgreementPage(
     return {
       error: client.isMinor
         ? "A minor cannot sign for themselves — send to the family rep, guardian, or conservator instead"
-        : "Confirm that the participant is not a minor before sending the intake to them",
+        : "Confirm that the participant is not a minor before sending the referral agreement to them",
       status: 400,
     } as const;
   }
@@ -151,7 +175,7 @@ async function buildAgreementPage(
    );
   if (!selectedEmail) {
     return {
-      error: `Add an email to the ${sentToFamily ? "family rep" : "participant"} record before sending the intake agreement`,
+      error: `Add an email to the ${sentToFamily ? "family rep" : "participant"} record before sending the referral agreement`,
       status: 400,
     } as const;
   }
@@ -265,6 +289,7 @@ router.get("/referrals", requireAuth, async (req, res): Promise<void> => {
       or(
         sql`${referralsTable.clientId} in (select id from clients where (first_name || ' ' || last_name) ilike ${like} and is_deleted = false)`,
         sql`${referralsTable.serviceCoordinatorId} in (select id from users where name ilike ${like})`,
+        sql`${referralVendorNameSql} ilike ${like}`,
         sql`replace(lower(${referralsTable.status}), '_', ' ') ilike ${like}`,
         sql`replace(lower(${referralsTable.submittedVia}), '_', ' ') ilike ${like}`,
         sql`replace(lower(${referralsTable.intakeSentTo}), '_', ' ') ilike ${like}`,
@@ -294,6 +319,7 @@ router.get("/referrals", requireAuth, async (req, res): Promise<void> => {
       referralDate: sql`${referralsTable.referralDate}`,
       clientName: sql`lower((select last_name || ', ' || first_name from clients where id = ${referralsTable.clientId}))`,
       coordinatorName: sql`lower((select name from users where id = ${referralsTable.serviceCoordinatorId}))`,
+      vendorName: sql`lower(${referralVendorNameSql})`,
       serviceType: sql`lower(${referralsTable.intakeFields}->>'serviceType')`,
       status: sql`lower(${referralsTable.status})`,
       createdAt: sql`${referralsTable.createdAt}`,
@@ -315,9 +341,10 @@ router.get("/referrals", requireAuth, async (req, res): Promise<void> => {
       .limit(limit)
       .offset(offset),
   ]);
-  const [clientNames, coordNames] = await Promise.all([
+  const [clientNames, coordNames, metadata] = await Promise.all([
     clientNameMap(referrals.map((r) => r.clientId)),
     userNameMap(referrals.map((r) => r.serviceCoordinatorId)),
+    referralMetadata(referrals),
   ]);
   res.json(
     ListReferralsResponse.parse({
@@ -326,6 +353,7 @@ router.get("/referrals", requireAuth, async (req, res): Promise<void> => {
           r,
           clientNames.get(r.clientId),
           r.serviceCoordinatorId ? coordNames.get(r.serviceCoordinatorId) : null,
+          undefined, undefined, metadata.get(r.id),
         ),
       ),
       total,
@@ -336,7 +364,7 @@ router.get("/referrals", requireAuth, async (req, res): Promise<void> => {
 router.post("/referrals", requireStaffOrCoordinator, async (req, res): Promise<void> => {
   if (Object.prototype.hasOwnProperty.call(req.body ?? {}, "diagnosis") ||
       Object.prototype.hasOwnProperty.call(req.body ?? {}, "eligibilityCategory")) {
-    res.status(400).json({ error: "Diagnosis and eligibility are no longer collected at referral intake" });
+    res.status(400).json({ error: "Diagnosis and eligibility are no longer collected on the referral form" });
     return;
   }
   const parsed = CreateReferralBody.safeParse(req.body);
@@ -549,6 +577,7 @@ router.post("/referrals", requireStaffOrCoordinator, async (req, res): Promise<v
         referral.serviceCoordinatorId ? coordNames.get(referral.serviceCoordinatorId) : null,
         client.isMinor,
         { participant: client.email, familyRep: familyRepresentative?.email ?? client.familyRepEmail },
+        (await referralMetadata([referral])).get(referral.id),
       ),
     ),
   );
@@ -592,6 +621,7 @@ router.get("/referrals/:id", requireAuth, async (req, res): Promise<void> => {
         clients[0]
           ? { participant: clients[0].email, familyRep: clients[0].familyRepEmail }
           : null,
+        (await referralMetadata([referral])).get(referral.id),
       ),
     ),
   );
@@ -764,11 +794,31 @@ router.post("/referrals/:id/coordinator-review", requireStaff, async (req, res):
   res.json(ReviewCoordinatorReferralResponse.parse(result));
 });
 
+router.get("/referrals/:id/history", requireStaff, async (req, res): Promise<void> => {
+  const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+  const [referral] = await db.select({ id: referralsTable.id }).from(referralsTable).where(and(
+    eq(referralsTable.id, id),
+    sql`${referralsTable.clientId} in (select id from clients where is_deleted = false)`,
+  ));
+  if (!referral) {
+    res.status(404).json({ error: "Referral not found" });
+    return;
+  }
+  const rows = await db.select({
+    id: auditLogTable.id, userId: auditLogTable.userId, userName: usersTable.name,
+    action: auditLogTable.action, entityType: auditLogTable.entityType, entityId: auditLogTable.entityId,
+    detail: auditLogTable.detail, createdAt: auditLogTable.createdAt,
+  }).from(auditLogTable).leftJoin(usersTable, eq(auditLogTable.userId, usersTable.id))
+    .where(and(eq(auditLogTable.entityType, "referral"), eq(auditLogTable.entityId, id)))
+    .orderBy(desc(auditLogTable.createdAt), desc(auditLogTable.id));
+  res.json(GetReferralHistoryResponse.parse(rows.map(row => ({ ...row, createdAt: row.createdAt.toISOString() }))));
+});
+
 router.patch("/referrals/:id", requireStaffOrCoordinator, async (req, res): Promise<void> => {
   const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
   if (Object.prototype.hasOwnProperty.call(req.body ?? {}, "diagnosis") ||
       Object.prototype.hasOwnProperty.call(req.body ?? {}, "eligibilityCategory")) {
-    res.status(400).json({ error: "Diagnosis and eligibility are no longer collected at referral intake" });
+    res.status(400).json({ error: "Diagnosis and eligibility are no longer collected on the referral form" });
     return;
   }
   const parsed = UpdateReferralBody.safeParse(req.body);
@@ -786,52 +836,55 @@ router.patch("/referrals/:id", requireStaffOrCoordinator, async (req, res): Prom
     if (updates[k] === "") updates[k] = null;
   }
   if (updates.parentEmail) updates.parentEmail = String(updates.parentEmail).trim().toLowerCase();
-  const [existing] = await db.select().from(referralsTable).where(eq(referralsTable.id, id));
-  if (!existing) {
-    res.status(404).json({ error: "Referral not found" });
-    return;
-  }
-  if (existing.coordinatorReviewStatus === "pending") {
-    res.status(409).json({ error: "This referral is awaiting CEPS review and cannot be changed until approved" });
-    return;
-  }
-  if (existing.coordinatorReviewStatus === "rejected" && parsed.data.status && parsed.data.status !== "closed") {
-    res.status(409).json({ error: "This referral was rejected and cannot be advanced" });
-    return;
-  }
-  // Coordinators may only edit referrals they own (same rule as the list scoping).
-  if (req.user!.role === "service_coordinator" && existing.serviceCoordinatorId !== req.user!.id) {
-    res.status(403).json({ error: "Forbidden" });
-    return;
-  }
-  if ("serviceCoordinatorId" in parsed.data) {
-    if (req.user!.role === "service_coordinator") {
-      res.status(403).json({ error: "Only staff can reassign a referral" });
-      return;
+  const result: { referral: typeof referralsTable.$inferSelect } | { error: string; status: number } = await db.transaction(async tx => {
+    const [existing] = await tx.select().from(referralsTable).where(eq(referralsTable.id, id)).for("update");
+    if (!existing) {
+      return { error: "Referral not found", status: 404 };
     }
-    if (parsed.data.serviceCoordinatorId) {
-      const [coordinator] = await db
-        .select({ id: usersTable.id })
-        .from(usersTable)
-        .where(
-          and(
-            eq(usersTable.id, parsed.data.serviceCoordinatorId),
-            eq(usersTable.role, "service_coordinator"),
-            eq(usersTable.active, true),
-          ),
-        );
-      if (!coordinator) {
-        res.status(400).json({ error: "Service Coordinator must be an active coordinator account" });
-        return;
+    if (existing.coordinatorReviewStatus === "pending") {
+      return { error: "This referral is awaiting CEPS review and cannot be changed until approved", status: 409 };
+    }
+    if (existing.coordinatorReviewStatus === "rejected" && parsed.data.status && parsed.data.status !== "closed") {
+      return { error: "This referral was rejected and cannot be advanced", status: 409 };
+    }
+    // Check ownership under the same lock as the write, including concurrent reassignment.
+    if (req.user!.role === "service_coordinator" && existing.serviceCoordinatorId !== req.user!.id) {
+      return { error: "Forbidden", status: 403 };
+    }
+    if ("serviceCoordinatorId" in parsed.data) {
+      if (req.user!.role === "service_coordinator") {
+        return { error: "Only staff can reassign a referral", status: 403 };
+      }
+      if (parsed.data.serviceCoordinatorId) {
+        const [coordinator] = await tx.select({ id: usersTable.id }).from(usersTable).where(and(
+          eq(usersTable.id, parsed.data.serviceCoordinatorId),
+          eq(usersTable.role, "service_coordinator"),
+          eq(usersTable.active, true),
+        ));
+        if (!coordinator) {
+          return { error: "Service Coordinator must be an active coordinator account", status: 400 };
+        }
       }
     }
-  }
-  const [referral] = await db.update(referralsTable).set(updates).where(eq(referralsTable.id, id)).returning();
-  if (!referral) {
-    res.status(404).json({ error: "Referral not found" });
+    const detail: string[] = [];
+    if ("serviceCoordinatorId" in parsed.data && existing.serviceCoordinatorId !== parsed.data.serviceCoordinatorId) {
+      const ids = [existing.serviceCoordinatorId, parsed.data.serviceCoordinatorId].filter((value): value is string => !!value);
+      const people = ids.length ? await tx.select({ id: usersTable.id, name: usersTable.name }).from(usersTable).where(inArray(usersTable.id, ids)) : [];
+      const names = new Map(people.map(person => [person.id, person.name]));
+      const oldName = existing.serviceCoordinatorId ? names.get(existing.serviceCoordinatorId) ?? "none" : "none";
+      const newName = parsed.data.serviceCoordinatorId ? names.get(parsed.data.serviceCoordinatorId) ?? "none" : "none";
+      detail.push(`Coordinator reassigned: ${oldName} → ${newName}`);
+    }
+    if (parsed.data.status) detail.push(`Status: ${parsed.data.status}`);
+    const [referral] = await tx.update(referralsTable).set(updates).where(eq(referralsTable.id, id)).returning();
+    await audit(req.user!.id, "update_referral", "referral", referral.id, detail.join("; ") || undefined, tx as unknown as typeof db);
+    return { referral };
+  });
+  if ("error" in result) {
+    res.status(result.status).json({ error: result.error });
     return;
   }
-  await audit(req.user!.id, "update_referral", "referral", referral.id, parsed.data.status ? `Status: ${parsed.data.status}` : undefined);
+  const { referral } = result;
   const [clientNames, coordNames] = await Promise.all([
     clientNameMap([referral.clientId]),
     userNameMap([referral.serviceCoordinatorId]),
@@ -842,6 +895,7 @@ router.patch("/referrals/:id", requireStaffOrCoordinator, async (req, res): Prom
         referral,
         clientNames.get(referral.clientId),
         referral.serviceCoordinatorId ? coordNames.get(referral.serviceCoordinatorId) : null,
+        undefined, undefined, (await referralMetadata([referral])).get(referral.id),
       ),
     ),
   );
@@ -917,7 +971,7 @@ router.post("/referrals/:id/send-intake", requireStaffOrCoordinator, async (req,
       return {
         error: currentClient.isMinor
           ? "A minor cannot sign for themselves — send to the family rep, guardian, or conservator instead"
-          : "Confirm that the participant is not a minor before sending the intake to them",
+          : "Confirm that the participant is not a minor before sending the referral agreement to them",
         status: 400,
       } as const;
     }
@@ -935,7 +989,7 @@ router.post("/referrals/:id/send-intake", requireStaffOrCoordinator, async (req,
     if (!recipientEmail) {
       const recipientLabel = parsed.data.recipient === "participant" ? "participant" : "family rep";
       return {
-        error: `Add an email to the ${recipientLabel} record before sending the intake agreement`,
+        error: `Add an email to the ${recipientLabel} record before sending the referral agreement`,
         status: 400,
       } as const;
     }
@@ -1189,7 +1243,7 @@ router.post("/signature/:token", async (req, res): Promise<void> => {
       ) {
         throw new SignatureSubmissionError(
           400,
-          "Select the relationship that matches the intake recipient",
+          "Select the relationship that matches the referral agreement recipient",
         );
       }
 

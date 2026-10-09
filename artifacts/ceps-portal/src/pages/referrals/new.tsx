@@ -305,7 +305,7 @@ export default function ReferralNewPage() {
   return (
     <div className="max-w-3xl mx-auto space-y-6 pb-20">
       <div>
-        <h1 className="text-3xl font-bold tracking-tight">New Referral Intake</h1>
+        <h1 className="text-3xl font-bold tracking-tight">New Referral</h1>
         <p className="text-muted-foreground mt-1">Complete the packet to initiate service authorization.</p>
       </div>
 

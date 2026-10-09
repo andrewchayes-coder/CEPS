@@ -188,7 +188,7 @@ export default function SignaturePage() {
           </div>
           <CardTitle className="text-2xl font-bold tracking-tight">Participant Agreement</CardTitle>
           <CardDescription className="text-base mt-2">
-            Community Engaged Payee Support (CEPS) Intake Packet
+            Community Engaged Payee Support (CEPS) Referral Packet
           </CardDescription>
         </CardHeader>
         <CardContent className="pt-8 space-y-8">

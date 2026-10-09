@@ -144,7 +144,7 @@ export function SendIntakeDialog({ referral, onSent }: { referral: Referral, onS
           send_type: isFirstSend ? 'first_send' : 'resend',
         });
         toast({
-          title: 'Intake Sent',
+          title: 'Referral Agreement Sent',
           description: `Participant Agreement link sent successfully.`
         });
         setOpen(false);
@@ -166,13 +166,13 @@ export function SendIntakeDialog({ referral, onSent }: { referral: Referral, onS
       <DialogTrigger asChild>
         <Button variant="outline" className="w-full" data-testid="button-open-send-intake">
           <Mail className="w-4 h-4 mr-2" />
-          {isFirstSend ? 'Send Intake' : 'Resend Intake'}
+          {isFirstSend ? 'Send Referral Agreement' : 'Resend Referral Agreement'}
         </Button>
       </DialogTrigger>
       <DialogContent className="max-w-5xl max-h-[90vh] overflow-y-auto">
         <form onSubmit={handleSubmit}>
           <DialogHeader>
-            <DialogTitle>{isFirstSend ? 'Send Intake Agreement' : 'Resend Intake Agreement'}</DialogTitle>
+            <DialogTitle>{isFirstSend ? 'Send Referral Agreement' : 'Resend Referral Agreement'}</DialogTitle>
             <DialogDescription>
               Choose who should receive the Participant Agreement for signature.
             </DialogDescription>
@@ -246,7 +246,7 @@ export function SendIntakeDialog({ referral, onSent }: { referral: Referral, onS
                   <p className="font-semibold">Missing Contact Information</p>
                   <p className="mt-1">
                     Neither the participant nor a family representative has an email address on file.
-                    Please <Link href={`/clients/${referral.clientId}?tab=overview`} className="underline font-medium hover:text-destructive/80">update the participant or representative contact information</Link> before sending the intake.
+                    Please <Link href={`/clients/${referral.clientId}?tab=overview`} className="underline font-medium hover:text-destructive/80">update the participant or representative contact information</Link> before sending the referral agreement.
                   </p>
                 </div>
               </div>
@@ -338,7 +338,7 @@ export function SendIntakeDialog({ referral, onSent }: { referral: Referral, onS
           <DialogFooter>
             <Button variant="ghost" type="button" onClick={() => setOpen(false)}>Cancel</Button>
             <Button type="submit" disabled={!previewIsCurrent || sendIntake.isPending} data-testid="button-submit-send-intake">
-              {sendIntake.isPending ? 'Sending...' : 'Send Intake'}
+              {sendIntake.isPending ? 'Sending...' : 'Send Referral Agreement'}
             </Button>
           </DialogFooter>
         </form>

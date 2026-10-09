@@ -12,6 +12,7 @@ export type ListReferralsSortBy = typeof ListReferralsSortBy[keyof typeof ListRe
 export const ListReferralsSortBy = {
   referralDate: 'referralDate',
   clientName: 'clientName',
+  vendorName: 'vendorName',
   coordinatorName: 'coordinatorName',
   serviceType: 'serviceType',
   status: 'status',

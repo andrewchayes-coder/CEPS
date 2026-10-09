@@ -733,7 +733,7 @@ paths:
           in: query
           schema:
             type: string
-            enum: [referralDate, clientName, coordinatorName, serviceType, status, createdAt]
+            enum: [referralDate, clientName, vendorName, coordinatorName, serviceType, status, createdAt]
         - name: sortDirection
           in: query
           schema: { type: string, enum: [asc, desc] }
@@ -902,6 +902,26 @@ paths:
                 $ref: "#/components/schemas/OkResult"
         "404": { description: Not found }
         "409": { description: Cannot delete a converted referral }
+  /referrals/{id}/history:
+    get:
+      operationId: getReferralHistory
+      tags: [referrals]
+      summary: Get referral history (staff only)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        "200":
+          description: Referral audit entries, newest first
+          content:
+            application/json:
+              schema: { type: array, items: { $ref: "#/components/schemas/AuditEntry" } }
+        "403":
+          description: Staff access required
+        "404":
+          description: Referral not found
   /referrals/{id}/coordinator-review:
     get:
       operationId: getCoordinatorReview
@@ -3158,6 +3178,10 @@ components:
         serviceCoordinatorId: { type: ["string", "null"] }
         coordinatorReviewStatus: { type: ["string", "null"], enum: [pending, approved, rejected, null] }
         coordinatorName: { type: ["string", "null"] }
+        vendorName: { type: ["string", "null"] }
+        submittedByUserId: { type: ["string", "null"] }
+        submittedByName: { type: ["string", "null"] }
+        submittedByRole: { type: ["string", "null"] }
         referralDate: { type: string }
         status:
           type: string

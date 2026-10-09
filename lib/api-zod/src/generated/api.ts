@@ -970,6 +970,7 @@ export const GetClientCaseResponse = zod.object({
  * @summary List referrals (filterable, scoped by role)
  */
 export const ListReferralsQueryParams = zod.object({
+  "submittedByMe": zod.coerce.boolean().optional().describe('Coordinator-only submission receipts; returns minimal fields without granting referral access.'),
   "status": zod.coerce.string().optional(),
   "coordinatorId": zod.coerce.string().optional(),
   "coordinatorReviewStatus": zod.enum(['pending', 'approved', 'rejected']).optional().describe('Staff-only filter for coordinator-review status.'),
@@ -984,7 +985,7 @@ export const ListReferralsQueryParams = zod.object({
 })
 
 export const ListReferralsResponse = zod.object({
-  "items": zod.array(zod.object({
+  "items": zod.array(zod.union([zod.object({
   "id": zod.string(),
   "clientId": zod.string(),
   "clientName": zod.string().nullish(),
@@ -1096,7 +1097,12 @@ export const ListReferralsResponse = zod.object({
   "supportingDocumentUrl": zod.string().nullish(),
   "notes": zod.string().nullish(),
   "createdAt": zod.string().nullish()
-})),
+}),zod.object({
+  "id": zod.string(),
+  "referralDate": zod.string(),
+  "clientName": zod.string(),
+  "status": zod.string()
+})])),
   "total": zod.int()
 })
 
@@ -1276,6 +1282,16 @@ export const CreateReferralResponse = zod.object({
   "notes": zod.string().nullish(),
   "createdAt": zod.string().nullish()
 })
+
+
+/**
+ * @summary Download a saved referral confirmation for staff, its coordinator or original submitter
+ */
+export const DownloadReferralConfirmationParams = zod.object({
+  "id": zod.coerce.string()
+})
+
+export const DownloadReferralConfirmationResponse = zod.unknown()
 
 
 /**

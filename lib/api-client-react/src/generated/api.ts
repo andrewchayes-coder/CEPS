@@ -2585,6 +2585,83 @@ export const useCreateReferral = <TError = ErrorType<unknown>,
       return useMutation(getCreateReferralMutationOptions(options));
     }
 
+export const getDownloadReferralConfirmationUrl = (id: string,) => {
+
+
+
+
+  return `/api/referrals/${id}/confirmation.pdf`
+}
+
+/**
+ * @summary Download a saved referral confirmation for staff, its coordinator or original submitter
+ */
+export const downloadReferralConfirmation = async (id: string, options?: Parameters<typeof customFetch>[1]): Promise<Blob> => {
+
+  return customFetch<Blob>(getDownloadReferralConfirmationUrl(id),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getDownloadReferralConfirmationQueryKey = (id: string,) => {
+    return [
+    `/api/referrals/${id}/confirmation.pdf`
+    ] as const;
+    }
+
+
+export const getDownloadReferralConfirmationQueryOptions = <TData = Awaited<ReturnType<typeof downloadReferralConfirmation>>, TError = ErrorType<void>>(id: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof downloadReferralConfirmation>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getDownloadReferralConfirmationQueryKey(id);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof downloadReferralConfirmation>>> = ({ signal }) => downloadReferralConfirmation(id, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: id !== null && id !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof downloadReferralConfirmation>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type DownloadReferralConfirmationQueryResult = NonNullable<Awaited<ReturnType<typeof downloadReferralConfirmation>>>
+export type DownloadReferralConfirmationQueryError = ErrorType<void>
+
+
+/**
+ * @summary Download a saved referral confirmation for staff, its coordinator or original submitter
+ */
+
+export function useDownloadReferralConfirmation<TData = Awaited<ReturnType<typeof downloadReferralConfirmation>>, TError = ErrorType<void>>(
+ id: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof downloadReferralConfirmation>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getDownloadReferralConfirmationQueryOptions(id,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
 export const getListFamilyRepresentativesUrl = (params: ListFamilyRepresentativesParams,) => {
   const normalizedParams = new URLSearchParams();
 

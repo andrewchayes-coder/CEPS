@@ -15,6 +15,12 @@ import {
 } from "@workspace/db";
 import app from "../app";
 import { newToken } from "../lib/auth";
+import { randomUUID } from "node:crypto";
+import { execFileSync } from "node:child_process";
+import { writeFileSync, mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { confirmationSections } from "../lib/referral-confirmation-pdf";
 
 // POST /referrals — supportingDocumentUrl round-trip.
 const nonce = `refcr${Date.now().toString(36)}`;
@@ -187,6 +193,93 @@ async function makeCoordinator(label: string) {
   createdLinkedUserIds.push(coordinator.id);
   return { id: coordinator.id, cookie: await session(coordinator.id) };
 }
+
+describe("Referral confirmation and submission receipts", () => {
+  it("does not add unentered optional family contact information from a linked participant", () => {
+    const sections = confirmationSections({
+      intakeFields: { clientUci: "receipt-uci", clientIsMinor: false },
+    } as typeof referralsTable.$inferSelect, {
+      familyRepName: "Not entered", familyRepPhone: "Not entered",
+      familyRepEmail: "not-entered@example.test", familyRepAddress: "Not entered",
+      email: "not-entered@example.test", phone: "Not entered", address: "Not entered",
+    } as typeof clientsTable.$inferSelect);
+    const family = sections.find(([label]) => label === "Family representative")!;
+    expect(family[1].every(([, value]) => value == null)).toBe(true);
+    const participant = sections.find(([label]) => label === "Participant")!;
+    expect(participant[1].filter(([label]) => ["Contact email", "Contact phone", "Mailing street"].includes(label))
+      .every(([, value]) => value == null)).toBe(true);
+  });
+  it("keeps download-only access after reassignment, generates saved data and audits authorized downloads", async () => {
+    const original = await makeCoordinator("Confirmation Original");
+    const current = await makeCoordinator("Confirmation Current");
+    const other = await makeCoordinator("Confirmation Other");
+    const uci = `${nonce}-confirmation`;
+    const vendorName = `${nonce}-confirmation-vendor`;
+    createdClientUcis.push(uci);
+    createdVendorNames.push(vendorName);
+    const path = `/objects/uploads/${original.id}/${randomUUID()}`;
+    await db.insert(auditLogTable).values({
+      userId: original.id, action: "file.upload_requested", entityType: "upload", entityId: path,
+      detail: "classes-receipt.pdf (application/pdf, 123 bytes)",
+    });
+    const created = await request(app).post("/api/referrals").set("Cookie", original.cookie).send({
+      supportingDocumentUrl: path,
+      serviceFrequency: "monthly",
+      intakeFields: { ...baseIntake(uci, vendorName), clientLastName: "Tester 李",
+        activityDescription: "A long saved activity description. ".repeat(150) },
+    });
+    expect(created.status).toBe(201);
+    const id = created.body.id;
+    createdReferralIds.push(id);
+    await db.update(referralsTable).set({ serviceCoordinatorId: current.id }).where(eq(referralsTable.id, id));
+    expect((await request(app).get(`/api/referrals/${id}`).set("Cookie", original.cookie)).status).toBe(403);
+    const pdfs = [];
+    for (const cookie of [staffCookie, original.cookie, current.cookie]) {
+      const response = await request(app).get(`/api/referrals/${id}/confirmation.pdf`).set("Cookie", cookie);
+      expect(response.status).toBe(200);
+      expect(response.headers["content-type"]).toMatch(/^application\/pdf/);
+      expect(response.headers["cache-control"]).toContain("no-store");
+      expect(Buffer.isBuffer(response.body)).toBe(true);
+      pdfs.push(response.body);
+    }
+    expect((await request(app).get(`/api/referrals/${id}/confirmation.pdf`).set("Cookie", other.cookie)).status).toBe(403);
+    for (const role of ["parent_guardian", "vendor", "self"]) {
+      const [person] = await db.insert(usersTable).values({
+        name: `${nonce} ${role}`, email: `${nonce}-confirmation-${role}@test.local`,
+        role, linkedRecordType: "client", linkedRecordId: created.body.clientId,
+      }).returning();
+      createdLinkedUserIds.push(person.id);
+      expect((await request(app).get(`/api/referrals/${id}/confirmation.pdf`).set("Cookie", await session(person.id))).status).toBe(403);
+    }
+    const events = await db.select().from(auditLogTable).where(and(eq(auditLogTable.entityId, id), eq(auditLogTable.action, "download_referral_confirmation")));
+    expect(events).toHaveLength(3);
+    const dir = mkdtempSync(join(tmpdir(), "ceps-confirmation-"));
+    try {
+      const file = join(dir, "confirmation.pdf");
+      writeFileSync(file, pdfs[0]);
+      const text = execFileSync("pdftotext", ["-layout", file, "-"], { encoding: "utf8" });
+      expect(text).toContain(uci);
+      expect(text).toContain("$123.45");
+      expect(text).toContain("2026-06-01");
+      expect(text.replace(/\s+/g, " ")).toContain("Tester 李");
+      expect(text).toContain("classes-receipt.pdf");
+      expect(text).toContain("Page 1 of");
+      expect(text).toContain("Page 3 of");
+      expect(text).toContain("not an authorization or an agreement");
+      expect(text).not.toContain("/objects/uploads/");
+    } finally { rmSync(dir, { recursive: true, force: true }); }
+    const mine = await request(app).get("/api/referrals?submittedByMe=true").set("Cookie", original.cookie);
+    expect(mine.status).toBe(200);
+    const receipt = mine.body.items.find((item: { id: string }) => item.id === id);
+    expect(Object.keys(receipt).sort()).toEqual(["clientName", "id", "referralDate", "status"]);
+    expect(receipt.clientName).toBe("Create Tester 李");
+    const regular = await request(app).get("/api/referrals?submittedByMe=false").set("Cookie", original.cookie);
+    expect(regular.body.items.some((item: { id: string }) => item.id === id)).toBe(false);
+    expect((await request(app).get("/api/referrals?submittedByMe=true").set("Cookie", other.cookie)).body.items).toEqual([]);
+    expect((await request(app).get("/api/referrals?submittedByMe=true").set("Cookie", staffCookie)).status).toBe(403);
+    expect((await request(app).get("/api/referrals?submittedByMe=invalid").set("Cookie", original.cookie)).status).toBe(400);
+  });
+});
 
 describe("POST /referrals supporting documents", () => {
   it.each([undefined, "", "   "])("rejects a minor without a family representative name (%s)", async familyRepName => {
@@ -365,10 +458,16 @@ describe("POST /referrals client contact and family representative carryover", (
 
     expect(response.status).toBe(202);
     expect(response.body).toEqual({
+      id: expect.any(String),
       status: "pending_review",
       message: "Referral submitted. CEPS will review it and follow up with you.",
     });
-    expect(response.body).not.toHaveProperty("id");
+    expect(response.body.id).toMatch(/^[0-9a-f-]{36}$/);
+    expect((await request(app).get(`/api/referrals/${response.body.id}/confirmation.pdf`).set("Cookie", coordinator.cookie)).status).toBe(200);
+    const receipts = await request(app).get("/api/referrals?submittedByMe=true").set("Cookie", coordinator.cookie);
+    const receipt = receipts.body.items.find((row: { id: string }) => row.id === response.body.id);
+    expect(receipt.status).toBe("pending_review");
+    expect(Object.keys(receipt).sort()).toEqual(["clientName", "id", "referralDate", "status"]);
     expect(JSON.stringify(response.body)).not.toContain(client.id);
     expect(JSON.stringify(response.body)).not.toContain(uci);
     const [heldReferral] = await db.select().from(referralsTable).where(eq(referralsTable.clientId, client.id));

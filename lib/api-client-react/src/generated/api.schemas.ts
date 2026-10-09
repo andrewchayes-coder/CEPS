@@ -1440,8 +1440,16 @@ export const ReferralPendingReviewStatus = {
 } as const;
 
 export interface ReferralPendingReview {
+  id: string;
   status: ReferralPendingReviewStatus;
   message: string;
+}
+
+export interface ReferralSubmission {
+  id: string;
+  referralDate: string;
+  clientName: string;
+  status: string;
 }
 
 export interface ReferralReviewRepresentative {
@@ -3181,6 +3189,10 @@ export type ListClients200 = {
 };
 
 export type ListReferralsParams = {
+/**
+ * Coordinator-only submission receipts; returns minimal fields without granting referral access.
+ */
+submittedByMe?: boolean;
 status?: string;
 coordinatorId?: string;
 /**
@@ -3228,7 +3240,7 @@ export const ListReferralsSortDirection = {
 } as const;
 
 export type ListReferrals200 = {
-  items: Referral[];
+  items: (Referral | ReferralSubmission)[];
   total: number;
 };
 

@@ -1,6 +1,6 @@
 import { expect, test, type Page } from '@playwright/test';
 
-async function openReferral(page: Page, calls: { count: number; body?: any }, role = 'staff') {
+async function openReferral(page: Page, calls: { count: number; body?: any }, role = 'staff', heldForReview = false) {
   await page.route('**/api/auth/me', (route) => route.fulfill({
     json: { id: 'test-staff', name: 'Test Staff', email: 'staff@example.test', role, active: true, permissions: [] },
   }));
@@ -8,12 +8,63 @@ async function openReferral(page: Page, calls: { count: number; body?: any }, ro
     if (route.request().method() === 'POST') {
       calls.count++;
       calls.body = route.request().postDataJSON();
-      return route.fulfill({ status: 201, json: { id: 'new-referral' } });
+      return route.fulfill({
+        status: heldForReview ? 202 : 201,
+        json: heldForReview
+          ? { id: 'new-referral', status: 'pending_review', message: 'Referral submitted. CEPS will review it and follow up with you.' }
+          : { id: 'new-referral', clientId: 'new-client', serviceCoordinatorId: 'test-staff', status: 'intake' },
+      });
     }
     return route.continue();
   });
   await page.goto('/referrals/new');
 }
+
+async function submitFilledReferral(page: Page) {
+  await fillThroughParticipant(page);
+  await chooseLanguage(page, 'Spanish');
+  await page.getByRole('button', { name: 'Next', exact: true }).click();
+  await page.getByRole('button', { name: 'Next', exact: true }).click();
+  await page.getByRole('button', { name: 'Submit Referral', exact: true }).click();
+  await expect(page.getByText('Referral submitted', { exact: true })).toBeVisible();
+}
+
+test('normal success downloads a receipt and allows a fresh referral without resubmitting', async ({ page }) => {
+  const calls = { count: 0 };
+  await openReferral(page, calls);
+  await page.route('**/api/referrals/new-referral/confirmation.pdf', route =>
+    route.fulfill({ contentType: 'application/pdf', body: '%PDF-1.7\nconfirmation test response' }));
+  await submitFilledReferral(page);
+  await expect(page.getByRole('link', { name: 'View referral', exact: true })).toHaveAttribute('href', '/referrals/new-referral');
+  const download = page.waitForEvent('download');
+  await page.getByTestId('button-download-confirmation').click();
+  expect((await download).suggestedFilename()).toMatch(/^ceps-referral-confirmation-.*\.pdf$/);
+  await page.getByTestId('button-submit-another-referral').click();
+  await expect(page.getByLabel('Coordinator Name')).toHaveValue('');
+  expect(calls.count).toBe(1);
+});
+
+test('held success has download-only access and a failed download can be retried', async ({ page }) => {
+  const calls = { count: 0 };
+  let downloads = 0;
+  await openReferral(page, calls, 'service_coordinator', true);
+  await page.route('**/api/referrals/new-referral/confirmation.pdf', route => {
+    downloads++;
+    return downloads === 1
+      ? route.fulfill({ status: 500, json: { error: 'Unable to prepare confirmation' } })
+      : route.fulfill({ contentType: 'application/pdf', body: '%PDF-1.7\nconfirmation test response' });
+  });
+  await submitFilledReferral(page);
+  await expect(page.getByTestId('status-referral-pending-review')).toContainText('CEPS will review');
+  await expect(page.getByRole('link', { name: 'View referral', exact: true })).toHaveCount(0);
+  await page.getByTestId('button-download-confirmation').click();
+  await expect(page.getByTestId('error-download-confirmation')).toContainText('Could not download the confirmation');
+  const download = page.waitForEvent('download');
+  await page.getByRole('button', { name: 'Retry', exact: true }).click();
+  await download;
+  expect(downloads).toBe(2);
+  expect(calls.count).toBe(1);
+});
 
 async function fillThroughParticipant(page: Page) {
   await page.getByLabel('Coordinator Name').fill('Alex Coordinator');
@@ -49,10 +100,39 @@ async function fillThroughParticipant(page: Page) {
   await page.getByPlaceholder('ZIP').fill('95814');
 }
 
+test.describe('download-only submission list', () => {
+  test.use({ timezoneId: 'America/Los_Angeles' });
+  test('shows only receipt fields and preserves the submission calendar date', async ({ page }) => {
+    await page.route('**/api/**', route => route.fulfill({ json: [] }));
+    await page.route('**/api/auth/me', route => route.fulfill({ json: {
+      id: 'coordinator', role: 'service_coordinator', name: 'Coordinator', email: 'coordinator@test.local',
+    } }));
+    await page.route('**/api/referrals?*', route => {
+      const mine = new URL(route.request().url()).searchParams.get('submittedByMe') === 'true';
+      return route.fulfill({ json: {
+        items: mine ? [{ id: 'receipt-1', referralDate: '2026-10-09', clientName: 'Receipt Participant', status: 'pending_review' }] : [],
+        total: mine ? 1 : 0,
+      } });
+    });
+    await page.goto('/referrals');
+    await page.getByText('My submissions', { exact: true }).click();
+    const row = page.getByTestId('row-submission-receipt-1');
+    await expect(row).toContainText('Oct 9, 2026');
+    await expect(row).toContainText('Receipt Participant');
+    await expect(row).toContainText('Pending CEPS review');
+    await expect(row.locator('a')).toHaveCount(0);
+    await expect(page.getByRole('columnheader', { name: 'Vendor', exact: true })).toHaveCount(0);
+    await expect(row.getByRole('button', { name: 'Download', exact: true })).toBeVisible();
+    await row.getByText('Receipt Participant').click();
+    await expect(page).toHaveURL(/\/referrals$/);
+  });
+});
+
 async function chooseLanguage(page: Page, language: string) {
   await page.getByTestId('select-preferred-language').click();
   if (language === 'Other') {
     await page.getByRole('listbox').press('End');
+    await expect(page.getByRole('option', { name: 'Other', exact: true })).toBeFocused();
     await page.keyboard.press('Enter');
     return;
   }

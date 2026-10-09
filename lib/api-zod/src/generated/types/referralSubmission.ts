@@ -5,10 +5,10 @@
  * CEPS Portal API — referral intake, authorizations, invoices, payments, remittances, vendors, reporting
  * OpenAPI spec version: 0.1.0
  */
-import type { ReferralPendingReviewStatus } from './referralPendingReviewStatus';
 
-export interface ReferralPendingReview {
+export interface ReferralSubmission {
   id: string;
-  status: ReferralPendingReviewStatus;
-  message: string;
+  referralDate: string;
+  clientName: string;
+  status: string;
 }

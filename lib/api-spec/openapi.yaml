@@ -701,6 +701,10 @@ paths:
       tags: [referrals]
       summary: List referrals (filterable, scoped by role)
       parameters:
+        - name: submittedByMe
+          in: query
+          description: Coordinator-only submission receipts; returns minimal fields without granting referral access.
+          schema: { type: boolean }
         - name: status
           in: query
           schema: { type: string }
@@ -748,7 +752,10 @@ paths:
                 properties:
                   items:
                     type: array
-                    items: { $ref: "#/components/schemas/Referral" }
+                    items:
+                      oneOf:
+                        - { $ref: "#/components/schemas/Referral" }
+                        - { $ref: "#/components/schemas/ReferralSubmission" }
                   total: { type: integer }
     post:
       operationId: createReferral
@@ -768,11 +775,29 @@ paths:
               schema:
                 $ref: "#/components/schemas/Referral"
         "202":
-          description: Held for CEPS review; intentionally contains no participant or referral identifiers.
+          description: Held for CEPS review; contains a referral ID for download-only confirmation access.
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/ReferralPendingReview"
+  /referrals/{id}/confirmation.pdf:
+    get:
+      operationId: downloadReferralConfirmation
+      tags: [referrals]
+      summary: Download a saved referral confirmation for staff, its coordinator or original submitter
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: On-demand Letter-size referral confirmation
+          content:
+            application/pdf:
+              schema: { type: string, format: binary }
+        "403":
+          description: Not permitted to download this referral confirmation
   /family-representatives:
     get:
       operationId: listFamilyRepresentatives
@@ -3223,10 +3248,19 @@ components:
         notes: { type: string }
     ReferralPendingReview:
       type: object
-      required: [status, message]
+      required: [id, status, message]
       properties:
+        id: { type: string }
         status: { type: string, enum: [pending_review] }
         message: { type: string }
+    ReferralSubmission:
+      type: object
+      required: [id, referralDate, clientName, status]
+      properties:
+        id: { type: string }
+        referralDate: { type: string }
+        clientName: { type: string }
+        status: { type: string }
     ReferralReviewValue:
       type: object
       required: [phone, email, address, preferredLanguage, isMinor, familyRepresentative]

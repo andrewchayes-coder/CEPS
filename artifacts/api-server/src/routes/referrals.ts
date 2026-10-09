@@ -262,6 +262,26 @@ router.get("/referrals", requireAuth, async (req, res): Promise<void> => {
   // coordinators see only referrals they own; parent/self only their linked
   // client's; vendors see none (forced to an unsatisfiable condition).
   const u = req.user!;
+  // Do not use zod.coerce.boolean: it treats the string "false" as true.
+  const submittedByMe = req.query.submittedByMe === "true";
+  if (req.query.submittedByMe !== undefined && req.query.submittedByMe !== "true" && req.query.submittedByMe !== "false") {
+    res.status(400).json({ error: "submittedByMe must be true or false" }); return;
+  }
+  if (submittedByMe) {
+    if (u.role !== "service_coordinator") { res.status(403).json({ error: "Forbidden" }); return; }
+    const owned = and(...conditions, eq(referralsTable.submittedByUserId, u.id));
+    const limit = Math.min(Math.max(query.data.limit ?? 50, 1), 1000);
+    const offset = Math.max(query.data.offset ?? 0, 0);
+    const [[{ total }], items] = await Promise.all([
+      db.select({ total: count() }).from(referralsTable).where(owned),
+      db.select({
+        id: referralsTable.id, referralDate: referralsTable.referralDate,
+        clientName: sql<string>`coalesce(nullif(trim(concat(${referralsTable.intakeFields}->>'clientFirstName', ' ', ${referralsTable.intakeFields}->>'clientLastName')), ''), (select first_name || ' ' || last_name from clients where id = ${referralsTable.clientId}))`,
+        status: sql<string>`case when ${referralsTable.coordinatorReviewStatus} = 'pending' then 'pending_review' when ${referralsTable.coordinatorReviewStatus} = 'rejected' then 'review_rejected' else ${referralsTable.status} end`,
+      }).from(referralsTable).where(owned).orderBy(desc(referralsTable.createdAt), desc(referralsTable.id)).limit(limit).offset(offset),
+    ]);
+    res.json(ListReferralsResponse.parse({ items, total })); return;
+  }
   let vendorEmpty = false;
   if (u.role === "service_coordinator") {
     conditions.push(eq(referralsTable.serviceCoordinatorId, u.id));
@@ -571,6 +591,7 @@ router.post("/referrals", requireStaffOrCoordinator, async (req, res): Promise<v
   }
   if (heldForReview) {
     res.status(202).json({
+      id: referral.id,
       status: "pending_review",
       message: "Referral submitted. CEPS will review it and follow up with you.",
     });

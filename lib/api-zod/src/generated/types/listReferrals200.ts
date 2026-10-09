@@ -6,8 +6,9 @@
  * OpenAPI spec version: 0.1.0
  */
 import type { Referral } from './referral';
+import type { ReferralSubmission } from './referralSubmission';
 
 export type ListReferrals200 = {
-  items: Referral[];
+  items: (Referral | ReferralSubmission)[];
   total: number;
 };

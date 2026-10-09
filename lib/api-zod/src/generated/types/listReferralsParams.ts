@@ -10,6 +10,10 @@ import type { ListReferralsSortBy } from './listReferralsSortBy';
 import type { ListReferralsSortDirection } from './listReferralsSortDirection';
 
 export type ListReferralsParams = {
+/**
+ * Coordinator-only submission receipts; returns minimal fields without granting referral access.
+ */
+submittedByMe?: boolean;
 status?: string;
 coordinatorId?: string;
 /**

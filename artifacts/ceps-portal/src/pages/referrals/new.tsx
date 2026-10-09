@@ -4,8 +4,7 @@ import { isAuthorizationAmount, normalizeAuthorizationAmount, isServiceDate } fr
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
-import { useCreateReferral } from '@workspace/api-client-react';
-import { useLocation } from 'wouter';
+import { useCreateReferral, getGetDashboardSummaryQueryKey } from '@workspace/api-client-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -25,6 +24,7 @@ import { validLanguage } from '@/lib/preferred-language';
 import { useAuth } from '@/components/auth/auth-provider';
 import { useQueryClient } from '@tanstack/react-query';
 import { Link } from 'wouter';
+import { DownloadReferralConfirmation } from '@/components/download-referral-confirmation';
 
 // -----------------------------------------------------------------------------
 // Validation Schemas (Step by Step to manage complex conditional logic)
@@ -154,12 +154,11 @@ type FormValues = z.infer<typeof fullSchema>;
 const STEPS = ['Coordinator', 'Vendor', 'Activity', 'Participant', 'Documents', 'Review'];
 
 export default function ReferralNewPage() {
-  const [, setLocation] = useLocation();
   const { user } = useAuth();
   const queryClient = useQueryClient();
   const { toast } = useToast();
   const createReferral = useCreateReferral();
-  const [confirmation, setConfirmation] = useState<string | null>(null);
+  const [submitted, setSubmitted] = useState<{ id: string; message?: string; canView: boolean } | null>(null);
   const [currentStep, setCurrentStep] = useState(0);
   const [supportingDocumentUrl, setSupportingDocumentUrl] = useState<string | undefined>(undefined);
   const [familyRepOpen, setFamilyRepOpen] = useState(false);
@@ -267,17 +266,14 @@ export default function ReferralNewPage() {
           supporting_document_supplied: Boolean(supportingDocumentUrl),
         });
         void queryClient.invalidateQueries({ queryKey: ['/api/referrals'] });
-        void queryClient.invalidateQueries({ queryKey: ['/api/dashboard'] });
-        if ('status' in res && res.status === 'pending_review') {
-          setConfirmation(res.message);
-          window.scrollTo(0, 0);
-          return;
+        void queryClient.invalidateQueries({ queryKey: ['referrals'] });
+        void queryClient.invalidateQueries({ queryKey: getGetDashboardSummaryQueryKey() });
+        if ('message' in res && res.status === 'pending_review') {
+          setSubmitted({ id: res.id, message: res.message, canView: false });
+        } else if ('clientId' in res) {
+          setSubmitted({ id: res.id, canView: user?.role === 'staff' || res.serviceCoordinatorId === user?.id });
         }
-        toast({
-          title: "Referral Submitted",
-          description: "The referral has been saved. Choose the agreement recipient on the referral page.",
-        });
-        if ('id' in res && typeof res.id === 'string') setLocation(`/referrals/${res.id}`);
+        window.scrollTo(0, 0);
       },
       onError: (err: any) => {
         toast({
@@ -289,20 +285,25 @@ export default function ReferralNewPage() {
     });
   };
 
-  if (confirmation) {
+  if (submitted) {
     return (
       <div className="max-w-2xl mx-auto py-10 md:py-20">
         <Card className="border-primary/30 overflow-hidden">
           <div className="h-2 bg-primary" />
           <CardHeader className="space-y-4">
             <div className="flex h-12 w-12 items-center justify-center rounded-full bg-primary/10 text-primary"><CheckCircle2 className="h-6 w-6" /></div>
-            <CardTitle className="text-2xl">Referral submitted for review</CardTitle>
-            <CardDescription className="text-base" role="status" data-testid="status-referral-pending-review">{confirmation}</CardDescription>
+            <CardTitle className="text-2xl">Referral submitted</CardTitle>
+            {submitted.message ? (
+              <CardDescription className="text-base" role="status" data-testid="status-referral-pending-review">{submitted.message}</CardDescription>
+            ) : (
+              <CardDescription className="text-base" role="status">The referral has been saved. Download a confirmation for your records.</CardDescription>
+            )}
           </CardHeader>
-          <CardContent className="text-sm text-muted-foreground">No further action is needed right now. CEPS will review the participant information before the referral can proceed.</CardContent>
-          <CardFooter className="flex flex-col sm:flex-row gap-3">
-            <Button onClick={() => { form.reset(); setSupportingDocumentUrl(undefined); setFamilyRepOpen(false); setCurrentStep(0); setConfirmation(null); }} data-testid="button-submit-another-referral">Submit another referral</Button>
-            <Button variant="outline" asChild><Link href="/referrals">Back to referrals</Link></Button>
+          {submitted.message && <CardContent className="text-sm text-muted-foreground">No further action is needed right now. CEPS will review the participant information before the referral can proceed.</CardContent>}
+          <CardFooter className="flex flex-col sm:flex-row sm:items-start gap-3">
+            <DownloadReferralConfirmation id={submitted.id} />
+            <Button variant="outline" onClick={() => { form.reset(); setSupportingDocumentUrl(undefined); setFamilyRepOpen(false); setCurrentStep(0); setSubmitted(null); }} data-testid="button-submit-another-referral">Submit another referral</Button>
+            {submitted.canView && <Button variant="outline" asChild><Link href={`/referrals/${submitted.id}`}>View referral</Link></Button>}
           </CardFooter>
         </Card>
       </div>

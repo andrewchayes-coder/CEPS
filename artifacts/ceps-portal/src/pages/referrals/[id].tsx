@@ -16,6 +16,7 @@ import { useToast } from '@/hooks/use-toast';
 import { CheckCircle2, AlertTriangle, FileText, ArrowLeft } from 'lucide-react';
 import { format, parseISO } from 'date-fns';
 import { Link } from 'wouter';
+import { DownloadReferralConfirmation } from '@/components/download-referral-confirmation';
 import { ClientLink } from '@/components/entity-links';
 import { AgreementReview } from '@/components/agreement-review';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -178,6 +179,9 @@ export default function ReferralDetailPage() {
           <Badge variant="outline" className="text-sm px-3 py-1">
             Status: <span className="font-semibold ml-1 capitalize">{referral.status.replace('_', ' ')}</span>
           </Badge>
+          {(isStaff || (user?.role === 'service_coordinator' && referral.serviceCoordinatorId === user.id)) && (
+            <DownloadReferralConfirmation id={id} label="Download confirmation" variant="outline" testId="button-download-confirmation" />
+          )}
           {isStaff && !isPendingReview && (
             <>
               <EditReferralDialog id={id} referral={referral} onSaved={refreshReferral} />

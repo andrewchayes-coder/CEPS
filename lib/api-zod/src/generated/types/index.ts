@@ -234,6 +234,7 @@ export * from './referralReviewValue';
 export * from './referralServiceFrequency';
 export * from './referralSignerRelationship';
 export * from './referralStatus';
+export * from './referralSubmission';
 export * from './referralSubmittedVia';
 export * from './referralUpdate';
 export * from './referralUpdateIntakeFields';

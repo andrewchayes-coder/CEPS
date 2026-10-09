@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { useListReferrals } from '@workspace/api-client-react';
 import { useAuth } from '@/components/auth/auth-provider';
 import { Link, useLocation, useSearch } from 'wouter';
-import { format } from 'date-fns';
+import { format, parseISO } from 'date-fns';
 import { 
   Table, 
   TableBody, 
@@ -22,6 +22,7 @@ import { Plus, Search, Filter, ChevronLeft, ChevronRight } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
 import { ClientLink } from '@/components/entity-links';
 import { useDebounce } from '@/hooks/use-debounce';
+import { DownloadReferralConfirmation } from '@/components/download-referral-confirmation';
 import { DateRangeFilter } from '@/components/date-range-filter';
 
 const PAGE_SIZE = 50;
@@ -37,6 +38,17 @@ export default function ReferralsPage() {
   const [startDate, setStartDate] = useState<string>();
   const [endDate, setEndDate] = useState<string>();
   const [page, setPage] = useState(0);
+  const [tab, setTab] = useState<'all' | 'mine'>('all');
+  const isCoordinator = user?.role === 'service_coordinator';
+  const mine = isCoordinator && tab === 'mine';
+  const switchTab = (t: 'all' | 'mine') => {
+    setTab(t);
+    setPage(0);
+    setStatusFilter('all');
+    setSearch('');
+    setStartDate(undefined);
+    setEndDate(undefined);
+  };
   const sort = useTableSort<'referralDate' | 'clientName' | 'coordinatorName' | 'serviceType' | 'status'>();
   const onSort = (key: Parameters<typeof sort.toggleSort>[0]) => {
     sort.toggleSort(key);
@@ -44,7 +56,7 @@ export default function ReferralsPage() {
   };
 
   // Server-driven status filter, search, and pagination.
-  const params = {
+  const params = mine ? { submittedByMe: true, limit: PAGE_SIZE, offset: page * PAGE_SIZE } : {
     ...(statusFilter !== 'all' ? { status: statusFilter } : {}),
     ...(reviewFilter === 'pending' ? { coordinatorReviewStatus: 'pending' as const } : {}),
     ...(debouncedSearch ? { search: debouncedSearch } : {}),
@@ -56,7 +68,8 @@ export default function ReferralsPage() {
   };
   const { data, isLoading, isError, refetch } = useListReferrals(params, {
     query: {
-      queryKey: ['referrals', params],
+      queryKey: ['referrals', user?.id ?? null, params],
+      enabled: !!user,
     },
   });
 
@@ -90,8 +103,15 @@ export default function ReferralsPage() {
         )}
       </div>
 
+      {isCoordinator && (
+        <div className="flex gap-2" role="tablist">
+          <Button role="tab" aria-selected={!mine} variant={mine ? 'outline' : 'default'} size="sm" onClick={() => switchTab('all')} data-testid="tab-all-referrals">Referrals</Button>
+          <Button role="tab" aria-selected={mine} variant={mine ? 'default' : 'outline'} size="sm" onClick={() => switchTab('mine')} data-testid="tab-my-submissions">My submissions</Button>
+        </div>
+      )}
+
       <Card>
-        <CardHeader className="pb-3 border-b">
+        {!mine && <CardHeader className="pb-3 border-b">
           <div className="flex flex-col sm:flex-row gap-4 items-center justify-between">
             <div className="relative w-full sm:max-w-sm">
               <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
@@ -144,9 +164,12 @@ export default function ReferralsPage() {
               )}
             </div>
           </div>
-        </CardHeader>
+        </CardHeader>}
         <CardContent className="p-0">
           <Table>
+            {mine ? (
+              <TableHeader><TableRow><TableHead>Date</TableHead><TableHead>Participant</TableHead><TableHead>Status</TableHead><TableHead className="text-right">Actions</TableHead></TableRow></TableHeader>
+            ) : (
             <TableHeader>
               <TableRow>
                 <SortableTableHead label="Date" sortKey="referralDate" activeSortBy={sort.sortBy} sortDirection={sort.sortDirection} onSort={onSort} />
@@ -158,8 +181,24 @@ export default function ReferralsPage() {
                 <TableHead className="text-right">Actions</TableHead>
               </TableRow>
             </TableHeader>
+            )}
             <TableBody>
-              {isLoading ? (
+              {mine ? (
+                isLoading ? (
+                  <TableRow><TableCell colSpan={4}><Skeleton className="h-6 w-full" /></TableCell></TableRow>
+                ) : isError ? (
+                  <TableRow><TableCell colSpan={4} className="h-32 text-center"><div role="alert" className="space-y-2"><p>Could not load your submissions.</p><Button variant="outline" size="sm" onClick={() => void refetch()}>Retry</Button></div></TableCell></TableRow>
+                ) : !referrals?.length ? (
+                  <TableRow><TableCell colSpan={4} className="h-24 text-center text-muted-foreground">You have not submitted any referrals yet.</TableCell></TableRow>
+                ) : referrals.map((item) => (
+                  <TableRow key={item.id} data-testid={`row-submission-${item.id}`}>
+                    <TableCell className="font-medium whitespace-nowrap">{format(parseISO(item.referralDate), 'MMM d, yyyy')}</TableCell>
+                    <TableCell>{item.clientName || 'Unknown Participant'}</TableCell>
+                    <TableCell>{item.status === 'pending_review' ? <Badge variant="outline" className="border-primary/30 bg-primary/10 text-primary">Pending CEPS review</Badge> : <StatusBadge status={item.status} />}</TableCell>
+                    <TableCell className="text-right"><DownloadReferralConfirmation id={item.id} label="Download" variant="ghost" size="sm" testId={`button-download-${item.id}`} /></TableCell>
+                  </TableRow>
+                ))
+              ) : isLoading ? (
                 <ReferralsTableSkeleton />
               ) : isError ? (
                 <TableRow><TableCell colSpan={6} className="h-32 text-center"><div role="alert" className="space-y-2"><p>Could not load referrals.</p><Button variant="outline" size="sm" onClick={() => void refetch()}>Retry</Button></div></TableCell></TableRow>
@@ -170,7 +209,7 @@ export default function ReferralsPage() {
                   </TableCell>
                 </TableRow>
               ) : (
-                referrals?.map((referral) => (
+                referrals?.map((item) => { if (!('clientId' in item)) return null; const referral = item; return (
                   <TableRow key={referral.id}>
                     <TableCell className="font-medium whitespace-nowrap">
                       {format(new Date(referral.referralDate), 'MMM d, yyyy')}
@@ -198,7 +237,7 @@ export default function ReferralsPage() {
                       </Button>
                     </TableCell>
                   </TableRow>
-                ))
+                ); })
               )}
             </TableBody>
           </Table>

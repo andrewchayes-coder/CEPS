@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { apiErrorMessage } from '@/lib/api-error';
+import { isAuthorizationAmount, normalizeAuthorizationAmount, isServiceDate } from '@/lib/referral-service';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
@@ -67,8 +68,10 @@ const activitySchema = z.object({
   serviceType: z.enum(['direct_pay_459', 'reimbursement_024']),
   serviceFrequency: z.enum(['one_time', 'monthly']),
   activityDescription: z.string().min(1, 'Description is required'),
-  serviceStartDate: z.string().min(1, 'Start date is required'),
-  serviceEndDate: z.string().min(1, 'End date is required'),
+  serviceStartDate: z.string().min(1, 'Service start date is required').refine(v => !v || isServiceDate(v), 'Enter a valid service start date'),
+  serviceEndDate: z.string().min(1, 'Service end date is required').refine(v => !v || isServiceDate(v), 'Enter a valid service end date'),
+  authAmount: z.string().trim().min(1, 'Authorization amount is required')
+    .refine(v => !v || isAuthorizationAmount(v), 'Enter a positive authorization amount with up to two decimal places'),
   posNumber: z.string().optional(),
   posStartDate: z.string().optional(),
   posEndDate: z.string().optional(),
@@ -109,6 +112,10 @@ const fullSchema = z.object({
   ...vendorSchemaBase,
   ...activitySchema.shape,
   ...clientSchemaBase,
+})
+.refine(data => !data.serviceStartDate || !data.serviceEndDate || data.serviceEndDate >= data.serviceStartDate, {
+  message: 'Service end date must be on or after service start date',
+  path: ['serviceEndDate'],
 })
 .refine(data => {
   if (data.vendorBillingDifferent === 'yes') {
@@ -179,6 +186,7 @@ export default function ReferralNewPage() {
       activityDescription: '',
       serviceStartDate: '',
       serviceEndDate: '',
+      authAmount: '',
       posNumber: '',
       posStartDate: '',
       posEndDate: '',
@@ -232,10 +240,9 @@ export default function ReferralNewPage() {
 
   const onSubmit = (data: FormValues) => {
     // Map flat form data to the nested API shape
-    const intakeFields = { ...data, preferredLanguage: data.preferredLanguage.trim() };
+    const intakeFields = { ...data, authAmount: normalizeAuthorizationAmount(data.authAmount), preferredLanguage: data.preferredLanguage.trim() };
     // Remove fields that go at the top level
     const serviceFrequency = intakeFields.serviceFrequency;
-    delete (intakeFields as any).serviceFrequency;
     if (intakeFields.clientIsMinor) {
       delete (intakeFields as any).familyRepRelationship;
       delete (intakeFields as any).familyRepPhone;
@@ -550,19 +557,41 @@ export default function ReferralNewPage() {
                 <div className="grid grid-cols-2 gap-4">
                   <FormField control={form.control} name="serviceStartDate" render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Anticipated Start Date</FormLabel>
+                      <FormLabel>Service start date</FormLabel>
                       <FormControl><Input type="date" {...field} /></FormControl>
                       <FormMessage />
                     </FormItem>
                   )} />
                   <FormField control={form.control} name="serviceEndDate" render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Anticipated End Date</FormLabel>
+                      <FormLabel>Service end date</FormLabel>
                       <FormControl><Input type="date" {...field} /></FormControl>
+                      <FormDescription>Use the authorization's end date (end of service or IPP renewal).</FormDescription>
                       <FormMessage />
                     </FormItem>
                   )} />
                 </div>
+
+                <FormField control={form.control} name="serviceFrequency" render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Service Frequency</FormLabel>
+                    <Select value={field.value} onValueChange={field.onChange}>
+                      <FormControl><SelectTrigger><SelectValue /></SelectTrigger></FormControl>
+                      <SelectContent>
+                        <SelectItem value="monthly">Monthly</SelectItem>
+                        <SelectItem value="one_time">One-time</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </FormItem>
+                )} />
+                <FormField control={form.control} name="authAmount" render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>{watch('serviceFrequency') === 'monthly' ? 'Monthly authorization amount' : 'Total authorization amount'}</FormLabel>
+                    <FormControl><Input inputMode="decimal" placeholder="0.00" {...field} /></FormControl>
+                    <FormDescription>Required even if you don't have the authorization number yet.</FormDescription>
+                    <FormMessage />
+                  </FormItem>
+                )} />
 
                 <div className="bg-secondary/50 p-4 rounded-lg space-y-4">
                   <h3 className="text-sm font-medium">Current POS Details (If Known)</h3>
@@ -820,6 +849,10 @@ export default function ReferralNewPage() {
                       <dl className="grid grid-cols-3 gap-1">
                         <dt className="text-muted-foreground">Type:</dt><dd className="col-span-2">{watch('serviceType') === 'direct_pay_459' ? 'Direct Pay' : 'Reimbursement'}</dd>
                         <dt className="text-muted-foreground">Desc:</dt><dd className="col-span-2 truncate" title={watch('activityDescription')}>{watch('activityDescription')}</dd>
+                        <dt className="text-muted-foreground">Start:</dt><dd className="col-span-2">{watch('serviceStartDate')}</dd>
+                        <dt className="text-muted-foreground">End:</dt><dd className="col-span-2">{watch('serviceEndDate')}</dd>
+                        <dt className="text-muted-foreground">{watch('serviceFrequency') === 'monthly' ? 'Monthly authorization amount:' : 'Total authorization amount:'}</dt>
+                        <dd className="col-span-2">${normalizeAuthorizationAmount(watch('authAmount') || '0')}</dd>
                       </dl>
                     </div>
                   </div>

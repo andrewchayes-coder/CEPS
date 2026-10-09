@@ -56,6 +56,7 @@ function baseIntake(clientUci: string, vendorName: string) {
     activityDescription: "Weekly therapy",
     serviceStartDate: "2026-02-01",
     serviceEndDate: "2026-06-01",
+    authAmount: "123.45",
     clientFirstName: "Create",
     clientLastName: "Tester",
     clientDob: "2015-05-05",
@@ -71,6 +72,65 @@ function baseIntake(clientUci: string, vendorName: string) {
     contactState: "CA",
   } as Record<string, unknown> & { clientUci: string };
 }
+
+it.each([
+  { fields: { authAmount: undefined }, error: 'Authorization amount is required' },
+  { fields: { authAmount: '0.00' }, error: 'positive authorization amount' },
+  { fields: { authAmount: '-1.00' }, error: 'positive authorization amount' },
+  { fields: { authAmount: '1.234' }, error: 'two decimal places' },
+  { fields: { serviceStartDate: undefined }, error: 'Service start date is required' },
+  { fields: { serviceEndDate: undefined }, error: 'Service end date is required' },
+  { fields: { serviceEndDate: '2026-01-01' }, error: 'on or after service start date' },
+  { fields: { serviceEndDate: '2026-02-30' }, error: 'valid date' },
+])('rejects invalid new referral service fields: $error ($fields)', async ({ fields, error }) => {
+  const suffix = `${createdClientUcis.length}-invalid-service`;
+  const uci = `${nonce}-${suffix}`, vendorName = `${nonce}-${suffix}-vendor`;
+  createdClientUcis.push(uci);
+  createdVendorNames.push(vendorName);
+  const response = await request(app).post('/api/referrals').set('Cookie', staffCookie).send({
+    intakeFields: { ...baseIntake(uci, vendorName), ...fields },
+  });
+  expect(response.status).toBe(400);
+  expect(response.body.error).toContain(error);
+  expect(await db.select().from(clientsTable).where(eq(clientsTable.uciNumber, uci))).toHaveLength(0);
+});
+
+it('normalizes the amount, accepts equal dates without a POS number, and merges valid staff edits', async () => {
+  const uci = `${nonce}-service-edit`, vendorName = `${nonce}-service-edit-vendor`;
+  createdClientUcis.push(uci);
+  createdVendorNames.push(vendorName);
+  const response = await request(app).post('/api/referrals').set('Cookie', staffCookie).send({
+    serviceFrequency: 'monthly',
+    intakeFields: { ...baseIntake(uci, vendorName), serviceEndDate: '2026-02-01', authAmount: '000123.4' },
+  });
+  if (response.body.id) createdReferralIds.push(response.body.id);
+  expect(response.status).toBe(201);
+  expect(response.body.intakeFields).toMatchObject({ authAmount: '123.40', serviceFrequency: 'monthly' });
+  const invalid = await request(app).patch(`/api/referrals/${response.body.id}`).set('Cookie', staffCookie)
+    .send({ intakeFields: { serviceEndDate: '2026-01-01' } });
+  expect(invalid.status).toBe(400);
+  const edited = await request(app).patch(`/api/referrals/${response.body.id}`).set('Cookie', staffCookie)
+    .send({ intakeFields: { authAmount: '45.6', serviceEndDate: '2026-03-01' } });
+  expect(edited.status).toBe(200);
+  expect(edited.body.intakeFields).toMatchObject({
+    authAmount: '45.60', serviceStartDate: '2026-02-01', serviceEndDate: '2026-03-01', vendorName,
+    activityDescription: 'Weekly therapy', serviceFrequency: 'monthly',
+  });
+  const owner = await makeCoordinator('Service field owner');
+  expect((await request(app).patch(`/api/referrals/${response.body.id}`).set('Cookie', staffCookie)
+    .send({ serviceCoordinatorId: owner.id })).status).toBe(200);
+  expect((await request(app).patch(`/api/referrals/${response.body.id}`).set('Cookie', owner.cookie)
+    .send({ intakeFields: { authAmount: '99.00' } })).status).toBe(403);
+
+  const [legacy] = await db.insert(referralsTable).values({
+    clientId: response.body.clientId, referralDate: '2026-01-01', status: 'intake', intakeFields: { vendorName },
+  }).returning();
+  createdReferralIds.push(legacy.id);
+  expect((await request(app).get(`/api/referrals/${legacy.id}`).set('Cookie', staffCookie)).status).toBe(200);
+  const legacyEdited = await request(app).patch(`/api/referrals/${legacy.id}`).set('Cookie', staffCookie).send({ notes: 'Legacy note' });
+  expect(legacyEdited.status).toBe(200);
+  expect(legacyEdited.body.intakeFields).toEqual({ vendorName });
+});
 
 beforeAll(async () => {
   const [staff] = await db

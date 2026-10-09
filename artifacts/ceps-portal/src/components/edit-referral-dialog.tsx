@@ -24,6 +24,7 @@ import { useToast } from '@/hooks/use-toast';
 import { Pencil } from 'lucide-react';
 import { apiErrorMessage } from '@/lib/api-error';
 import { useAuth } from '@/components/auth/auth-provider';
+import { isAuthorizationAmount, isServiceDate, normalizeAuthorizationAmount } from '@/lib/referral-service';
 
 const STATUSES = [
   'intake',
@@ -39,6 +40,7 @@ type ReferralLike = {
   status: string;
   notes?: string | null;
   serviceCoordinatorId?: string | null;
+  intakeFields?: { serviceStartDate?: string; serviceEndDate?: string; authAmount?: string } | null;
 };
 
 type Props = {
@@ -62,7 +64,11 @@ export function EditReferralDialog({ id, referral, onSaved }: Props) {
     status: referral.status,
     notes: referral.notes ?? '',
     serviceCoordinatorId: referral.serviceCoordinatorId ?? '',
+    serviceStartDate: referral.intakeFields?.serviceStartDate ?? '',
+    serviceEndDate: referral.intakeFields?.serviceEndDate ?? '',
+    authAmount: referral.intakeFields?.authAmount ?? '',
   });
+  const [serviceError, setServiceError] = useState('');
   const [addingCoordinator, setAddingCoordinator] = useState(false);
   const [coordinatorForm, setCoordinatorForm] = useState({ name: '', email: '' });
 
@@ -75,7 +81,11 @@ export function EditReferralDialog({ id, referral, onSaved }: Props) {
         status: referral.status,
         notes: referral.notes ?? '',
         serviceCoordinatorId: referral.serviceCoordinatorId ?? '',
+        serviceStartDate: referral.intakeFields?.serviceStartDate ?? '',
+        serviceEndDate: referral.intakeFields?.serviceEndDate ?? '',
+        authAmount: referral.intakeFields?.authAmount ?? '',
       });
+      setServiceError('');
       setAddingCoordinator(false);
       setCoordinatorForm({ name: '', email: '' });
     }
@@ -109,6 +119,16 @@ export function EditReferralDialog({ id, referral, onSaved }: Props) {
   };
 
   const handleSave = () => {
+    const serviceChanged = ['serviceStartDate', 'serviceEndDate', 'authAmount'].some(key =>
+      form[key as 'serviceStartDate' | 'serviceEndDate' | 'authAmount'] !== (referral.intakeFields?.[key as 'serviceStartDate' | 'serviceEndDate' | 'authAmount'] ?? ''));
+    if (serviceChanged) {
+      const error = !isServiceDate(form.serviceStartDate) ? 'Service start date is required and must be valid'
+        : !isServiceDate(form.serviceEndDate) ? 'Service end date is required and must be valid'
+        : form.serviceEndDate < form.serviceStartDate ? 'Service end date must be on or after service start date'
+        : !isAuthorizationAmount(form.authAmount) ? 'Enter a positive authorization amount with up to two decimal places' : '';
+      setServiceError(error);
+      if (error) return;
+    }
     updateReferral.mutate(
       {
         id,
@@ -116,6 +136,10 @@ export function EditReferralDialog({ id, referral, onSaved }: Props) {
           status: form.status as any,
           notes: form.notes,
           serviceCoordinatorId: form.serviceCoordinatorId || null,
+          ...(serviceChanged ? { intakeFields: {
+            serviceStartDate: form.serviceStartDate, serviceEndDate: form.serviceEndDate,
+            authAmount: normalizeAuthorizationAmount(form.authAmount),
+          } } : {}),
         },
       },
       {
@@ -192,6 +216,24 @@ export function EditReferralDialog({ id, referral, onSaved }: Props) {
               </div>
             ))}
           </div>
+          {user?.role === 'staff' && (
+            <div className="space-y-3">
+              <div className="space-y-1">
+                <Label htmlFor="edit-service-start">Service start date</Label>
+                <Input id="edit-service-start" type="date" value={form.serviceStartDate} onChange={e => set('serviceStartDate', e.target.value)} />
+              </div>
+              <div className="space-y-1">
+                <Label htmlFor="edit-service-end">Service end date</Label>
+                <Input id="edit-service-end" type="date" value={form.serviceEndDate} onChange={e => set('serviceEndDate', e.target.value)} />
+                <p className="text-xs text-muted-foreground">Use the authorization's end date (end of service or IPP renewal).</p>
+              </div>
+              <div className="space-y-1">
+                <Label htmlFor="edit-auth-amount">Authorization amount</Label>
+                <Input id="edit-auth-amount" inputMode="decimal" placeholder="0.00" value={form.authAmount} onChange={e => set('authAmount', e.target.value)} />
+              </div>
+              {serviceError && <p role="alert" className="text-sm text-destructive">{serviceError}</p>}
+            </div>
+          )}
           <div className="space-y-2">
             <Label>Notes</Label>
             <Textarea value={form.notes} onChange={(e) => set('notes', e.target.value)} />

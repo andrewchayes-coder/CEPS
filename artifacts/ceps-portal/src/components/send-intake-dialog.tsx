@@ -42,8 +42,8 @@ export function SendIntakeDialog({ referral, onSent }: { referral: Referral, onS
     { query: { enabled: open, queryKey: getListFamilyRepresentativesQueryKey({ clientId: referral.clientId }) } }
   );
 
-  const [cost, setCost] = useState(referral.cost || '');
-  const [serviceFrequency, setServiceFrequency] = useState<'' | 'one_time' | 'monthly'>(referral.serviceFrequency || '');
+  const [cost, setCost] = useState(referral.cost || referral.intakeFields?.authAmount || '');
+  const [serviceFrequency, setServiceFrequency] = useState<'' | 'one_time' | 'monthly'>(referral.serviceFrequency || referral.intakeFields?.serviceFrequency || '');
   const [paymentSchedule, setPaymentSchedule] = useState(referral.paymentSchedule || '');
   const [paymentTypeRequested, setPaymentTypeRequested] = useState<'' | 'service_payment' | 'reimbursement'>(referral.paymentTypeRequested || '');
   const [preview, setPreview] = useState<SignaturePage | null>(null);
@@ -90,8 +90,8 @@ export function SendIntakeDialog({ referral, onSent }: { referral: Referral, onS
       const primaryRep = familyReps.find(r => r.isPrimary && r.email) || familyReps.find(r => r.email);
       setFamilyRepresentativeId(primaryRep ? primaryRep.id : '');
 
-      setCost(referral.cost || '');
-      setServiceFrequency(referral.serviceFrequency || '');
+      setCost(referral.cost || referral.intakeFields?.authAmount || '');
+      setServiceFrequency(referral.serviceFrequency || referral.intakeFields?.serviceFrequency || '');
       setPaymentSchedule(referral.paymentSchedule || '');
       setPaymentTypeRequested(referral.paymentTypeRequested || '');
       setPreview(null);

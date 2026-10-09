@@ -3145,6 +3145,8 @@ components:
         activityDescription: { type: string }
         serviceStartDate: { type: string }
         serviceEndDate: { type: string }
+        authAmount: { type: string, description: Positive authorization amount stored with two decimal places }
+        serviceFrequency: { type: string, enum: [one_time, monthly] }
         posNumber: { type: string }
         posStartDate: { type: string }
         posEndDate: { type: string }
@@ -3282,6 +3284,13 @@ components:
     ReferralUpdate:
       type: object
       properties:
+        intakeFields:
+          type: object
+          description: Staff-only service field edits; merged with existing referral details.
+          properties:
+            serviceStartDate: { type: string }
+            serviceEndDate: { type: string }
+            authAmount: { type: string }
         status:
           type: string
           enum: [intake, pending_signature, pending_auth, pending_w9, pending_invoice, active, closed]

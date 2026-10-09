@@ -6,6 +6,7 @@
  * OpenAPI spec version: 0.1.0
  */
 import type { ReferralIntakeFieldsFamilyRepRelationship } from './referralIntakeFieldsFamilyRepRelationship';
+import type { ReferralIntakeFieldsServiceFrequency } from './referralIntakeFieldsServiceFrequency';
 import type { ReferralIntakeFieldsServiceType } from './referralIntakeFieldsServiceType';
 import type { ReferralIntakeFieldsVendorBillingDifferent } from './referralIntakeFieldsVendorBillingDifferent';
 
@@ -35,6 +36,9 @@ export interface ReferralIntakeFields {
   activityDescription?: string;
   serviceStartDate?: string;
   serviceEndDate?: string;
+  /** Positive authorization amount stored with two decimal places */
+  authAmount?: string;
+  serviceFrequency?: ReferralIntakeFieldsServiceFrequency;
   posNumber?: string;
   posStartDate?: string;
   posEndDate?: string;

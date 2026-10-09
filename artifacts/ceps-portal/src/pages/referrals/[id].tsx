@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { formatMoney } from '@/lib/utils';
 import { useLocation, useParams } from 'wouter';
 import { useGetReferral, useGetReferralHistory, getGetReferralHistoryQueryKey, useDeleteReferral, useGetCoordinatorReview, useReviewCoordinatorReferral, getGetCoordinatorReviewQueryKey } from '@workspace/api-client-react';
 import type { ReferralReviewRepresentative, ReferralReviewValue, CoordinatorReviewInput, CoordinatorReviewDetails } from '@workspace/api-client-react';
@@ -246,7 +247,8 @@ export default function ReferralDetailPage() {
                   {intake?.serviceType === 'direct_pay_459' ? 'Direct Pay (459)' : 'Reimbursement (024)'}
                 </p>
                 <p className="line-clamp-2" title={intake?.activityDescription}>{intake?.activityDescription}</p>
-                <p>Dates: {intake?.serviceStartDate} to {intake?.serviceEndDate}</p>
+                <p>Dates: {intake?.serviceStartDate || intake?.serviceEndDate ? `${intake?.serviceStartDate || '—'} to ${intake?.serviceEndDate || '—'}` : '—'}</p>
+                <p>Authorization amount: {intake?.authAmount ? `$${formatMoney(intake.authAmount)} (${(referral.serviceFrequency || intake.serviceFrequency) === 'monthly' ? 'monthly' : 'total'})` : '—'}</p>
               </div>
 
               <div className="space-y-1">

@@ -709,6 +709,14 @@ export const ReferralIntakeFieldsServiceType = {
   reimbursement_024: 'reimbursement_024',
 } as const;
 
+export type ReferralIntakeFieldsServiceFrequency = typeof ReferralIntakeFieldsServiceFrequency[keyof typeof ReferralIntakeFieldsServiceFrequency];
+
+
+export const ReferralIntakeFieldsServiceFrequency = {
+  one_time: 'one_time',
+  monthly: 'monthly',
+} as const;
+
 export type ReferralIntakeFieldsFamilyRepRelationship = typeof ReferralIntakeFieldsFamilyRepRelationship[keyof typeof ReferralIntakeFieldsFamilyRepRelationship];
 
 
@@ -745,6 +753,9 @@ export interface ReferralIntakeFields {
   activityDescription?: string;
   serviceStartDate?: string;
   serviceEndDate?: string;
+  /** Positive authorization amount stored with two decimal places */
+  authAmount?: string;
+  serviceFrequency?: ReferralIntakeFieldsServiceFrequency;
   posNumber?: string;
   posStartDate?: string;
   posEndDate?: string;
@@ -1511,6 +1522,15 @@ export interface CoordinatorReviewResult {
   status: CoordinatorReviewResultStatus;
 }
 
+/**
+ * Staff-only service field edits; merged with existing referral details.
+ */
+export type ReferralUpdateIntakeFields = {
+  serviceStartDate?: string;
+  serviceEndDate?: string;
+  authAmount?: string;
+};
+
 export type ReferralUpdateStatus = typeof ReferralUpdateStatus[keyof typeof ReferralUpdateStatus];
 
 
@@ -1549,6 +1569,8 @@ export const ReferralUpdatePaymentTypeRequested = {
 } as const;
 
 export interface ReferralUpdate {
+  /** Staff-only service field edits; merged with existing referral details. */
+  intakeFields?: ReferralUpdateIntakeFields;
   status?: ReferralUpdateStatus;
   /** @nullable */
   serviceCoordinatorId?: string | null;

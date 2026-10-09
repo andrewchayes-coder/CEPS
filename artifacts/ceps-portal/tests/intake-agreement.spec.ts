@@ -56,6 +56,11 @@ function referral(overrides: Record<string, unknown> = {}) {
 }
 
 async function mockStaff(page: Page) {
+  await page.route('**/api/referrals/*/history', route => route.fulfill({ json: [] }));
+  await page.route('**/api/family-representatives?*', route => route.fulfill({ json: [{
+    id: 'family-rep-1', clientId: 'client-1', name: 'Pat Current Record',
+    email: 'family@test.local', relationship: 'parent', isPrimary: true,
+  }] }));
   await page.route('**/api/auth/me', (route) => route.fulfill({ json: staff }));
 }
 

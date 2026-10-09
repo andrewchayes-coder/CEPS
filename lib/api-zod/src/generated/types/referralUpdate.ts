@@ -5,11 +5,14 @@
  * CEPS Portal API — referral intake, authorizations, invoices, payments, remittances, vendors, reporting
  * OpenAPI spec version: 0.1.0
  */
+import type { ReferralUpdateIntakeFields } from './referralUpdateIntakeFields';
 import type { ReferralUpdatePaymentTypeRequested } from './referralUpdatePaymentTypeRequested';
 import type { ReferralUpdateServiceFrequency } from './referralUpdateServiceFrequency';
 import type { ReferralUpdateStatus } from './referralUpdateStatus';
 
 export interface ReferralUpdate {
+  /** Staff-only service field edits; merged with existing referral details. */
+  intakeFields?: ReferralUpdateIntakeFields;
   status?: ReferralUpdateStatus;
   /** @nullable */
   serviceCoordinatorId?: string | null;

@@ -1,4 +1,5 @@
 import { Router, type IRouter } from "express";
+import { referralServiceError, normalizeAuthorizationAmount } from "../lib/referral-service";
 import { eq, and, isNull, gt, desc, count, ilike, or, sql, ne, gte, lte, inArray, type SQL } from "drizzle-orm";
 import {
   db,
@@ -373,6 +374,13 @@ router.post("/referrals", requireStaffOrCoordinator, async (req, res): Promise<v
     return;
   }
   const f = parsed.data.intakeFields;
+  const serviceError = referralServiceError(f);
+  if (serviceError) {
+    res.status(400).json({ error: serviceError });
+    return;
+  }
+  f.authAmount = normalizeAuthorizationAmount(f.authAmount!);
+  if (parsed.data.serviceFrequency) f.serviceFrequency = parsed.data.serviceFrequency;
   const preferredLanguage = typeof f.preferredLanguage === "string"
     ? f.preferredLanguage.trim()
     : "";
@@ -525,7 +533,7 @@ router.post("/referrals", requireStaffOrCoordinator, async (req, res): Promise<v
         status: "intake",
         submittedVia: parsed.data.submittedVia ?? "staff_manual_entry",
         intakeFields: f,
-        serviceFrequency: parsed.data.serviceFrequency,
+        serviceFrequency: parsed.data.serviceFrequency ?? f.serviceFrequency,
         cost: clean(parsed.data.cost),
         paymentSchedule: clean(parsed.data.paymentSchedule),
         paymentTypeRequested: clean(parsed.data.paymentTypeRequested),
@@ -840,6 +848,16 @@ router.patch("/referrals/:id", requireStaffOrCoordinator, async (req, res): Prom
     const [existing] = await tx.select().from(referralsTable).where(eq(referralsTable.id, id)).for("update");
     if (!existing) {
       return { error: "Referral not found", status: 404 };
+    }
+    if (parsed.data.intakeFields && Object.keys(parsed.data.intakeFields).length) {
+      if (req.user!.role !== "staff") return { error: "Only staff can edit referral service dates and authorization amount", status: 403 };
+      const fields = { ...(existing.intakeFields as Record<string, unknown> ?? {}), ...parsed.data.intakeFields };
+      const serviceError = referralServiceError(fields);
+      if (serviceError) return { error: serviceError, status: 400 };
+      fields.authAmount = normalizeAuthorizationAmount(fields.authAmount as string);
+      updates.intakeFields = fields;
+    } else {
+      delete updates.intakeFields;
     }
     if (existing.coordinatorReviewStatus === "pending") {
       return { error: "This referral is awaiting CEPS review and cannot be changed until approved", status: 409 };

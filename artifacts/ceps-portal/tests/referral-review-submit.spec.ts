@@ -32,8 +32,9 @@ async function fillThroughParticipant(page: Page) {
   await expect(page.getByText('Activity Information', { exact: true })).toBeVisible();
 
   await page.getByLabel('Description of Activity').fill('Weekly art lessons');
-  await page.getByLabel('Anticipated Start Date').fill('2026-10-01');
-  await page.getByLabel('Anticipated End Date').fill('2027-05-01');
+  await page.getByLabel('Service start date').fill('2026-10-01');
+  await page.getByLabel('Service end date').fill('2027-05-01');
+  await page.getByLabel('Monthly authorization amount').fill('123.45');
   await page.getByRole('button', { name: 'Next' }).click();
   await expect(page.getByText('Participant Information', { exact: true })).toBeVisible();
 
@@ -50,6 +51,11 @@ async function fillThroughParticipant(page: Page) {
 
 async function chooseLanguage(page: Page, language: string) {
   await page.getByTestId('select-preferred-language').click();
+  if (language === 'Other') {
+    await page.getByRole('listbox').press('End');
+    await page.keyboard.press('Enter');
+    return;
+  }
   await page.getByRole('option', { name: language, exact: true }).click();
 }
 
@@ -95,6 +101,10 @@ test('Documents Next opens Review without creating a referral; only Submit creat
 
   await page.getByRole('button', { name: 'Next' }).click();
   await expect(page.getByText('Review & Submit', { exact: true })).toBeVisible();
+  await expect(page.getByText('2026-10-01', { exact: true })).toBeVisible();
+  await expect(page.getByText('2027-05-01', { exact: true })).toBeVisible();
+  await expect(page.getByText('Monthly authorization amount:', { exact: true })).toBeVisible();
+  await expect(page.getByText('$123.45', { exact: true })).toBeVisible();
   await expect(page.getByTestId('review-preferred-language')).toHaveText('Spanish');
   await page.waitForTimeout(2300); // The regression used to submit and redirect after about two seconds.
   expect(calls.count).toBe(0);
@@ -103,6 +113,8 @@ test('Documents Next opens Review without creating a referral; only Submit creat
   await page.getByRole('button', { name: 'Submit Referral', exact: true }).click();
   await expect.poll(() => calls.count).toBe(1);
   expect(calls.body.intakeFields.contactEmail).toBe('pat@example.test');
+  expect(calls.body.intakeFields.authAmount).toBe('123.45');
+  expect(calls.body.intakeFields.serviceFrequency).toBe('monthly');
   expect(calls.body.intakeFields.preferredLanguage).toBe('Spanish');
   expect(calls.body.intakeFields.familyRepName).toBeUndefined();
   expect(calls.body.intakeFields.familyRepRelationship).toBeUndefined();

@@ -44,7 +44,7 @@ function intake(uci: string, firstName: string, lastName: string, vendor: string
       vendorPhone: "5559876543", vendorServiceStreet: "1 Main St", vendorServiceCity: "Sacramento",
       vendorServiceZip: "95814", vendorServiceState: "CA", vendorBillingDifferent: "no",
       serviceType: "direct_pay_459", activityDescription: "Therapy", serviceStartDate: "2026-01-01",
-      serviceEndDate: "2026-12-31", clientFirstName: firstName, clientLastName: lastName,
+      serviceEndDate: "2026-12-31", authAmount: "123.45", clientFirstName: firstName, clientLastName: lastName,
       clientDob: "2000-01-01", clientUci: uci, preferredLanguage: "English", clientIsMinor: false,
     },
   };

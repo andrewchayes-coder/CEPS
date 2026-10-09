@@ -145,13 +145,19 @@ router.patch("/fees/:id", requireStaff, async (req, res): Promise<void> => {
       .where(and(eq(feesTable.id, id), notDeleted(feesTable)))
       .for("update");
     if (!before) return { kind: "not_found" as const };
+    const finalFeeMonth = parsed.data.feeMonth === undefined ? before.feeMonth : parsed.data.feeMonth;
+    if (finalFeeMonth !== before.feeMonth) {
+      const [allocation] = await tx.select({ id: remittanceAllocationsTable.id })
+        .from(remittanceAllocationsTable).where(eq(remittanceAllocationsTable.feeId, id)).limit(1);
+      if (allocation) return { kind: "matched_month" as const };
+    }
+    const authorizationId = await findFeeAuthorizationForMonth(txDb, before.clientId, finalFeeMonth);
     relationshipError = (await validateParticipantLinks(txDb, before.clientId, {
       paymentId: before.paymentId,
-      authorizationId: before.authorizationId,
+      authorizationId,
       allowDeletedPayment: true,
     })).error;
     if (relationshipError) return { kind: "invalid_link" as const };
-    const finalFeeMonth = parsed.data.feeMonth === undefined ? before.feeMonth : parsed.data.feeMonth;
     if (finalFeeMonth !== null) {
       const [conflict] = await tx.select({ id: feesTable.id }).from(feesTable).where(and(
         eq(feesTable.clientId, before.clientId),
@@ -164,6 +170,7 @@ router.patch("/fees/:id", requireStaff, async (req, res): Promise<void> => {
     let fee: typeof before;
     const persistedUpdates = {
       ...parsed.data,
+      authorizationId,
       // Once staff edit an automatically generated fee, keep durable provenance
       // that it is no longer safe for payment reconciliation to reverse.
       ...(before.ruleApplied === MONTHLY_FEE_RULE && Object.keys(parsed.data).length > 0
@@ -180,12 +187,14 @@ router.patch("/fees/:id", requireStaff, async (req, res): Promise<void> => {
       if (isFeeMonthConflict(error)) return { kind: "conflict" as const };
       throw error;
     }
+    await updateFeeCollectionStatus(txDb, fee.id, req.user!.id, null);
+    [fee] = await tx.select().from(feesTable).where(eq(feesTable.id, fee.id));
     await audit(
       req.user!.id,
       "update_fee",
       "fee",
       fee.id,
-      diffDetail(before, parsed.data, Object.keys(parsed.data)),
+      diffDetail(before, fee, [...Object.keys(persistedUpdates), "status"]),
       txDb,
     );
     return { kind: "updated" as const, fee };
@@ -196,6 +205,10 @@ router.patch("/fees/:id", requireStaff, async (req, res): Promise<void> => {
   }
   if (result.kind === "invalid_link") {
     res.status(400).json({ error: relationshipError });
+    return;
+  }
+  if (result.kind === "matched_month") {
+    res.status(400).json({ error: "Unmatch this fee's remittances before changing its month" });
     return;
   }
   if (result.kind === "conflict") {

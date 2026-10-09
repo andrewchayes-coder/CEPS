@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { apiErrorMessage } from '@/lib/api-error';
-import { useUpdatePayment, useListVendors, useListInvoices, useListAuthorizations, type PaymentAllocation } from '@workspace/api-client-react';
+import { useUpdatePayment, useListVendors, useListInvoices, useGetInvoice, useListAuthorizations, type PaymentAllocation } from '@workspace/api-client-react';
 import type { PaymentUpdate } from '@workspace/api-client-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -98,11 +98,21 @@ export function EditPaymentDialog({ id, payment, onSaved }: Props) {
 
   const [invoiceSearch, setInvoiceSearch] = useState('');
   const debouncedInvoiceSearch = useDebounce(invoiceSearch, 300);
-  const { data: invoicesData, isLoading: invoicesLoading } = useListInvoices(
-    { clientId: payment.clientId, search: debouncedInvoiceSearch, limit: 50 },
-    { query: { enabled: open && !!payment.clientId, queryKey: ['invoices', { clientId: payment.clientId, search: debouncedInvoiceSearch, limit: 50 }] } }
+  const invoiceQuery = { clientId: payment.clientId, search: debouncedInvoiceSearch, status: 'approved', limit: 50 };
+  const { data: invoicesData, isLoading: approvedInvoicesLoading } = useListInvoices(
+    invoiceQuery,
+    { query: { enabled: open && !!payment.clientId, queryKey: ['invoices', invoiceQuery] } }
   );
-  const invoices = invoicesData?.items ?? [];
+  const { data: currentInvoice, isLoading: currentInvoiceLoading } = useGetInvoice(payment.invoiceId ?? '', {
+    query: { enabled: open && !!payment.invoiceId, queryKey: ['invoice', payment.invoiceId] },
+  });
+  const invoiceOptions = new Map((invoicesData?.items ?? [])
+    .filter(invoice => invoice.status === 'approved').map(invoice => [invoice.id, invoice]));
+  if (currentInvoice && currentInvoice.id === payment.invoiceId && currentInvoice.clientId === payment.clientId) {
+    invoiceOptions.set(currentInvoice.id, currentInvoice);
+  }
+  const invoices = [...invoiceOptions.values()];
+  const invoicesLoading = approvedInvoicesLoading || (!!payment.invoiceId && currentInvoiceLoading);
 
   const [authSearch, setAuthSearch] = useState('');
   const debouncedAuthSearch = useDebounce(authSearch, 300);

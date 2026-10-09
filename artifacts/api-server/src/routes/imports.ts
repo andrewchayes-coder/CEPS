@@ -27,7 +27,7 @@ import {
   CommitImportBody,
   CommitImportResponse,
 } from "@workspace/api-zod";
-import { requireStaff, audit } from "../lib/auth";
+import { requireStaff, requirePermission, hasUserPermissionInTransaction, audit } from "../lib/auth";
 import { notDeleted } from "../lib/serializers";
 import {
   isImportEntity,
@@ -243,6 +243,9 @@ async function insertRow(entity: ImportEntity, values: Record<string, unknown>, 
         return row.id;
       }
       case "remittances": {
+        if (!(await hasUserPermissionInTransaction(tx, userId, "remittance_entry"))) {
+          throw new RemittanceImportPermissionError();
+        }
         const v = { ...values };
         v.source = "alta_regional";
         v.status = "received";
@@ -267,7 +270,18 @@ function resolveEntity(raw: string | string[] | undefined): ImportEntity | null 
   return entity && isImportEntity(entity) ? entity : null;
 }
 
-router.get("/import/:entity/template", requireStaff, async (req, res): Promise<void> => {
+class RemittanceImportPermissionError extends Error {}
+
+const remittanceImportPermission = requirePermission("remittance_entry");
+const requireImportPermission: typeof remittanceImportPermission = async (req, res, next) => {
+  if (resolveEntity(req.params.entity) === "remittances") {
+    await remittanceImportPermission(req, res, next);
+    return;
+  }
+  next();
+};
+
+router.get("/import/:entity/template", requireStaff, requireImportPermission, async (req, res): Promise<void> => {
   const entity = resolveEntity(req.params.entity);
   if (!entity) {
     res.status(404).json({ error: "Unknown import entity" });
@@ -280,7 +294,7 @@ router.get("/import/:entity/template", requireStaff, async (req, res): Promise<v
   res.send(csv);
 });
 
-router.post("/import/:entity/validate", requireStaff, async (req, res): Promise<void> => {
+router.post("/import/:entity/validate", requireStaff, requireImportPermission, async (req, res): Promise<void> => {
   const entity = resolveEntity(req.params.entity);
   if (!entity) {
     res.status(404).json({ error: "Unknown import entity" });
@@ -347,7 +361,7 @@ router.post("/import/:entity/validate", requireStaff, async (req, res): Promise<
   );
 });
 
-router.post("/import/:entity/commit", requireStaff, async (req, res): Promise<void> => {
+router.post("/import/:entity/commit", requireStaff, requireImportPermission, async (req, res): Promise<void> => {
   const entity = resolveEntity(req.params.entity);
   if (!entity) {
     res.status(404).json({ error: "Unknown import entity" });
@@ -403,6 +417,10 @@ router.post("/import/:entity/commit", requireStaff, async (req, res): Promise<vo
       imported++;
       results.push({ rowNumber: r.rowNumber, status: "imported", id });
     } catch (err) {
+      if (err instanceof RemittanceImportPermissionError) {
+        res.status(403).json({ error: "Missing required permission", permission: "remittance_entry" });
+        return;
+      }
       // A unique-constraint conflict (race / fingerprint) surfaces as a skipped
       // duplicate rather than a hard error, matching the Alta import behaviour.
       // Postgres reports unique violations with SQLSTATE 23505; the sentinel

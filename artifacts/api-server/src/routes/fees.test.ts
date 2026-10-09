@@ -241,6 +241,62 @@ describe("fee authorization usage", () => {
 });
 
 describe("fee lifecycle actions", () => {
+  it("recalculates collected and pending fees after amount edits, and blocks matched month changes", async () => {
+    const [feeAuth] = await db.insert(authorizationsTable).values({
+      clientId: clientA, authNumber: `${nonce}-fee-edit`, serviceCode: "490", paymentType: "fee",
+      servicePeriodStart: "2098-01-01", servicePeriodEnd: "2098-12-31", maxPeriodAmount: "1920.00", status: "active",
+    }).returning();
+    for (const [month, remitted, initialStatus, newAmount, expectedStatus] of [
+      ["2098-01", "160.00", "collected", "200.00", "pending"],
+      ["2098-02", "80.00", "pending", "80.00", "collected"],
+    ]) {
+      const created = await request(app).post("/api/fees").set("Cookie", cookie).send({
+        clientId: clientA, amount: "160.00", feeMonth: month,
+      });
+      expect(created.status).toBe(201);
+      const feeId = created.body.id;
+      const [remittance] = await db.insert(remittancesTable).values({
+        clientId: clientA, authorizationId: feeAuth.id, remittanceDate: `${month}-20`,
+        amount: remitted, paymentMonth: month, status: "received",
+      }).returning();
+      await db.insert(remittanceAllocationsTable).values({
+        remittanceId: remittance.id, paymentId: null, feeId, amount: remitted,
+      });
+      await db.update(feesTable).set({ status: initialStatus }).where(eq(feesTable.id, feeId));
+      const edited = await request(app).patch(`/api/fees/${feeId}`).set("Cookie", cookie).send({ amount: newAmount });
+      expect(edited.status).toBe(200);
+      expect(edited.body).toMatchObject({ amount: newAmount, status: expectedStatus, remittedAmount: remitted, authorizationId: feeAuth.id });
+      const [stored] = await db.select().from(feesTable).where(eq(feesTable.id, feeId));
+      expect(stored.status).toBe(expectedStatus);
+      const changedMonth = await request(app).patch(`/api/fees/${feeId}`).set("Cookie", cookie).send({ feeMonth: "2098-03", amount: "250.00" });
+      expect(changedMonth.status).toBe(400);
+      expect(changedMonth.body.error).toBe("Unmatch this fee's remittances before changing its month");
+      const [unchanged] = await db.select().from(feesTable).where(eq(feesTable.id, feeId));
+      expect(unchanged).toMatchObject({ amount: newAmount, feeMonth: month, status: expectedStatus, authorizationId: feeAuth.id });
+      // Supplying the same month is not a month change, even when matched.
+      expect((await request(app).patch(`/api/fees/${feeId}`).set("Cookie", cookie).send({ feeMonth: month })).status).toBe(200);
+    }
+  });
+
+  it("relinks an unallocated fee to the 490 for its new month, or clears a missing match", async () => {
+    const auths = await db.insert(authorizationsTable).values(["03", "04"].map(month => ({
+      clientId: clientB, authNumber: `${nonce}-fee-edit-${month}`, serviceCode: "490", paymentType: "fee",
+      servicePeriodStart: `2098-${month}-01`, servicePeriodEnd: `2098-${month}-30`,
+      maxPeriodAmount: "160.00", status: "active",
+    }))).returning();
+    const created = await request(app).post("/api/fees").set("Cookie", cookie).send({
+      clientId: clientB, amount: "160.00", feeMonth: "2098-03",
+    });
+    expect(created.status).toBe(201);
+    expect(created.body.authorizationId).toBe(auths[0].id);
+    const updated = await request(app).patch(`/api/fees/${created.body.id}`).set("Cookie", cookie).send({ feeMonth: "2098-04" });
+    expect(updated.status).toBe(200);
+    expect(updated.body).toMatchObject({ feeMonth: "2098-04", authorizationId: auths[1].id, status: "pending" });
+    const unmatched = await request(app).patch(`/api/fees/${created.body.id}`).set("Cookie", cookie).send({ feeMonth: "2101-05" });
+    expect(unmatched.status).toBe(200);
+    expect(unmatched.body.authorizationId).toBeNull();
+  });
+
   it("requires and stores a waiver reason, and prevents routine status updates", async () => {
     const created = await request(app).post("/api/fees").set("Cookie", cookie).send({
       clientId: clientA, amount: "160.00", feeMonth: "2099-01",

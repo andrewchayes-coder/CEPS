@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useListInvoices, useListReadyToApproveInvoices, useListReadyForCheckWritingInvoices } from '@workspace/api-client-react';
-import { Link } from 'wouter';
+import { Link, useSearch } from 'wouter';
 import { ClientLink, VendorLink } from '@/components/entity-links';
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow, SortableTableHead, useTableSort
@@ -22,6 +22,10 @@ const PAGE_SIZE = 50;
 
 export default function InvoicesPage() {
   const { user } = useAuth();
+  const urlSearch = useSearch();
+  const urlFilters = new URLSearchParams(urlSearch);
+  const requestedStatus = urlFilters.get('status');
+  const requestedClientId = urlFilters.get('clientId');
   const permissions = new Set((user as any)?.permissions ?? []);
   const canValidate = permissions.has('invoice_log_validate');
   const canApprove = permissions.has('invoice_approve');
@@ -34,6 +38,12 @@ export default function InvoicesPage() {
   const [startDate, setStartDate] = useState<string>();
   const [endDate, setEndDate] = useState<string>();
   const [page, setPage] = useState(0);
+  useEffect(() => {
+    const statuses = ['needs_entry', 'pending_review', 'validated', 'approved', 'rejected', 'duplicate'];
+    setStatusFilter(requestedStatus && statuses.includes(requestedStatus) ? requestedStatus : 'all');
+    setView('all');
+    setPage(0);
+  }, [urlSearch]);
   const sort = useTableSort<'serviceMonth' | 'vendorName' | 'clientName' | 'authNumber' | 'amountRequested' | 'status'>();
   const onSort = (key: Parameters<typeof sort.toggleSort>[0]) => {
     sort.toggleSort(key);
@@ -43,6 +53,7 @@ export default function InvoicesPage() {
   const params = {
     limit: PAGE_SIZE,
     offset: page * PAGE_SIZE,
+    ...(requestedClientId ? { clientId: requestedClientId } : {}),
     ...(debouncedSearch ? { search: debouncedSearch } : {}),
     ...(startDate ? { startDate } : {}),
     ...(endDate ? { endDate } : {}),

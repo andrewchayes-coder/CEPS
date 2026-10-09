@@ -72,7 +72,7 @@ export function LogPaymentDialog({ onSaved, defaultClientId, defaultInvoiceId }:
   const createPayment = useCreatePayment();
 
   const [open, setOpen] = useState(false);
-  const [form, setForm] = useState({ ...emptyForm, clientId: defaultClientId ?? '', invoiceId: defaultInvoiceId ?? 'none' });
+  const [form, setForm] = useState({ ...emptyForm, clientId: defaultClientId ?? '' });
   const [duplicate, setDuplicate] = useState<Payment[] | null>(null);
   const [justification, setJustification] = useState('');
   const [allocationError, setAllocationError] = useState('');
@@ -96,24 +96,26 @@ export function LogPaymentDialog({ onSaved, defaultClientId, defaultInvoiceId }:
   const [invoiceSearch, setInvoiceSearch] = useState('');
   const debouncedInvoiceSearch = useDebounce(invoiceSearch, 300);
   const invoiceQuery = { clientId: form.clientId, search: debouncedInvoiceSearch, limit: 50 };
-  const { data: validatedInvoicesData, isLoading: validatedInvoicesLoading } = useListInvoices(
-    { ...invoiceQuery, status: 'validated' },
-    { query: { enabled: open && !!form.clientId, queryKey: ['invoices', { ...invoiceQuery, status: 'validated' }] } },
+  const awaitingApprovalQuery = { clientId: form.clientId, status: 'validated', limit: 1 };
+  const { data: validatedInvoicesData } = useListInvoices(
+    awaitingApprovalQuery,
+    { query: { enabled: open && !!form.clientId, queryKey: ['invoices', awaitingApprovalQuery] } },
   );
   const { data: approvedInvoicesData, isLoading: approvedInvoicesLoading } = useListInvoices(
     { ...invoiceQuery, status: 'approved' },
     { query: { enabled: open && !!form.clientId, queryKey: ['invoices', { ...invoiceQuery, status: 'approved' }] } },
   );
-  const invoices = Array.from(new Map(
-    [...(validatedInvoicesData?.items ?? []), ...(approvedInvoicesData?.items ?? [])].map((invoice) => [invoice.id, invoice]),
-  ).values()).sort((a, b) => getInvoiceDisplayMonth(a).localeCompare(getInvoiceDisplayMonth(b)));
-  const invoicesLoading = validatedInvoicesLoading || approvedInvoicesLoading;
+  const invoices = [...(approvedInvoicesData?.items ?? [])]
+    .filter(invoice => invoice.status === 'approved')
+    .sort((a, b) => getInvoiceDisplayMonth(a).localeCompare(getInvoiceDisplayMonth(b)));
+  const awaitingApprovalCount = validatedInvoicesData?.total ?? 0;
+  const invoicesLoading = approvedInvoicesLoading;
 
   React.useEffect(() => {
-    if (defaultInvoiceId && invoices.some((invoice) => invoice.id === defaultInvoiceId)) {
+    if (open && defaultInvoiceId && invoices.some((invoice) => invoice.id === defaultInvoiceId)) {
       handleInvoiceChange(defaultInvoiceId);
     }
-  }, [defaultInvoiceId, invoices.length]);
+  }, [open, defaultInvoiceId, invoices.length]);
 
   const [authSearch, setAuthSearch] = useState('');
   const debouncedAuthSearch = useDebounce(authSearch, 300);
@@ -185,7 +187,7 @@ export function LogPaymentDialog({ onSaved, defaultClientId, defaultInvoiceId }:
   const computedTotal = form.allocations.reduce((sum, a) => sum + (parseFloat(a.amount) || 0), 0);
 
   const reset = () => {
-    setForm({ ...emptyForm, clientId: defaultClientId ?? '', invoiceId: defaultInvoiceId ?? 'none' });
+    setForm({ ...emptyForm, clientId: defaultClientId ?? '' });
     setDuplicate(null);
     setJustification('');
     setAllocationError('');
@@ -330,6 +332,14 @@ export function LogPaymentDialog({ onSaved, defaultClientId, defaultInvoiceId }:
               clearLabel="None"
               data-testid="select-payment-invoice-id"
             />
+            {!invoicesLoading && invoices.length === 0 && awaitingApprovalCount > 0 && (
+              <p className="text-sm text-muted-foreground" data-testid="payment-awaiting-approval-hint">
+                Only approved invoices can be paid. Invoices awaiting approval: {awaitingApprovalCount}{' '}
+                <a className="text-primary underline" href={`${import.meta.env.BASE_URL}invoices?status=validated&clientId=${encodeURIComponent(form.clientId)}`}>
+                  View invoices awaiting approval
+                </a>
+              </p>
+            )}
           </div>
         </div>
 

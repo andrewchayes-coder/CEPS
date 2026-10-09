@@ -1,4 +1,4 @@
-import { useRef, useState, type ReactElement } from 'react';
+import { useEffect, useRef, useState, type ReactElement } from 'react';
 import {
   getImportTemplate,
   useValidateImport,
@@ -48,6 +48,17 @@ export default function AdminImportPage() {
 
   const validateMutation = useValidateImport();
   const commitMutation = useCommitImport();
+  const canImportRemittances = (user?.permissions ?? []).includes('remittance_entry');
+  const entities = ENTITIES.filter(item => item.value !== 'remittances' || canImportRemittances);
+  useEffect(() => {
+    if (entity === 'remittances' && !canImportRemittances) {
+      setEntity('clients');
+      setCsvText(null);
+      setFileName(null);
+      setValidation(null);
+      setCommitResult(null);
+    }
+  }, [entity, canImportRemittances]);
 
   // Staff-only guard (nav already hides it, but defend the route too).
   if (user && user.role !== 'staff') {
@@ -185,7 +196,7 @@ export default function AdminImportPage() {
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              {ENTITIES.map((e) => (
+              {entities.map((e) => (
                 <SelectItem key={e.value} value={e.value} data-testid={`option-${e.value}`}>
                   {e.label}
                 </SelectItem>

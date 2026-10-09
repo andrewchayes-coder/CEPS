@@ -71,12 +71,6 @@ export default function VendorDetailPage() {
     phone: value.phone || '', billingAddress: value.billingAddress || '', serviceAddress: value.serviceAddress || '',
     preferred: value.preferred, active: value.active,
   });
-  const apiError = (error: any, fallback: string) =>
-    typeof error?.data?.error === 'string' ? error.data.error :
-      typeof error?.data?.message === 'string' ? error.data.message :
-        typeof error?.response?.data?.error === 'string' ? error.response.data.error :
-          typeof error?.response?.data?.message === 'string' ? error.response.data.message : fallback;
-
   useEffect(() => {
     if (vendor && (!initialized.current || !isDirty)) {
       setFormData(vendorForm(vendor));
@@ -108,7 +102,7 @@ export default function VendorDetailPage() {
           toast({
             variant: 'destructive',
             title: 'Error',
-            description: apiError(error, `Could not ${nextActive ? 'reactivate' : 'deactivate'} this vendor.`),
+            description: apiErrorMessage(error, `Could not ${nextActive ? 'reactivate' : 'deactivate'} this vendor.`),
           });
         },
       },
@@ -122,7 +116,7 @@ export default function VendorDetailPage() {
       setIsDirty(false);
       refetch();
     };
-    const onError = (error: any) => toast({ variant: 'destructive', title: 'Unable to update vendor', description: apiError(error, 'Please try again.') });
+    const onError = (error: any) => toast({ variant: 'destructive', title: 'Unable to update vendor', description: apiErrorMessage(error, 'Please try again.') });
     if (isVendorUser) {
       updateVendorContact.mutate(
         {

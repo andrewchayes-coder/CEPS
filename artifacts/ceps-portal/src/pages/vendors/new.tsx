@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { apiErrorMessage } from '@/lib/api-error';
 import { useCreateVendor } from '@workspace/api-client-react';
 import { Link, Redirect, useLocation } from 'wouter';
 import { ArrowLeft, Save } from 'lucide-react';
@@ -22,15 +23,7 @@ const initialForm: VendorForm = {
   billingAddress: '', serviceAddress: '', w9Status: 'pending', preferred: false,
 };
 function errorMessage(error: unknown): string {
-  const item = error as {
-    data?: { error?: unknown; message?: unknown };
-    response?: { data?: { error?: unknown; message?: unknown } };
-    message?: unknown;
-  };
-  const payload = item?.data ?? item?.response?.data;
-  if (typeof payload?.error === 'string') return payload.error;
-  if (typeof payload?.message === 'string') return payload.message;
-  return typeof item?.message === 'string' ? item.message : 'Could not create vendor. Please try again.';
+  return apiErrorMessage(error, 'Could not create vendor. Please try again.');
 }
 
 export default function VendorNewPage() {

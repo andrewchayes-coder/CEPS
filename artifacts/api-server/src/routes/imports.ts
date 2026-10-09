@@ -13,6 +13,7 @@
 
 import { Router, type IRouter } from "express";
 import { and, inArray } from "drizzle-orm";
+import { suggestUnmatchedPosForClient } from "../lib/posMatching";
 import {
   db,
   clientsTable,
@@ -225,6 +226,7 @@ async function insertRow(entity: ImportEntity, values: Record<string, unknown>, 
     switch (entity) {
       case "clients": {
         const [row] = await tx.insert(clientsTable).values(values as typeof clientsTable.$inferInsert).returning();
+        await suggestUnmatchedPosForClient(txDb, row.id);
         await audit(userId, "import_client", "client", row.id, `Bulk import — UCI ${row.uciNumber}`, txDb);
         return row.id;
       }

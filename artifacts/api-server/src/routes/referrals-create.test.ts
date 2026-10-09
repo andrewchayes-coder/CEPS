@@ -129,6 +129,14 @@ async function makeCoordinator(label: string) {
 }
 
 describe("POST /referrals supporting documents", () => {
+  it.each([undefined, "", "   "])("rejects a minor without a family representative name (%s)", async familyRepName => {
+    const response = await request(app).post("/api/referrals").set("Cookie", staffCookie).send({
+      intakeFields: { ...baseIntake(`${nonce}-missing-parent`, `${nonce}-missing-parent-vendor`), familyRepName },
+    });
+    expect(response.status).toBe(400);
+    expect(response.body.error).toBe("Family representative name is required for minors");
+  });
+
   it("reuses a vendor by trimmed case-insensitive name and links it to the referral", async () => {
     const uci = `${nonce}-case-insensitive-vendor`;
     createdClientUcis.push(uci);

@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { apiErrorMessage } from '@/lib/api-error';
 import { useParams } from 'wouter';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -48,7 +49,7 @@ export default function InviteAcceptPage() {
           toast({
             variant: 'destructive',
             title: 'Could not accept invite',
-            description: err?.data?.message || 'This invite may be invalid or expired.',
+            description: apiErrorMessage(err, 'This invite may be invalid or expired.'),
           });
         },
       },

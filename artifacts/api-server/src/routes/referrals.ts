@@ -361,6 +361,10 @@ router.post("/referrals", requireStaffOrCoordinator, async (req, res): Promise<v
     res.status(400).json({ error: "Client first name, last name, DOB and UCI are required" });
     return;
   }
+  if (f.clientIsMinor === true && !clean(f.familyRepName)) {
+    res.status(400).json({ error: "Family representative name is required for minors" });
+    return;
+  }
   const hasAdultRepContactWithoutName = f.clientIsMinor !== true &&
     !clean(f.familyRepName) &&
     [f.familyRepRelationship, f.familyRepPhone, f.familyRepEmail, f.familyRepAddress]

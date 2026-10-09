@@ -446,7 +446,7 @@ describe("POST /payments/import", () => {
       remainingAmount: "100.00",
     });
     expect(crossVendor.body.rows[1]).toMatchObject({
-      result: "amount_mismatch", invoiceId: null, invoiceVendor: null, invoiceVendorId: null,
+      result: "payee_mismatch", invoiceId: null, invoiceVendor: null, invoiceVendorId: null,
     });
     expect(crossVendor.body.rows[1].reason).toContain("amount alone is not sufficient");
     expect(crossVendor.body.rows[1].candidates).toHaveLength(2);

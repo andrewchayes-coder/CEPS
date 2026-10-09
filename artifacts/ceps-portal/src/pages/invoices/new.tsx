@@ -1,4 +1,5 @@
 import React from 'react';
+import { apiErrorMessage } from '@/lib/api-error';
 import { useForm, useFieldArray } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
@@ -128,7 +129,7 @@ function StaffInvoiceNewPage() {
         toast({
           variant: "destructive",
           title: "Submission Failed",
-          description: err?.data?.message || "Failed to submit invoice.",
+          description: apiErrorMessage(err, "Failed to submit invoice."),
         });
       }
     });

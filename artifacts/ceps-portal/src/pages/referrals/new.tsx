@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { apiErrorMessage } from '@/lib/api-error';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
@@ -275,7 +276,7 @@ export default function ReferralNewPage() {
         toast({
           variant: "destructive",
           title: "Submission Failed",
-          description: err?.data?.message || "An error occurred while saving the referral.",
+          description: apiErrorMessage(err, "An error occurred while saving the referral."),
         });
       }
     });

@@ -1,5 +1,6 @@
 import { BrandLogo } from '@/components/brand-logo';
 import React, { useState } from 'react';
+import { apiErrorMessage } from '@/lib/api-error';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
@@ -60,7 +61,7 @@ export default function LoginPage() {
         toast({
           variant: 'destructive',
           title: 'Login Failed',
-          description: err?.data?.message || 'Demo account unavailable.',
+          description: apiErrorMessage(err, 'Demo account unavailable.'),
         });
       }
     });
@@ -77,7 +78,7 @@ export default function LoginPage() {
         toast({
           variant: 'destructive',
           title: 'Login Failed',
-          description: err?.data?.message || 'Invalid email or password.',
+          description: apiErrorMessage(err, 'Invalid email or password.'),
         });
       }
     });
@@ -99,7 +100,7 @@ export default function LoginPage() {
         toast({
           variant: 'destructive',
           title: 'Error',
-          description: err?.data?.message || 'Could not send magic link.',
+          description: apiErrorMessage(err, 'Could not send magic link.'),
         });
       }
     });

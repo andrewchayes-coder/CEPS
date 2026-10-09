@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { apiErrorMessage } from '@/lib/api-error';
 import {
     useListUnmatchedPos,
     useGetUnmatchedPos,
@@ -22,8 +23,6 @@ import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/components/auth/auth-provider';
 import { Redirect } from 'wouter';
-
-type ApiErrorResponse = { data?: { error?: string; message?: string } };
 
 export default function AuthorizationsUnmatchedPage() {
     const { user, isLoading: authLoading } = useAuth();
@@ -80,7 +79,7 @@ export default function AuthorizationsUnmatchedPage() {
                 <Alert variant="destructive" className="bg-destructive/10 border-destructive/20 text-destructive">
                     <AlertTriangle className="h-4 w-4" />
                     <AlertTitle>Error loading queue</AlertTitle>
-                    <AlertDescription>{(error as ApiErrorResponse)?.data?.error || (error as ApiErrorResponse)?.data?.message || 'Could not fetch unmatched POS documents.'}</AlertDescription>
+                    <AlertDescription>{apiErrorMessage(error, 'Could not fetch unmatched POS documents.')}</AlertDescription>
                 </Alert>
             ) : queueLoading ? (
                 <div className="flex h-64 flex-col items-center justify-center space-y-4">
@@ -169,11 +168,10 @@ function UnmatchedPosCard({ item, highlighted = false }: { item: UnmatchedPosDoc
                 }
             },
             onError: (err: unknown) => {
-                const apiErr = err as ApiErrorResponse;
                 toast({
                     variant: 'destructive',
                     title: 'Error',
-                    description: apiErr?.data?.error || apiErr?.data?.message || 'Failed to complete match.'
+                    description: apiErrorMessage(err, 'Failed to complete match.')
                 });
             }
         });

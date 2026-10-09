@@ -6,6 +6,7 @@ import { LogPaymentDialog } from '@/components/log-payment-dialog';
 import { DeleteEntityButton } from '@/components/delete-entity-button';
 import { EditPaymentDialog } from '@/components/edit-payment-dialog';
 import { ClientLink, VendorLink } from '@/components/entity-links';
+import { MetricHelp } from '@/components/metric-help';
 import { Link } from 'wouter';
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow, SortableTableHead, useTableSort } from '@/components/ui/table';
@@ -140,7 +141,8 @@ export default function PaymentsPage() {
                           {p.allocations?.some((line) => line.remitted === 'full') && p.allocations.some((line) => line.remitted !== 'full') && (
                             <span className="block font-semibold text-amber-700 dark:text-amber-300">Partial</span>
                           )}
-                          ${parseFloat(p.allocatedAmount ?? '0').toFixed(2)} allocated<br />${parseFloat(p.remainingAmount ?? p.amount).toFixed(2)} remaining
+                          <MetricHelp label="Allocated" explanation="Amount matched to remittances." /> ${parseFloat(p.allocatedAmount ?? '0').toFixed(2)}<br />
+                          <MetricHelp label="Remaining" explanation="Amount not yet matched to a remittance." /> ${parseFloat(p.remainingAmount ?? p.amount).toFixed(2)}
                         </span>
                       )}
                     </TableCell>

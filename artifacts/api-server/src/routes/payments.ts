@@ -673,7 +673,15 @@ router.post("/payments/check-run/reconcile", requirePermission("check_writing"),
 router.post("/payments", requirePermission("check_writing"), async (req, res): Promise<void> => {
   const parsed = CreatePaymentBody.safeParse(req.body);
   if (!parsed.success) {
-    res.status(400).json({ error: parsed.error.message });
+    res.status(400).json({
+      error: parsed.error.issues.map(issue => {
+        const field = issue.path.join(".") || "Payment";
+        const problem = issue.message.includes("received undefined") ? "This field is required."
+          : issue.code === "invalid_format" && issue.path.at(-1) === "amount"
+            ? "Enter a valid dollar amount, such as 160.00." : issue.message;
+        return `${field}: ${problem}`;
+      }).join("; "),
+    });
     return;
   }
   // Pull the override fields out before they reach the insert values — they are
@@ -1008,7 +1016,7 @@ async function auditAltaFmsWorksheet(
         }
 
         if (!selected) {
-          result = "amount_mismatch";
+          result = payeeMatches.length === 0 ? "payee_mismatch" : "amount_mismatch";
           reason = payeeMatches.length > 1
             ? `Multiple approved invoice lines match the check payee "${row.payeeName}", and the remaining balance does not identify exactly one line; no invoice was selected.`
             : payeeMatches.length === 0

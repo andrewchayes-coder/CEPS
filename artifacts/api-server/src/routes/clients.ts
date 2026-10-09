@@ -36,6 +36,7 @@ import {
   diffDetail,
 } from "../lib/serializers";
 import { sortedOrder } from "../lib/sorting";
+import { suggestUnmatchedPosForClient } from "../lib/posMatching";
 import { enrichPayments } from "../lib/paymentSerialization";
 import { softDeleteClient } from "../lib/participantLinks";
 
@@ -210,8 +211,13 @@ router.post("/clients", requireStaffOrCoordinator, async (req, res): Promise<voi
     res.status(409).json({ error: `A client with UCI ${parsed.data.uciNumber} already exists` });
     return;
   }
-  const [client] = await db.insert(clientsTable).values(parsed.data).returning();
-  await audit(req.user!.id, "create_client", "client", client.id, `${client.firstName} ${client.lastName}`);
+  const client = await db.transaction(async (tx) => {
+    const txDb = tx as unknown as typeof db;
+    const [created] = await tx.insert(clientsTable).values(parsed.data).returning();
+    await suggestUnmatchedPosForClient(txDb, created.id);
+    await audit(req.user!.id, "create_client", "client", created.id, `${created.firstName} ${created.lastName}`, txDb);
+    return created;
+  });
   res.status(201).json(CreateClientResponse.parse(clientJson(client)));
 });
 
@@ -288,26 +294,26 @@ router.patch("/clients/:id", requireAuth, async (req, res): Promise<void> => {
     res.status(400).json({ error: parsed.error.message });
     return;
   }
-  const [before] = await db
-    .select()
-    .from(clientsTable)
-    .where(and(eq(clientsTable.id, id), notDeleted(clientsTable)));
-  if (!before) {
+  const client = await db.transaction(async (tx) => {
+    const txDb = tx as unknown as typeof db;
+    const [before] = await tx.select().from(clientsTable)
+      .where(and(eq(clientsTable.id, id), notDeleted(clientsTable))).for("update");
+    if (!before) return null;
+    const [updated] = await tx.update(clientsTable).set(parsed.data)
+      .where(and(eq(clientsTable.id, id), notDeleted(clientsTable))).returning();
+    if (!updated) return null;
+    if ((["uciNumber", "firstName", "lastName"] as const)
+      .some(field => parsed.data[field] !== undefined && parsed.data[field] !== before[field])) {
+      await suggestUnmatchedPosForClient(txDb, updated.id);
+    }
+    await audit(req.user!.id, "update_client", "client", updated.id,
+      diffDetail(before, parsed.data, Object.keys(parsed.data)), txDb);
+    return updated;
+  });
+  if (!client) {
     res.status(404).json({ error: "Client not found" });
     return;
   }
-  const [client] = await db
-    .update(clientsTable)
-    .set(parsed.data)
-    .where(and(eq(clientsTable.id, id), notDeleted(clientsTable)))
-    .returning();
-  await audit(
-    req.user!.id,
-    "update_client",
-    "client",
-    client.id,
-    diffDetail(before, parsed.data, Object.keys(parsed.data)),
-  );
   const names = await userNameMap([client.assignedCoordinatorId]);
   res.json(
     UpdateClientResponse.parse(

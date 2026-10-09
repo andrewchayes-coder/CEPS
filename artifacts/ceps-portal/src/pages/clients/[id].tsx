@@ -1,4 +1,5 @@
 import React from 'react';
+import { MetricHelp } from '@/components/metric-help';
 import { useLocation, useParams, useSearch } from 'wouter';
 import { useGetClientCase, useListFees, useDeleteClient, useDeleteFee, useListFamilyRepresentatives, getListFamilyRepresentativesQueryKey, type CaseDocument, type Payment, type PaymentAllocation } from '@workspace/api-client-react';
 import { useAuth } from '@/components/auth/auth-provider';
@@ -647,7 +648,10 @@ export default function ClientDetailPage() {
                        <TableCell>{remittance.authorizationId ? <Link href={`/authorizations/${remittance.authorizationId}`} className="text-primary hover:underline">{remittance.authNumber}</Link> : (remittance.authNumber || '—')}</TableCell>
                        <TableCell className="text-right font-medium">
                          ${Number(remittance.amount).toFixed(2)}
-                         <div className="text-xs font-normal text-muted-foreground">${Number(remittance.remainingAmount ?? remittance.amount).toFixed(2)} remaining</div>
+                         <div className="text-xs font-normal text-muted-foreground">
+                           <MetricHelp label="Allocated" explanation="Amount matched to payments." /> ${Number(remittance.allocatedAmount ?? '0').toFixed(2)} ·{' '}
+                           <MetricHelp label="Remaining" explanation="Amount not yet matched to a payment." /> ${Number(remittance.remainingAmount ?? remittance.amount).toFixed(2)}
+                         </div>
                        </TableCell>
                        <TableCell><Badge variant="outline" className={remittance.status === 'matched' ? 'bg-chart-5/10 text-chart-5 border-chart-5/20' : remittance.status === 'pending' ? 'bg-chart-2/10 text-chart-2 border-chart-2/20' : ''}>{remittance.status}</Badge></TableCell>
                        <TableCell className="text-right"><Button variant="ghost" size="sm" asChild><Link href={`/remittances/${remittance.id}`}>View</Link></Button></TableCell>

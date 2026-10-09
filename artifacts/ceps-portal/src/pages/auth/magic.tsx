@@ -1,4 +1,5 @@
 import React, { useEffect } from 'react';
+import { apiErrorMessage } from '@/lib/api-error';
 import { useLocation } from 'wouter';
 import { useConsumeMagicLink, getGetCurrentUserQueryKey } from '@workspace/api-client-react';
 import { useQueryClient } from '@tanstack/react-query';
@@ -41,7 +42,7 @@ export default function MagicLinkConsumePage() {
         toast({
           variant: 'destructive',
           title: 'Sign In Failed',
-          description: err?.data?.message || 'This link may have expired or is invalid.',
+          description: apiErrorMessage(err, 'This link may have expired or is invalid.'),
         });
         setLocation('/login');
       }

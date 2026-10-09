@@ -10,6 +10,7 @@ import { AltaRemittanceImport } from '@/components/alta-remittance-import';
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow, SortableTableHead, useTableSort } from '@/components/ui/table';
+import { MetricHelp } from '@/components/metric-help';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -263,7 +264,10 @@ export default function RemittancesPage() {
                     </TableCell>
                     <TableCell className="text-right font-medium">
                       ${parseFloat(r.amount).toFixed(2)}
-                      <div className="text-xs font-normal text-muted-foreground">${parseFloat(r.allocatedAmount ?? '0').toFixed(2)} allocated · ${parseFloat(r.remainingAmount ?? r.amount).toFixed(2)} remaining</div>
+                      <div className="text-xs font-normal text-muted-foreground">
+                        <MetricHelp label="Allocated" explanation="Amount matched to payments." /> ${parseFloat(r.allocatedAmount ?? '0').toFixed(2)} ·{' '}
+                        <MetricHelp label="Remaining" explanation="Amount not yet matched to a payment." /> ${parseFloat(r.remainingAmount ?? r.amount).toFixed(2)}
+                      </div>
                       {r.expectedAmount && <div className="text-xs font-normal text-muted-foreground">Expected ${parseFloat(r.expectedAmount).toFixed(2)}</div>}
                     </TableCell>
                     <TableCell>

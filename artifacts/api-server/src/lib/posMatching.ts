@@ -39,18 +39,36 @@ export async function suggestUnmatchedPosForClient(tx: typeof db, clientId: stri
     or(
       isNull(unmatchedPosDocumentsTable.suggestedClientId),
       eq(unmatchedPosDocumentsTable.suggestedClientId, clientId),
+      eq(unmatchedPosDocumentsTable.suggestionMethod, "name"),
     ),
   ));
   for (const row of rows) {
-    if (row.suggestedClientId) continue;
     const method = matchPosDocumentToClient(row, client);
-    if (!method) continue;
+    const ownsSuggestion = row.suggestedClientId === clientId;
+    if (ownsSuggestion) {
+      // Renames/UCI corrections can weaken or invalidate an automatic hint.
+      if (method && row.suggestionMethod === method) continue;
+    } else {
+      if (!method) continue;
+      if (row.suggestedClientId && !(row.suggestionMethod === "name" && method === "uci")) continue;
+    }
+    // A UCI match outranks an automatic name suggestion, even for another
+    // participant. Pending-only compare-and-set never touches reviewed matches.
     await tx.update(unmatchedPosDocumentsTable)
-      .set({ suggestedClientId: clientId, suggestionMethod: method, suggestedAt: new Date() })
+      .set({ suggestedClientId: method ? clientId : null, suggestionMethod: method, suggestedAt: method ? new Date() : null })
       .where(and(
         eq(unmatchedPosDocumentsTable.id, row.id),
         eq(unmatchedPosDocumentsTable.reviewStatus, "pending"),
-        isNull(unmatchedPosDocumentsTable.suggestedClientId),
+        ownsSuggestion
+          ? and(
+              eq(unmatchedPosDocumentsTable.suggestedClientId, clientId),
+              row.suggestionMethod === null ? isNull(unmatchedPosDocumentsTable.suggestionMethod)
+                : eq(unmatchedPosDocumentsTable.suggestionMethod, row.suggestionMethod),
+            )
+          : or(
+              isNull(unmatchedPosDocumentsTable.suggestedClientId),
+              ...(method === "uci" ? [eq(unmatchedPosDocumentsTable.suggestionMethod, "name")] : []),
+            ),
       ));
   }
 }

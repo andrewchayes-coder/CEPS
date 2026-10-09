@@ -192,7 +192,7 @@ export default function AuthorizationDetailPage() {
                         : 'authorization details'}
                     </p>
                     <div className="flex gap-3 text-xs mt-1">
-                      {version.receivedDate && <span>Received {version.receivedDate}</span>}
+                      <span>{version.receivedDate ? `Received ${version.receivedDate}` : 'Received date not recorded'}</span>
                       {version.posPdfUrl && <a href={`${import.meta.env.BASE_URL}api/storage${version.posPdfUrl}`} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-primary hover:underline">POS PDF <ExternalLink className="w-3 h-3" /></a>}
                     </div>
                   </div>

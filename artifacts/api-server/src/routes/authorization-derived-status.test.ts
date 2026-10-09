@@ -93,7 +93,10 @@ describe("fully derived authorization status", () => {
     { stored: "active", start: -30, end: 30, max: "100.00", expected: "exhausted" },
     { stored: "expired", start: -30, end: 30, max: "100.00", expected: "exhausted" },
     { stored: "pending", start: 0, end: 0, max: "200.00", expected: "active" },
-    { stored: "exhausted", start: -30, end: 30, max: "160.00", expected: "active", fee: true },
+    { stored: "exhausted", start: -30, end: 30, max: "160.00", expected: "exhausted", fee: true },
+    { stored: "active", start: -30, end: 30, max: "100.00", expected: "exhausted", fee: true },
+    { stored: "expired", start: -30, end: 30, max: "320.00", expected: "active", fee: true },
+    { stored: "canceled", start: -30, end: 30, max: "160.00", expected: "canceled", fee: true },
     { stored: "pending", start: 2, end: 30, max: "160.00", expected: "pending", fee: true },
     { stored: "active", start: -30, end: -1, max: "160.00", expected: "expired", fee: true },
   ])("SQL, serializer, list and detail agree: $stored / $start / $end → $expected", async fixture => {
@@ -166,7 +169,7 @@ describe("fully derived authorization status", () => {
     expect(live).toMatchObject({ status: stored, receivedDate });
     const versions = await db.select().from(authorizationVersionsTable).where(eq(authorizationVersionsTable.authorizationId, row.id));
     expect(versions).toHaveLength(1);
-    expect(versions[0]).toMatchObject({ status: stored, receivedDate });
+    expect(versions[0]).toMatchObject({ status: stored, receivedDate: row.receivedDate });
     expect(versions[0].changedFields).toContain("receivedDate");
   });
 
@@ -182,20 +185,52 @@ describe("fully derived authorization status", () => {
     expect(amended.status).toBe(200);
     expect(amended.body.authorization.receivedDate).toBe(date());
     const [version] = await db.select().from(authorizationVersionsTable).where(eq(authorizationVersionsTable.authorizationId, row.id));
-    expect(version.receivedDate).toBe(date());
+    expect(version.receivedDate).toBeNull();
   });
 
-  it("checks a max-only PATCH using the final monthly amount and period, without saving on warning", async () => {
+  it("saves unrelated edits without a max warning, but checks a max-only PATCH against merged values", async () => {
     const row = await auth({ servicePeriodStart: "2020-01-01", servicePeriodEnd: "2030-12-31", monthlyAmount: "100.00", maxPeriodAmount: "1000.00" });
+    for (const updates of [
+      { posNotes: "Notes-only edit" },
+      { vendorId: null, posNotes: "Unrelated vendor edit" },
+      { monthlyAmount: row.monthlyAmount, maxPeriodAmount: row.maxPeriodAmount, posNotes: "Unchanged financial fields" },
+    ]) {
+      const saved = await request(app).patch(`/api/authorizations/${row.id}`).set("Cookie", cookie).send(updates);
+      expect(saved.status).toBe(200);
+      expect(saved.body.saved).toBe(true);
+      expect(saved.body.warnings ?? []).toEqual([]);
+    }
+    const priorVersions = await db.select().from(authorizationVersionsTable).where(eq(authorizationVersionsTable.authorizationId, row.id));
     const patch = await request(app).patch(`/api/authorizations/${row.id}`).set("Cookie", cookie).send({ maxPeriodAmount: "100.00" });
     expect(patch.status).toBe(200);
     expect(patch.body.saved).toBe(false);
     expect(patch.body.warnings[0]).toMatch(/monthly amount.*maximum/i);
     const [unchanged] = await db.select().from(authorizationsTable).where(eq(authorizationsTable.id, row.id));
     expect(unchanged.maxPeriodAmount).toBe("1000.00");
-    expect(await db.select().from(authorizationVersionsTable).where(eq(authorizationVersionsTable.authorizationId, row.id))).toHaveLength(0);
+    expect(await db.select().from(authorizationVersionsTable).where(eq(authorizationVersionsTable.authorizationId, row.id))).toHaveLength(priorVersions.length);
     const accepted = await request(app).patch(`/api/authorizations/${row.id}`).set("Cookie", cookie).send({ maxPeriodAmount: "100.00", acceptMaxAmountWarning: true });
     expect(accepted.body.saved).toBe(true);
+  });
+
+  it("keeps the prior received date and amounts in history while the amendment becomes the current version", async () => {
+    const created = await request(app).post("/api/authorizations").set("Cookie", cookie).send({
+      clientId, authNumber: `${nonce}-received-history`, serviceCode: "459",
+      servicePeriodStart: "2026-01-01", servicePeriodEnd: "2026-02-28",
+      monthlyAmount: "100.00", maxPeriodAmount: "200.00", receivedDate: "2026-01-05",
+    });
+    expect(created.status).toBe(201);
+    const id = created.body.authorization.id;
+    const amended = await request(app).post(`/api/authorizations/${id}/amend`).set("Cookie", cookie).send({
+      servicePeriodStart: "2026-01-01", servicePeriodEnd: "2026-04-30",
+      monthlyAmount: "100.00", maxPeriodAmount: "400.00", receivedDate: "2026-03-02", confirmed: true,
+    });
+    expect(amended.status).toBe(200);
+    expect(amended.body.saved).toBe(true);
+    expect(amended.body.authorization).toMatchObject({ maxPeriodAmount: "400.00", receivedDate: "2026-03-02" });
+    const [version] = await db.select().from(authorizationVersionsTable).where(eq(authorizationVersionsTable.authorizationId, id));
+    expect(version).toMatchObject({ maxPeriodAmount: "200.00", servicePeriodEnd: "2026-02-28", receivedDate: "2026-01-05" });
+    const [current] = await db.select().from(authorizationsTable).where(eq(authorizationsTable.id, id));
+    expect(current).toMatchObject({ maxPeriodAmount: "400.00", servicePeriodEnd: "2026-04-30", receivedDate: "2026-03-02" });
   });
 
   it("derived status drives expiring searches, reports and dashboard alerts", async () => {
@@ -215,7 +250,7 @@ describe("fully derived authorization status", () => {
     expect(dashboard.status).toBe(200);
     expect(dashboard.body.alerts.some((a: { kind: string; entityId: string }) => a.entityId === expiring.id && a.kind === "expiring_authorization")).toBe(true);
     expect(dashboard.body.alerts.some((a: { kind: string; entityId: string }) => a.entityId === exhausted.id && a.kind === "authorization_exhausted_active")).toBe(true);
-    expect(dashboard.body.alerts.some((a: { kind: string; entityId: string }) => a.entityId === fee.id && a.kind === "authorization_exhausted_active")).toBe(false);
+    expect(dashboard.body.alerts.some((a: { kind: string; entityId: string }) => a.entityId === fee.id && a.kind === "authorization_exhausted_active")).toBe(true);
     const report = await request(app).get("/api/reports/expiring-authorizations").query({ days: 10 }).set("Cookie", cookie);
     expect(report.status).toBe(200);
     expect(JSON.stringify(report.body)).toContain(expiring.id);

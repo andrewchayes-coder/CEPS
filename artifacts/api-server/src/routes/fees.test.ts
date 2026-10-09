@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { eq, inArray } from "drizzle-orm";
 import request from "supertest";
 import {
@@ -218,7 +218,7 @@ describe("fee authorization usage", () => {
     expect(linkedFee.authorizationId).toBe(feeAuth.id);
     const amountUsed = (await authorizationTotalsPaid([feeAuth.id])).get(feeAuth.id)!;
     expect(amountUsed.toFixed(2)).toBe("160.00");
-    expect(effectiveAuthStatus(feeAuth, amountUsed)).toBe("active");
+    expect(effectiveAuthStatus(feeAuth, amountUsed)).toBe("exhausted");
     const listed = await request(app).get("/api/fees").query({ clientId: clientB, feeMonth }).set("Cookie", cookie);
     expect(listed.status).toBe(200);
     expect(listed.body[0]).toMatchObject({
@@ -232,7 +232,7 @@ describe("fee authorization usage", () => {
     expect(authResponse.body).toMatchObject({
       totalPaid: "160.00",
       remainingAmount: "0.00",
-      status: "active",
+      status: "exhausted",
     });
 
     await db.update(feesTable).set({ status: "waived" }).where(eq(feesTable.id, fee.id));
@@ -241,6 +241,54 @@ describe("fee authorization usage", () => {
 });
 
 describe("fee lifecycle actions", () => {
+  it("edits a legacy fee with a deleted trigger check and clears that check only on authorization relink", async () => {
+    const auths = await db.insert(authorizationsTable).values(["05", "06"].map(month => ({
+      clientId: clientB, authNumber: `${nonce}-legacy-edit-${month}`, serviceCode: "490", paymentType: "fee",
+      servicePeriodStart: `2097-${month}-01`, servicePeriodEnd: `2097-${month}-30`,
+      maxPeriodAmount: "160.00", status: "active",
+    }))).returning();
+    const [check] = await db.insert(paymentsTable).values({
+      clientId: clientB, qbCheckNumber: `${nonce}-legacy-trigger`, checkDate: "2097-05-15",
+      amount: "100.00", paymentType: "direct_payment", source: "manual",
+    }).returning();
+    const created = await request(app).post("/api/fees").set("Cookie", cookie).send({
+      clientId: clientB, paymentId: check.id, feeMonth: "2097-05", amount: "160.00",
+    });
+    expect(created.status).toBe(201);
+    await db.update(paymentsTable).set({ isDeleted: true }).where(eq(paymentsTable.id, check.id));
+    for (const edit of [{ notes: "Legacy fee correction" }, { amount: "180.00" }]) {
+      const edited = await request(app).patch(`/api/fees/${created.body.id}`).set("Cookie", cookie).send(edit);
+      expect(edited.status, JSON.stringify(edited.body)).toBe(200);
+      expect(edited.body).toMatchObject({ ...edit, paymentId: check.id, authorizationId: auths[0].id });
+    }
+    const changedMonth = await request(app).patch(`/api/fees/${created.body.id}`).set("Cookie", cookie)
+      .send({ feeMonth: "2097-06" });
+    expect(changedMonth.status, JSON.stringify(changedMonth.body)).toBe(200);
+    expect(changedMonth.body).toMatchObject({
+      feeMonth: "2097-06", amount: "180.00", paymentId: null, authorizationId: auths[1].id,
+      notes: "Legacy fee correction",
+    });
+    const [stored] = await db.select().from(feesTable).where(eq(feesTable.id, created.body.id));
+    expect(stored).toMatchObject({ paymentId: null, authorizationId: auths[1].id });
+    const audits = await db.select().from(auditLogTable).where(eq(auditLogTable.entityId, created.body.id));
+    expect(audits.some(audit => audit.detail?.includes(`cleared link to deleted check #${check.qbCheckNumber}`))).toBe(true);
+    expect((await db.select().from(paymentsTable).where(eq(paymentsTable.id, check.id)))[0].isDeleted).toBe(true);
+  });
+
+  it.each(["client", "authorization", "payment"])("maps the remaining active %s guard to 409 with its message", async parent => {
+    const message = `Active fee must reference an active ${parent}`;
+    const transaction = vi.spyOn(db, "transaction").mockRejectedValueOnce({
+      cause: { code: "23503", constraint: `fees_active_${parent}_link`, message },
+    });
+    try {
+      const response = await request(app).patch(`/api/fees/${clientA}`).set("Cookie", cookie).send({ notes: "Guard test" });
+      expect(response.status).toBe(409);
+      expect(response.body.error).toBe(message);
+    } finally {
+      transaction.mockRestore();
+    }
+  });
+
   it("recalculates collected and pending fees after amount edits, and blocks matched month changes", async () => {
     const [feeAuth] = await db.insert(authorizationsTable).values({
       clientId: clientA, authNumber: `${nonce}-fee-edit`, serviceCode: "490", paymentType: "fee",

@@ -150,7 +150,7 @@ describe("CEPS fee counts only against the 490 authorization", () => {
     expect((await db.select().from(feesTable).where(eq(feesTable.id, fee.id)))[0].authorizationId).toBe(auth.id);
   });
 
-  it("counts billed fees (not checks) for a 490 without deriving Exhausted", async () => {
+  it("exhausts a 490 at its billed-fee max, excluding waived/deleted fees and checks", async () => {
     const { client, auth } = await fixture("fee", "490", "480.00");
     await db.insert(feesTable).values([
       { clientId: client.id, authorizationId: auth.id, feeMonth: "2026-06", amount: "160.00", status: "pending" },
@@ -161,18 +161,41 @@ describe("CEPS fee counts only against the 490 authorization", () => {
     ]);
     await checkLine(client.id, auth.id, "50.00");
     expect((await authorizationTotalsPaid([auth.id])).get(auth.id)?.toFixed(2)).toBe("480.00");
-    const list = await request(app).get("/api/authorizations").query({ clientId: client.id, status: "active" }).set("Cookie", cookie);
+    const list = await request(app).get("/api/authorizations").query({ clientId: client.id, status: "exhausted" }).set("Cookie", cookie);
     const detail = await request(app).get(`/api/authorizations/${auth.id}`).set("Cookie", cookie);
     expect(list.status).toBe(200);
     expect(detail.status).toBe(200);
     for (const response of [list.body.items[0], detail.body]) {
       expect(response.totalPaid).toBe("480.00");
       expect(response.remainingAmount).toBe("0.00");
-      expect(response.status).toBe("active");
+      expect(response.status).toBe("exhausted");
     }
     const dashboard = await request(app).get("/api/dashboard/summary").set("Cookie", cookie);
     expect(dashboard.status).toBe(200);
-    expect(dashboard.body.alerts.some((alert: { entityId: string; kind: string }) => alert.entityId === auth.id && alert.kind === "authorization_exhausted_active")).toBe(false);
+    expect(dashboard.body.alerts.some((alert: { entityId: string; kind: string }) => alert.entityId === auth.id && alert.kind === "authorization_exhausted_active")).toBe(true);
+  });
+
+  it("keeps generating monthly fees after the covering 490 is exhausted", async () => {
+    const { client, auth } = await fixture("direct_payment", "459", "1000.00");
+    const [feeAuth] = await db.insert(authorizationsTable).values({
+      clientId: client.id, authNumber: randomUUID(), serviceCode: "490", paymentType: "fee",
+      servicePeriodStart: auth.servicePeriodStart, servicePeriodEnd: auth.servicePeriodEnd,
+      maxPeriodAmount: "160.00", status: "active",
+    }).returning();
+    for (const month of ["2026-08", "2026-09"]) {
+      const paid = await request(app).post("/api/payments").set("Cookie", cookie).send({
+        clientId: client.id, qbCheckNumber: randomUUID(), checkDate: `${month}-10`,
+        amount: "100.00", paymentType: "direct_payment",
+        allocations: [{ authorizationId: auth.id, serviceMonth: month, amount: "100.00" }],
+      });
+      expect(paid.status, JSON.stringify(paid.body)).toBe(201);
+      const feeStatus = await request(app).get(`/api/authorizations/${feeAuth.id}`).set("Cookie", cookie);
+      expect(feeStatus.body.status).toBe("exhausted");
+    }
+    const fees = await db.select().from(feesTable).where(eq(feesTable.clientId, client.id));
+    expect(fees).toHaveLength(2);
+    expect(fees.every(fee => fee.authorizationId === feeAuth.id && fee.amount === "160.00" && !fee.isDeleted)).toBe(true);
+    expect((await authorizationTotalsPaid([feeAuth.id])).get(feeAuth.id)?.toFixed(2)).toBe("320.00");
   });
 
   it("approves and logs a $900 invoice against a $900 service max despite its fee", async () => {

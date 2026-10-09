@@ -3,9 +3,9 @@ name: Derived authorization status
 description: CEPS's fully derived status rule and calendar-date contract constraint.
 ---
 
-Treat stored authorization status as canceled or not. Derive status in this order: canceled override, future start → pending, past end → expired, service usage at/over the period maximum → exhausted, otherwise active. Fee-type/490 authorizations never become exhausted. Dates use the existing UTC calendar-day convention, with start and end dates inclusive.
+Treat stored authorization status as canceled or not. Derive status in this order: canceled override, future start → pending, past end → expired, usage at/over the period maximum → exhausted, otherwise active. This includes 490 authorizations: their usage is non-deleted, non-waived billed fees, never service checks. A 490's exhaustion is a staff-review flag and must not stop monthly fee generation. Dates use the existing UTC calendar-day convention, with start and end dates inclusive.
 
-**Why:** CEPS's 2026-10-09 direction supersedes legacy manual status values and the prior behavior that exhausted 490s. Stored pending/expired/exhausted values must not block current authorizations or amendments that add time or money.
+**Why:** CEPS corrected its earlier direction on 2026-10-09: a 490 CAN be Exhausted because fees count against its own maximum. Stored pending/expired/exhausted values must not block current authorizations or amendments that add time or money.
 
 **How to apply:** Keep serializer and SQL derivations in lockstep, tested against identical fixtures. Use derived status for operational filters, search, counts, alerts and payment/invoice eligibility. New authorizations and bulk imports explicitly store active; cancellation uses its dedicated workflow. Leave legacy stored statuses and the database default untouched—no backfill.
 

@@ -152,11 +152,12 @@ router.patch("/fees/:id", requireStaff, async (req, res): Promise<void> => {
       if (allocation) return { kind: "matched_month" as const };
     }
     const authorizationId = await findFeeAuthorizationForMonth(txDb, before.clientId, finalFeeMonth);
-    relationshipError = (await validateParticipantLinks(txDb, before.clientId, {
+    const links = await validateParticipantLinks(txDb, before.clientId, {
       paymentId: before.paymentId,
       authorizationId,
       allowDeletedPayment: true,
-    })).error;
+    });
+    relationshipError = links.error;
     if (relationshipError) return { kind: "invalid_link" as const };
     if (finalFeeMonth !== null) {
       const [conflict] = await tx.select({ id: feesTable.id }).from(feesTable).where(and(
@@ -168,9 +169,14 @@ router.patch("/fees/:id", requireStaff, async (req, res): Promise<void> => {
       if (conflict) return { kind: "conflict" as const };
     }
     let fee: typeof before;
+    const authorizationChanged = authorizationId !== before.authorizationId;
+    const clearDeletedPaymentLink = authorizationChanged && !!links.payment?.isDeleted;
     const persistedUpdates = {
       ...parsed.data,
-      authorizationId,
+      // Do not fire the parent guard for unchanged links on legacy fees.
+      // Trigger checks are informational; a relink must not retain a deleted check.
+      ...(authorizationChanged ? { authorizationId } : {}),
+      ...(clearDeletedPaymentLink ? { paymentId: null } : {}),
       // Once staff edit an automatically generated fee, keep durable provenance
       // that it is no longer safe for payment reconciliation to reverse.
       ...(before.ruleApplied === MONTHLY_FEE_RULE && Object.keys(parsed.data).length > 0
@@ -194,11 +200,22 @@ router.patch("/fees/:id", requireStaff, async (req, res): Promise<void> => {
       "update_fee",
       "fee",
       fee.id,
-      diffDetail(before, fee, [...Object.keys(persistedUpdates), "status"]),
+      [
+        diffDetail(before, fee, [...Object.keys(persistedUpdates), "status"]),
+        clearDeletedPaymentLink ? `cleared link to deleted check #${links.payment!.qbCheckNumber}` : null,
+      ].filter(Boolean).join("; "),
       txDb,
     );
     return { kind: "updated" as const, fee };
+  }).catch((error: unknown) => {
+    const message = feeParentGuardMessage(error);
+    if (message) return { kind: "guard_conflict" as const, message };
+    throw error;
   });
+  if (result.kind === "guard_conflict") {
+    res.status(409).json({ error: result.message });
+    return;
+  }
   if (result.kind === "not_found") {
     res.status(404).json({ error: "Fee not found" });
     return;
@@ -302,6 +319,18 @@ function isFeeMonthConflict(error: unknown): boolean {
     current = current.cause as typeof current;
   }
   return false;
+}
+
+function feeParentGuardMessage(error: unknown): string | undefined {
+  let current = error as { code?: string; constraint?: string; message?: string; cause?: unknown } | undefined;
+  while (current) {
+    if (current.code === "23503" && current.constraint &&
+      ["fees_active_client_link", "fees_active_authorization_link", "fees_active_payment_link"].includes(current.constraint)) {
+      return current.message;
+    }
+    current = current.cause as typeof current;
+  }
+  return undefined;
 }
 
 router.delete("/fees/:id", requireStaff, async (req, res): Promise<void> => {

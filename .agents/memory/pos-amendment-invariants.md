@@ -9,8 +9,8 @@ Match an existing authorization using the same byte-exact client/authorization-n
 
 **How to apply:** Bind lookup, confirmation, parse, match, and upload results to the current immutable input/file identity. Preserve the current POS PDF when no replacement upload succeeds. Cancellation remains a separate staff action with a required reason and its own audit event.
 
-For amendments, the received date describes the incoming amendment and is recorded on both the live authorization and the newly created history row; the history row's other business fields still snapshot the predecessor. Manual Enter POS defaults the date to today (UTC); batch amendments use the document's upload date.
+For amendments, the incoming received date belongs only to the live authorization. History snapshots the predecessor's received date along with its prior business fields. A null predecessor date means "Received date not recorded"; do not substitute the new POS's date. Manual Enter POS defaults the incoming date to today (UTC); batch amendments use the document's upload date.
 
-**Why:** CEPS explicitly requested both date writes on 2026-10-09 so the version timeline records when each amendment arrived.
+**Why:** CEPS corrected the earlier direction on 2026-10-09: each version must show when that version arrived, not old amounts under the incoming amendment's date.
 
-**How to apply:** Do not substitute the predecessor's received date for the incoming amendment date. Preserve stored status through amendments and re-derive the effective status from the updated dates and budget.
+**How to apply:** Preserve prior received dates in newly written snapshots in both amendment paths. Do not backfill existing history rows. Preserve stored status through amendments and re-derive the effective status from the updated dates and budget.

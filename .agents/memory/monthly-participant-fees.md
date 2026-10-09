@@ -21,6 +21,8 @@ The $160 CEPS fee counts only toward its 490 (`payment_type = 'fee'`) authorizat
 
 Staff may change a fee amount even when remittances are allocated; the amount cannot fall below its remitted total. Recalculate collection status after edits: increasing a Paid fee makes it Pending, and reducing a Pending fee to the remitted total makes it Paid. A fee with any remittance allocation cannot change months until those remittances are unmatched. Unallocated month changes must relink to the covering 490, clearing the link when there is no match.
 
-**Why:** CEPS explicitly required these edit rules on 2026-10-09; received money must not silently move to another service month.
+An old fee's informational trigger check may be deleted without making notes or amount edits invalid. Preserve that check link when the 490 link is unchanged. When an edit changes the 490 link, clear an informational link to a deleted check and record the check number in the audit detail. Do not change the financial-parent guard to permit an active fee to acquire a deleted check link.
+
+**Why:** CEPS explicitly required these edit rules on 2026-10-09; received money must not silently move to another service month, and fees belong to their 490 rather than an old trigger check.
 
 **How to apply:** These are manual-edit rules, not permission for automatic payment reconciliation to overwrite adjusted fee amounts or for historical fee backfills.

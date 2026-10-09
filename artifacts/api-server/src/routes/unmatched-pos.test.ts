@@ -446,6 +446,7 @@ describe("unmatched POS API", () => {
     const [authorization] = await db.insert(authorizationsTable).values({
       clientId: queueClientId,
       authNumber: `${nonce}-POS-AMEND`,
+      receivedDate: "2026-01-05",
       serviceCode: "459",
       paymentType: "direct_payment",
       servicePeriodStart: "2026-05-01",
@@ -492,7 +493,10 @@ describe("unmatched POS API", () => {
     const versions = await db.select().from(authorizationVersionsTable)
       .where(eq(authorizationVersionsTable.authorizationId, authorization.id));
     expect(versions).toHaveLength(1);
-    expect(versions[0].receivedDate).toBe("2026-04-20");
+    expect(versions[0]).toMatchObject({
+      receivedDate: "2026-01-05", servicePeriodEnd: "2026-05-31",
+      maxPeriodAmount: "200.00", authNumber: `${nonce}-POS-AMEND`,
+    });
   });
 
   it("rejects amendment fields that are not supported instead of silently ignoring them", async () => {

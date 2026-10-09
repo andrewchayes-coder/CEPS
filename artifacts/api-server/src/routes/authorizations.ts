@@ -236,7 +236,7 @@ router.get("/authorizations", requireAuth, async (req, res): Promise<void> => {
   // authorizationJson). We replicate that derivation in SQL so filtering and
   // pagination stay at the DB level with identical semantics.
   //   totalPaid  = fee total for 490 authorizations, otherwise payment total
-  //   effective  = canceled | pending | expired | exhausted (services only) | active
+  //   effective  = canceled | pending | expired | exhausted | active
   //   days       = ceil((servicePeriodEnd@00:00Z − now) / 1 day)
   const totalPaidSql = authorizationUsageSql();
   const effectiveStatusSql = effectiveAuthorizationStatusSql(totalPaidSql);
@@ -482,7 +482,9 @@ router.patch("/authorizations/:id", requireStaff, async (req, res): Promise<void
       .where(and(eq(authorizationsTable.id, id), notDeleted(authorizationsTable)))
       .for("update");
     if (!before) return undefined;
-    warning = maxAmountWarning({ ...before, ...updates });
+    const financialFieldsChanged = (["servicePeriodStart", "servicePeriodEnd", "monthlyAmount", "maxPeriodAmount"] as const)
+      .some(field => updates[field] !== undefined && updates[field] !== before![field]);
+    warning = financialFieldsChanged ? maxAmountWarning({ ...before, ...updates }) : null;
     if (warning && !parsed.data.acceptMaxAmountWarning) return undefined;
     const [updated] = await tx
       .update(authorizationsTable)
@@ -604,7 +606,7 @@ router.post("/authorizations/:id/amend", requireStaff, async (req, res): Promise
       servicePeriodEnd: before.servicePeriodEnd, monthlyAmount: before.monthlyAmount,
       oneTimeAmount: before.oneTimeAmount, maxPeriodAmount: before.maxPeriodAmount, units: before.units,
       status: before.status, posNotes: before.posNotes, posPdfUrl: before.posPdfUrl,
-      receivedDate, isDeleted: before.isDeleted, deletedAt: before.deletedAt,
+      receivedDate: before.receivedDate, isDeleted: before.isDeleted, deletedAt: before.deletedAt,
       deletedBy: before.deletedBy, createdAt: before.createdAt, changedBy: req.user!.id,
       changedFields: Object.keys(updates),
     });
@@ -1133,7 +1135,7 @@ router.post("/unmatched-pos/:id/review", requireStaff, async (req, res): Promise
         servicePeriodEnd: auth!.servicePeriodEnd, monthlyAmount: auth!.monthlyAmount,
         oneTimeAmount: auth!.oneTimeAmount, maxPeriodAmount: auth!.maxPeriodAmount, units: auth!.units,
         status: auth!.status, posNotes: auth!.posNotes, posPdfUrl: auth!.posPdfUrl,
-        receivedDate: updates.receivedDate, isDeleted: auth!.isDeleted, deletedAt: auth!.deletedAt,
+        receivedDate: auth!.receivedDate, isDeleted: auth!.isDeleted, deletedAt: auth!.deletedAt,
         deletedBy: auth!.deletedBy, createdAt: auth!.createdAt, changedBy: req.user!.id,
         changedFields: Object.keys(updates),
       });

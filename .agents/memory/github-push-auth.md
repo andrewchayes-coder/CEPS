@@ -20,3 +20,9 @@ Throttle GitHub blob uploads through the Replit connector and respect 429 retry 
 **Why:** The connector proxy applies a separate per-repl request-rate limit; uploading all changed blobs concurrently can exceed it.
 
 **How to apply:** Use bounded or sequential uploads with pacing. A rate-limit response is not a credential failure and does not require reconnecting the integration.
+
+Keep commit payloads scoped and discard old notebook results after a push. A notebook capture failure does not roll back a completed GitHub update.
+
+**Why:** The notebook resets above its memory limit; a push can succeed and be verified before the tool reports that later capture failure.
+
+**How to apply:** Avoid retaining multiple complete commit/file payloads across pushes. If a tool fails after reporting success, check the remote ref before retrying any mutation.

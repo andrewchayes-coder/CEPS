@@ -14,3 +14,9 @@ The Git Data API uses the commit message exactly as supplied, without adding the
 When copying a Git tree through the connector, use complete file reads and verify the remote tree SHA before creating or referencing a commit. **Why:** The code-execution shell callback can silently truncate large blob output even with a generous requested byte limit; a GitHub tree built from those strings may succeed yet contain incomplete files. **How to apply:** For UTF-8 files, use complete file reads with an explicit size cap, compare the returned tree hash to the local tree, and never move the branch unless they match. Encode commit objects without losing their final message newline.
 
 The code-execution shell callback may remove tab separators and return CRLF line endings from Git output. **Why:** Parsing `git ls-tree` lines as tab-delimited or matching untrimmed lines led to repeated failures even though the Git objects were valid. **How to apply:** When comparing Git objects through this callback, parse the fixed-width 40-character hash and trim each line; verify every uploaded blob SHA, then the tree and commit SHA, before updating a remote ref without force.
+
+Throttle GitHub blob uploads through the Replit connector and respect 429 retry delays even when GitHub's own quota is available.
+
+**Why:** The connector proxy applies a separate per-repl request-rate limit; uploading all changed blobs concurrently can exceed it.
+
+**How to apply:** Use bounded or sequential uploads with pacing. A rate-limit response is not a credential failure and does not require reconnecting the integration.

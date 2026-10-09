@@ -5,7 +5,7 @@ import { eq, inArray } from "drizzle-orm";
 import {
   db, usersTable, sessionsTable, staffRolesTable, staffRolePermissionsTable, STAFF_PERMISSIONS,
   clientsTable, authorizationsTable, paymentsTable, paymentAllocationsTable, invoicesTable,
-  invoiceLineItemsTable, feesTable, auditLogTable, vendorsTable,
+  invoiceLineItemsTable, feesTable, auditLogTable, vendorsTable, remittancesTable, remittanceAllocationsTable,
 } from "@workspace/db";
 import app from "../app";
 import { newToken } from "../lib/auth";
@@ -34,6 +34,9 @@ beforeAll(async () => {
 
 afterAll(async () => {
   if (clients.length) {
+    const remittances = await db.select({ id: remittancesTable.id }).from(remittancesTable).where(inArray(remittancesTable.clientId, clients));
+    if (remittances.length) await db.delete(remittanceAllocationsTable).where(inArray(remittanceAllocationsTable.remittanceId, remittances.map(r => r.id)));
+    await db.delete(remittancesTable).where(inArray(remittancesTable.clientId, clients));
     await db.delete(feesTable).where(inArray(feesTable.clientId, clients));
     const payments = await db.select({ id: paymentsTable.id }).from(paymentsTable).where(inArray(paymentsTable.clientId, clients));
     if (payments.length) await db.delete(paymentAllocationsTable).where(inArray(paymentAllocationsTable.paymentId, payments.map((p) => p.id)));
@@ -87,6 +90,43 @@ async function invoiceLine(clientId: string, authorizationId: string, status = "
   }
   return invoice;
 }
+
+describe("participant case payment response contract", () => {
+  it.each(["none", "partial", "full"])("loads participants with %s-remitted payment lines", async state => {
+    const { client, auth } = await fixture();
+    const payment = await checkLine(client.id, auth.id);
+    const [line] = await db.select().from(paymentAllocationsTable).where(eq(paymentAllocationsTable.paymentId, payment.id));
+    const remittedAmount = state === "none" ? "0.00" : state === "partial" ? "200.00" : "600.00";
+    if (state !== "none") {
+      const [remittance] = await db.insert(remittancesTable).values({
+        clientId: client.id, authorizationId: auth.id, amount: remittedAmount,
+        remittanceDate: "2026-08-20", paymentMonth: "2026-08", status: "received",
+      }).returning();
+      await db.insert(remittanceAllocationsTable).values({
+        remittanceId: remittance.id, paymentId: payment.id, paymentAllocationId: line.id, amount: remittedAmount,
+      });
+    }
+    const participant = await request(app).get(`/api/clients/${client.id}/case`).set("Cookie", cookie);
+    expect(participant.status).toBe(200);
+    expect(participant.body.client.id).toBe(client.id);
+    expect(participant.body.payments[0].allocations[0]).toMatchObject({
+      id: line.id, authorizationId: auth.id, serviceMonth: "2026-08", amount: "600.00",
+      remittedAmount, remitted: state,
+    });
+    expect(participant.body.payments[0].allocations[0].remittanceLinks).toHaveLength(state === "none" ? 0 : 1);
+    const paymentDetail = await request(app).get(`/api/payments/${payment.id}`).set("Cookie", cookie);
+    expect(paymentDetail.status).toBe(200);
+    expect(participant.body.payments[0].allocations).toEqual(paymentDetail.body.allocations);
+  });
+
+  it("loads participants without payments and returns 404 only for a missing participant", async () => {
+    const { client } = await fixture();
+    const participant = await request(app).get(`/api/clients/${client.id}/case`).set("Cookie", cookie);
+    expect(participant.status).toBe(200);
+    expect(participant.body.payments).toEqual([]);
+    expect((await request(app).get(`/api/clients/${randomUUID()}/case`).set("Cookie", cookie)).status).toBe(404);
+  });
+});
 
 describe("CEPS fee counts only against the 490 authorization", () => {
   it.each([["direct_payment", "459"], ["reimbursement", "024"]])("ignores a mislinked fee for %s in every authorization response", async (paymentType, serviceCode) => {

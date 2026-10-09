@@ -176,7 +176,7 @@ export default function ClientDetailPage() {
     : 'overview';
   const deleteClient = useDeleteClient();
   const deleteFee = useDeleteFee();
-  const { data: caseData, isLoading, refetch } = useGetClientCase(id, {
+  const { data: caseData, isLoading, error, isFetching, refetch } = useGetClientCase(id, {
     query: {
       enabled: !!id,
       queryKey: ['clientCase', id]
@@ -198,7 +198,28 @@ export default function ClientDetailPage() {
   const referralsSort = useTableSort<string>('referralDate', 'desc');
 
   if (isLoading) return <div className="p-8 text-center">Loading case record...</div>;
-  if (!caseData) return <div className="p-8 text-center">Participant not found.</div>;
+  if (!caseData) {
+    if (error?.status === 404) return <div className="p-8 text-center">Participant not found.</div>;
+    const forbidden = error?.status === 403;
+    return (
+      <Card className="mx-auto max-w-xl" data-testid="participant-load-error">
+        <CardHeader>
+          <CardTitle>{forbidden ? 'Participant access denied' : 'Could not load participant'}</CardTitle>
+          <CardDescription>
+            {forbidden
+              ? 'You do not have permission to view this participant.'
+              : 'The participant record could not be loaded. Please try again.'}
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="flex items-center gap-3">
+          <Button onClick={() => void refetch()} disabled={isFetching}>
+            {isFetching ? 'Retrying...' : 'Try again'}
+          </Button>
+          <Link href="/clients" className="text-primary hover:underline">Back to Participants</Link>
+        </CardContent>
+      </Card>
+    );
+  }
 
   const { client, authorizations, invoices, payments, remittances, referrals } = caseData;
   // The API only returns non-deleted representatives. If none is flagged

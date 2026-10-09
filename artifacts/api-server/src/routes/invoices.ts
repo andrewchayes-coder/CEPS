@@ -581,18 +581,19 @@ router.post("/invoices/:id/validate", requirePermission("invoice_log_validate"),
     ? await db.select().from(authorizationsTable).where(inArray(authorizationsTable.id, authorizationIds))
     : [];
   const authById = new Map(authRows.map((auth) => [auth.id, auth]));
+  const usedAmounts = await authorizationTotalsPaid(authorizationIds);
 
   // 1. Authorization active and not expired
-  const today = new Date().toISOString().slice(0, 10);
   if (lineItems.length === 0) {
     checks.push({ check: "authorization_active", passed: false, message: "No authorization is linked to this invoice." });
   } else {
     for (const item of lineItems) {
       const auth = authById.get(item.authorizationId);
-      const active = !!auth && !auth.isDeleted && auth.status === "active" && auth.servicePeriodEnd >= today;
+      const status = auth ? effectiveAuthStatus(auth, usedAmounts.get(auth.id) ?? 0) : "missing";
+      const active = !!auth && !auth.isDeleted && status === "active";
       checks.push({ check: "authorization_active", passed: active, message: active
         ? `Authorization ${auth!.authNumber} is active through ${auth!.servicePeriodEnd}.`
-        : `Invoice line authorization ${item.authorizationId} is missing, deleted, inactive, or expired.` });
+         : `Invoice line authorization ${item.authorizationId} is ${auth?.isDeleted ? "deleted" : status}.` });
     }
   }
 
@@ -655,7 +656,6 @@ router.post("/invoices/:id/validate", requirePermission("invoice_log_validate"),
   }
 
   // 5. Cumulative payments + this invoice within max period amount
-  const usedAmounts = await authorizationTotalsPaid([...amountsByAuth.keys()]);
   for (const [authId, invoiceForAuth] of amountsByAuth) {
     const auth = authById.get(authId);
     if (!auth) continue;

@@ -28,7 +28,6 @@ export * from './authorizationCancelInput';
 export * from './authorizationInput';
 export * from './authorizationInputPaymentType';
 export * from './authorizationInputServiceCode';
-export * from './authorizationInputStatus';
 export * from './authorizationLookupResult';
 export * from './authorizationPaymentType';
 export * from './authorizationResult';

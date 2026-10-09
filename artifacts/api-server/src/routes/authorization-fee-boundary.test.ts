@@ -110,7 +110,7 @@ describe("CEPS fee counts only against the 490 authorization", () => {
     expect((await db.select().from(feesTable).where(eq(feesTable.id, fee.id)))[0].authorizationId).toBe(auth.id);
   });
 
-  it("counts billed fees (not checks) for a 490 and agrees on Exhausted", async () => {
+  it("counts billed fees (not checks) for a 490 without deriving Exhausted", async () => {
     const { client, auth } = await fixture("fee", "490", "480.00");
     await db.insert(feesTable).values([
       { clientId: client.id, authorizationId: auth.id, feeMonth: "2026-06", amount: "160.00", status: "pending" },
@@ -121,22 +121,24 @@ describe("CEPS fee counts only against the 490 authorization", () => {
     ]);
     await checkLine(client.id, auth.id, "50.00");
     expect((await authorizationTotalsPaid([auth.id])).get(auth.id)?.toFixed(2)).toBe("480.00");
-    const list = await request(app).get("/api/authorizations").query({ clientId: client.id, status: "exhausted" }).set("Cookie", cookie);
+    const list = await request(app).get("/api/authorizations").query({ clientId: client.id, status: "active" }).set("Cookie", cookie);
     const detail = await request(app).get(`/api/authorizations/${auth.id}`).set("Cookie", cookie);
     expect(list.status).toBe(200);
     expect(detail.status).toBe(200);
     for (const response of [list.body.items[0], detail.body]) {
       expect(response.totalPaid).toBe("480.00");
       expect(response.remainingAmount).toBe("0.00");
-      expect(response.status).toBe("exhausted");
+      expect(response.status).toBe("active");
     }
     const dashboard = await request(app).get("/api/dashboard/summary").set("Cookie", cookie);
     expect(dashboard.status).toBe(200);
-    expect(dashboard.body.alerts.some((alert: { entityId: string }) => alert.entityId === auth.id)).toBe(true);
+    expect(dashboard.body.alerts.some((alert: { entityId: string; kind: string }) => alert.entityId === auth.id && alert.kind === "authorization_exhausted_active")).toBe(false);
   });
 
   it("approves and logs a $900 invoice against a $900 service max despite its fee", async () => {
     const { client, auth } = await fixture("direct_payment", "459", "900.00");
+    // A stale stored status must not block validation, approval or payment.
+    await db.update(authorizationsTable).set({ status: "pending" }).where(eq(authorizationsTable.id, auth.id));
     await db.insert(feesTable).values({ clientId: client.id, authorizationId: auth.id, feeMonth: "2026-08", amount: "160.00", status: "pending" });
     const invoice = await invoiceLine(client.id, auth.id);
     const validated = await request(app).post(`/api/invoices/${invoice.id}/validate`).set("Cookie", cookie).send({});

@@ -1621,6 +1621,11 @@ export interface AuthorizationAmendInput {
   posNotes?: string | null;
   /** @nullable */
   posPdfUrl?: string | null;
+  /**
+     * Amendment received date (YYYY-MM-DD); defaults to today in UTC
+     * @pattern ^\d{4}-\d{2}-\d{2}$
+     */
+  receivedDate?: string;
   confirmed: boolean;
   acceptMaxAmountWarning?: boolean;
 }
@@ -1651,16 +1656,6 @@ export const AuthorizationInputPaymentType = {
   fee: 'fee',
 } as const;
 
-export type AuthorizationInputStatus = typeof AuthorizationInputStatus[keyof typeof AuthorizationInputStatus];
-
-
-export const AuthorizationInputStatus = {
-  active: 'active',
-  expired: 'expired',
-  pending: 'pending',
-  exhausted: 'exhausted',
-} as const;
-
 export interface AuthorizationInput {
   clientId: string;
   /** @nullable */
@@ -1676,7 +1671,6 @@ export interface AuthorizationInput {
   oneTimeAmount?: string;
   maxPeriodAmount: string;
   units?: number;
-  status?: AuthorizationInputStatus;
   /** @nullable */
   posNotes?: string | null;
   receivedDate?: string;

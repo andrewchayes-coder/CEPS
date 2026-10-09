@@ -1,4 +1,5 @@
 import React, { useState, useRef } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
@@ -51,10 +52,12 @@ const formSchema = z.object({
   oneTimeAmount: z.string().optional(),
   maxPeriodAmount: z.string().min(1, 'Max period amount is required'),
   posNotes: z.string().optional(),
+  receivedDate: z.string().min(1, 'Received date is required'),
   acceptMaxAmountWarning: z.boolean().default(false)
 });
 
 export default function AuthorizationNewPage() {
+  const queryClient = useQueryClient();
   const [, setLocation] = useLocation();
   const { toast } = useToast();
   const createAuth = useCreateAuthorization();
@@ -105,6 +108,7 @@ export default function AuthorizationNewPage() {
       oneTimeAmount: '',
       maxPeriodAmount: '',
       posNotes: '',
+      receivedDate: new Date().toISOString().slice(0, 10),
       acceptMaxAmountWarning: false
     }
   });
@@ -395,6 +399,7 @@ export default function AuthorizationNewPage() {
           servicePeriodEnd: data.servicePeriodEnd,
           monthlyAmount: data.monthlyAmount || null,
           maxPeriodAmount: data.maxPeriodAmount,
+          receivedDate: data.receivedDate,
           posNotes: data.posNotes || null,
           ...(posPdfUrl ? { posPdfUrl } : {}),
           confirmed: true,
@@ -417,6 +422,7 @@ export default function AuthorizationNewPage() {
               title: "Authorization Amended",
               description: "The authorization has been successfully amended.",
             });
+            void queryClient.invalidateQueries();
             setLocation(`/authorizations/${existingAuth.id}`);
           }
         },
@@ -458,6 +464,7 @@ export default function AuthorizationNewPage() {
             title: "Authorization Created",
             description: "The POS has been saved successfully.",
           });
+          void queryClient.invalidateQueries();
           setLocation(res.authorization ? `/authorizations/${res.authorization.id}` : '/authorizations');
         }
       },
@@ -695,6 +702,16 @@ export default function AuthorizationNewPage() {
                   </FormItem>
                 )} />
               </div>
+
+              <FormField control={form.control} name="receivedDate" render={({ field }) => (
+                <FormItem>
+                  <FormLabel>{isAmendment ? 'Amendment Received Date' : 'Received Date'}</FormLabel>
+                  <FormControl>
+                    <Input type="date" {...field} disabled={isQueued} data-testid="input-authorization-received-date" />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )} />
 
               <div className="bg-secondary/30 p-4 rounded-lg border space-y-4">
                 <h3 className="text-sm font-medium">Financial Amounts</h3>

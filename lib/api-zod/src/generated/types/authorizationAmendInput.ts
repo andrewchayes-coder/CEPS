@@ -16,6 +16,11 @@ export interface AuthorizationAmendInput {
   posNotes?: string | null;
   /** @nullable */
   posPdfUrl?: string | null;
+  /**
+     * Amendment received date (YYYY-MM-DD); defaults to today in UTC
+     * @pattern ^\d{4}-\d{2}-\d{2}$
+     */
+  receivedDate?: string;
   confirmed: boolean;
   acceptMaxAmountWarning?: boolean;
 }

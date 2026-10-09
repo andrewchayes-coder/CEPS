@@ -1925,7 +1925,6 @@ export const CreateAuthorizationBody = zod.object({
   "oneTimeAmount": zod.string().optional(),
   "maxPeriodAmount": zod.string(),
   "units": zod.int().optional(),
-  "status": zod.enum(['active', 'expired', 'pending', 'exhausted']).optional(),
   "posNotes": zod.string().nullish(),
   "receivedDate": zod.string().optional(),
   "posPdfUrl": zod.string().optional().describe('Stored object path of the uploaded POS PDF'),
@@ -2105,6 +2104,9 @@ export const AmendAuthorizationParams = zod.object({
   "id": zod.coerce.string()
 })
 
+export const amendAuthorizationBodyReceivedDateRegExp = new RegExp('^\\d{4}-\\d{2}-\\d{2}$');
+
+
 export const AmendAuthorizationBody = zod.object({
   "servicePeriodStart": zod.string(),
   "servicePeriodEnd": zod.string(),
@@ -2112,6 +2114,7 @@ export const AmendAuthorizationBody = zod.object({
   "maxPeriodAmount": zod.string(),
   "posNotes": zod.string().nullish(),
   "posPdfUrl": zod.string().nullish(),
+  "receivedDate": zod.string().regex(amendAuthorizationBodyReceivedDateRegExp).optional().describe('Amendment received date (YYYY-MM-DD); defaults to today in UTC'),
   "confirmed": zod.boolean(),
   "acceptMaxAmountWarning": zod.boolean().optional()
 })

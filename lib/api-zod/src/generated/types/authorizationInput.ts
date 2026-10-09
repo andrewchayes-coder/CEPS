@@ -7,7 +7,6 @@
  */
 import type { AuthorizationInputPaymentType } from './authorizationInputPaymentType';
 import type { AuthorizationInputServiceCode } from './authorizationInputServiceCode';
-import type { AuthorizationInputStatus } from './authorizationInputStatus';
 
 export interface AuthorizationInput {
   clientId: string;
@@ -24,7 +23,6 @@ export interface AuthorizationInput {
   oneTimeAmount?: string;
   maxPeriodAmount: string;
   units?: number;
-  status?: AuthorizationInputStatus;
   /** @nullable */
   posNotes?: string | null;
   receivedDate?: string;

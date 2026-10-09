@@ -457,6 +457,7 @@ describe("unmatched POS API", () => {
     const [queued] = await db.insert(unmatchedPosDocumentsTable).values({
       posPdfUrl: `/objects/uploads/${nonce}-amend.pdf`,
       sourceFileName: `${nonce}-amend.pdf`,
+      createdAt: new Date("2026-04-20T23:45:00Z"),
       authNumber: authorization.authNumber,
       suggestedClientId: queueClientId,
       suggestionMethod: "uci",
@@ -487,8 +488,11 @@ describe("unmatched POS API", () => {
     expect(updated.servicePeriodEnd).toBe("2026-06-30");
     expect(updated.authNumber).toBe(`${nonce}-POS-AMENDED`);
     expect(updated.paymentType).toBe("reimbursement");
-    expect(await db.select().from(authorizationVersionsTable)
-      .where(eq(authorizationVersionsTable.authorizationId, authorization.id))).toHaveLength(1);
+    expect(updated.receivedDate).toBe("2026-04-20");
+    const versions = await db.select().from(authorizationVersionsTable)
+      .where(eq(authorizationVersionsTable.authorizationId, authorization.id));
+    expect(versions).toHaveLength(1);
+    expect(versions[0].receivedDate).toBe("2026-04-20");
   });
 
   it("rejects amendment fields that are not supported instead of silently ignoring them", async () => {

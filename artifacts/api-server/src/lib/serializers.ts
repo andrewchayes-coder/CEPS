@@ -205,10 +205,22 @@ export function effectiveAuthStatus(a: Authorization, totalPaid: Decimal | numbe
   if (a.status === "canceled") return "canceled";
   const today = new Date().toISOString().slice(0, 10);
   if (a.servicePeriodStart > today) return "pending";
-  if (a.status === "pending") return "pending";
   if (a.servicePeriodEnd < today) return "expired";
-  if (money(totalPaid).greaterThanOrEqualTo(money(a.maxPeriodAmount))) return "exhausted";
-  return a.status;
+  if (a.paymentType !== "fee" && a.serviceCode !== "490" &&
+    money(totalPaid).greaterThanOrEqualTo(money(a.maxPeriodAmount))) return "exhausted";
+  return "active";
+}
+
+// Stored status means canceled or not. Keep this SQL and effectiveAuthStatus
+// in lockstep: cancellation, future start, past end, service exhaustion, active.
+export function effectiveAuthorizationStatusSql(totalUsed: SQL = authorizationUsageSql()): SQL {
+  return sql`case
+    when ${authorizationsTable.status} = 'canceled' then 'canceled'
+    when ${authorizationsTable.servicePeriodStart} > (now() at time zone 'utc')::date then 'pending'
+    when ${authorizationsTable.servicePeriodEnd} < (now() at time zone 'utc')::date then 'expired'
+    when ${authorizationsTable.paymentType} <> 'fee' and ${authorizationsTable.serviceCode} <> '490'
+      and ${totalUsed} >= ${authorizationsTable.maxPeriodAmount} then 'exhausted'
+    else 'active' end`;
 }
 
 export function authorizationJson(

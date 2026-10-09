@@ -235,6 +235,7 @@ async function insertRow(entity: ImportEntity, values: Record<string, unknown>, 
       }
       case "authorizations": {
         const v = { ...values };
+        v.status = "active";
         if (v.paymentType == null && typeof v.serviceCode === "string") v.paymentType = derivePaymentType(v.serviceCode);
         const [row] = await tx.insert(authorizationsTable).values(v as typeof authorizationsTable.$inferInsert).returning();
         await advanceReferralForAuthorization(txDb, row, userId);

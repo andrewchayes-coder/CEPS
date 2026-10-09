@@ -120,6 +120,8 @@ describe("authorization amendment and cancellation workflows", () => {
   it("amends the requested fields, preserves status, and snapshots exactly once", async () => {
     const created = await createAuthorization(`${nonce}-amend`, { status: "pending", posNotes: "original notes", posPdfUrl: "/old.pdf" });
     const authId = created.body.authorization.id;
+    // Model a legacy stored value; generic creation no longer accepts it.
+    await db.update(authorizationsTable).set({ status: "pending" }).where(eq(authorizationsTable.id, authId));
     const response = await request(app)
       .post(`/api/authorizations/${authId}/amend`)
       .set("Cookie", staffCookie)

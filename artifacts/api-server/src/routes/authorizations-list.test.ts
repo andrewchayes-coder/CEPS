@@ -273,8 +273,10 @@ describe("GET /authorizations derived filters", () => {
 
   it("status filter matches pending (derived) auths", async () => {
     const res = await get(staffCookie, { clientId: clientB, status: "pending", limit: 1000 });
-    expect(res.body.total).toBe(2);
-    expect(res.body.items.map((a: { id: string }) => a.id)).toEqual(expect.arrayContaining([authPending, authFutureStart]));
+    expect(res.body.total).toBe(1);
+    expect(res.body.items.map((a: { id: string }) => a.id)).toEqual([authFutureStart]);
+    const active = await get(staffCookie, { clientId: clientB, status: "active", limit: 1000 });
+    expect(active.body.items.map((a: { id: string }) => a.id)).toContain(authPending);
   });
 
   it("derives pending for a future-start authorization regardless of stored active status", async () => {

@@ -316,7 +316,6 @@ export const IMPORT_REGISTRY: Record<ImportEntity, EntityDef> = {
       { key: "oneTimeAmount", header: "One Time Amount", required: false, type: "money", example: "" },
       { key: "maxPeriodAmount", header: "Max Period Amount", required: true, type: "money", example: "6000.00" },
       { key: "units", header: "Units", required: false, type: "integer", example: "12" },
-      { key: "status", header: "Status", required: false, type: "enum", enumValues: ["active", "expired", "pending", "exhausted"], example: "active" },
       { key: "receivedDate", header: "Received Date", required: false, type: "date", example: "2025-12-15" },
     ],
   },

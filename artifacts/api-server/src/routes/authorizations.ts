@@ -47,6 +47,7 @@ import {
   vendorNameMap,
   authorizationTotalsPaid,
   authorizationUsageSql,
+  effectiveAuthorizationStatusSql,
   notDeleted,
   diffDetail,
 } from "../lib/serializers";
@@ -211,7 +212,7 @@ router.get("/authorizations", requireAuth, async (req, res): Promise<void> => {
         ilike(sql`${authorizationsTable.maxPeriodAmount}::text`, like),
         ilike(sql`to_char(${authorizationsTable.maxPeriodAmount}, 'FM$999,999,999,990.00')`, like),
         ilike(sql`${authorizationsTable.units}::text`, like),
-        ilike(sql`replace(${authorizationsTable.status}, '_', ' ')`, like),
+        ilike(effectiveAuthorizationStatusSql(), like),
         ilike(sql`coalesce(${authorizationsTable.receivedDate}::text, '')`, like),
         ilike(sql`to_char(${authorizationsTable.receivedDate}, 'MM/DD/YYYY')`, like),
         sql`${authorizationsTable.clientId} in (select id from clients where (first_name || ' ' || last_name) ilike ${like} and is_deleted = false)`,
@@ -235,10 +236,10 @@ router.get("/authorizations", requireAuth, async (req, res): Promise<void> => {
   // authorizationJson). We replicate that derivation in SQL so filtering and
   // pagination stay at the DB level with identical semantics.
   //   totalPaid  = fee total for 490 authorizations, otherwise payment total
-  //   effective  = pending | expired (period end past) | exhausted (paid ≥ max) | status
+  //   effective  = canceled | pending | expired | exhausted (services only) | active
   //   days       = ceil((servicePeriodEnd@00:00Z − now) / 1 day)
   const totalPaidSql = authorizationUsageSql();
-  const effectiveStatusSql = sql`case when ${authorizationsTable.status} = 'canceled' then 'canceled' when ${authorizationsTable.servicePeriodStart} > (now() at time zone 'utc')::date then 'pending' when ${authorizationsTable.status} = 'pending' then 'pending' when ${authorizationsTable.servicePeriodEnd} < (now() at time zone 'utc')::date then 'expired' when ${totalPaidSql} >= ${authorizationsTable.maxPeriodAmount} then 'exhausted' else ${authorizationsTable.status} end`;
+  const effectiveStatusSql = effectiveAuthorizationStatusSql(totalPaidSql);
   const daysUntilExpirySql = sql`ceil(extract(epoch from ((${authorizationsTable.servicePeriodEnd} || 'T00:00:00Z')::timestamptz - now())) / 86400)`;
   if (query.data.status) {
     conditions.push(sql`${effectiveStatusSql} = ${query.data.status}`);
@@ -303,7 +304,7 @@ router.post("/authorizations", requireStaff, async (req, res): Promise<void> => 
     res.status(400).json({ error: "authNumber must contain a nonblank value" });
     return;
   }
-  if ((d.status as string | undefined) === "canceled") {
+  if (req.body.status === "canceled") {
     res.status(400).json({ error: "Canceled authorizations must use the dedicated cancellation endpoint." });
     return;
   }
@@ -331,7 +332,7 @@ router.post("/authorizations", requireStaff, async (req, res): Promise<void> => 
         .values({
           ...cleanAuthFields(values),
           paymentType: d.paymentType ?? derivePaymentType(d.serviceCode),
-          status: d.status ?? "active",
+          status: "active",
         })
         .returning();
       if (created) {
@@ -472,18 +473,7 @@ router.patch("/authorizations/:id", requireStaff, async (req, res): Promise<void
   }
   const { acceptMaxAmountWarning: _accept, ...rawUpdates } = parsed.data;
   const updates = cleanAuthFields(rawUpdates);
-  const warning = parsed.data.maxPeriodAmount && parsed.data.servicePeriodStart && parsed.data.servicePeriodEnd
-    ? maxAmountWarning({
-        monthlyAmount: parsed.data.monthlyAmount,
-        maxPeriodAmount: parsed.data.maxPeriodAmount,
-        servicePeriodStart: parsed.data.servicePeriodStart,
-        servicePeriodEnd: parsed.data.servicePeriodEnd,
-      })
-    : null;
-  if (warning && !parsed.data.acceptMaxAmountWarning) {
-    res.status(200).json(UpdateAuthorizationResponse.parse({ saved: false, warnings: [warning] }));
-    return;
-  }
+  let warning: string | null = null;
   let before: typeof authorizationsTable.$inferSelect | undefined;
   const auth = await db.transaction(async (tx) => {
     [before] = await tx
@@ -492,6 +482,8 @@ router.patch("/authorizations/:id", requireStaff, async (req, res): Promise<void
       .where(and(eq(authorizationsTable.id, id), notDeleted(authorizationsTable)))
       .for("update");
     if (!before) return undefined;
+    warning = maxAmountWarning({ ...before, ...updates });
+    if (warning && !parsed.data.acceptMaxAmountWarning) return undefined;
     const [updated] = await tx
       .update(authorizationsTable)
       .set(updates)
@@ -528,6 +520,10 @@ router.patch("/authorizations/:id", requireStaff, async (req, res): Promise<void
     });
     return updated;
   });
+  if (warning && !parsed.data.acceptMaxAmountWarning) {
+    res.status(200).json(UpdateAuthorizationResponse.parse({ saved: false, warnings: [warning] }));
+    return;
+  }
   if (!auth) {
     res.status(404).json({ error: "Authorization not found" });
     return;
@@ -571,6 +567,11 @@ router.post("/authorizations/:id/amend", requireStaff, async (req, res): Promise
     res.status(400).json({ error: "Explicit confirmation is required before applying an amendment." });
     return;
   }
+  const receivedDate = parsed.data.receivedDate ?? new Date().toISOString().slice(0, 10);
+  if (!validIsoDate(receivedDate)) {
+    res.status(400).json({ error: "receivedDate must be a valid YYYY-MM-DD date." });
+    return;
+  }
   const warning = maxAmountWarning(parsed.data);
   if (warning && !parsed.data.acceptMaxAmountWarning) {
     res.status(200).json(AmendAuthorizationResponse.parse({ saved: false, warnings: [warning] }));
@@ -586,6 +587,7 @@ router.post("/authorizations/:id/amend", requireStaff, async (req, res): Promise
       servicePeriodEnd: parsed.data.servicePeriodEnd,
       monthlyAmount: parsed.data.monthlyAmount,
       maxPeriodAmount: parsed.data.maxPeriodAmount,
+      receivedDate,
       posNotes: parsed.data.posNotes,
       ...(parsed.data.posPdfUrl !== undefined ? { posPdfUrl: parsed.data.posPdfUrl } : {}),
     };
@@ -602,7 +604,7 @@ router.post("/authorizations/:id/amend", requireStaff, async (req, res): Promise
       servicePeriodEnd: before.servicePeriodEnd, monthlyAmount: before.monthlyAmount,
       oneTimeAmount: before.oneTimeAmount, maxPeriodAmount: before.maxPeriodAmount, units: before.units,
       status: before.status, posNotes: before.posNotes, posPdfUrl: before.posPdfUrl,
-      receivedDate: before.receivedDate, isDeleted: before.isDeleted, deletedAt: before.deletedAt,
+      receivedDate, isDeleted: before.isDeleted, deletedAt: before.deletedAt,
       deletedBy: before.deletedBy, createdAt: before.createdAt, changedBy: req.user!.id,
       changedFields: Object.keys(updates),
     });
@@ -613,7 +615,7 @@ router.post("/authorizations/:id/amend", requireStaff, async (req, res): Promise
     return;
   }
   await audit(req.user!.id, "amend_authorization", "authorization", auth.id, diffDetail(before, auth, [
-    "servicePeriodStart", "servicePeriodEnd", "monthlyAmount", "maxPeriodAmount", "posNotes", "posPdfUrl",
+    "servicePeriodStart", "servicePeriodEnd", "monthlyAmount", "maxPeriodAmount", "receivedDate", "posNotes", "posPdfUrl",
   ]));
   const totals = await authorizationTotalsPaid([auth.id]);
   const [clientNames, vendorNames] = await Promise.all([clientNameMap([auth.clientId]), vendorNameMap([auth.vendorId])]);
@@ -1101,6 +1103,7 @@ router.post("/unmatched-pos/:id/review", requireStaff, async (req, res): Promise
       if (warning && !body.data.acceptMaxAmountWarning) return { kind: "warning" as const, warning };
       const updates = {
         authNumber: nextAuthNumber,
+        receivedDate: row.createdAt.toISOString().slice(0, 10),
         servicePeriodStart: start,
         servicePeriodEnd: end,
         monthlyAmount,
@@ -1130,7 +1133,7 @@ router.post("/unmatched-pos/:id/review", requireStaff, async (req, res): Promise
         servicePeriodEnd: auth!.servicePeriodEnd, monthlyAmount: auth!.monthlyAmount,
         oneTimeAmount: auth!.oneTimeAmount, maxPeriodAmount: auth!.maxPeriodAmount, units: auth!.units,
         status: auth!.status, posNotes: auth!.posNotes, posPdfUrl: auth!.posPdfUrl,
-        receivedDate: auth!.receivedDate, isDeleted: auth!.isDeleted, deletedAt: auth!.deletedAt,
+        receivedDate: updates.receivedDate, isDeleted: auth!.isDeleted, deletedAt: auth!.deletedAt,
         deletedBy: auth!.deletedBy, createdAt: auth!.createdAt, changedBy: req.user!.id,
         changedFields: Object.keys(updates),
       });

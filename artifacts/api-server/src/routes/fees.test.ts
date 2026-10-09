@@ -218,7 +218,7 @@ describe("fee authorization usage", () => {
     expect(linkedFee.authorizationId).toBe(feeAuth.id);
     const amountUsed = (await authorizationTotalsPaid([feeAuth.id])).get(feeAuth.id)!;
     expect(amountUsed.toFixed(2)).toBe("160.00");
-    expect(effectiveAuthStatus(feeAuth, amountUsed)).toBe("exhausted");
+    expect(effectiveAuthStatus(feeAuth, amountUsed)).toBe("active");
     const listed = await request(app).get("/api/fees").query({ clientId: clientB, feeMonth }).set("Cookie", cookie);
     expect(listed.status).toBe(200);
     expect(listed.body[0]).toMatchObject({
@@ -232,7 +232,7 @@ describe("fee authorization usage", () => {
     expect(authResponse.body).toMatchObject({
       totalPaid: "160.00",
       remainingAmount: "0.00",
-      status: "exhausted",
+      status: "active",
     });
 
     await db.update(feesTable).set({ status: "waived" }).where(eq(feesTable.id, fee.id));

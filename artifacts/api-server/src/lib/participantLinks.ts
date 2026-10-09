@@ -151,7 +151,7 @@ export async function softDeleteClient(
 export async function validateParticipantLinks(
   tx: DbHandle,
   clientId: string,
-  links: { authorizationId?: string | null; invoiceId?: string | null; paymentId?: string | null; vendorId?: string | null; allowDeletedPayment?: boolean },
+  links: { authorizationId?: string | null; invoiceId?: string | null; paymentId?: string | null; vendorId?: string | null; allowDeletedPayment?: boolean; serviceAuthorizationOnly?: boolean },
 ): Promise<ParticipantLinkValidation> {
   const [client] = await tx.select().from(clientsTable)
     .where(and(eq(clientsTable.id, clientId), notDeleted(clientsTable))).for("share");
@@ -163,6 +163,9 @@ export async function validateParticipantLinks(
       .where(and(eq(authorizationsTable.id, links.authorizationId), notDeleted(authorizationsTable))).for("share");
     if (!authorization) return { error: "authorizationId must reference a non-deleted authorization" };
     if (authorization.clientId !== clientId) return { error: "authorizationId must belong to clientId" };
+    if (links.serviceAuthorizationOnly && authorization.paymentType === "fee") {
+      return { error: "490 is the CEPS fee authorization. Fees are created automatically and can't be paid by check." };
+    }
   }
 
   let invoice: typeof invoicesTable.$inferSelect | undefined;

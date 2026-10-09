@@ -1,6 +1,6 @@
 import { Router, type IRouter } from "express";
 import { eq, desc, and, ne, sql } from "drizzle-orm";
-import { db, feesTable, remittanceAllocationsTable } from "@workspace/db";
+import { db, feesTable, authorizationsTable, remittanceAllocationsTable } from "@workspace/db";
 import {
   ListFeesQueryParams,
   ListFeesResponse,
@@ -14,6 +14,7 @@ import {
 import { requireAuth, requireStaff, audit } from "../lib/auth";
 import { feeJson, clientNameMap, authNumberMap, notDeleted, diffDetail } from "../lib/serializers";
 import { validateParticipantLinks } from "../lib/participantLinks";
+import { findFeeAuthorizationForMonth } from "../lib/feeAuthorization";
 import {
   lockRemittancesForFeeAllocations,
   recomputeRemittanceAllocationState,
@@ -23,6 +24,7 @@ import {
 const router: IRouter = Router();
 const MONTHLY_FEE_RULE = "flat_160_per_client_month";
 const MANUALLY_ADJUSTED_MONTHLY_FEE_RULE = "flat_160_per_client_month_manually_adjusted";
+const FEE_AUTHORIZATION_ERROR = "Fees can only be linked to the participant's 490 fee authorization";
 
 async function enrichFees(fees: (typeof feesTable.$inferSelect)[]) {
   const [clientNames, authNumbers] = await Promise.all([
@@ -76,18 +78,33 @@ router.post("/fees", requireStaff, async (req, res): Promise<void> => {
     res.status(400).json({ error: parsed.error.message });
     return;
   }
+  if (parsed.data.authorizationId != null &&
+      !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(parsed.data.authorizationId)) {
+    res.status(400).json({ error: FEE_AUTHORIZATION_ERROR });
+    return;
+  }
   let relationshipError: string | undefined;
   const fee = await db.transaction(async (tx) => {
     const txDb = tx as unknown as typeof db;
+    const authorizationId = parsed.data.authorizationId
+      ?? await findFeeAuthorizationForMonth(txDb, parsed.data.clientId, parsed.data.feeMonth ?? null);
+    if (authorizationId) {
+      const [authorization] = await tx.select().from(authorizationsTable)
+        .where(and(eq(authorizationsTable.id, authorizationId), notDeleted(authorizationsTable))).for("share");
+      if (!authorization || authorization.clientId !== parsed.data.clientId || authorization.paymentType !== "fee") {
+        relationshipError = FEE_AUTHORIZATION_ERROR;
+        return null;
+      }
+    }
     relationshipError = (await validateParticipantLinks(txDb, parsed.data.clientId, {
       paymentId: parsed.data.paymentId,
-      authorizationId: parsed.data.authorizationId,
+      authorizationId,
     })).error;
     if (relationshipError) return null;
     try {
       const [created] = await tx
         .insert(feesTable)
-        .values({ ...parsed.data, createdBy: req.user!.id })
+        .values({ ...parsed.data, authorizationId, createdBy: req.user!.id })
         .returning();
       await audit(req.user!.id, "create_fee", "fee", created.id, `$${created.amount}${created.ruleApplied ? ` (${created.ruleApplied})` : ""}`, txDb);
       return created;

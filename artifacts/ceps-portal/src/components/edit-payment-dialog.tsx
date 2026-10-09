@@ -110,7 +110,7 @@ export function EditPaymentDialog({ id, payment, onSaved }: Props) {
     { clientId: payment.clientId, search: debouncedAuthSearch, limit: 50 },
     { query: { enabled: open && !!payment.clientId, queryKey: ['authorizations', { clientId: payment.clientId, search: debouncedAuthSearch, limit: 50 }] } }
   );
-  const authorizations = authorizationsData?.items ?? [];
+  const authorizations = (authorizationsData?.items ?? []).filter((auth) => auth.paymentType !== 'fee');
 
   const set = (k: string, v: any) => setForm((p) => ({ ...p, [k]: v }));
 

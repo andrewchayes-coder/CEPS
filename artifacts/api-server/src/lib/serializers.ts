@@ -1,4 +1,4 @@
-import { inArray, eq, and, ne, sql, type Column, type SQL } from "drizzle-orm";
+import { inArray, eq, and, sql, type Column, type SQL } from "drizzle-orm";
 import Decimal from "decimal.js";
 import { money } from "./money";
 import {
@@ -170,46 +170,35 @@ export function referralJson(
   };
 }
 
-// Exact per-authorization sum of non-deleted payments. Summed in SQL (Postgres
-// numeric addition is exact) and returned as Decimal so callers never coerce
-// cent values through Number().
-export async function authorizationTotalsPaid(ids: string[]): Promise<Map<string, Decimal>> {
+// The $160 CEPS fee counts only toward its 490 authorization, never toward a 459/024 service authorization (CEPS, 10/9/2026).
+// Correlated SQL is shared by list filters, serialized totals and capacity checks.
+// PostgreSQL numeric addition preserves cents; an edited check can be excluded.
+export function authorizationUsageSql(excludePaymentId?: string): SQL {
+  return sql`case when ${authorizationsTable.paymentType} = 'fee' then
+    coalesce((select sum(${feesTable.amount}) from ${feesTable}
+      where ${feesTable.authorizationId} = ${authorizationsTable.id}
+      and ${feesTable.isDeleted} = false and ${feesTable.status} <> 'waived'), 0)
+    else coalesce((select sum(${paymentAllocationsTable.amount}) from ${paymentAllocationsTable}
+      inner join ${paymentsTable} on ${paymentsTable.id} = ${paymentAllocationsTable.paymentId}
+      where ${paymentAllocationsTable.authorizationId} = ${authorizationsTable.id}
+      and ${paymentsTable.isDeleted} = false
+      and ${excludePaymentId ? sql`${paymentsTable.id} <> ${excludePaymentId}` : sql`true`}), 0) end`;
+}
+
+export async function authorizationTotalsPaid(
+  ids: string[],
+  database: typeof db = db,
+  excludePaymentId?: string,
+): Promise<Map<string, Decimal>> {
   if (ids.length === 0) return new Map();
-  const paymentRows = await db
+  const rows = await database
     .select({
-      authorizationId: paymentAllocationsTable.authorizationId,
-      total: sql<string>`coalesce(sum(${paymentAllocationsTable.amount}), 0)`,
+      authorizationId: authorizationsTable.id,
+      total: sql<string>`(${authorizationUsageSql(excludePaymentId)})::text`,
     })
-    .from(paymentAllocationsTable)
-    .innerJoin(authorizationsTable, eq(authorizationsTable.id, paymentAllocationsTable.authorizationId))
-    .innerJoin(paymentsTable, eq(paymentsTable.id, paymentAllocationsTable.paymentId))
-    .where(and(
-      inArray(paymentAllocationsTable.authorizationId, ids),
-      ne(authorizationsTable.paymentType, "fee"),
-      notDeleted(paymentsTable),
-    ))
-    .groupBy(paymentAllocationsTable.authorizationId);
-  const map = new Map<string, Decimal>();
-  for (const row of paymentRows) {
-    if (!row.authorizationId) continue;
-    map.set(row.authorizationId, money(row.total));
-  }
-  const feeRows = await db
-    .select({
-      authorizationId: feesTable.authorizationId,
-      total: sql<string>`coalesce(sum(${feesTable.amount}), 0)`,
-    })
-    .from(feesTable)
-    .where(and(
-      inArray(feesTable.authorizationId, ids),
-      notDeleted(feesTable),
-      ne(feesTable.status, "waived"),
-    ))
-    .groupBy(feesTable.authorizationId);
-  for (const row of feeRows) {
-    if (row.authorizationId) map.set(row.authorizationId, money(row.total));
-  }
-  return map;
+    .from(authorizationsTable)
+    .where(inArray(authorizationsTable.id, ids));
+  return new Map(rows.map((row) => [row.authorizationId, money(row.total)]));
 }
 
 export function effectiveAuthStatus(a: Authorization, totalPaid: Decimal | number): string {

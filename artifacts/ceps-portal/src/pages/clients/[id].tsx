@@ -441,7 +441,7 @@ export default function ClientDetailPage() {
                         </div>
                         <div className="space-y-2 mt-4">
                           <div className="flex justify-between text-xs text-muted-foreground">
-                            <span>Utilized: ${(paid).toFixed(2)}</span>
+                            <span>{auth.paymentType === 'fee' ? 'Fees billed' : 'Utilized'}: ${(paid).toFixed(2)}</span>
                             <span>Max: ${(max).toFixed(2)}</span>
                           </div>
                           <Progress value={percent} className="h-2" />

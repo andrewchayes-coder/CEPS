@@ -19,6 +19,7 @@ let clientB: string;
 let vendorA: string;
 let authA: string;
 let authB: string;
+let feeAuthA: string;
 let paymentA: string;
 let paymentB: string;
 let deletedAuth: string;
@@ -42,8 +43,10 @@ beforeAll(async () => {
     { clientId: clientA, vendorId: vendorA, authNumber: `${nonce}-auth-a`, serviceCode: "459", paymentType: "direct_payment", servicePeriodStart: "2026-01-01", servicePeriodEnd: "2099-01-01", oneTimeAmount: "100.00", maxPeriodAmount: "1000.00", status: "active" },
     { clientId: clientB, vendorId: vendorA, authNumber: `${nonce}-auth-b`, serviceCode: "459", paymentType: "direct_payment", servicePeriodStart: "2026-01-01", servicePeriodEnd: "2099-01-01", oneTimeAmount: "100.00", maxPeriodAmount: "1000.00", status: "active" },
     { clientId: clientA, vendorId: vendorA, authNumber: `${nonce}-auth-deleted`, serviceCode: "459", paymentType: "direct_payment", servicePeriodStart: "2026-01-01", servicePeriodEnd: "2099-01-01", oneTimeAmount: "100.00", maxPeriodAmount: "1000.00", status: "active", isDeleted: true },
+    { clientId: clientA, authNumber: `${nonce}-490-a`, serviceCode: "490", paymentType: "fee", servicePeriodStart: "2026-01-01", servicePeriodEnd: "2099-01-01", maxPeriodAmount: "5000.00", status: "active" },
   ]).returning();
   [authA, authB, deletedAuth] = auths.map((auth) => auth.id);
+  feeAuthA = auths[3].id;
   const payments = await db.insert(paymentsTable).values([
     { clientId: clientA, authorizationId: authA, vendorId: vendorA, qbCheckNumber: `${nonce}-a`, checkDate: "2026-03-15", amount: "100.00", paymentMonth: "2026-03", paymentType: "direct_payment", source: "manual" },
     { clientId: clientB, authorizationId: authB, vendorId: vendorA, qbCheckNumber: `${nonce}-b`, checkDate: "2026-03-15", amount: "100.00", paymentMonth: "2026-03", paymentType: "direct_payment", source: "manual" },
@@ -77,11 +80,11 @@ afterAll(async () => {
 describe("fee participant links", () => {
   it("accepts valid same-participant payment and authorization links", async () => {
     const response = await request(app).post("/api/fees").set("Cookie", cookie).send({
-      clientId: clientA, paymentId: paymentA, authorizationId: authA, amount: "5.00",
+      clientId: clientA, paymentId: paymentA, authorizationId: feeAuthA, amount: "5.00",
     });
     expect(response.status).toBe(201);
     expect(response.body.paymentId).toBe(paymentA);
-    expect(response.body.authorizationId).toBe(authA);
+    expect(response.body.authorizationId).toBe(feeAuthA);
   });
 
   it.each([
@@ -94,7 +97,7 @@ describe("fee participant links", () => {
       clientId: clientA, amount: "9.00", [field]: id(),
     });
     expect(response.status).toBe(400);
-    expect(response.body.error).toContain(field);
+    expect(response.body.error).toContain(field === "authorizationId" ? "490 fee authorization" : field);
     expect((await db.select().from(feesTable).where(eq(feesTable.clientId, clientA))).length).toBe(beforeFees.length);
     expect((await db.select().from(auditLogTable).where(eq(auditLogTable.userId, staffId))).length).toBe(beforeAudits.length);
   });
@@ -107,7 +110,7 @@ describe("fee participant links", () => {
       clientId: clientA, amount: "9.00", [field]: id(),
     });
     expect(response.status).toBe(400);
-    expect(response.body.error).toContain(`${field} must reference a non-deleted`);
+    expect(response.body.error).toContain(field === "authorizationId" ? "490 fee authorization" : `${field} must reference a non-deleted`);
   });
 
 });

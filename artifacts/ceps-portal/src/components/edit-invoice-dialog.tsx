@@ -102,7 +102,7 @@ export function EditInvoiceDialog({ id, invoice, onSaved, variant = 'dialog' }: 
     { clientId: invoice.clientId, search: debouncedAuthSearch, limit: 50 },
     { query: { enabled: isActive, queryKey: ['authorizations', { clientId: invoice.clientId, search: debouncedAuthSearch, limit: 50 }] } }
   );
-  const authorizations = authorizationsData?.items ?? [];
+  const authorizations = (authorizationsData?.items ?? []).filter((auth) => auth.paymentType !== 'fee');
 
   useEffect(() => {
     if (isActive) {

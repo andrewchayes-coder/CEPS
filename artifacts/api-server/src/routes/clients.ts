@@ -7,7 +7,6 @@ import {
   authorizationsTable,
   invoicesTable,
   paymentsTable,
-  paymentAllocationsTable,
   remittancesTable,
   vendorsTable,
 } from "@workspace/db";
@@ -28,7 +27,6 @@ import {
   referralJson,
   authorizationJson,
   invoiceJson,
-  paymentJson,
   remittanceJson,
   userNameMap,
   vendorNameMap,
@@ -38,6 +36,7 @@ import {
   diffDetail,
 } from "../lib/serializers";
 import { sortedOrder } from "../lib/sorting";
+import { enrichPayments } from "../lib/paymentSerialization";
 import { softDeleteClient } from "../lib/participantLinks";
 
 const router: IRouter = Router();
@@ -376,11 +375,7 @@ router.get("/clients/:id/case", requireAuth, async (req, res): Promise<void> => 
     userContactMap([client.assignedCoordinatorId, ...referrals.map((r) => r.serviceCoordinatorId)]),
     authorizationTotalsPaid(authorizations.map((a) => a.id)),
   ]);
-  const paymentAllocations = payments.length
-    ? await db.select().from(paymentAllocationsTable)
-      .where(inArray(paymentAllocationsTable.paymentId, payments.map((payment) => payment.id)))
-    : [];
-  const paymentAllocationAuthNumbers = await authNumberMap(paymentAllocations.map((allocation) => allocation.authorizationId));
+  const enrichedPayments = await enrichPayments(payments, req.user!);
   const uniqueVendorIds = [...new Set(vendorIds.filter((vendorId): vendorId is string => !!vendorId))];
   const vendors =
     req.user!.role === "staff" && uniqueVendorIds.length > 0
@@ -503,20 +498,7 @@ router.get("/clients/:id/case", requireAuth, async (req, res): Promise<void> => 
           authNumber: i.authorizationId ? authNums.get(i.authorizationId) : null,
         }),
       ),
-      payments: payments.map((p) =>
-        paymentJson(p, {
-          clientName,
-          vendorName: p.vendorId ? vendorNames.get(p.vendorId) : null,
-          authNumber: p.authorizationId ? authNums.get(p.authorizationId) : null,
-          allocations: paymentAllocations.filter((allocation) => allocation.paymentId === p.id).map((allocation) => ({
-            id: allocation.id,
-            authorizationId: allocation.authorizationId,
-            authNumber: paymentAllocationAuthNumbers.get(allocation.authorizationId) ?? null,
-            serviceMonth: allocation.serviceMonth ?? p.paymentMonth ?? p.checkDate.slice(0, 7),
-            amount: allocation.amount,
-          })),
-        }),
-      ),
+      payments: enrichedPayments,
       remittances: remittances.map((r) =>
         remittanceJson(r, {
           clientName,

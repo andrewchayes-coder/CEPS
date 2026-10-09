@@ -248,6 +248,7 @@ router.post("/invoices", requireAuth, async (req, res): Promise<void> => {
     for (const item of lineItems) {
       const relationshipError = (await validateParticipantLinks(txDb, values.clientId, {
         authorizationId: item.authorizationId,
+        serviceAuthorizationOnly: true,
         vendorId: values.vendorId,
       })).error;
       if (relationshipError) return { error: relationshipError, status: 400 as const };
@@ -429,6 +430,7 @@ router.patch("/invoices/:id", requireStaff, async (req, res): Promise<void> => {
     await tx.execute(sql`select id from invoices where id = ${id} for update`);
     relationshipError = (await validateParticipantLinks(txDb, before.clientId, {
       authorizationId: effectiveAuthorizationId,
+      serviceAuthorizationOnly: true,
       vendorId: effectiveVendorId,
     })).error;
     if (relationshipError) return null;
@@ -436,6 +438,7 @@ router.patch("/invoices/:id", requireStaff, async (req, res): Promise<void> => {
       for (const item of acceptedLineItems) {
         relationshipError = (await validateParticipantLinks(txDb, before.clientId, {
           authorizationId: item.authorizationId,
+          serviceAuthorizationOnly: true,
           vendorId: effectiveVendorId,
         })).error;
         if (relationshipError) return null;
@@ -490,9 +493,12 @@ router.post("/invoices/:id/decision", requirePermission("invoice_approve"), asyn
       const lines = await tx.select().from(invoiceLineItemsTable).where(eq(invoiceLineItemsTable.invoiceId, id));
       const authIds = [...new Set(lines.map((line) => line.authorizationId))];
       const auths = authIds.length ? await tx.select().from(authorizationsTable).where(inArray(authorizationsTable.id, authIds)) : [];
-      const totals = await authorizationTotalsPaid(authIds);
+      const totals = await authorizationTotalsPaid(authIds, tx as unknown as typeof db);
       for (const line of lines) {
         const auth = auths.find((candidate) => candidate.id === line.authorizationId);
+        if (auth?.paymentType === "fee") {
+          return { error: "490 is the CEPS fee authorization. Fees are created automatically and can't be paid by check.", code: 400 as const };
+        }
         const status = auth ? effectiveAuthStatus(auth, totals.get(auth.id) ?? 0) : "missing";
         if (!auth || status !== "active") {
           return {
@@ -649,19 +655,12 @@ router.post("/invoices/:id/validate", requirePermission("invoice_log_validate"),
   }
 
   // 5. Cumulative payments + this invoice within max period amount
+  const usedAmounts = await authorizationTotalsPaid([...amountsByAuth.keys()]);
   for (const [authId, invoiceForAuth] of amountsByAuth) {
     const auth = authById.get(authId);
     if (!auth) continue;
-    // Sum in SQL — Postgres numeric addition is exact and avoids fetching an
-    // unbounded number of payment rows just to total them in JS. COALESCE keeps
-    // the result "0" (never null) when there are no payments yet.
-    const [row] = await db
-        .select({ total: sql<string>`coalesce(sum(${paymentAllocationsTable.amount}), 0)` })
-        .from(paymentAllocationsTable)
-        .innerJoin(paymentsTable, eq(paymentsTable.id, paymentAllocationsTable.paymentId))
-        .where(and(eq(paymentAllocationsTable.authorizationId, auth.id), notDeleted(paymentsTable)));
-    const totalPaid = money(row?.total);
-     const wouldBe = totalPaid.plus(invoiceForAuth);
+    const totalPaid = usedAmounts.get(auth.id) ?? money(0);
+    const wouldBe = totalPaid.plus(invoiceForAuth);
     const within = wouldBe.lessThanOrEqualTo(money(auth.maxPeriodAmount));
     checks.push({
       check: "within_max_period_amount",

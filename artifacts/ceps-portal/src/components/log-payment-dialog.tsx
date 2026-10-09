@@ -121,7 +121,7 @@ export function LogPaymentDialog({ onSaved, defaultClientId, defaultInvoiceId }:
     { clientId: form.clientId, search: debouncedAuthSearch, limit: 50 },
     { query: { enabled: open && !!form.clientId, queryKey: ['authorizations', { clientId: form.clientId, search: debouncedAuthSearch, limit: 50 }] } }
   );
-  const authorizations = authorizationsData?.items;
+  const authorizations = authorizationsData?.items.filter((auth) => auth.paymentType !== 'fee');
 
   const set = (k: string, v: any) => setForm((p) => ({ ...p, [k]: v }));
 

@@ -33,9 +33,10 @@ import {
   type AltaFmsPaymentAuditRowResult,
 } from "@workspace/api-zod";
 import { requireAuth, requireStaff, requirePermission, audit } from "../lib/auth";
-import { paymentJson, remittanceJson, clientNameMap, vendorNameMap, authNumberMap, notDeleted, diffDetail, effectiveAuthStatus } from "../lib/serializers";
+import { remittanceJson, clientNameMap, vendorNameMap, authNumberMap, notDeleted, diffDetail, effectiveAuthStatus, authorizationTotalsPaid } from "../lib/serializers";
 import { checkDuplicatePayment, checkDuplicatePaymentAllocations, lockDuplicatePaymentKey } from "../lib/paymentDuplicateCheck";
 import { money } from "../lib/money";
+import { allocatedToLine, enrichPayments } from "../lib/paymentSerialization";
 import { parseAltaRemittanceCsv, altaRowFingerprint } from "../lib/altaRemittanceParser";
 import { altaFmsPaymentRowFingerprint, parseAltaFmsPaymentWorksheet } from "../lib/altaFmsPaymentParser";
 import { sortedOrder } from "../lib/sorting";
@@ -77,18 +78,12 @@ async function assertInvoicePayable(
     }
   }
   const auths = authIds.length ? await tx.select().from(authorizationsTable).where(inArray(authorizationsTable.id, authIds)) : [];
+  const totals = await authorizationTotalsPaid(authIds, tx, excludePaymentId);
   for (const line of lines) {
     const auth = auths.find((candidate) => candidate.id === line.authorizationId);
     if (!auth) return `Cannot pay line ${line.id}: authorization ${line.authorizationId} is missing`;
-    const paid = await tx.select({ total: sql<string>`coalesce(sum(${paymentAllocationsTable.amount}), 0)` })
-      .from(paymentAllocationsTable)
-      .innerJoin(paymentsTable, eq(paymentsTable.id, paymentAllocationsTable.paymentId))
-      .where(and(
-        eq(paymentAllocationsTable.authorizationId, auth.id),
-        notDeleted(paymentsTable),
-        ...(excludePaymentId ? [sql`${paymentsTable.id} <> ${excludePaymentId}`] : []),
-      ));
-    const current = money(paid[0]?.total ?? 0);
+    if (auth.paymentType === "fee") return "490 is the CEPS fee authorization. Fees are created automatically and can't be paid by check.";
+    const current = totals.get(auth.id) ?? money(0);
     const status = effectiveAuthStatus(auth, current);
     if (status !== "active") {
       return `Cannot pay line ${line.id}: authorization ${auth.authNumber} is ${status}`;
@@ -101,15 +96,7 @@ async function assertInvoicePayable(
   for (const allocationAuthId of new Set(allocationAuthorizationIds)) {
     const auth = auths.find((candidate) => candidate.id === allocationAuthId);
     if (!auth) return `Allocation authorization ${allocationAuthId} is missing for invoice ${invoiceId}`;
-    const paid = await tx.select({ total: sql<string>`coalesce(sum(${paymentAllocationsTable.amount}), 0)` })
-      .from(paymentAllocationsTable)
-      .innerJoin(paymentsTable, eq(paymentsTable.id, paymentAllocationsTable.paymentId))
-      .where(and(
-        eq(paymentAllocationsTable.authorizationId, auth.id),
-        notDeleted(paymentsTable),
-        ...(excludePaymentId ? [sql`${paymentsTable.id} <> ${excludePaymentId}`] : []),
-      ));
-    const current = money(paid[0]?.total ?? 0);
+    const current = totals.get(auth.id) ?? money(0);
     const status = effectiveAuthStatus(auth, current);
     if (status !== "active") return `Allocation authorization ${auth.authNumber} is ${status} for invoice ${invoiceId}`;
     if (current.plus(incoming.get(auth.id) ?? money(0)).greaterThan(money(auth.maxPeriodAmount))) {
@@ -398,84 +385,6 @@ async function reconcileMonthlyFee(
     }
   }
   return "none";
-}
-
-async function enrichPayments(
-  payments: (typeof paymentsTable.$inferSelect)[],
-  viewer?: { role: string; linkedRecordType?: string | null; linkedRecordId?: string | null },
-) {
-  const ids = payments.map((p) => p.id);
-  const [clientNames, vendorNames, authNums, allocationRows, paymentAllocations] = await Promise.all([
-    clientNameMap(payments.map((p) => p.clientId)),
-    vendorNameMap(payments.map((p) => p.vendorId)),
-    authNumberMap(payments.map((p) => p.authorizationId)),
-    ids.length ? db.select({
-      paymentId: remittanceAllocationsTable.paymentId,
-      total: sql<string>`coalesce(sum(${remittanceAllocationsTable.amount}), 0)`,
-    }).from(remittanceAllocationsTable).where(inArray(remittanceAllocationsTable.paymentId, ids)).groupBy(remittanceAllocationsTable.paymentId) : [],
-    db.select().from(paymentAllocationsTable).where(inArray(paymentAllocationsTable.paymentId, ids)),
-  ]);
-  const allocationIds = paymentAllocations.map((allocation) => allocation.id);
-  const remittanceLinks = viewer?.role === "vendor" || !allocationIds.length
-    ? []
-    : await db.select({
-      paymentAllocationId: remittanceAllocationsTable.paymentAllocationId,
-      id: remittancesTable.id,
-      clientId: remittancesTable.clientId,
-      reference: sql<string | null>`coalesce(${remittancesTable.altaReference}, ${remittancesTable.reportReference})`,
-      date: sql<string>`${remittancesTable.remittanceDate}::text`,
-      amount: remittanceAllocationsTable.amount,
-    })
-      .from(remittanceAllocationsTable)
-      .innerJoin(remittancesTable, eq(remittancesTable.id, remittanceAllocationsTable.remittanceId))
-      .where(and(
-        inArray(remittanceAllocationsTable.paymentAllocationId, allocationIds),
-        notDeleted(remittancesTable),
-      ));
-  const allocationAuthNums = await authNumberMap(paymentAllocations.map((a) => a.authorizationId));
-  const allocated = new Map(allocationRows.map((r) => [r.paymentId, money(r.total)]));
-  const remittedByLine = new Map<string, ReturnType<typeof money>>();
-  const remittancesByLine = new Map<string, typeof remittanceLinks>();
-  for (const link of remittanceLinks) {
-    // A malformed/cross-linked allocation must not expose a remittance from a
-    // different participant through an otherwise-visible payment.
-    const line = paymentAllocations.find((allocation) => allocation.id === link.paymentAllocationId);
-    if (!line || payments.find((payment) => payment.id === line.paymentId)?.clientId !== link.clientId) continue;
-    if ((viewer?.role === "parent_guardian" || viewer?.role === "self") &&
-      (viewer.linkedRecordType !== "client" || viewer.linkedRecordId !== link.clientId)) continue;
-    const list = remittancesByLine.get(link.paymentAllocationId!) ?? [];
-    list.push(link);
-    remittancesByLine.set(link.paymentAllocationId!, list);
-  }
-  await Promise.all(paymentAllocations.map(async (allocation) => {
-    remittedByLine.set(allocation.id, await allocatedToLine(allocation.id, db));
-  }));
-  return payments.map((p) =>
-    paymentJson(p, {
-      clientName: clientNames.get(p.clientId),
-      vendorName: p.vendorId ? vendorNames.get(p.vendorId) : null,
-      authNumber: p.authorizationId ? authNums.get(p.authorizationId) : null,
-      allocatedAmount: (allocated.get(p.id) ?? money(p.remitted ? p.amount : 0)).toFixed(2),
-      remainingAmount: money(p.amount).minus(allocated.get(p.id) ?? money(p.remitted ? p.amount : 0)).toFixed(2),
-      allocations: paymentAllocations.filter((a) => a.paymentId === p.id).map((a) => ({
-        id: a.id,
-        authorizationId: a.authorizationId,
-        authNumber: allocationAuthNums.get(a.authorizationId) ?? null,
-        serviceMonth: a.serviceMonth ?? p.paymentMonth ?? p.checkDate.slice(0, 7),
-        amount: a.amount,
-        remittedAmount: (remittedByLine.get(a.id) ?? money(0)).toFixed(2),
-        remittanceLinks: (remittancesByLine.get(a.id) ?? []).map((link) => ({
-          id: link.id,
-          reference: link.reference,
-          date: link.date.slice(0, 10),
-          amount: link.amount,
-        })),
-        remitted: (remittedByLine.get(a.id) ?? money(0)).isZero()
-          ? "none"
-          : (remittedByLine.get(a.id) ?? money(0)).greaterThanOrEqualTo(money(a.amount)) ? "full" : "partial",
-      })),
-    }),
-  );
 }
 
 router.get("/payments", requireAuth, async (req, res): Promise<void> => {
@@ -818,6 +727,7 @@ router.post("/payments", requirePermission("check_writing"), async (req, res): P
     for (const allocation of allocations) {
       relationshipError = (await validateParticipantLinks(txDb, dupClientId, {
         authorizationId: allocation.authorizationId,
+        serviceAuthorizationOnly: true,
         invoiceId: null,
         vendorId: values.vendorId as string | null,
       })).error;
@@ -1669,6 +1579,7 @@ router.patch("/payments/:id", requirePermission("check_writing"), async (req, re
       for (const allocation of allocationsToPersist) {
         relationshipError = (await validateParticipantLinks(txDb, effClientId, {
           authorizationId: allocation.authorizationId,
+          serviceAuthorizationOnly: true,
           invoiceId: null,
           vendorId: effVendorId,
         })).error;
@@ -1824,12 +1735,6 @@ type MatchingTarget =
   | { kind: "fee"; feeId: string }
   | { kind: "ambiguous" };
 type AllocatableTarget = Exclude<MatchingTarget, { kind: "ambiguous" }>;
-
-async function allocatedToLine(paymentAllocationId: string, database: typeof db): Promise<ReturnType<typeof money>> {
-  const [row] = await database.select({ total: sql<string>`coalesce(sum(${remittanceAllocationsTable.amount}), 0)` })
-    .from(remittanceAllocationsTable).where(eq(remittanceAllocationsTable.paymentAllocationId, paymentAllocationId));
-  return money(row?.total ?? 0);
-}
 
 async function allocatedToFee(feeId: string, database: typeof db): Promise<ReturnType<typeof money>> {
   const [row] = await database.select({ total: sql<string>`coalesce(sum(${remittanceAllocationsTable.amount}), 0)` })

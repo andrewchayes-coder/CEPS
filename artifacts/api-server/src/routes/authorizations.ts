@@ -46,6 +46,7 @@ import {
   clientNameMap,
   vendorNameMap,
   authorizationTotalsPaid,
+  authorizationUsageSql,
   notDeleted,
   diffDetail,
 } from "../lib/serializers";
@@ -236,9 +237,7 @@ router.get("/authorizations", requireAuth, async (req, res): Promise<void> => {
   //   totalPaid  = fee total for 490 authorizations, otherwise payment total
   //   effective  = pending | expired (period end past) | exhausted (paid ≥ max) | status
   //   days       = ceil((servicePeriodEnd@00:00Z − now) / 1 day)
-  const paymentTotalSql = sql`coalesce((select sum(${paymentAllocationsTable.amount}) from ${paymentAllocationsTable} inner join ${paymentsTable} on ${paymentsTable.id} = ${paymentAllocationsTable.paymentId} where ${paymentAllocationsTable.authorizationId} = ${authorizationsTable.id} and ${paymentsTable.isDeleted} = false), 0)`;
-  const feeTotalSql = sql`coalesce((select sum(${feesTable.amount}) from ${feesTable} where ${feesTable.authorizationId} = ${authorizationsTable.id} and ${feesTable.isDeleted} = false and ${feesTable.status} <> 'waived'), 0)`;
-  const totalPaidSql = sql`case when ${authorizationsTable.paymentType} = 'fee' then ${feeTotalSql} else ${paymentTotalSql} end`;
+  const totalPaidSql = authorizationUsageSql();
   const effectiveStatusSql = sql`case when ${authorizationsTable.status} = 'canceled' then 'canceled' when ${authorizationsTable.servicePeriodStart} > (now() at time zone 'utc')::date then 'pending' when ${authorizationsTable.status} = 'pending' then 'pending' when ${authorizationsTable.servicePeriodEnd} < (now() at time zone 'utc')::date then 'expired' when ${totalPaidSql} >= ${authorizationsTable.maxPeriodAmount} then 'exhausted' else ${authorizationsTable.status} end`;
   const daysUntilExpirySql = sql`ceil(extract(epoch from ((${authorizationsTable.servicePeriodEnd} || 'T00:00:00Z')::timestamptz - now())) / 86400)`;
   if (query.data.status) {

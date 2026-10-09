@@ -77,7 +77,7 @@ function StaffInvoiceNewPage() {
     { clientId: selectedClientId, search: debouncedAuthSearch, limit: 50 },
     { query: { enabled: !!selectedClientId, queryKey: ['authorizations', { clientId: selectedClientId, search: debouncedAuthSearch, limit: 50 }] } }
   );
-  const filteredAuthorizations = authorizationsData?.items ?? [];
+  const filteredAuthorizations = (authorizationsData?.items ?? []).filter((auth) => auth.paymentType !== 'fee');
 
   const [vendorSearch, setVendorSearch] = React.useState('');
   const debouncedVendorSearch = useDebounce(vendorSearch, 300);

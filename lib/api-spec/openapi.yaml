@@ -695,6 +695,94 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ClientCase"
+  /clients/{id}/notes:
+    get:
+      operationId: listClientNotes
+      tags: [clients]
+      summary: List participant notes (staff and assigned coordinator only)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        "200":
+          description: Newest first, excluding deleted notes
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/ClientNote" }
+        "403": { description: Forbidden }
+        "404": { description: Participant not found }
+    post:
+      operationId: createClientNote
+      tags: [clients]
+      summary: Add a participant note
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ClientNoteInput" }
+      responses:
+        "201":
+          description: Created and audited
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ClientNote" }
+        "400": { description: Invalid note body }
+        "403": { description: Forbidden }
+        "404": { description: Participant not found }
+  /clients/{id}/notes/{noteId}:
+    patch:
+      operationId: updateClientNote
+      tags: [clients]
+      summary: Edit an author's own note, retaining a full audit trail
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+        - name: noteId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ClientNoteInput" }
+      responses:
+        "200":
+          description: Updated and audited
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ClientNote" }
+        "400": { description: Invalid note body }
+        "403": { description: Forbidden }
+        "404": { description: Participant or note not found }
+    delete:
+      operationId: deleteClientNote
+      tags: [clients]
+      summary: Soft delete a note (author or staff with manage-users permission)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+        - name: noteId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        "204": { description: Soft deleted and audited }
+        "403": { description: Forbidden }
+        "404": { description: Participant or note not found }
   /referrals:
     get:
       operationId: listReferrals
@@ -3035,6 +3123,30 @@ components:
         entityId: { type: ["string", "null"] }
         detail: { type: ["string", "null"] }
         createdAt: { type: string }
+    ClientNoteInput:
+      type: object
+      required: [body]
+      properties:
+        body:
+          type: string
+          minLength: 1
+          maxLength: 5000
+          description: Trimmed, nonblank text; author and timestamps are server-owned.
+    ClientNote:
+      type: object
+      required: [id, body, authorName, authorRole, createdAt, updatedAt, updatedByName, canEdit, canDelete]
+      properties:
+        id: { type: string, format: uuid }
+        body: { type: string }
+        authorName: { type: string }
+        authorRole: { type: string }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: ["string", "null"], format: date-time }
+        updatedByName: { type: ["string", "null"] }
+        canEdit: { type: boolean }
+        canDelete:
+          type: boolean
+          description: Author, or staff with manage-users permission. Never grants edit rights.
     Client:
       type: object
       required: [id, firstName, lastName, dateOfBirth, uciNumber, status]

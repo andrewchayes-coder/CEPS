@@ -552,6 +552,30 @@ export interface AuditEntry {
   createdAt: string;
 }
 
+export interface ClientNoteInput {
+  /**
+     * Trimmed, nonblank text; author and timestamps are server-owned.
+     * @minLength 1
+     * @maxLength 5000
+     */
+  body: string;
+}
+
+export interface ClientNote {
+  id: string;
+  body: string;
+  authorName: string;
+  authorRole: string;
+  createdAt: string;
+  /** @nullable */
+  updatedAt: string | null;
+  /** @nullable */
+  updatedByName: string | null;
+  canEdit: boolean;
+  /** Author, or staff with manage-users permission. Never grants edit rights. */
+  canDelete: boolean;
+}
+
 export type ClientStatus = typeof ClientStatus[keyof typeof ClientStatus];
 
 

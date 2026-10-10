@@ -970,6 +970,95 @@ export const GetClientCaseResponse = zod.object({
 
 
 /**
+ * @summary List participant notes (staff and assigned coordinator only)
+ */
+export const ListClientNotesParams = zod.object({
+  "id": zod.uuid()
+})
+
+export const ListClientNotesResponseItem = zod.object({
+  "id": zod.uuid(),
+  "body": zod.string(),
+  "authorName": zod.string(),
+  "authorRole": zod.string(),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date().nullable(),
+  "updatedByName": zod.string().nullable(),
+  "canEdit": zod.boolean(),
+  "canDelete": zod.boolean().describe('Author, or staff with manage-users permission. Never grants edit rights.')
+})
+export const ListClientNotesResponse = zod.array(ListClientNotesResponseItem)
+
+
+/**
+ * @summary Add a participant note
+ */
+export const CreateClientNoteParams = zod.object({
+  "id": zod.uuid()
+})
+
+export const createClientNoteBodyBodyMax = 5000;
+
+
+
+export const CreateClientNoteBody = zod.object({
+  "body": zod.string().min(1).max(createClientNoteBodyBodyMax).describe('Trimmed, nonblank text; author and timestamps are server-owned.')
+})
+
+export const CreateClientNoteResponse = zod.object({
+  "id": zod.uuid(),
+  "body": zod.string(),
+  "authorName": zod.string(),
+  "authorRole": zod.string(),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date().nullable(),
+  "updatedByName": zod.string().nullable(),
+  "canEdit": zod.boolean(),
+  "canDelete": zod.boolean().describe('Author, or staff with manage-users permission. Never grants edit rights.')
+})
+
+
+/**
+ * @summary Edit an author's own note, retaining a full audit trail
+ */
+export const UpdateClientNoteParams = zod.object({
+  "id": zod.uuid(),
+  "noteId": zod.uuid()
+})
+
+export const updateClientNoteBodyBodyMax = 5000;
+
+
+
+export const UpdateClientNoteBody = zod.object({
+  "body": zod.string().min(1).max(updateClientNoteBodyBodyMax).describe('Trimmed, nonblank text; author and timestamps are server-owned.')
+})
+
+export const UpdateClientNoteResponse = zod.object({
+  "id": zod.uuid(),
+  "body": zod.string(),
+  "authorName": zod.string(),
+  "authorRole": zod.string(),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date().nullable(),
+  "updatedByName": zod.string().nullable(),
+  "canEdit": zod.boolean(),
+  "canDelete": zod.boolean().describe('Author, or staff with manage-users permission. Never grants edit rights.')
+})
+
+
+/**
+ * @summary Soft delete a note (author or staff with manage-users permission)
+ */
+export const DeleteClientNoteParams = zod.object({
+  "id": zod.uuid(),
+  "noteId": zod.uuid()
+})
+
+export const DeleteClientNoteResponse = zod.void()
+
+
+/**
  * @summary List referrals (filterable, scoped by role)
  */
 export const ListReferralsQueryParams = zod.object({

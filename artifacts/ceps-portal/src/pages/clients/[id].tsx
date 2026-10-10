@@ -26,6 +26,7 @@ import { DocumentPreview } from '@/components/document-preview';
 import { getInvoiceDisplayMonth } from '@/lib/invoice-utils';
 import { earliestPaymentServiceMonth, formatPaymentServiceMonths } from '@/lib/payment-utils';
 import { MonthlyAmount, MonthlyAmountLine } from '@/components/authorization-monthly-amount';
+import { ParticipantNotes } from '@/components/participant-notes';
 import { PaymentRemittedState } from '@/components/payment-remitted-state';
 
 type PaymentRow = { payment: Payment; line: PaymentAllocation | null };
@@ -430,6 +431,7 @@ export default function ClientDetailPage() {
                   </CardContent>
                 </Card>
               )}
+            <ParticipantNotes key={client.id} clientId={client.id} />
             </div>
 
             <div className="space-y-6">

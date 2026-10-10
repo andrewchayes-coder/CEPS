@@ -52,6 +52,8 @@ export * from './client';
 export * from './clientCase';
 export * from './clientInput';
 export * from './clientInputStatus';
+export * from './clientNote';
+export * from './clientNoteInput';
 export * from './clientStatus';
 export * from './clientUpdate';
 export * from './clientUpdateStatus';

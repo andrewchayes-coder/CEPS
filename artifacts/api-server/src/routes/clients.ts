@@ -39,6 +39,7 @@ import { sortedOrder } from "../lib/sorting";
 import { suggestUnmatchedPosForClient } from "../lib/posMatching";
 import { enrichPayments } from "../lib/paymentSerialization";
 import { softDeleteClient } from "../lib/participantLinks";
+import { coordinatorCanAccessClient } from "../lib/clientAccess";
 
 const router: IRouter = Router();
 
@@ -242,7 +243,7 @@ router.get("/clients/:id", requireAuth, async (req, res): Promise<void> => {
     return;
   }
   // Coordinators may only see clients assigned to them (same rule as the list).
-  if (req.user!.role === "service_coordinator" && client.assignedCoordinatorId !== req.user!.id) {
+  if (!coordinatorCanAccessClient(req.user!, client)) {
     res.status(403).json({ error: "Forbidden" });
     return;
   }
@@ -359,7 +360,7 @@ router.get("/clients/:id/case", requireAuth, async (req, res): Promise<void> => 
     return;
   }
   // Coordinators may only see clients assigned to them (same rule as the list).
-  if (req.user!.role === "service_coordinator" && client.assignedCoordinatorId !== req.user!.id) {
+  if (!coordinatorCanAccessClient(req.user!, client)) {
     res.status(403).json({ error: "Forbidden" });
     return;
   }

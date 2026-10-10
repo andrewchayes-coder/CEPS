@@ -10,6 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { Download, ChevronLeft, ChevronRight } from 'lucide-react';
 import { format } from 'date-fns';
+import { Link } from 'wouter';
 import { downloadCSV } from '@/lib/csv';
 import { useToast } from '@/hooks/use-toast';
 import { useDebounce } from '@/hooks/use-debounce';
@@ -205,7 +206,16 @@ export default function AuditLogPage() {
                     <TableCell className="font-medium">{e.userName ?? '—'}</TableCell>
                     <TableCell><span className="font-mono text-xs">{e.action}</span></TableCell>
                     <TableCell className="capitalize text-muted-foreground">{e.entityType ?? '—'}</TableCell>
-                    <TableCell className="font-mono text-xs text-muted-foreground">{e.entityId ?? '—'}</TableCell>
+                    <TableCell className="font-mono text-xs text-muted-foreground">
+                      {e.entityType === 'client_note' && e.entityId ? (
+                        <Link href={`/clients/${e.entityId}`} className="text-primary hover:underline" data-testid={`link-audit-participant-${e.id}`}>{e.entityId}</Link>
+                      ) : (e.entityId ?? '—')}
+                    </TableCell>
+                    {e.entityType === 'client_note' ? (
+                      <TableCell className="min-w-[16rem] max-w-md">
+                        {e.detail ? <span className="block whitespace-pre-wrap [overflow-wrap:anywhere]" data-testid={`detail-audit-${e.id}`}>{e.detail}</span> : <span className="text-muted-foreground">—</span>}
+                      </TableCell>
+                    ) : (
                     <TableCell className="max-w-xs">
                       {e.detail ? (
                         <Tooltip>
@@ -220,6 +230,7 @@ export default function AuditLogPage() {
                         <span className="text-muted-foreground">—</span>
                       )}
                     </TableCell>
+                    )}
                   </TableRow>
                 ))
               )}

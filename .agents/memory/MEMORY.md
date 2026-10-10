@@ -28,3 +28,4 @@
 - [Derived authorization status](derived-authorization-status.md) — cancellation overrides; dates/usage derive other statuses; 490 exhaustion flags review, never stops fee generation.
 - [Referral terminology](referral-terminology.md) — use Referral in user-facing copy; keep the Intake status label and existing internal identifiers.
 - [Referral service requirements](referral-service-requirements.md) — dates and amount are required without a POS number; no TBD end date; preserve untouched legacy referrals.
+- [Participant notes policy](participant-notes-policy.md) — plain text without categories; author editing never expires because CEPS ruled out time windows.

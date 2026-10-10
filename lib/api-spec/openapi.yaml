@@ -1118,7 +1118,7 @@ paths:
           in: query
           schema:
             type: string
-            enum: [authNumber, clientName, vendorName, servicePeriodStart, servicePeriodEnd, maxPeriodAmount, status, createdAt]
+            enum: [authNumber, clientName, vendorName, servicePeriodStart, servicePeriodEnd, monthlyAmount, maxPeriodAmount, status, createdAt]
         - name: sortDirection
           in: query
           schema: { type: string, enum: [asc, desc] }
@@ -3453,6 +3453,15 @@ components:
         servicePeriodStart: { type: string }
         servicePeriodEnd: { type: string }
         monthlyAmount: { type: ["string", "null"] }
+        monthlyAmountChanged:
+          type: boolean
+          description: "List-only: whether an earlier version differs from the current monthly amount."
+        previousMonthlyAmount:
+          type: ["string", "null"]
+          description: "List-only: monthly amount immediately before the latest transition to the current amount."
+        monthlyAmountChangedReceivedDate:
+          type: ["string", "null"]
+          description: "List-only: received date of the newer version at that amount transition; null if not recorded."
         oneTimeAmount: { type: ["string", "null"] }
         maxPeriodAmount: { type: string }
         units: { type: ["integer", "null"] }

@@ -18,6 +18,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { useAuth } from '@/components/auth/auth-provider';
 import { useDebounce } from '@/hooks/use-debounce';
 import { DateRangeFilter } from '@/components/date-range-filter';
+import { MonthlyAmount } from '@/components/authorization-monthly-amount';
 import { PosBatchUpload } from '@/components/pos-batch-upload';
 
 const PAGE_SIZE = 50;
@@ -31,7 +32,7 @@ export default function AuthorizationsPage() {
   const [startDate, setStartDate] = useState<string>();
   const [endDate, setEndDate] = useState<string>();
   const [page, setPage] = useState(0);
-  const sort = useTableSort<'authNumber' | 'clientName' | 'vendorName' | 'servicePeriodStart' | 'maxPeriodAmount' | 'status'>();
+  const sort = useTableSort<'authNumber' | 'clientName' | 'vendorName' | 'servicePeriodStart' | 'monthlyAmount' | 'maxPeriodAmount' | 'status'>();
   const onSort = (key: Parameters<typeof sort.toggleSort>[0]) => {
     sort.toggleSort(key);
     setPage(0);
@@ -103,6 +104,7 @@ export default function AuthorizationsPage() {
                 <SortableTableHead label="Participant" sortKey="clientName" activeSortBy={sort.sortBy} sortDirection={sort.sortDirection} onSort={onSort} />
                 <SortableTableHead label="Vendor" sortKey="vendorName" activeSortBy={sort.sortBy} sortDirection={sort.sortDirection} onSort={onSort} />
                 <SortableTableHead label="Service Period" sortKey="servicePeriodStart" activeSortBy={sort.sortBy} sortDirection={sort.sortDirection} onSort={onSort} />
+                <SortableTableHead label="Monthly" sortKey="monthlyAmount" activeSortBy={sort.sortBy} sortDirection={sort.sortDirection} onSort={onSort} className="text-right" />
                 <SortableTableHead label="Max Amount" sortKey="maxPeriodAmount" activeSortBy={sort.sortBy} sortDirection={sort.sortDirection} onSort={onSort} className="text-right" />
                 <SortableTableHead label="Status" sortKey="status" activeSortBy={sort.sortBy} sortDirection={sort.sortDirection} onSort={onSort} />
                 {isStaff && <TableHead className="text-right">Actions</TableHead>}
@@ -113,7 +115,7 @@ export default function AuthorizationsPage() {
                 <AuthsTableSkeleton />
               ) : auths?.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={isStaff ? 7 : 6} className="h-24 text-center text-muted-foreground">
+                  <TableCell colSpan={isStaff ? 8 : 7} className="h-24 text-center text-muted-foreground">
                     No authorizations found.
                   </TableCell>
                 </TableRow>
@@ -137,6 +139,9 @@ export default function AuthorizationsPage() {
                              <AlertCircle className="w-3 h-3 mr-1" /> {auth.daysUntilExpiry} days left
                            </span>
                         )}
+                      </TableCell>
+                      <TableCell className="text-right whitespace-nowrap">
+                        <MonthlyAmount auth={auth} />
                       </TableCell>
                       <TableCell className="text-right">
                         ${parseFloat(auth.maxPeriodAmount).toFixed(2)}
@@ -223,6 +228,7 @@ function AuthsTableSkeleton() {
           <TableCell><Skeleton className="h-4 w-32" /></TableCell>
           <TableCell><Skeleton className="h-4 w-32" /></TableCell>
           <TableCell><Skeleton className="h-4 w-28" /></TableCell>
+          <TableCell className="text-right"><Skeleton className="h-4 w-16 ml-auto" /></TableCell>
           <TableCell className="text-right"><Skeleton className="h-4 w-16 ml-auto" /></TableCell>
           <TableCell><Skeleton className="h-5 w-20 rounded-full" /></TableCell>
         </TableRow>

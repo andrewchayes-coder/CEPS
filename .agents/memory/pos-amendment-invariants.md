@@ -14,3 +14,9 @@ For amendments, the incoming received date belongs only to the live authorizatio
 **Why:** CEPS corrected the earlier direction on 2026-10-09: each version must show when that version arrived, not old amounts under the incoming amendment's date.
 
 **How to apply:** Preserve prior received dates in newly written snapshots in both amendment paths. Do not backfill existing history rows. Preserve stored status through amendments and re-derive the effective status from the updated dates and budget.
+
+Monthly amount change markers describe the most recent actual change to the current rate, using the received date of the newer version at that transition. A later dates-only amendment must not move that date.
+
+**Why:** CEPS needs to distinguish the current monthly rate from the period maximum, and a dates-only amendment does not change how long the previous rate applied.
+
+**How to apply:** Preserve the amount transition's date across subsequent equal-rate versions. If that date was not recorded, say so rather than substituting a later amendment date.

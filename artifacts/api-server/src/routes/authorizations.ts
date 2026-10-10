@@ -52,6 +52,7 @@ import {
   diffDetail,
 } from "../lib/serializers";
 import { sortedOrder } from "../lib/sorting";
+import { authorizationMonthlyChanges } from "../lib/authorizationMonthlyChanges";
 import { softDeleteAuthorization, validateParticipantLinks } from "../lib/participantLinks";
 import { relinkPendingFeesToFeeAuthorizations } from "../lib/feeAuthorization";
 import { advanceReferralForAuthorization } from "../lib/advanceReferralForAuthorization";
@@ -261,6 +262,7 @@ router.get("/authorizations", requireAuth, async (req, res): Promise<void> => {
       vendorName: sql`lower((select name from vendors where id = ${authorizationsTable.vendorId}))`,
       servicePeriodStart: sql`${authorizationsTable.servicePeriodStart}`,
       servicePeriodEnd: sql`${authorizationsTable.servicePeriodEnd}`,
+      monthlyAmount: sql`${authorizationsTable.monthlyAmount}`,
       maxPeriodAmount: sql`${authorizationsTable.maxPeriodAmount}`,
       status: effectiveStatusSql,
       createdAt: sql`${authorizationsTable.createdAt}`,
@@ -279,17 +281,19 @@ router.get("/authorizations", requireAuth, async (req, res): Promise<void> => {
       .offset(offset),
   ]);
   const totals = await authorizationTotalsPaid(auths.map((a) => a.id));
-  const [clientNames, vendorNames] = await Promise.all([
+  const [clientNames, vendorNames, monthlyChanges] = await Promise.all([
     clientNameMap(auths.map((a) => a.clientId)),
     vendorNameMap(auths.map((a) => a.vendorId)),
+    authorizationMonthlyChanges(auths),
   ]);
-  const items = auths.map((a) =>
-    authorizationJson(a, {
+  const items = auths.map((a) => ({
+    ...authorizationJson(a, {
       clientName: clientNames.get(a.clientId),
       vendorName: a.vendorId ? vendorNames.get(a.vendorId) : null,
       totalPaid: totals.get(a.id) ?? 0,
     }),
-  );
+    ...monthlyChanges.get(a.id),
+  }));
   res.json(ListAuthorizationsResponse.parse({ items, total }));
 });
 

@@ -27,6 +27,18 @@ export interface Authorization {
   servicePeriodEnd: string;
   /** @nullable */
   monthlyAmount?: string | null;
+  /** List-only: whether an earlier version differs from the current monthly amount. */
+  monthlyAmountChanged?: boolean;
+  /**
+     * List-only: monthly amount immediately before the latest transition to the current amount.
+     * @nullable
+     */
+  previousMonthlyAmount?: string | null;
+  /**
+     * List-only: received date of the newer version at that amount transition; null if not recorded.
+     * @nullable
+     */
+  monthlyAmountChangedReceivedDate?: string | null;
   /** @nullable */
   oneTimeAmount?: string | null;
   maxPeriodAmount: string;

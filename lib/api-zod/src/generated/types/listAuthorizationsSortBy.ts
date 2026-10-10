@@ -15,6 +15,7 @@ export const ListAuthorizationsSortBy = {
   vendorName: 'vendorName',
   servicePeriodStart: 'servicePeriodStart',
   servicePeriodEnd: 'servicePeriodEnd',
+  monthlyAmount: 'monthlyAmount',
   maxPeriodAmount: 'maxPeriodAmount',
   status: 'status',
   createdAt: 'createdAt',

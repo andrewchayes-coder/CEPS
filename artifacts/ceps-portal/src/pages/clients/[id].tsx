@@ -25,6 +25,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { DocumentPreview } from '@/components/document-preview';
 import { getInvoiceDisplayMonth } from '@/lib/invoice-utils';
 import { earliestPaymentServiceMonth, formatPaymentServiceMonths } from '@/lib/payment-utils';
+import { MonthlyAmount, MonthlyAmountLine } from '@/components/authorization-monthly-amount';
 import { PaymentRemittedState } from '@/components/payment-remitted-state';
 
 type PaymentRow = { payment: Payment; line: PaymentAllocation | null };
@@ -241,6 +242,7 @@ export default function ClientDetailPage() {
     vendorName: (auth) => auth.vendorName,
     serviceCode: (auth) => auth.serviceCode,
     servicePeriodStart: (auth) => new Date(auth.servicePeriodStart),
+    monthlyAmount: (auth) => auth.monthlyAmount == null ? null : Number(auth.monthlyAmount),
     maxPeriodAmount: (auth) => Number(auth.maxPeriodAmount),
     status: (auth) => auth.status,
   });
@@ -455,6 +457,7 @@ export default function ClientDetailPage() {
                                 {auth.authNumber}
                               </Link>
                             </p>
+                            <MonthlyAmountLine auth={auth} />
                             <p className="text-xs text-muted-foreground line-clamp-1">
                               <VendorLink id={auth.vendorId} name={auth.vendorName} className="text-xs text-muted-foreground hover:underline" />
                             </p>
@@ -492,6 +495,7 @@ export default function ClientDetailPage() {
                     <SortableTableHead sortDirection={authorizationsSort.sort.key === 'vendorName' ? authorizationsSort.sort.direction : null} onSort={() => authorizationsSort.onSort('vendorName')}>Vendor</SortableTableHead>
                     <SortableTableHead sortDirection={authorizationsSort.sort.key === 'serviceCode' ? authorizationsSort.sort.direction : null} onSort={() => authorizationsSort.onSort('serviceCode')}>Code</SortableTableHead>
                     <SortableTableHead sortDirection={authorizationsSort.sort.key === 'servicePeriodStart' ? authorizationsSort.sort.direction : null} onSort={() => authorizationsSort.onSort('servicePeriodStart')}>Period</SortableTableHead>
+                    <SortableTableHead className="text-right" sortDirection={authorizationsSort.sort.key === 'monthlyAmount' ? authorizationsSort.sort.direction : null} onSort={() => authorizationsSort.onSort('monthlyAmount')}>Monthly</SortableTableHead>
                     <SortableTableHead className="text-right" sortDirection={authorizationsSort.sort.key === 'maxPeriodAmount' ? authorizationsSort.sort.direction : null} onSort={() => authorizationsSort.onSort('maxPeriodAmount')}>Max Amount</SortableTableHead>
                     <SortableTableHead sortDirection={authorizationsSort.sort.key === 'status' ? authorizationsSort.sort.direction : null} onSort={() => authorizationsSort.onSort('status')}>Status</SortableTableHead>
                   </TableRow>
@@ -509,6 +513,7 @@ export default function ClientDetailPage() {
                       <TableCell className="text-xs whitespace-nowrap">
                         {format(new Date(auth.servicePeriodStart), 'MM/dd/yy')} - {format(new Date(auth.servicePeriodEnd), 'MM/dd/yy')}
                       </TableCell>
+                      <TableCell className="text-right whitespace-nowrap"><MonthlyAmount auth={auth} /></TableCell>
                       <TableCell className="text-right">${parseFloat(auth.maxPeriodAmount).toFixed(2)}</TableCell>
                       <TableCell>
                         <Badge variant="outline" className={auth.status === 'active' ? 'border-chart-5 text-chart-5' : ''}>{auth.status}</Badge>
@@ -516,7 +521,7 @@ export default function ClientDetailPage() {
                     </TableRow>
                   ))}
                   {authorizations.length === 0 && (
-                    <TableRow><TableCell colSpan={6} className="text-center py-8 text-muted-foreground">No authorizations found.</TableCell></TableRow>
+                    <TableRow><TableCell colSpan={7} className="text-center py-8 text-muted-foreground">No authorizations found.</TableCell></TableRow>
                   )}
                 </TableBody>
               </Table>

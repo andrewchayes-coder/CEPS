@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeAll, afterAll } from "vitest";
+import { describe, it, expect, beforeAll, afterAll, vi } from "vitest";
 import request from "supertest";
 import { inArray } from "drizzle-orm";
 import {
@@ -8,6 +8,8 @@ import {
   clientsTable,
   vendorsTable,
   authorizationsTable,
+  authorizationVersionsTable,
+  pool,
 } from "@workspace/db";
 import app from "../app";
 import { newToken } from "../lib/auth";
@@ -58,6 +60,9 @@ async function insertAuth(opts: {
   status?: string;
   servicePeriodStart?: string;
   servicePeriodEnd?: string;
+  monthlyAmount?: string | null;
+  oneTimeAmount?: string | null;
+  receivedDate?: string | null;
 }) {
   const [a] = await db
     .insert(authorizationsTable)
@@ -70,6 +75,9 @@ async function insertAuth(opts: {
       servicePeriodStart: opts.servicePeriodStart ?? "2026-01-01",
       servicePeriodEnd: opts.servicePeriodEnd ?? "2027-06-30",
       maxPeriodAmount: "1000.00",
+      monthlyAmount: opts.monthlyAmount ?? null,
+      oneTimeAmount: opts.oneTimeAmount ?? null,
+      receivedDate: opts.receivedDate ?? null,
       status: opts.status ?? "active",
     })
     .returning();
@@ -148,6 +156,7 @@ beforeAll(async () => {
 });
 
 afterAll(async () => {
+  await db.delete(authorizationVersionsTable).where(inArray(authorizationVersionsTable.authorizationId, createdAuthIds));
   await db.delete(authorizationsTable).where(inArray(authorizationsTable.id, createdAuthIds));
   await db.delete(sessionsTable).where(inArray(sessionsTable.userId, [staffId, vendorUserId, parentUserId, coordinatorUserId]));
   await db.delete(clientsTable).where(inArray(clientsTable.id, [clientA, clientB]));
@@ -306,5 +315,99 @@ describe("GET /authorizations service-period range", () => {
     const ids = res.body.items.map((a: any) => a.id);
     expect(ids).toEqual(expect.arrayContaining([startsAtEnd.id, endsAtStart.id]));
     expect(ids).not.toContain(outside.id);
+  });
+});
+
+describe("GET /authorizations monthly amounts", () => {
+  let changedId: string;
+  let unchangedId: string;
+  let zeroId: string;
+  let oneTimeId: string;
+
+  beforeAll(async () => {
+    const unchanged = await insertAuth({ clientId: clientA, monthlyAmount: "100.00" });
+    unchangedId = unchanged.id;
+    await insertAuth({ clientId: clientA, monthlyAmount: "200.00" });
+    const changed = await insertAuth({
+      clientId: clientA, monthlyAmount: "900.00", receivedDate: "2026-10-05",
+    });
+    changedId = changed.id;
+    const zero = await insertAuth({ clientId: clientA, monthlyAmount: "0.00" });
+    zeroId = zero.id;
+    const oneTime = await insertAuth({ clientId: clientA, oneTimeAmount: "250.00", receivedDate: "2026-10-01" });
+    oneTimeId = oneTime.id;
+    await db.insert(authorizationVersionsTable).values([
+      { ...unchanged, id: undefined, authorizationId: unchanged.id, changedAt: new Date("2026-09-01T00:00:00Z") },
+      { ...changed, id: undefined, authorizationId: changed.id, monthlyAmount: "500.00",
+        receivedDate: "2026-09-01", changedAt: new Date("2026-10-01T00:00:00Z") },
+      // The newest amendment did not change the amount. The tooltip must
+      // point to October 1, not the latest (October 5) received date.
+      { ...changed, id: undefined, authorizationId: changed.id,
+        receivedDate: "2026-10-01", changedAt: new Date("2026-10-05T00:00:00Z") },
+      { ...zero, id: undefined, authorizationId: zero.id, monthlyAmount: "10.00",
+        receivedDate: "2026-09-01", changedAt: new Date("2026-10-01T00:00:00Z") },
+      { ...oneTime, id: undefined, authorizationId: oneTime.id, monthlyAmount: "200.00",
+        oneTimeAmount: null, receivedDate: "2026-09-01", changedAt: new Date("2026-10-01T00:00:00Z") },
+    ]);
+  });
+
+  it("sorts numerically by the current monthly amount in both directions before pagination", async () => {
+    const asc = await get(staffCookie, { clientId: clientA, sortBy: "monthlyAmount", sortDirection: "asc", limit: 1000 });
+    expect(asc.status).toBe(200);
+    expect(asc.body.items.filter((a: any) => a.monthlyAmount !== null).map((a: any) => a.monthlyAmount))
+      .toEqual(["0.00", "100.00", "200.00", "900.00"]);
+    const desc = await get(staffCookie, { clientId: clientA, sortBy: "monthlyAmount", sortDirection: "desc", limit: 2 });
+    expect(desc.status).toBe(200);
+    expect(desc.body.items.map((a: any) => a.monthlyAmount)).toEqual(["900.00", "200.00"]);
+  });
+
+  it("returns current amounts and the latest amount transition for all authorized roles", async () => {
+    for (const cookie of [staffCookie, coordinatorCookie, parentCookie]) {
+      const res = await get(cookie, { clientId: clientA, limit: 1000 });
+      expect(res.status).toBe(200);
+      const changed = res.body.items.find((a: any) => a.id === changedId);
+      expect(changed).toMatchObject({
+        monthlyAmount: "900.00", monthlyAmountChanged: true,
+        previousMonthlyAmount: "500.00", monthlyAmountChangedReceivedDate: "2026-10-01",
+      });
+      expect(res.body.items.find((a: any) => a.id === unchangedId)).toMatchObject({
+        monthlyAmountChanged: false, previousMonthlyAmount: null, monthlyAmountChangedReceivedDate: null,
+      });
+      expect(res.body.items.find((a: any) => a.id === zeroId)).toMatchObject({
+        monthlyAmount: "0.00", monthlyAmountChanged: true,
+        previousMonthlyAmount: "10.00", monthlyAmountChangedReceivedDate: null,
+      });
+      expect(res.body.items.find((a: any) => a.id === oneTimeId)).toMatchObject({
+        monthlyAmount: null, oneTimeAmount: "250.00", monthlyAmountChanged: true, previousMonthlyAmount: "200.00",
+      });
+      expect(res.body.items.every((a: any) => a.clientId === clientA)).toBe(true);
+    }
+  });
+
+  it("searches raw and currency-formatted monthly amounts", async () => {
+    for (const search of ["900.00", "$900.00"]) {
+      const res = await get(staffCookie, { clientId: clientA, search });
+      expect(res.status).toBe(200);
+      expect(res.body.items.map((a: any) => a.id)).toEqual([changedId]);
+    }
+  });
+
+  it("uses exactly one grouped history query for multiple authorization rows", async () => {
+    const spy = vi.spyOn(pool, "query");
+    try {
+      const res = await get(staffCookie, { clientId: clientA, limit: 1000 });
+      expect(res.status).toBe(200);
+      expect(res.body.items.length).toBeGreaterThan(5);
+      const queries = spy.mock.calls.map(call => {
+        const query = call[0] as unknown;
+        return typeof query === "string" ? query : (query as { text?: string }).text ?? "";
+      });
+      const history = queries.filter(query => query.includes('"authorization_versions"'));
+      expect(history).toHaveLength(1);
+      expect(history[0]).toMatch(/jsonb_agg/i);
+      expect(history[0]).toMatch(/group by/i);
+    } finally {
+      spy.mockRestore();
+    }
   });
 });

@@ -7,6 +7,8 @@
  */
 
 export interface InvoiceValidationCheck {
+  /** Non-blocking information; does not prevent validation. */
+  warning?: boolean;
   check: string;
   passed: boolean;
   message: string;

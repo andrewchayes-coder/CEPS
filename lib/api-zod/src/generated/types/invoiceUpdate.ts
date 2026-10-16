@@ -11,6 +11,16 @@ import type { InvoiceUpdatePaymentType } from './invoiceUpdatePaymentType';
 import type { InvoiceUpdateStatus } from './invoiceUpdateStatus';
 
 export interface InvoiceUpdate {
+  /**
+     * @nullable
+     * @pattern ^\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])$
+     */
+  serviceStartDate?: string | null;
+  /**
+     * @nullable
+     * @pattern ^\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])$
+     */
+  serviceEndDate?: string | null;
   /** @nullable */
   authorizationId?: string | null;
   /** @nullable */

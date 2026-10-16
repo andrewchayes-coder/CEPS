@@ -1,10 +1,11 @@
 import { useQueryClient } from '@tanstack/react-query';
 import { invalidateInvoiceQueries } from '@/lib/invoice-query-cache';
 import React from 'react';
-import { useCreateInvoice, useListClients, useListVendors } from '@workspace/api-client-react';
+import { getGetClientQueryKey, useCreateInvoice, useGetClient, useListClients, useListVendors } from '@workspace/api-client-react';
 import { useUpload } from '@workspace/object-storage-web';
 import { ArrowLeft, CheckCircle2, FileText, Loader2, RotateCcw, Save, XCircle } from 'lucide-react';
 import { Link } from 'wouter';
+import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { FormControl, FormField, FormItem, FormLabel, FormMessage, Form } from '@/components/ui/form';
@@ -15,15 +16,22 @@ import { trackAnalyticsEvent } from '@/lib/analytics';
 import { apiErrorMessage } from '@/lib/api-error';
 import { useAuth } from '@/components/auth/auth-provider';
 import { useDebounce } from '@/hooks/use-debounce';
+import { validateServiceDateRange } from '@/lib/invoice-service-dates';
+import { Input } from '@/components/ui/input';
 import { useForm } from 'react-hook-form';
 import * as z from 'zod';
 import { zodResolver } from '@hookform/resolvers/zod';
 
-const coordinatorSchema = z.object({
+const simplifiedInvoiceSchema = z.object({
   clientId: z.string().min(1, 'Participant is required'),
   vendorId: z.string().optional(),
   documentType: z.enum(['invoice', 'receipt']),
   notes: z.string().optional(),
+  serviceStartDate: z.string(),
+  serviceEndDate: z.string(),
+}).superRefine((v, ctx) => {
+  const err = validateServiceDateRange(v.serviceStartDate, v.serviceEndDate);
+  if (err) ctx.addIssue({ code: 'custom', path: [!v.serviceStartDate || err.includes('start date') ? 'serviceStartDate' : 'serviceEndDate'], message: err });
 });
 
 type UploadEntry = {
@@ -32,10 +40,10 @@ type UploadEntry = {
   status: 'uploading' | 'attached' | 'upload_failed' | 'submitting' | 'submit_failed' | 'submitted';
   objectPath?: string;
   error?: string;
-  submissionValues?: z.infer<typeof coordinatorSchema>;
+  submissionValues?: z.infer<typeof simplifiedInvoiceSchema>;
 };
 
-export function CoordinatorInvoiceSubmit() {
+export function SimplifiedInvoiceSubmit() {
   const { toast } = useToast();
   const { user } = useAuth();
   const createInvoice = useCreateInvoice();
@@ -48,15 +56,21 @@ export function CoordinatorInvoiceSubmit() {
   const [vendorSearch, setVendorSearch] = React.useState('');
   const debouncedClientSearch = useDebounce(clientSearch, 300);
   const debouncedVendorSearch = useDebounce(vendorSearch, 300);
-  const form = useForm<z.infer<typeof coordinatorSchema>>({
-    resolver: zodResolver(coordinatorSchema),
-    defaultValues: { clientId: '', vendorId: '', documentType: 'invoice', notes: '' },
+  const isCoordinator = user?.role === 'service_coordinator';
+  const linkedClientId = !isCoordinator && user?.linkedRecordType === 'client' ? user.linkedRecordId ?? '' : '';
+  const { data: linkedClient, isLoading: linkedLoading, isError: linkedError } = useGetClient(linkedClientId, {
+    query: { enabled: !isCoordinator && !!linkedClientId, queryKey: getGetClientQueryKey(linkedClientId) },
   });
-  const selectedClientId = form.watch('clientId');
-  const { data: clientsData, isLoading: clientsLoading } = useListClients({ search: debouncedClientSearch, limit: 50 });
+  const form = useForm<z.infer<typeof simplifiedInvoiceSchema>>({
+    resolver: zodResolver(simplifiedInvoiceSchema),
+    defaultValues: { clientId: '', vendorId: '', documentType: 'invoice', notes: '', serviceStartDate: '', serviceEndDate: '' },
+  });
+  const watchedClientId = form.watch('clientId');
+  const selectedClientId = isCoordinator ? watchedClientId : linkedClientId;
+  const { data: clientsData, isLoading: clientsLoading } = useListClients({ search: debouncedClientSearch, limit: 50 }, { query: { enabled: isCoordinator, queryKey: ['clients', 'simplified-invoice', debouncedClientSearch] } });
   const { data: vendorsData, isLoading: vendorsLoading } = useListVendors(
     { clientId: selectedClientId, search: debouncedVendorSearch, limit: 50, invoiceEligible: 'true' },
-    { query: { enabled: !!selectedClientId, queryKey: ['vendors', { clientId: selectedClientId, search: debouncedVendorSearch, limit: 50, invoiceEligible: 'true' }] } },
+    { query: { enabled: !!selectedClientId, queryKey: ['vendors', 'simplified-invoice', { clientId: selectedClientId, search: debouncedVendorSearch, limit: 50, invoiceEligible: 'true' }] } },
   );
   const clients = clientsData?.items ?? [];
   const vendors = vendorsData?.items ?? [];
@@ -67,6 +81,10 @@ export function CoordinatorInvoiceSubmit() {
   React.useEffect(() => {
     form.setValue('vendorId', '');
   }, [selectedClientId, form]);
+
+  React.useEffect(() => {
+    if (!isCoordinator && linkedClientId) form.setValue('clientId', linkedClientId);
+  }, [isCoordinator, linkedClientId, form]);
 
   const uploadSelectedFile = async (entry: UploadEntry) => {
     setUploads((current) => current.map((item) => item.id === entry.id ? { ...item, status: 'uploading', error: undefined } : item));
@@ -100,13 +118,15 @@ export function CoordinatorInvoiceSubmit() {
     accepted.forEach((entry) => { void uploadSelectedFile(entry); });
   };
 
-  const submitOne = async (entry: UploadEntry, values: z.infer<typeof coordinatorSchema>) => {
+  const submitOne = async (entry: UploadEntry, values: z.infer<typeof simplifiedInvoiceSchema>) => {
     if (!entry.objectPath) return false;
     setUploads((current) => current.map((item) => item.id === entry.id ? { ...item, status: 'submitting', error: undefined } : item));
     try {
       await createInvoice.mutateAsync({
         data: {
-          clientId: values.clientId,
+          clientId: isCoordinator ? values.clientId : linkedClientId,
+          serviceStartDate: values.serviceStartDate,
+          serviceEndDate: values.serviceEndDate,
           ...(values.vendorId && values.vendorId !== 'none' ? { vendorId: values.vendorId } : {}),
           ...(values.notes ? { notes: values.notes } : {}),
           documentUrl: entry.objectPath,
@@ -127,7 +147,7 @@ export function CoordinatorInvoiceSubmit() {
     }
   };
 
-  const submit = async (values: z.infer<typeof coordinatorSchema>, retryOnlyFailed = false) => {
+  const submit = async (values: z.infer<typeof simplifiedInvoiceSchema>, retryOnlyFailed = false) => {
     if (submissionLock.current || (hasSubmitFailures && !retryOnlyFailed)) return;
     const eligible = uploads.filter((entry) => entry.objectPath && (retryOnlyFailed
       ? entry.status === 'submit_failed'
@@ -144,7 +164,7 @@ export function CoordinatorInvoiceSubmit() {
         trackAnalyticsEvent('invoice_created', { role: user?.role ?? 'unknown', status: 'needs_entry', count: succeeded });
         toast({
           title: 'Invoices submitted',
-          description: `${succeeded} invoice${succeeded === 1 ? '' : 's'} submitted to CEPS for entry.`,
+          description: `${succeeded} invoice${succeeded === 1 ? '' : 's'} submitted to CEPS for review.`,
         });
       }
       if (succeeded < results.length) {
@@ -166,14 +186,23 @@ export function CoordinatorInvoiceSubmit() {
       </Button>
       <div>
         <h1 className="text-3xl font-bold tracking-tight">Submit Invoice</h1>
-        <p className="text-muted-foreground mt-1">Attach invoice documents for CEPS to enter and review.</p>
+        <p className="text-muted-foreground mt-1">Attach invoice documents for CEPS to review.</p>
       </div>
       <Card>
         <CardHeader><CardTitle>Invoice Details</CardTitle></CardHeader>
         <CardContent>
           <Form {...form}>
             <form onSubmit={form.handleSubmit((values) => submit(values))} className="space-y-6">
-              <FormField control={form.control} name="clientId" render={({ field }) => (
+              {!isCoordinator ? (
+                <div className="space-y-2">
+                  <Label>Participant</Label>
+                  {!linkedClientId || linkedError ? (
+                    <p className="text-sm text-destructive" role="alert" data-testid="text-invoice-unlinked">Your account is not linked to a participant record. Contact CEPS to submit invoices.</p>
+                  ) : (
+                    <Input value={linkedLoading ? 'Loading…' : linkedClient ? `${linkedClient.firstName} ${linkedClient.lastName}` : ''} readOnly disabled data-testid="text-invoice-participant" />
+                  )}
+                </div>
+              ) : <FormField control={form.control} name="clientId" render={({ field }) => (
                 <FormItem>
                   <FormLabel htmlFor="coordinator-invoice-client">Participant</FormLabel>
                   <FormControl>
@@ -191,7 +220,7 @@ export function CoordinatorInvoiceSubmit() {
                   </FormControl>
                   <FormMessage />
                 </FormItem>
-              )} />
+              )} />}
               <FormField control={form.control} name="vendorId" render={({ field }) => (
                 <FormItem>
                   <FormLabel htmlFor="coordinator-invoice-vendor">Vendor (Optional)</FormLabel>
@@ -246,6 +275,22 @@ export function CoordinatorInvoiceSubmit() {
                 </FormItem>
               )} />
               <div className="space-y-3">
+                <div className="grid gap-4 sm:grid-cols-2">
+                  {(['serviceStartDate', 'serviceEndDate'] as const).map((name) => (
+                    <FormField key={name} control={form.control} name={name} render={({ field }) => (
+                      <FormItem>
+                        <FormLabel htmlFor={`simplified-${name}`}>{name === 'serviceStartDate' ? 'Service start date' : 'Service end date'} <span className="text-destructive">*</span></FormLabel>
+                        <FormControl>
+                          <Input id={`simplified-${name}`} type="date" value={field.value} onChange={field.onChange} onBlur={field.onBlur} disabled={submissionInProgress || hasSubmitFailures} data-testid={`input-${name}`} />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )} />
+                  ))}
+                </div>
+                <p className="text-sm text-muted-foreground">These dates apply to every file attached below. Submit invoices for different service periods separately.</p>
+              </div>
+              <div className="space-y-3">
                 <label htmlFor="coordinator-invoice-files" className="text-sm font-medium">Attach invoice(s) <span className="text-destructive">*</span></label>
                 <p className="text-sm text-muted-foreground">Select one or more PDF, PNG, or JPG invoice documents. Each attached file is submitted as a separate invoice.</p>
                 <input
@@ -298,7 +343,7 @@ export function CoordinatorInvoiceSubmit() {
                   <RotateCcw className="mr-2 h-4 w-4" /> Retry failed invoice submissions
                 </Button>
               )}
-              <Button type="submit" className="w-full" disabled={createInvoice.isPending || isUploading || submissionInProgress || hasSubmitFailures || readyCount === 0 || !selectedClientId}>
+              <Button type="submit" className="w-full" disabled={createInvoice.isPending || isUploading || submissionInProgress || hasSubmitFailures || readyCount === 0 || !selectedClientId || (!isCoordinator && !linkedClient)}>
                 <Save className="w-4 h-4 mr-2" />
                 {createInvoice.isPending ? 'Submitting…' : 'Submit Invoice(s)'}
               </Button>

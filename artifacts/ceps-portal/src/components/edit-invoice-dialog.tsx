@@ -33,6 +33,7 @@ import { MonthYearInput } from '@/components/month-year-input';
 import { useDebounce } from '@/hooks/use-debounce';
 import { Badge } from '@/components/ui/badge';
 import { DocumentTypeSelect, DocumentTypeMismatchHint } from '@/components/invoice-document-type';
+import { blankLinesForServiceDates, formatServiceDates, validateServiceDateRange } from '@/lib/invoice-service-dates';
 import { apiErrorMessage } from '@/lib/api-error';
 
 const formSchema = z.object({
@@ -40,6 +41,8 @@ const formSchema = z.object({
   paymentType: z.string(),
   documentType: z.enum(['invoice', 'receipt']),
   notes: z.string().optional(),
+  serviceStartDate: z.string().optional(),
+  serviceEndDate: z.string().optional(),
   lineItems: z.array(z.object({
     id: z.string().optional(),
     authorizationId: z.string().min(1, 'Required'),
@@ -58,6 +61,8 @@ type InvoiceLike = {
   serviceCodes?: string[];
   status: string;
   notes?: string | null;
+  serviceStartDate?: string | null;
+  serviceEndDate?: string | null;
   lineItems: InvoiceLineItem[];
 };
 
@@ -83,9 +88,11 @@ export function EditInvoiceDialog({ id, invoice, onSaved, variant = 'dialog' }: 
       paymentType: invoice.paymentType,
       documentType: invoice.documentType === 'receipt' ? 'receipt' : 'invoice',
       notes: invoice.notes ?? '',
+      serviceStartDate: invoice.serviceStartDate ?? '',
+      serviceEndDate: invoice.serviceEndDate ?? '',
       lineItems: invoice.lineItems.length > 0
         ? invoice.lineItems.map(l => ({ id: l.id, authorizationId: l.authorizationId, serviceMonth: l.serviceMonth, amount: l.amount }))
-        : [{ authorizationId: '', serviceMonth: new Date().toISOString().substring(0, 7), amount: '' }]
+        : blankLinesForServiceDates(invoice.serviceStartDate, invoice.serviceEndDate, new Date().toISOString().substring(0, 7))
     },
   });
 
@@ -128,9 +135,11 @@ export function EditInvoiceDialog({ id, invoice, onSaved, variant = 'dialog' }: 
         paymentType: invoice.paymentType,
         documentType: invoice.documentType === 'receipt' ? 'receipt' : 'invoice',
         notes: invoice.notes ?? '',
+        serviceStartDate: invoice.serviceStartDate ?? '',
+        serviceEndDate: invoice.serviceEndDate ?? '',
         lineItems: invoice.lineItems.length > 0
           ? invoice.lineItems.map(l => ({ id: l.id, authorizationId: l.authorizationId, serviceMonth: l.serviceMonth, amount: l.amount }))
-          : [{ authorizationId: '', serviceMonth: new Date().toISOString().substring(0, 7), amount: '' }]
+          : blankLinesForServiceDates(invoice.serviceStartDate, invoice.serviceEndDate, new Date().toISOString().substring(0, 7))
       });
     }
   }, [isActive, invoice, form]);
@@ -143,6 +152,8 @@ export function EditInvoiceDialog({ id, invoice, onSaved, variant = 'dialog' }: 
       documentType: data.documentType,
       notes: data.notes === '' ? undefined : data.notes,
       lineItems: data.lineItems,
+      serviceStartDate: data.serviceStartDate || null,
+      serviceEndDate: data.serviceEndDate || null,
       ...(invoice.status === 'needs_entry' ? { status: 'pending_review' as InvoiceUpdate['status'] } : {}),
     };
     updateInvoice.mutate(
@@ -167,6 +178,15 @@ export function EditInvoiceDialog({ id, invoice, onSaved, variant = 'dialog' }: 
                  <Label htmlFor="edit-invoice-participant">Participant</Label>
                 <Input id="edit-invoice-participant" value={invoice.clientName ?? invoice.clientId} disabled />
               </div>
+              {(['serviceStartDate', 'serviceEndDate'] as const).map((name) => (
+                <FormField key={name} control={form.control} name={name} render={({ field }) => (
+                  <FormItem>
+                    <FormLabel htmlFor={`edit-invoice-${name}`}>{name === 'serviceStartDate' ? 'Service start date' : 'Service end date'}</FormLabel>
+                    <FormControl><Input id={`edit-invoice-${name}`} type="date" value={field.value ?? ''} onChange={field.onChange} onBlur={field.onBlur} data-testid={`input-edit-${name}`} /></FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )} />
+              ))}
               <FormField control={form.control} name="vendorId" render={({ field }) => (
                 <FormItem className="sm:col-span-2">
                   <FormLabel htmlFor="edit-invoice-vendor">Vendor</FormLabel>
@@ -324,6 +344,9 @@ export function EditInvoiceDialog({ id, invoice, onSaved, variant = 'dialog' }: 
   if (isInline) {
     return (
       <section className="space-y-3" data-testid="inline-invoice-editor">
+        {formatServiceDates(invoice.serviceStartDate, invoice.serviceEndDate) && (
+          <p className="text-sm font-medium" data-testid="text-inline-service-dates-top">Service dates submitted: {formatServiceDates(invoice.serviceStartDate, invoice.serviceEndDate)}</p>
+        )}
         <div>
           <h3 className="font-semibold">CEPS Line-Item Entry</h3>
           <p className="text-sm text-muted-foreground">Add at least one valid authorization, service month, and amount to move this invoice to review.</p>

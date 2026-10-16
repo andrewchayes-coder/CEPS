@@ -286,6 +286,8 @@ export function invoiceJson(
     amountRequested: i.amountRequested,
     paymentType: i.paymentType,
     documentType: i.documentType,
+    serviceStartDate: i.serviceStartDate,
+    serviceEndDate: i.serviceEndDate,
     serviceCodes: [...new Set((opts.lineItems ?? []).map(line => line.serviceCode).filter((code): code is string => !!code))].sort(),
     documentUrl: i.documentUrl,
     status: i.status,

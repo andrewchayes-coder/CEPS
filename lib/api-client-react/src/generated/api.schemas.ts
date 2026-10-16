@@ -1152,6 +1152,16 @@ export interface Invoice {
   amountRequested: string;
   paymentType: InvoicePaymentType;
   documentType: InvoiceDocumentType;
+  /**
+     * @nullable
+     * @pattern ^\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])$
+     */
+  serviceStartDate?: string | null;
+  /**
+     * @nullable
+     * @pattern ^\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])$
+     */
+  serviceEndDate?: string | null;
   /** Distinct authorization service codes from invoice lines, sorted ascending. */
   serviceCodes: string[];
   /** @nullable */
@@ -2284,6 +2294,16 @@ export interface InvoiceInput {
   amountRequested?: string;
   paymentType?: InvoiceInputPaymentType;
   documentType?: InvoiceInputDocumentType;
+  /**
+     * Required for simplified submissions.
+     * @pattern ^\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])$
+     */
+  serviceStartDate?: string;
+  /**
+     * Required for simplified submissions.
+     * @pattern ^\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])$
+     */
+  serviceEndDate?: string;
   documentUrl?: string;
   notes?: string;
   /** @minItems 1 */
@@ -2322,6 +2342,16 @@ export const InvoiceUpdateStatus = {
 } as const;
 
 export interface InvoiceUpdate {
+  /**
+     * @nullable
+     * @pattern ^\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])$
+     */
+  serviceStartDate?: string | null;
+  /**
+     * @nullable
+     * @pattern ^\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])$
+     */
+  serviceEndDate?: string | null;
   /** @nullable */
   authorizationId?: string | null;
   /** @nullable */
@@ -2346,6 +2376,8 @@ export interface InvoiceValidationInput {
 }
 
 export interface InvoiceValidationCheck {
+  /** Non-blocking information; does not prevent validation. */
+  warning?: boolean;
   check: string;
   passed: boolean;
   message: string;

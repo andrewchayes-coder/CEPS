@@ -20,6 +20,7 @@ import { checkDuplicatePayment } from "../lib/paymentDuplicateCheck";
 import { sortedOrder } from "../lib/sorting";
 import { softDeleteInvoice, validateParticipantLinks } from "../lib/participantLinks";
 import { normalizeValidateOwnedUploadPath } from "../lib/upload-paths";
+import { invoiceServiceDatesError } from "../lib/invoice-service-dates";
 
 const router: IRouter = Router();
 
@@ -77,7 +78,11 @@ router.get("/invoices", requireAuth, async (req, res): Promise<void> => {
   const u = req.user!;
   if (u.role === "vendor" && u.linkedRecordType === "vendor") {
     conditions.push(eq(invoicesTable.vendorId, u.linkedRecordId ?? ""));
-  } else if ((u.role === "parent_guardian" || u.role === "self") && u.linkedRecordType === "client") {
+  } else if (u.role === "parent_guardian" || u.role === "self") {
+    if (u.linkedRecordType !== "client" || !u.linkedRecordId) {
+      res.status(403).json({ error: "A linked participant is required" });
+      return;
+    }
     conditions.push(eq(invoicesTable.clientId, u.linkedRecordId ?? ""));
   } else if (u.role === "service_coordinator") {
     conditions.push(
@@ -167,9 +172,10 @@ router.post("/invoices", requireAuth, async (req, res): Promise<void> => {
   }
   const u = req.user!;
   const isCoordinator = u.role === "service_coordinator";
+  const isSimplified = isCoordinator || u.role === "parent_guardian" || u.role === "self";
   const submittedByRole = u.role === "vendor" ? "vendor" : u.role === "parent_guardian" || u.role === "self" ? "parent" : isCoordinator ? "service_coordinator" : "staff";
   // Non-staff may only submit for their own linked records
-  if (submittedByRole === "parent" && parsed.data.clientId !== u.linkedRecordId) {
+  if (submittedByRole === "parent" && (u.linkedRecordType !== "client" || parsed.data.clientId !== u.linkedRecordId)) {
     res.status(403).json({ error: "You can only submit invoices for your own client record" });
     return;
   }
@@ -185,18 +191,23 @@ router.post("/invoices", requireAuth, async (req, res): Promise<void> => {
       res.status(403).json({ error: "You can only submit invoices for participants in your caseload" });
       return;
     }
-    if (parsed.data.lineItems?.length) {
-      res.status(400).json({ error: "Service coordinators cannot submit invoice line items" });
-      return;
-    }
+  }
+  if (isSimplified && parsed.data.lineItems !== undefined) {
+    res.status(400).json({ error: "Simplified submissions cannot include invoice line items; CEPS enters them after submission" });
+    return;
+  }
+  const datesError = invoiceServiceDatesError(parsed.data.serviceStartDate, parsed.data.serviceEndDate, isSimplified);
+  if (datesError) {
+    res.status(400).json({ error: datesError });
+    return;
   }
   const lineItems = parsed.data.lineItems ?? [];
-  if (lineItems.length === 0 && !isCoordinator) {
+  if (lineItems.length === 0 && !isSimplified) {
     res.status(400).json({ error: "At least one invoice line item is required" });
     return;
   }
   const submittedDocument = parsed.data.documentUrl?.trim() || null;
-  if ((u.role === "staff" || u.role === "service_coordinator") && !submittedDocument) {
+  if ((u.role === "staff" || isSimplified) && !submittedDocument) {
     res.status(400).json({ error: "An invoice document is required" });
     return;
   }
@@ -225,6 +236,8 @@ router.post("/invoices", requireAuth, async (req, res): Promise<void> => {
     clientId: parsed.data.clientId,
     amountRequested: total,
     documentType: parsed.data.documentType ?? "invoice",
+    serviceStartDate: parsed.data.serviceStartDate ?? null,
+    serviceEndDate: parsed.data.serviceEndDate ?? null,
     paymentType: parsed.data.paymentType ?? (parsed.data.documentType === "receipt" ? "reimbursement" : "direct_payment"),
     documentUrl: submittedDocument,
     notes: parsed.data.notes,
@@ -232,17 +245,17 @@ router.post("/invoices", requireAuth, async (req, res): Promise<void> => {
     authorizationId: null,
     vendorId: (submittedByRole === "vendor" ? u.linkedRecordId : parsed.data.vendorId) || null,
     submittedByRole,
-    status: isCoordinator ? "needs_entry" : "pending_review",
+    status: isSimplified ? "needs_entry" : "pending_review",
     submittedDate: new Date().toISOString().slice(0, 10),
   };
   const result = await db.transaction(async (tx) => {
-    if (isCoordinator && submittedDocument) {
+    if (isSimplified && submittedDocument) {
       // Serialize submissions for this exact owned upload across processes.
       // The transaction lock is released automatically at commit/rollback.
       await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${submittedDocument}, 0))`);
       const [existing] = await tx.select().from(invoicesTable).where(and(
         eq(invoicesTable.documentUrl, submittedDocument),
-        eq(invoicesTable.submittedByRole, "service_coordinator"),
+        eq(invoicesTable.submittedByRole, submittedByRole),
         notDeleted(invoicesTable),
       )).limit(1);
       if (existing) {
@@ -252,7 +265,9 @@ router.post("/invoices", requireAuth, async (req, res): Promise<void> => {
         if (existing.vendorId !== values.vendorId ||
             existing.notes !== (values.notes ?? null) ||
             existing.paymentType !== values.paymentType ||
-            existing.documentType !== values.documentType) {
+            existing.documentType !== values.documentType ||
+            existing.serviceStartDate !== values.serviceStartDate ||
+            existing.serviceEndDate !== values.serviceEndDate) {
           return { error: "This uploaded document was already submitted with different invoice details", status: 409 as const };
         }
         return { invoice: existing, created: false };
@@ -348,6 +363,14 @@ router.patch("/invoices/:id", requireStaff, async (req, res): Promise<void> => {
     return;
   }
   const { lineItems, ...invoicePatch } = parsed.data;
+  const datesError = invoiceServiceDatesError(
+    invoicePatch.serviceStartDate === undefined ? before.serviceStartDate : invoicePatch.serviceStartDate,
+    invoicePatch.serviceEndDate === undefined ? before.serviceEndDate : invoicePatch.serviceEndDate,
+  );
+  if (datesError) {
+    res.status(400).json({ error: datesError });
+    return;
+  }
   if (invoicePatch.status === "validated" || invoicePatch.status === "approved" || invoicePatch.status === "rejected" || invoicePatch.status === "duplicate") {
     res.status(400).json({ error: "Use the invoice validation or decision endpoint to change invoice workflow status" });
     return;
@@ -423,7 +446,7 @@ router.patch("/invoices/:id", requireStaff, async (req, res): Promise<void> => {
   // prior validation result, so reset the status to pending_review to avoid a
   // stale "validated"/"duplicate" badge — unless the request explicitly sets a
   // status of its own (in which case honor the caller's intent).
-  const materialFields = ["amountRequested", "serviceMonth", "authorizationId"] as const;
+  const materialFields = ["amountRequested", "serviceMonth", "authorizationId", "serviceStartDate", "serviceEndDate"] as const;
   const materiallyChanged = !!acceptedLineItems || materialFields.some(
     (f) => f in parsed.data && String((before as Record<string, unknown>)[f] ?? null) !== String((parsed.data as Record<string, unknown>)[f] ?? null),
   );
@@ -588,8 +611,20 @@ router.post("/invoices/:id/validate", requirePermission("invoice_log_validate"),
     return;
   }
 
-  const checks: { check: string; passed: boolean; message: string }[] = [];
+  const checks: { check: string; passed: boolean; message: string; warning?: boolean }[] = [];
   const lineItems = await db.select().from(invoiceLineItemsTable).where(eq(invoiceLineItemsTable.invoiceId, invoice.id));
+  if (invoice.serviceStartDate && invoice.serviceEndDate) {
+    for (const month of new Set(lineItems.map((line) => line.serviceMonth))) {
+      if (month < invoice.serviceStartDate.slice(0, 7) || month > invoice.serviceEndDate.slice(0, 7)) {
+        checks.push({
+          check: "submitted_service_dates",
+          passed: true,
+          warning: true,
+          message: `Line month ${month} is outside the submitted service dates ${invoice.serviceStartDate} – ${invoice.serviceEndDate}`,
+        });
+      }
+    }
+  }
   const authorizationIds = [...new Set(lineItems.map((item) => item.authorizationId))];
   const authRows = authorizationIds.length
     ? await db.select().from(authorizationsTable).where(inArray(authorizationsTable.id, authorizationIds))

@@ -19,6 +19,16 @@ export interface InvoiceInput {
   amountRequested?: string;
   paymentType?: InvoiceInputPaymentType;
   documentType?: InvoiceInputDocumentType;
+  /**
+     * Required for simplified submissions.
+     * @pattern ^\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])$
+     */
+  serviceStartDate?: string;
+  /**
+     * Required for simplified submissions.
+     * @pattern ^\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])$
+     */
+  serviceEndDate?: string;
   documentUrl?: string;
   notes?: string;
   /** @minItems 1 */

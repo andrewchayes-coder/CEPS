@@ -16,6 +16,7 @@ import { FileUpload } from '@/components/file-upload';
 import { DocumentPreview } from '@/components/document-preview';
 import { getInvoiceDisplayMonth } from '@/lib/invoice-utils';
 import { DocumentTypeBadge, formatServiceCodes } from '@/components/invoice-document-type';
+import { formatServiceDates } from '@/lib/invoice-service-dates';
 import { apiErrorMessage } from '@/lib/api-error';
 
 export default function InvoiceDetailPage() {
@@ -123,6 +124,7 @@ export default function InvoiceDetailPage() {
           <CardContent className="space-y-4 text-sm">
             <dl className="grid grid-cols-3 gap-2">
               <dt className="text-muted-foreground">Participant:</dt><dd className="col-span-2 font-medium"><ClientLink id={invoice.clientId} name={invoice.clientName} /></dd>
+              {formatServiceDates(invoice.serviceStartDate, invoice.serviceEndDate) && <><dt className="text-muted-foreground">Service dates:</dt><dd className="col-span-2" data-testid="text-detail-service-dates">{formatServiceDates(invoice.serviceStartDate, invoice.serviceEndDate)}</dd></>}
               <dt className="text-muted-foreground">Type:</dt><dd className="col-span-2"><DocumentTypeBadge type={(invoice).documentType} testId="badge-detail-document-type" /></dd>
               <dt className="text-muted-foreground">Svc Code:</dt><dd className="col-span-2" data-testid="text-detail-service-codes">{formatServiceCodes(invoice)}</dd>
               <dt className="text-muted-foreground">Vendor:</dt><dd className="col-span-2"><VendorLink id={invoice.vendorId} name={invoice.vendorName} /></dd>
@@ -236,20 +238,29 @@ export default function InvoiceDetailPage() {
             {validating ? (
               <div className="text-center text-muted-foreground">Running checks...</div>
             ) : (
+              <>
+              {validation?.valid && validation.checks.some((c) => c.warning) && (
+                <div className="flex gap-2 rounded-md border border-amber-300 bg-amber-50 p-3 text-sm text-amber-800" data-testid="banner-validation-warning">
+                  <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" /> Validation passed with warnings. Review them below; they do not block approval.
+                </div>
+              )}
               <ul className="space-y-3">
                 {validation?.checks.map((check, i) => (
                   <li key={i} className="flex items-start gap-3 text-sm">
-                    {check.passed ?
+                    {check.warning ?
+                      <AlertTriangle className="w-5 h-5 text-amber-600 shrink-0" data-testid={`icon-check-warning-${i}`} /> :
+                      check.passed ?
                       <CheckCircle2 className="w-5 h-5 text-chart-5 shrink-0" /> :
                       <XCircle className="w-5 h-5 text-destructive shrink-0" />
                     }
                     <div>
-                      <p className={`font-medium ${check.passed ? 'text-foreground' : 'text-destructive'}`}>{check.check}</p>
+                      <p className={`font-medium ${check.warning ? 'text-amber-700' : check.passed ? 'text-foreground' : 'text-destructive'}`}>{check.check}</p>
                       <p className="text-muted-foreground text-xs mt-0.5">{check.message}</p>
                     </div>
                   </li>
                 ))}
               </ul>
+              </>
             )}
 
              {invoice.status === 'pending_review' && canValidate && (

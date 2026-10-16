@@ -6,6 +6,7 @@ import app from "../app";
 import { newToken } from "../lib/auth";
 
 const nonce = `inv${Date.now().toString(36)}`;
+const submittedDates = { serviceStartDate: "2026-01-01", serviceEndDate: "2026-12-31" };
 
 let staffId: string;
 let otherStaffId: string;
@@ -242,6 +243,7 @@ describe("service coordinator invoice submission and CEPS entry", () => {
         clientId,
         vendorId: vendor.id,
         notes: "Please process these invoices",
+        ...submittedDates,
         documentUrl: `/objects/uploads/${coordinatorId}/${fileId}`,
       });
     const dashboard = await request(app).get("/api/dashboard/summary").set("Cookie", coordinatorCookie);
@@ -275,6 +277,7 @@ describe("service coordinator invoice submission and CEPS entry", () => {
       .send({
         clientId,
         vendorId: unrelatedVendor.id,
+        ...submittedDates,
         documentUrl: `/objects/uploads/${coordinatorId}/44444444-4444-4444-8444-444444444444`,
       });
     expect(vendorNotLinkedToParticipant.status).toBe(400);
@@ -285,6 +288,7 @@ describe("service coordinator invoice submission and CEPS entry", () => {
       .send({
         clientId,
         documentUrl: `/objects/uploads/${staffId}/77777777-7777-4777-8777-777777777777`,
+        ...submittedDates,
       });
     expect(documentNotOwned.status).toBe(403);
 
@@ -310,6 +314,7 @@ describe("service coordinator invoice submission and CEPS entry", () => {
     const awaitingEntry = await request(app).post("/api/invoices").set("Cookie", coordinatorCookie).send({
       clientId,
       documentUrl: `/objects/uploads/${coordinatorId}/66666666-6666-4666-8666-666666666666`,
+      ...submittedDates,
     });
     expect(awaitingEntry.status).toBe(201);
 
@@ -331,7 +336,7 @@ describe("service coordinator invoice submission and CEPS entry", () => {
 
   it("returns the original invoice for a retry and rejects retries with changed details", async () => {
     const documentUrl = `/objects/uploads/${coordinatorId}/88888888-8888-4888-8888-888888888888`;
-    const payload = { clientId, notes: "Original notes", documentUrl };
+    const payload = { clientId, notes: "Original notes", documentUrl, ...submittedDates };
     const first = await request(app).post("/api/invoices").set("Cookie", coordinatorCookie).send(payload);
     const retry = await request(app).post("/api/invoices").set("Cookie", coordinatorCookie).send(payload);
     expect(first.status).toBe(201);
@@ -357,6 +362,7 @@ describe("service coordinator invoice submission and CEPS entry", () => {
     const payload = {
       clientId,
       notes: "Concurrent retry",
+      ...submittedDates,
       documentUrl: `/objects/uploads/${coordinatorId}/99999999-9999-4999-8999-999999999999`,
     };
     const [left, right] = await Promise.all([
@@ -377,10 +383,10 @@ describe("service coordinator invoice submission and CEPS entry", () => {
     await db.update(clientsTable).set({ assignedCoordinatorId: coordinatorId }).where(eq(clientsTable.id, otherClientId));
     try {
       const first = await request(app).post("/api/invoices").set("Cookie", coordinatorCookie)
-        .send({ clientId, documentUrl });
+        .send({ clientId, documentUrl, ...submittedDates });
       expect(first.status).toBe(201);
       const otherParticipant = await request(app).post("/api/invoices").set("Cookie", coordinatorCookie)
-        .send({ clientId: otherClientId, documentUrl });
+        .send({ clientId: otherClientId, documentUrl, ...submittedDates });
       expect(otherParticipant.status).toBe(409);
     } finally {
       await db.update(clientsTable).set({ assignedCoordinatorId: null }).where(eq(clientsTable.id, otherClientId));
@@ -409,6 +415,7 @@ describe("service coordinator invoice submission and CEPS entry", () => {
         clientId,
         vendorId: vendor.id,
         documentUrl: `/objects/uploads/${coordinatorId}/bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb`,
+        ...submittedDates,
       });
       expect(submission.status).toBe(400);
       expect(submission.body.error).toContain("associated with clientId");
@@ -419,7 +426,7 @@ describe("service coordinator invoice submission and CEPS entry", () => {
 });
 
 describe("invoice line-item document attachments", () => {
-  it("requires an invoice document for staff and coordinators, but not a linked parent", async () => {
+  it("requires an invoice document for staff, coordinators, and linked parents", async () => {
     const auth = await makeAuth({ maxPeriodAmount: "1000.00" });
     const body = { clientId, paymentType: "direct_payment", lineItems: [{ authorizationId: auth.id, serviceMonth: "2026-07", amount: "10.00" }] };
     for (const documentUrl of [undefined, "", "   "]) {
@@ -432,7 +439,6 @@ describe("invoice line-item document attachments", () => {
       { name: "Inv Coordinator", email: `${nonce}-document-coordinator@test.local`, role: "service_coordinator" },
       { name: "Inv Parent", email: `${nonce}-parent@test.local`, role: "parent_guardian", linkedRecordType: "client", linkedRecordId: clientId },
     ]).returning();
-    let parentInvoiceId: string | undefined;
     const coordinatorToken = newToken();
     const parentToken = newToken();
     try {
@@ -444,14 +450,15 @@ describe("invoice line-item document attachments", () => {
       const restricted = await request(app).post("/api/invoices").set("Cookie", `ceps_session=${coordinatorToken}`).send({
         clientId,
         paymentType: "direct_payment",
+        ...submittedDates,
       });
       expect(restricted.status).toBe(400);
       expect(restricted.body.error).toBe("An invoice document is required");
-      const allowed = await request(app).post("/api/invoices").set("Cookie", `ceps_session=${parentToken}`).send(body);
-      expect(allowed.status).toBe(201);
-      parentInvoiceId = allowed.body.id;
+      const parentWithoutDocument = await request(app).post("/api/invoices").set("Cookie", `ceps_session=${parentToken}`)
+        .send({ clientId, ...submittedDates });
+      expect(parentWithoutDocument.status).toBe(400);
+      expect(parentWithoutDocument.body.error).toBe("An invoice document is required");
     } finally {
-      if (parentInvoiceId) await db.delete(invoicesTable).where(eq(invoicesTable.id, parentInvoiceId));
       await db.update(clientsTable).set({ assignedCoordinatorId: coordinatorId }).where(eq(clientsTable.id, clientId));
       await db.delete(auditLogTable).where(inArray(auditLogTable.userId, [coordinator.id, parent.id]));
       await db.delete(sessionsTable).where(inArray(sessionsTable.userId, [coordinator.id, parent.id]));

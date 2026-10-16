@@ -57,6 +57,7 @@ async function create(data: Record<string, unknown>, coordinator = false) {
   const userId = coordinator ? coordId : staffId;
   const response = await request(app).post("/api/invoices").set("Cookie", coordinator ? coordCookie : staffCookie).send({
     clientId, documentUrl: `/objects/uploads/${userId}/${randomUUID()}`,
+    ...(coordinator ? { serviceStartDate: "2026-10-01", serviceEndDate: "2026-10-31" } : {}),
     ...(!coordinator ? { lineItems: [{ authorizationId: auth459, serviceMonth: "2026-10", amount: "10.00" }] } : {}),
     ...data,
   });

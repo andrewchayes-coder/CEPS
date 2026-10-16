@@ -31,3 +31,4 @@
 - [Participant notes policy](participant-notes-policy.md) — plain text without categories; author editing never expires because CEPS ruled out time windows.
 - [PDF Indic font coverage](pdf-indic-font-coverage.md) — Latin/CJK font tests can miss fontkit's undeclared runtime requirement; retain an Indic-script extraction regression.
 - [Invoice document classification](invoice-document-classification.md) — document type and payment type are independent; the reimbursement-to-receipt backfill is one-time, not an ongoing rule.
+- [Simplified invoice boundary](simplified-invoice-boundary.md) — coordinators and family submit documents and dates for CEPS entry; coordinator global vendor search is intentional for referrals.

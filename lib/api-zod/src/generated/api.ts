@@ -682,6 +682,8 @@ export const GetClientCaseParams = zod.object({
   "id": zod.coerce.string()
 })
 
+export const getClientCaseResponseInvoicesItemServiceStartDateRegExp = new RegExp('^\\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\\d|3[01])$');
+export const getClientCaseResponseInvoicesItemServiceEndDateRegExp = new RegExp('^\\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\\d|3[01])$');
 export const getClientCaseResponseInvoicesItemLineItemsItemServiceMonthRegExp = new RegExp('^\\d{4}-(0[1-9]|1[0-2])$');
 export const getClientCaseResponseInvoicesItemLineItemsItemAmountRegExp = new RegExp('^\\d+(\\.\\d{1,2})?$');
 export const getClientCaseResponsePaymentsItemAllocationsItemServiceMonthRegExp = new RegExp('^\\d{4}-(0[1-9]|1[0-2])$');
@@ -868,6 +870,8 @@ export const GetClientCaseResponse = zod.object({
   "amountRequested": zod.string(),
   "paymentType": zod.enum(['direct_payment', 'reimbursement']),
   "documentType": zod.enum(['invoice', 'receipt']),
+  "serviceStartDate": zod.string().regex(getClientCaseResponseInvoicesItemServiceStartDateRegExp).nullish(),
+  "serviceEndDate": zod.string().regex(getClientCaseResponseInvoicesItemServiceEndDateRegExp).nullish(),
   "serviceCodes": zod.array(zod.string()).describe('Distinct authorization service codes from invoice lines, sorted ascending.'),
   "documentUrl": zod.string().nullish(),
   "status": zod.enum(['needs_entry', 'pending_review', 'validated', 'approved', 'rejected', 'duplicate']),
@@ -2848,6 +2852,8 @@ export const ListInvoicesQueryParams = zod.object({
   "sortDirection": zod.enum(['asc', 'desc']).optional()
 })
 
+export const listInvoicesResponseItemsItemServiceStartDateRegExp = new RegExp('^\\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\\d|3[01])$');
+export const listInvoicesResponseItemsItemServiceEndDateRegExp = new RegExp('^\\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\\d|3[01])$');
 export const listInvoicesResponseItemsItemLineItemsItemServiceMonthRegExp = new RegExp('^\\d{4}-(0[1-9]|1[0-2])$');
 export const listInvoicesResponseItemsItemLineItemsItemAmountRegExp = new RegExp('^\\d+(\\.\\d{1,2})?$');
 
@@ -2867,6 +2873,8 @@ export const ListInvoicesResponse = zod.object({
   "amountRequested": zod.string(),
   "paymentType": zod.enum(['direct_payment', 'reimbursement']),
   "documentType": zod.enum(['invoice', 'receipt']),
+  "serviceStartDate": zod.string().regex(listInvoicesResponseItemsItemServiceStartDateRegExp).nullish(),
+  "serviceEndDate": zod.string().regex(listInvoicesResponseItemsItemServiceEndDateRegExp).nullish(),
   "serviceCodes": zod.array(zod.string()).describe('Distinct authorization service codes from invoice lines, sorted ascending.'),
   "documentUrl": zod.string().nullish(),
   "status": zod.enum(['needs_entry', 'pending_review', 'validated', 'approved', 'rejected', 'duplicate']),
@@ -2893,6 +2901,8 @@ export const ListInvoicesResponse = zod.object({
  * @summary Submit invoice (vendor portal, parent, or staff entry)
  */
 export const createInvoiceBodyDocumentTypeDefault = `invoice`;
+export const createInvoiceBodyServiceStartDateRegExp = new RegExp('^\\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\\d|3[01])$');
+export const createInvoiceBodyServiceEndDateRegExp = new RegExp('^\\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\\d|3[01])$');
 export const createInvoiceBodyLineItemsItemServiceMonthRegExp = new RegExp('^\\d{4}-(0[1-9]|1[0-2])$');
 export const createInvoiceBodyLineItemsItemAmountRegExp = new RegExp('^\\d+(\\.\\d{1,2})?$');
 
@@ -2906,6 +2916,8 @@ export const CreateInvoiceBody = zod.object({
   "amountRequested": zod.string().optional(),
   "paymentType": zod.enum(['direct_payment', 'reimbursement']).optional(),
   "documentType": zod.enum(['invoice', 'receipt']).default(createInvoiceBodyDocumentTypeDefault),
+  "serviceStartDate": zod.string().regex(createInvoiceBodyServiceStartDateRegExp).optional().describe('Required for simplified submissions.'),
+  "serviceEndDate": zod.string().regex(createInvoiceBodyServiceEndDateRegExp).optional().describe('Required for simplified submissions.'),
   "documentUrl": zod.string().optional(),
   "notes": zod.string().optional(),
   "lineItems": zod.array(zod.object({
@@ -2917,6 +2929,8 @@ export const CreateInvoiceBody = zod.object({
 })).min(1).optional()
 })
 
+export const createInvoiceResponseServiceStartDateRegExp = new RegExp('^\\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\\d|3[01])$');
+export const createInvoiceResponseServiceEndDateRegExp = new RegExp('^\\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\\d|3[01])$');
 export const createInvoiceResponseLineItemsItemServiceMonthRegExp = new RegExp('^\\d{4}-(0[1-9]|1[0-2])$');
 export const createInvoiceResponseLineItemsItemAmountRegExp = new RegExp('^\\d+(\\.\\d{1,2})?$');
 
@@ -2935,6 +2949,8 @@ export const CreateInvoiceResponse = zod.object({
   "amountRequested": zod.string(),
   "paymentType": zod.enum(['direct_payment', 'reimbursement']),
   "documentType": zod.enum(['invoice', 'receipt']),
+  "serviceStartDate": zod.string().regex(createInvoiceResponseServiceStartDateRegExp).nullish(),
+  "serviceEndDate": zod.string().regex(createInvoiceResponseServiceEndDateRegExp).nullish(),
   "serviceCodes": zod.array(zod.string()).describe('Distinct authorization service codes from invoice lines, sorted ascending.'),
   "documentUrl": zod.string().nullish(),
   "status": zod.enum(['needs_entry', 'pending_review', 'validated', 'approved', 'rejected', 'duplicate']),
@@ -2962,6 +2978,8 @@ export const GetInvoiceParams = zod.object({
   "id": zod.coerce.string()
 })
 
+export const getInvoiceResponseServiceStartDateRegExp = new RegExp('^\\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\\d|3[01])$');
+export const getInvoiceResponseServiceEndDateRegExp = new RegExp('^\\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\\d|3[01])$');
 export const getInvoiceResponseLineItemsItemServiceMonthRegExp = new RegExp('^\\d{4}-(0[1-9]|1[0-2])$');
 export const getInvoiceResponseLineItemsItemAmountRegExp = new RegExp('^\\d+(\\.\\d{1,2})?$');
 
@@ -2980,6 +2998,8 @@ export const GetInvoiceResponse = zod.object({
   "amountRequested": zod.string(),
   "paymentType": zod.enum(['direct_payment', 'reimbursement']),
   "documentType": zod.enum(['invoice', 'receipt']),
+  "serviceStartDate": zod.string().regex(getInvoiceResponseServiceStartDateRegExp).nullish(),
+  "serviceEndDate": zod.string().regex(getInvoiceResponseServiceEndDateRegExp).nullish(),
   "serviceCodes": zod.array(zod.string()).describe('Distinct authorization service codes from invoice lines, sorted ascending.'),
   "documentUrl": zod.string().nullish(),
   "status": zod.enum(['needs_entry', 'pending_review', 'validated', 'approved', 'rejected', 'duplicate']),
@@ -3007,12 +3027,16 @@ export const UpdateInvoiceParams = zod.object({
   "id": zod.coerce.string()
 })
 
+export const updateInvoiceBodyServiceStartDateRegExp = new RegExp('^\\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\\d|3[01])$');
+export const updateInvoiceBodyServiceEndDateRegExp = new RegExp('^\\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\\d|3[01])$');
 export const updateInvoiceBodyLineItemsItemServiceMonthRegExp = new RegExp('^\\d{4}-(0[1-9]|1[0-2])$');
 export const updateInvoiceBodyLineItemsItemAmountRegExp = new RegExp('^\\d+(\\.\\d{1,2})?$');
 
 
 
 export const UpdateInvoiceBody = zod.object({
+  "serviceStartDate": zod.string().regex(updateInvoiceBodyServiceStartDateRegExp).nullish(),
+  "serviceEndDate": zod.string().regex(updateInvoiceBodyServiceEndDateRegExp).nullish(),
   "authorizationId": zod.string().nullish(),
   "vendorId": zod.string().nullish(),
   "serviceMonth": zod.string().optional(),
@@ -3031,6 +3055,8 @@ export const UpdateInvoiceBody = zod.object({
 })).min(1).optional()
 })
 
+export const updateInvoiceResponseServiceStartDateRegExp = new RegExp('^\\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\\d|3[01])$');
+export const updateInvoiceResponseServiceEndDateRegExp = new RegExp('^\\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\\d|3[01])$');
 export const updateInvoiceResponseLineItemsItemServiceMonthRegExp = new RegExp('^\\d{4}-(0[1-9]|1[0-2])$');
 export const updateInvoiceResponseLineItemsItemAmountRegExp = new RegExp('^\\d+(\\.\\d{1,2})?$');
 
@@ -3049,6 +3075,8 @@ export const UpdateInvoiceResponse = zod.object({
   "amountRequested": zod.string(),
   "paymentType": zod.enum(['direct_payment', 'reimbursement']),
   "documentType": zod.enum(['invoice', 'receipt']),
+  "serviceStartDate": zod.string().regex(updateInvoiceResponseServiceStartDateRegExp).nullish(),
+  "serviceEndDate": zod.string().regex(updateInvoiceResponseServiceEndDateRegExp).nullish(),
   "serviceCodes": zod.array(zod.string()).describe('Distinct authorization service codes from invoice lines, sorted ascending.'),
   "documentUrl": zod.string().nullish(),
   "status": zod.enum(['needs_entry', 'pending_review', 'validated', 'approved', 'rejected', 'duplicate']),
@@ -3097,6 +3125,7 @@ export const ValidateInvoiceResponse = zod.object({
   "valid": zod.boolean(),
   "status": zod.string(),
   "checks": zod.array(zod.object({
+  "warning": zod.boolean().optional().describe('Non-blocking information; does not prevent validation.'),
   "check": zod.string(),
   "passed": zod.boolean(),
   "message": zod.string()
@@ -3116,6 +3145,8 @@ export const DecideInvoiceBody = zod.object({
   "notes": zod.string().optional()
 })
 
+export const decideInvoiceResponseServiceStartDateRegExp = new RegExp('^\\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\\d|3[01])$');
+export const decideInvoiceResponseServiceEndDateRegExp = new RegExp('^\\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\\d|3[01])$');
 export const decideInvoiceResponseLineItemsItemServiceMonthRegExp = new RegExp('^\\d{4}-(0[1-9]|1[0-2])$');
 export const decideInvoiceResponseLineItemsItemAmountRegExp = new RegExp('^\\d+(\\.\\d{1,2})?$');
 
@@ -3134,6 +3165,8 @@ export const DecideInvoiceResponse = zod.object({
   "amountRequested": zod.string(),
   "paymentType": zod.enum(['direct_payment', 'reimbursement']),
   "documentType": zod.enum(['invoice', 'receipt']),
+  "serviceStartDate": zod.string().regex(decideInvoiceResponseServiceStartDateRegExp).nullish(),
+  "serviceEndDate": zod.string().regex(decideInvoiceResponseServiceEndDateRegExp).nullish(),
   "serviceCodes": zod.array(zod.string()).describe('Distinct authorization service codes from invoice lines, sorted ascending.'),
   "documentUrl": zod.string().nullish(),
   "status": zod.enum(['needs_entry', 'pending_review', 'validated', 'approved', 'rejected', 'duplicate']),
@@ -3167,6 +3200,8 @@ export const ListReadyToApproveInvoicesQueryParams = zod.object({
   "offset": zod.coerce.number().int().min(listReadyToApproveInvoicesQueryOffsetMin).default(listReadyToApproveInvoicesQueryOffsetDefault)
 })
 
+export const listReadyToApproveInvoicesResponseItemsItemServiceStartDateRegExp = new RegExp('^\\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\\d|3[01])$');
+export const listReadyToApproveInvoicesResponseItemsItemServiceEndDateRegExp = new RegExp('^\\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\\d|3[01])$');
 export const listReadyToApproveInvoicesResponseItemsItemLineItemsItemServiceMonthRegExp = new RegExp('^\\d{4}-(0[1-9]|1[0-2])$');
 export const listReadyToApproveInvoicesResponseItemsItemLineItemsItemAmountRegExp = new RegExp('^\\d+(\\.\\d{1,2})?$');
 
@@ -3186,6 +3221,8 @@ export const ListReadyToApproveInvoicesResponse = zod.object({
   "amountRequested": zod.string(),
   "paymentType": zod.enum(['direct_payment', 'reimbursement']),
   "documentType": zod.enum(['invoice', 'receipt']),
+  "serviceStartDate": zod.string().regex(listReadyToApproveInvoicesResponseItemsItemServiceStartDateRegExp).nullish(),
+  "serviceEndDate": zod.string().regex(listReadyToApproveInvoicesResponseItemsItemServiceEndDateRegExp).nullish(),
   "serviceCodes": zod.array(zod.string()).describe('Distinct authorization service codes from invoice lines, sorted ascending.'),
   "documentUrl": zod.string().nullish(),
   "status": zod.enum(['needs_entry', 'pending_review', 'validated', 'approved', 'rejected', 'duplicate']),
@@ -3221,6 +3258,8 @@ export const ListReadyForCheckWritingInvoicesQueryParams = zod.object({
   "offset": zod.coerce.number().int().min(listReadyForCheckWritingInvoicesQueryOffsetMin).default(listReadyForCheckWritingInvoicesQueryOffsetDefault)
 })
 
+export const listReadyForCheckWritingInvoicesResponseItemsItemServiceStartDateRegExp = new RegExp('^\\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\\d|3[01])$');
+export const listReadyForCheckWritingInvoicesResponseItemsItemServiceEndDateRegExp = new RegExp('^\\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\\d|3[01])$');
 export const listReadyForCheckWritingInvoicesResponseItemsItemLineItemsItemServiceMonthRegExp = new RegExp('^\\d{4}-(0[1-9]|1[0-2])$');
 export const listReadyForCheckWritingInvoicesResponseItemsItemLineItemsItemAmountRegExp = new RegExp('^\\d+(\\.\\d{1,2})?$');
 
@@ -3240,6 +3279,8 @@ export const ListReadyForCheckWritingInvoicesResponse = zod.object({
   "amountRequested": zod.string(),
   "paymentType": zod.enum(['direct_payment', 'reimbursement']),
   "documentType": zod.enum(['invoice', 'receipt']),
+  "serviceStartDate": zod.string().regex(listReadyForCheckWritingInvoicesResponseItemsItemServiceStartDateRegExp).nullish(),
+  "serviceEndDate": zod.string().regex(listReadyForCheckWritingInvoicesResponseItemsItemServiceEndDateRegExp).nullish(),
   "serviceCodes": zod.array(zod.string()).describe('Distinct authorization service codes from invoice lines, sorted ascending.'),
   "documentUrl": zod.string().nullish(),
   "status": zod.enum(['needs_entry', 'pending_review', 'validated', 'approved', 'rejected', 'duplicate']),

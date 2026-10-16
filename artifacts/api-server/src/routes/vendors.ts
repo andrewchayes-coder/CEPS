@@ -20,6 +20,23 @@ import { sortedOrder } from "../lib/sorting";
 
 const router: IRouter = Router();
 
+function participantVendorCondition(clientId: string, invoiceEligible = false): SQL {
+  const referrals = invoiceEligible ? sql`` : sql`union
+    select vendor_id from referrals where referrals.client_id = ${clientId}
+      and referrals.vendor_id is not null`;
+  return sql`${vendorsTable.id} in (
+    select vendor_id from authorizations where authorizations.client_id = ${clientId}
+      and authorizations.is_deleted = false
+    union
+    select vendor_id from invoices where invoices.client_id = ${clientId}
+      and invoices.is_deleted = false
+    union
+    select vendor_id from payments where payments.client_id = ${clientId}
+      and payments.is_deleted = false
+    ${referrals}
+  )`;
+}
+
 const nullableVendorFields = [
   "qbPayeeName", "altaVendorNumber", "ein", "billingAddress", "serviceAddress",
   "phone", "email", "contactPerson", "w9DocumentUrl",
@@ -64,32 +81,18 @@ router.get("/vendors", requireAuth, async (req, res): Promise<void> => {
   if (u.role === "vendor" && u.linkedRecordType === "vendor") {
     conditions.push(eq(vendorsTable.id, u.linkedRecordId ?? ""));
   }
-  // Query-string filters
-  if (query.data.clientId) {
-    const referralAssociations = query.data.invoiceEligible === "true"
-      ? sql``
-      : sql`union
-        select vendor_id
-        from referrals
-        where referrals.client_id = ${query.data.clientId}
-          and referrals.vendor_id is not null`;
-    conditions.push(sql`${vendorsTable.id} in (
-      select vendor_id
-      from authorizations
-      where authorizations.client_id = ${query.data.clientId}
-        and authorizations.is_deleted = false
-      union
-      select vendor_id
-      from invoices
-      where invoices.client_id = ${query.data.clientId}
-        and invoices.is_deleted = false
-      union
-      select vendor_id
-      from payments
-      where payments.client_id = ${query.data.clientId}
-        and payments.is_deleted = false
-      ${referralAssociations}
-    )`);
+  let clientId = query.data.clientId;
+  if (u.role === "parent_guardian" || u.role === "self") {
+    if (u.linkedRecordType !== "client" || !u.linkedRecordId ||
+        (clientId && clientId !== u.linkedRecordId)) {
+      res.status(403).json({ error: "You can only view vendors linked to your participant" });
+      return;
+    }
+    clientId = u.linkedRecordId;
+  }
+  // Coordinators intentionally retain global vendor search for referrals.
+  if (clientId) {
+    conditions.push(participantVendorCondition(clientId, query.data.invoiceEligible === "true"));
   }
   if (query.data.search) {
     const like = `%${escapeLike(query.data.search)}%`;
@@ -189,7 +192,16 @@ router.get("/vendors/:id", requireAuth, async (req, res): Promise<void> => {
     res.status(403).json({ error: "Forbidden" });
     return;
   }
-  const [vendor] = await db.select().from(vendorsTable).where(eq(vendorsTable.id, id));
+  const conditions: SQL[] = [eq(vendorsTable.id, id)];
+  if (u.role === "parent_guardian" || u.role === "self") {
+    if (u.linkedRecordType !== "client" || !u.linkedRecordId ||
+        (req.query.clientId !== undefined && req.query.clientId !== u.linkedRecordId)) {
+      res.status(403).json({ error: "You can only view vendors linked to your participant" });
+      return;
+    }
+    conditions.push(participantVendorCondition(u.linkedRecordId));
+  }
+  const [vendor] = await db.select().from(vendorsTable).where(and(...conditions));
   if (!vendor) {
     res.status(404).json({ error: "Vendor not found" });
     return;

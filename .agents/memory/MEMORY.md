@@ -30,3 +30,4 @@
 - [Referral service requirements](referral-service-requirements.md) — dates and amount are required without a POS number; no TBD end date; preserve untouched legacy referrals.
 - [Participant notes policy](participant-notes-policy.md) — plain text without categories; author editing never expires because CEPS ruled out time windows.
 - [PDF Indic font coverage](pdf-indic-font-coverage.md) — Latin/CJK font tests can miss fontkit's undeclared runtime requirement; retain an Indic-script extraction regression.
+- [Invoice document classification](invoice-document-classification.md) — document type and payment type are independent; the reimbursement-to-receipt backfill is one-time, not an ongoing rule.

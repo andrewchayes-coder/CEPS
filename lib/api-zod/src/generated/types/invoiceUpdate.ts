@@ -6,6 +6,7 @@
  * OpenAPI spec version: 0.1.0
  */
 import type { InvoiceLineItemInput } from './invoiceLineItemInput';
+import type { InvoiceUpdateDocumentType } from './invoiceUpdateDocumentType';
 import type { InvoiceUpdatePaymentType } from './invoiceUpdatePaymentType';
 import type { InvoiceUpdateStatus } from './invoiceUpdateStatus';
 
@@ -17,6 +18,8 @@ export interface InvoiceUpdate {
   serviceMonth?: string;
   amountRequested?: string;
   paymentType?: InvoiceUpdatePaymentType;
+  /** Omit to preserve the current document type. */
+  documentType?: InvoiceUpdateDocumentType;
   status?: InvoiceUpdateStatus;
   notes?: string;
   /** @nullable */

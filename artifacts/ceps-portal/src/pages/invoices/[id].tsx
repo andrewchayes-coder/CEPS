@@ -15,6 +15,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { FileUpload } from '@/components/file-upload';
 import { DocumentPreview } from '@/components/document-preview';
 import { getInvoiceDisplayMonth } from '@/lib/invoice-utils';
+import { DocumentTypeBadge, formatServiceCodes } from '@/components/invoice-document-type';
 import { apiErrorMessage } from '@/lib/api-error';
 
 export default function InvoiceDetailPage() {
@@ -22,7 +23,7 @@ export default function InvoiceDetailPage() {
   const [, navigate] = useLocation();
   const { user } = useAuth();
   const isStaff = user?.role === 'staff';
-  const permissions = new Set((user as any)?.permissions ?? []);
+  const permissions = new Set((user)?.permissions ?? []);
   const canValidate = permissions.has('invoice_log_validate');
   const canApprove = permissions.has('invoice_approve');
   const { toast } = useToast();
@@ -122,6 +123,8 @@ export default function InvoiceDetailPage() {
           <CardContent className="space-y-4 text-sm">
             <dl className="grid grid-cols-3 gap-2">
               <dt className="text-muted-foreground">Participant:</dt><dd className="col-span-2 font-medium"><ClientLink id={invoice.clientId} name={invoice.clientName} /></dd>
+              <dt className="text-muted-foreground">Type:</dt><dd className="col-span-2"><DocumentTypeBadge type={(invoice).documentType} testId="badge-detail-document-type" /></dd>
+              <dt className="text-muted-foreground">Svc Code:</dt><dd className="col-span-2" data-testid="text-detail-service-codes">{formatServiceCodes(invoice)}</dd>
               <dt className="text-muted-foreground">Vendor:</dt><dd className="col-span-2"><VendorLink id={invoice.vendorId} name={invoice.vendorName} /></dd>
               <dt className="text-muted-foreground">Amount Requested:</dt><dd className="col-span-2 font-bold text-lg">${parseFloat(invoice.amountRequested).toFixed(2)}</dd>
               <dt className="text-muted-foreground mt-2">Submitted By:</dt><dd className="col-span-2 mt-2 capitalize">{invoice.submittedByRole}</dd>
@@ -167,6 +170,7 @@ export default function InvoiceDetailPage() {
                       ) : (
                         <span className="italic">None</span>
                       )}
+                      <span className="ml-3" data-testid={`text-line-${index}-service-code`}>Svc Code: {(line).serviceCode ?? '—'}</span>
                     </div>
                     {line.documentUrl && (
                       <a

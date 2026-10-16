@@ -267,6 +267,13 @@
       "when": 1791643991223,
       "tag": "0037_breezy_spacker_dave",
       "breakpoints": true
+    },
+    {
+      "idx": 38,
+      "version": "7",
+      "when": 1792172701073,
+      "tag": "0038_wooden_yellow_claw",
+      "breakpoints": true
     }
   ]
 }

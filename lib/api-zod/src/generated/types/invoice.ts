@@ -5,6 +5,7 @@
  * CEPS Portal API — referral intake, authorizations, invoices, payments, remittances, vendors, reporting
  * OpenAPI spec version: 0.1.0
  */
+import type { InvoiceDocumentType } from './invoiceDocumentType';
 import type { InvoiceLineItem } from './invoiceLineItem';
 import type { InvoicePaymentType } from './invoicePaymentType';
 import type { InvoiceStatus } from './invoiceStatus';
@@ -32,6 +33,9 @@ export interface Invoice {
   serviceMonth: string | null;
   amountRequested: string;
   paymentType: InvoicePaymentType;
+  documentType: InvoiceDocumentType;
+  /** Distinct authorization service codes from invoice lines, sorted ascending. */
+  serviceCodes: string[];
   /** @nullable */
   documentUrl?: string | null;
   status: InvoiceStatus;

@@ -29,9 +29,15 @@ async function enrich(invoices: (typeof invoicesTable.$inferSelect)[]) {
     vendorNameMap(invoices.map((i) => i.vendorId)),
     authNumberMap(invoices.map((i) => i.authorizationId)),
     userNameMap(invoices.map((i) => i.reviewedBy)),
-    invoices.length ? db.select().from(invoiceLineItemsTable).where(inArray(invoiceLineItemsTable.invoiceId, invoices.map((i) => i.id))) : Promise.resolve([]),
+    invoices.length ? db.select({
+      id: invoiceLineItemsTable.id, invoiceId: invoiceLineItemsTable.invoiceId,
+      authorizationId: invoiceLineItemsTable.authorizationId, serviceMonth: invoiceLineItemsTable.serviceMonth,
+      amount: invoiceLineItemsTable.amount, documentUrl: invoiceLineItemsTable.documentUrl,
+      authNumber: authorizationsTable.authNumber, serviceCode: authorizationsTable.serviceCode,
+    }).from(invoiceLineItemsTable)
+      .leftJoin(authorizationsTable, eq(authorizationsTable.id, invoiceLineItemsTable.authorizationId))
+      .where(inArray(invoiceLineItemsTable.invoiceId, invoices.map((i) => i.id))) : Promise.resolve([]),
   ]);
-  const itemAuths = await authNumberMap(lineItems.map((item) => item.authorizationId));
   const itemsByInvoice = new Map<string, typeof lineItems>();
   for (const item of lineItems) itemsByInvoice.set(item.invoiceId, [...(itemsByInvoice.get(item.invoiceId) ?? []), item]);
   return invoices.map((i) =>
@@ -43,7 +49,8 @@ async function enrich(invoices: (typeof invoicesTable.$inferSelect)[]) {
       lineItems: (itemsByInvoice.get(i.id) ?? []).map((item) => ({
         id: item.id,
         authorizationId: item.authorizationId,
-        authNumber: itemAuths.get(item.authorizationId) ?? null,
+        authNumber: item.authNumber ?? null,
+        serviceCode: item.serviceCode ?? null,
         serviceMonth: item.serviceMonth,
         amount: item.amount,
         documentUrl: item.documentUrl ?? null,
@@ -80,6 +87,12 @@ router.get("/invoices", requireAuth, async (req, res): Promise<void> => {
   const escapeLike = (s: string) => s.replace(/[\\%_]/g, (c) => `\\${c}`);
   // Query-string filters
   if (query.data.status) conditions.push(eq(invoicesTable.status, query.data.status));
+  if (query.data.documentType) conditions.push(eq(invoicesTable.documentType, query.data.documentType));
+  if (query.data.serviceCode) conditions.push(sql`exists (
+    select 1 from invoice_line_items ili_code
+    inner join authorizations a_code on a_code.id = ili_code.authorization_id
+    where ili_code.invoice_id = ${invoicesTable.id} and a_code.service_code = ${query.data.serviceCode}
+  )`);
   if (query.data.clientId) conditions.push(eq(invoicesTable.clientId, query.data.clientId));
   if (query.data.vendorId) conditions.push(eq(invoicesTable.vendorId, query.data.vendorId));
   if (query.data.startDate || query.data.endDate) {
@@ -99,6 +112,7 @@ router.get("/invoices", requireAuth, async (req, res): Promise<void> => {
         ilike(sql`${invoicesTable.amountRequested}::text`, like),
         ilike(sql`to_char(${invoicesTable.amountRequested}, 'FM$999,999,999,990.00')`, like),
         ilike(sql`replace(${invoicesTable.paymentType}, '_', ' ')`, like),
+        ilike(invoicesTable.documentType, like),
         ilike(sql`replace(${invoicesTable.status}, '_', ' ')`, like),
         ilike(sql`coalesce(${invoicesTable.notes}, '')`, like),
         sql`${invoicesTable.clientId} in (select id from clients where (first_name || ' ' || last_name) ilike ${like} and is_deleted = false)`,
@@ -119,6 +133,8 @@ router.get("/invoices", requireAuth, async (req, res): Promise<void> => {
     query.data.sortDirection,
     {
       serviceMonth: sql`(select min(ili_sort.service_month) from invoice_line_items ili_sort where ili_sort.invoice_id = ${invoicesTable.id})`,
+      documentType: sql`${invoicesTable.documentType}`,
+      serviceCode: sql`(select min(a_sort.service_code) from invoice_line_items ili_sort inner join authorizations a_sort on a_sort.id = ili_sort.authorization_id where ili_sort.invoice_id = ${invoicesTable.id})`,
       vendorName: sql`lower((select name from vendors where id = ${invoicesTable.vendorId}))`,
       clientName: sql`lower((select last_name || ', ' || first_name from clients where id = ${invoicesTable.clientId}))`,
       authNumber: sql`lower((select min(a_sort.auth_number) from invoice_line_items ili_sort inner join authorizations a_sort on a_sort.id = ili_sort.authorization_id where ili_sort.invoice_id = ${invoicesTable.id}))`,
@@ -179,10 +195,6 @@ router.post("/invoices", requireAuth, async (req, res): Promise<void> => {
     res.status(400).json({ error: "At least one invoice line item is required" });
     return;
   }
-  if (!parsed.data.paymentType && !isCoordinator) {
-    res.status(400).json({ error: "paymentType is required" });
-    return;
-  }
   const submittedDocument = parsed.data.documentUrl?.trim() || null;
   if ((u.role === "staff" || u.role === "service_coordinator") && !submittedDocument) {
     res.status(400).json({ error: "An invoice document is required" });
@@ -212,7 +224,8 @@ router.post("/invoices", requireAuth, async (req, res): Promise<void> => {
   const values = {
     clientId: parsed.data.clientId,
     amountRequested: total,
-    paymentType: parsed.data.paymentType ?? "direct_payment",
+    documentType: parsed.data.documentType ?? "invoice",
+    paymentType: parsed.data.paymentType ?? (parsed.data.documentType === "receipt" ? "reimbursement" : "direct_payment"),
     documentUrl: submittedDocument,
     notes: parsed.data.notes,
     // Deprecated relationship columns are intentionally left null.
@@ -238,7 +251,8 @@ router.post("/invoices", requireAuth, async (req, res): Promise<void> => {
         }
         if (existing.vendorId !== values.vendorId ||
             existing.notes !== (values.notes ?? null) ||
-            existing.paymentType !== values.paymentType) {
+            existing.paymentType !== values.paymentType ||
+            existing.documentType !== values.documentType) {
           return { error: "This uploaded document was already submitted with different invoice details", status: 409 as const };
         }
         return { invoice: existing, created: false };

@@ -269,7 +269,7 @@ export function invoiceJson(
     vendorName?: string | null;
     authNumber?: string | null;
     reviewedByName?: string | null;
-    lineItems?: { id: string; authorizationId: string; authNumber?: string | null; serviceMonth: string; amount: string }[];
+    lineItems?: { id: string; authorizationId: string; authNumber?: string | null; serviceCode?: string | null; serviceMonth: string; amount: string }[];
   } = {},
 ) {
   return {
@@ -285,6 +285,8 @@ export function invoiceJson(
     serviceMonth: i.serviceMonth,
     amountRequested: i.amountRequested,
     paymentType: i.paymentType,
+    documentType: i.documentType,
+    serviceCodes: [...new Set((opts.lineItems ?? []).map(line => line.serviceCode).filter((code): code is string => !!code))].sort(),
     documentUrl: i.documentUrl,
     status: i.status,
     reviewedBy: i.reviewedBy,

@@ -1,3 +1,5 @@
+import { useQueryClient } from '@tanstack/react-query';
+import { invalidateInvoiceQueries } from '@/lib/invoice-query-cache';
 import React from 'react';
 import { apiErrorMessage } from '@/lib/api-error';
 import { useForm, useFieldArray } from 'react-hook-form';
@@ -20,12 +22,14 @@ import { trackAnalyticsEvent } from '@/lib/analytics';
 import { SearchableSelect } from '@/components/searchable-select';
 import { MonthYearInput } from '@/components/month-year-input';
 import { useDebounce } from '@/hooks/use-debounce';
+import { DocumentTypeSelect, DocumentTypeMismatchHint } from '@/components/invoice-document-type';
 import { CoordinatorInvoiceSubmit } from '@/components/coordinator-invoice-submit';
 
 const formSchema = z.object({
   clientId: z.string().min(1, 'Participant is required'),
   vendorId: z.string().optional(),
   paymentType: z.enum(['direct_payment', 'reimbursement']),
+  documentType: z.enum(['invoice', 'receipt']),
   notes: z.string().optional(),
   documentUrl: z.string().min(1, 'An invoice document is required'),
   lineItems: z.array(z.object({
@@ -46,6 +50,7 @@ function StaffInvoiceNewPage() {
   const [, setLocation] = useLocation();
   const { toast } = useToast();
   const createInvoice = useCreateInvoice();
+  const queryClient = useQueryClient();
   const { user } = useAuth();
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
@@ -53,6 +58,7 @@ function StaffInvoiceNewPage() {
       clientId: '',
       vendorId: '',
       paymentType: 'direct_payment',
+      documentType: 'invoice',
       notes: '',
       documentUrl: '',
       lineItems: [{ authorizationId: '', serviceMonth: new Date().toISOString().substring(0, 7), amount: '' }]
@@ -65,6 +71,8 @@ function StaffInvoiceNewPage() {
   });
   const selectedClientId = form.watch('clientId');
   const lineItems = form.watch('lineItems');
+  const watchedDocType = form.watch('documentType');
+  const watchedPayType = form.watch('paymentType');
   const totalAmount = lineItems.reduce((sum, item) => sum + (parseFloat(item.amount) || 0), 0);
 
   const [clientSearch, setClientSearch] = React.useState('');
@@ -118,6 +126,7 @@ function StaffInvoiceNewPage() {
       }
     }, {
       onSuccess: () => {
+        void invalidateInvoiceQueries(queryClient);
         trackAnalyticsEvent('invoice_created', {
           role: user?.role ?? 'unknown',
           status: 'submitted',
@@ -241,6 +250,14 @@ function StaffInvoiceNewPage() {
                     <FormMessage />
                   </FormItem>
                 )} />
+                <FormField control={form.control} name="documentType" render={({ field }) => (
+                  <FormItem>
+                    <FormLabel htmlFor="invoice-document-type">Document Type</FormLabel>
+                    <DocumentTypeSelect id="invoice-document-type" value={field.value} onValueChange={field.onChange} />
+                    <FormMessage />
+                  </FormItem>
+                )} />
+                <DocumentTypeMismatchHint documentType={watchedDocType} paymentType={watchedPayType} />
               </div>
 
               <div className="space-y-4 border rounded-md p-4">
@@ -260,7 +277,7 @@ function StaffInvoiceNewPage() {
                               id={`line-${index}-auth`}
                               value={field.value ?? ''}
                               onValueChange={(v) => handleAuthChange(index, v)}
-                              options={filteredAuthorizations.map(a => ({ value: a.id, label: a.authNumber, subtitle: a.activityDescription ?? undefined }))}
+                              options={filteredAuthorizations.map(a => ({ value: a.id, label: a.authNumber, subtitle: [a.serviceCode, a.activityDescription].filter(Boolean).join(' · ') || undefined }))}
                               onSearchChange={setAuthSearch}
                               loading={authorizationsLoading}
                               disabled={!selectedClientId}

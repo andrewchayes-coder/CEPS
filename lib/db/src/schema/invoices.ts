@@ -7,6 +7,7 @@ import {
   boolean,
   timestamp,
   index,
+  check,
 } from "drizzle-orm/pg-core";
 import { sql } from "drizzle-orm";
 import { clientsTable } from "./clients";
@@ -31,6 +32,7 @@ export const invoicesTable = pgTable("invoices", {
     scale: 2,
   }).notNull(),
   paymentType: text("payment_type").notNull(), // direct_payment | reimbursement
+  documentType: text("document_type").notNull().default("invoice"),
   documentUrl: text("document_url"),
   // needs_entry | pending_review | validated | approved | rejected | duplicate
   status: text("status").notNull().default("pending_review"),
@@ -44,6 +46,7 @@ export const invoicesTable = pgTable("invoices", {
     .notNull()
     .defaultNow(),
 }, (table) => ({
+  documentTypeCheck: check("invoices_document_type_check", sql`${table.documentType} in ('invoice', 'receipt')`),
   // Backing indexes for the SQL-WHERE list filtering / role scoping
   // (Prompt 6), following the audit-log indexing pattern.
   clientIdIdx: index("invoices_client_id_idx").on(table.clientId),

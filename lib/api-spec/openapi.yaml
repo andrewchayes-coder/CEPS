@@ -1581,6 +1581,12 @@ paths:
         - name: status
           in: query
           schema: { type: string }
+        - name: documentType
+          in: query
+          schema: { type: string, enum: [invoice, receipt] }
+        - name: serviceCode
+          in: query
+          schema: { type: string, enum: ["459", "024", "490"] }
         - name: clientId
           in: query
           schema: { type: string }
@@ -1606,7 +1612,7 @@ paths:
           in: query
           schema:
             type: string
-            enum: [serviceMonth, vendorName, clientName, authNumber, amountRequested, status, submittedDate, createdAt]
+            enum: [serviceMonth, documentType, vendorName, clientName, authNumber, serviceCode, amountRequested, status, submittedDate, createdAt]
         - name: sortDirection
           in: query
           schema: { type: string, enum: [asc, desc] }
@@ -3864,7 +3870,7 @@ components:
         resultingAuthorizationId: { type: ["string", "null"], format: uuid }
     Invoice:
       type: object
-      required: [id, clientId, submittedByRole, submittedDate, serviceMonth, amountRequested, paymentType, status, lineItems]
+      required: [id, clientId, submittedByRole, submittedDate, serviceMonth, amountRequested, paymentType, documentType, serviceCodes, status, lineItems]
       properties:
         id: { type: string }
         clientId: { type: string }
@@ -3878,6 +3884,11 @@ components:
         serviceMonth: { type: ["string", "null"], description: "Deprecated compatibility value; line item months are authoritative." }
         amountRequested: { type: string }
         paymentType: { type: string, enum: [direct_payment, reimbursement] }
+        documentType: { type: string, enum: [invoice, receipt] }
+        serviceCodes:
+          type: array
+          description: Distinct authorization service codes from invoice lines, sorted ascending.
+          items: { type: string }
         documentUrl: { type: ["string", "null"] }
         status: { type: string, enum: [needs_entry, pending_review, validated, approved, rejected, duplicate] }
         reviewedBy: { type: ["string", "null"] }
@@ -3895,6 +3906,7 @@ components:
         id: { type: string }
         authorizationId: { type: string }
         authNumber: { type: ["string", "null"] }
+        serviceCode: { type: ["string", "null"] }
         serviceMonth: { type: string, pattern: '^\d{4}-(0[1-9]|1[0-2])$' }
         amount: { type: string, pattern: '^\d+(\.\d{1,2})?$' }
         documentUrl: { type: ["string", "null"] }
@@ -3908,6 +3920,7 @@ components:
         serviceMonth: { type: string }
         amountRequested: { type: string }
         paymentType: { type: string, enum: [direct_payment, reimbursement] }
+        documentType: { type: string, enum: [invoice, receipt], default: invoice }
         documentUrl: { type: string }
         notes: { type: string }
         lineItems:
@@ -3931,6 +3944,7 @@ components:
         serviceMonth: { type: string }
         amountRequested: { type: string }
         paymentType: { type: string, enum: [direct_payment, reimbursement] }
+        documentType: { type: string, enum: [invoice, receipt], description: Omit to preserve the current document type. }
         status: { type: string, enum: [needs_entry, pending_review, validated, approved, rejected, duplicate] }
         notes: { type: string }
         documentUrl: { type: ["string", "null"] }

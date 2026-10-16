@@ -16,6 +16,7 @@ import { DateRangeFilter } from '@/components/date-range-filter';
 import { useDebounce } from '@/hooks/use-debounce';
 import { getInvoiceDisplayMonth } from '@/lib/invoice-utils';
 import { LogPaymentDialog } from '@/components/log-payment-dialog';
+import { DocumentTypeBadge, formatServiceCodes } from '@/components/invoice-document-type';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 
 const PAGE_SIZE = 50;
@@ -26,7 +27,7 @@ export default function InvoicesPage() {
   const urlFilters = new URLSearchParams(urlSearch);
   const requestedStatus = urlFilters.get('status');
   const requestedClientId = urlFilters.get('clientId');
-  const permissions = new Set((user as any)?.permissions ?? []);
+  const permissions = new Set((user)?.permissions ?? []);
   const canValidate = permissions.has('invoice_log_validate');
   const canApprove = permissions.has('invoice_approve');
   const canWriteChecks = permissions.has('check_writing');
@@ -35,6 +36,8 @@ export default function InvoicesPage() {
   const [search, setSearch] = useState('');
   const debouncedSearch = useDebounce(search, 300);
   const [statusFilter, setStatusFilter] = useState('all');
+  const [typeFilter, setTypeFilter] = useState('all');
+  const [codeFilter, setCodeFilter] = useState('all');
   const [startDate, setStartDate] = useState<string>();
   const [endDate, setEndDate] = useState<string>();
   const [page, setPage] = useState(0);
@@ -44,7 +47,7 @@ export default function InvoicesPage() {
     setView('all');
     setPage(0);
   }, [urlSearch]);
-  const sort = useTableSort<'serviceMonth' | 'vendorName' | 'clientName' | 'authNumber' | 'amountRequested' | 'status'>();
+  const sort = useTableSort<'serviceMonth' | 'vendorName' | 'clientName' | 'documentType' | 'authNumber' | 'serviceCode' | 'amountRequested' | 'status'>();
   const onSort = (key: Parameters<typeof sort.toggleSort>[0]) => {
     sort.toggleSort(key);
     setPage(0);
@@ -58,6 +61,8 @@ export default function InvoicesPage() {
     ...(startDate ? { startDate } : {}),
     ...(endDate ? { endDate } : {}),
     ...(statusFilter !== 'all' ? { status: statusFilter } : {}),
+    ...(typeFilter !== 'all' ? { documentType: typeFilter as 'invoice' | 'receipt' } : {}),
+    ...(codeFilter !== 'all' ? { serviceCode: codeFilter as '459' | '024' } : {}),
     ...(sort.sortBy ? { sortBy: sort.sortBy, sortDirection: sort.sortDirection } : {}),
   };
   const { data, isLoading } = useListInvoices(params, {
@@ -141,6 +146,26 @@ export default function InvoicesPage() {
                 <SelectItem value="duplicate">Duplicate</SelectItem>
               </SelectContent>
             </Select>
+            <Select value={typeFilter} onValueChange={(value) => { setTypeFilter(value); setPage(0); }}>
+              <SelectTrigger className="w-full sm:w-36" aria-label="Filter by document type" data-testid="filter-invoice-type">
+                <SelectValue placeholder="Type" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All types</SelectItem>
+                <SelectItem value="invoice">Invoices</SelectItem>
+                <SelectItem value="receipt">Receipts</SelectItem>
+              </SelectContent>
+            </Select>
+            <Select value={codeFilter} onValueChange={(value) => { setCodeFilter(value); setPage(0); }}>
+              <SelectTrigger className="w-full sm:w-36" aria-label="Filter by service code" data-testid="filter-invoice-service-code">
+                <SelectValue placeholder="Svc Code" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All codes</SelectItem>
+                <SelectItem value="459">459</SelectItem>
+                <SelectItem value="024">024</SelectItem>
+              </SelectContent>
+            </Select>
           </div>
         </CardHeader>}
         <CardContent className="p-0">
@@ -148,9 +173,11 @@ export default function InvoicesPage() {
             <TableHeader>
               <TableRow>
                 <SortableTableHead label="Service Month" sortKey="serviceMonth" activeSortBy={sort.sortBy} sortDirection={sort.sortDirection} onSort={onSort} />
+                <SortableTableHead label="Type" sortKey="documentType" activeSortBy={sort.sortBy} sortDirection={sort.sortDirection} onSort={onSort} />
                 <SortableTableHead label="Vendor" sortKey="vendorName" activeSortBy={sort.sortBy} sortDirection={sort.sortDirection} onSort={onSort} />
                 <SortableTableHead label="Participant" sortKey="clientName" activeSortBy={sort.sortBy} sortDirection={sort.sortDirection} onSort={onSort} />
                 <SortableTableHead label="Auth #" sortKey="authNumber" activeSortBy={sort.sortBy} sortDirection={sort.sortDirection} onSort={onSort} />
+                <SortableTableHead label="Svc Code" sortKey="serviceCode" activeSortBy={sort.sortBy} sortDirection={sort.sortDirection} onSort={onSort} />
                 <SortableTableHead label="Amount" sortKey="amountRequested" activeSortBy={sort.sortBy} sortDirection={sort.sortDirection} onSort={onSort} className="text-right" />
                 <SortableTableHead label="Status" sortKey="status" activeSortBy={sort.sortBy} sortDirection={sort.sortDirection} onSort={onSort} />
                 <TableHead className="text-right">Actions</TableHead>
@@ -161,7 +188,7 @@ export default function InvoicesPage() {
                 <InvoicesTableSkeleton />
               ) : displayedInvoices?.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={7} className="h-24 text-center text-muted-foreground">
+                  <TableCell colSpan={9} className="h-24 text-center text-muted-foreground">
                     No invoices found.
                   </TableCell>
                 </TableRow>
@@ -169,6 +196,7 @@ export default function InvoicesPage() {
                 displayedInvoices?.map((invoice) => (
                   <TableRow key={invoice.id}>
                     <TableCell className="font-medium whitespace-nowrap">{getInvoiceDisplayMonth(invoice)}</TableCell>
+                    <TableCell><DocumentTypeBadge type={(invoice).documentType} testId={`badge-invoice-type-${invoice.id}`} /></TableCell>
                     <TableCell><VendorLink id={invoice.vendorId} name={invoice.vendorName} /></TableCell>
                     <TableCell><ClientLink id={invoice.clientId} name={invoice.clientName} /></TableCell>
                     <TableCell className="text-muted-foreground text-xs space-y-1">
@@ -186,6 +214,7 @@ export default function InvoicesPage() {
                         ) : invoice.authNumber || '-'
                       )}
                     </TableCell>
+                    <TableCell className="whitespace-nowrap text-xs" data-testid={`text-invoice-svc-code-${invoice.id}`}>{formatServiceCodes(invoice)}</TableCell>
                     <TableCell className="text-right font-medium">${parseFloat(invoice.amountRequested).toFixed(2)}</TableCell>
                     <TableCell>
                       <StatusBadge status={invoice.status} />
@@ -269,9 +298,11 @@ function InvoicesTableSkeleton() {
       {[1, 2, 3, 4, 5].map((i) => (
         <TableRow key={i}>
           <TableCell><Skeleton className="h-4 w-20" /></TableCell>
+          <TableCell><Skeleton className="h-5 w-16 rounded-full" /></TableCell>
           <TableCell><Skeleton className="h-4 w-32" /></TableCell>
           <TableCell><Skeleton className="h-4 w-32" /></TableCell>
           <TableCell><Skeleton className="h-4 w-24" /></TableCell>
+          <TableCell><Skeleton className="h-4 w-14" /></TableCell>
           <TableCell className="text-right"><Skeleton className="h-4 w-16 ml-auto" /></TableCell>
           <TableCell><Skeleton className="h-5 w-24 rounded-full" /></TableCell>
           <TableCell className="text-right"><Skeleton className="h-8 w-16 ml-auto" /></TableCell>

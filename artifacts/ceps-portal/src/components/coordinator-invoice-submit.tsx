@@ -1,3 +1,5 @@
+import { useQueryClient } from '@tanstack/react-query';
+import { invalidateInvoiceQueries } from '@/lib/invoice-query-cache';
 import React from 'react';
 import { useCreateInvoice, useListClients, useListVendors } from '@workspace/api-client-react';
 import { useUpload } from '@workspace/object-storage-web';
@@ -20,6 +22,7 @@ import { zodResolver } from '@hookform/resolvers/zod';
 const coordinatorSchema = z.object({
   clientId: z.string().min(1, 'Participant is required'),
   vendorId: z.string().optional(),
+  documentType: z.enum(['invoice', 'receipt']),
   notes: z.string().optional(),
 });
 
@@ -36,6 +39,7 @@ export function CoordinatorInvoiceSubmit() {
   const { toast } = useToast();
   const { user } = useAuth();
   const createInvoice = useCreateInvoice();
+  const queryClient = useQueryClient();
   const { uploadFile } = useUpload();
   const [uploads, setUploads] = React.useState<UploadEntry[]>([]);
   const [submissionInProgress, setSubmissionInProgress] = React.useState(false);
@@ -46,7 +50,7 @@ export function CoordinatorInvoiceSubmit() {
   const debouncedVendorSearch = useDebounce(vendorSearch, 300);
   const form = useForm<z.infer<typeof coordinatorSchema>>({
     resolver: zodResolver(coordinatorSchema),
-    defaultValues: { clientId: '', vendorId: '', notes: '' },
+    defaultValues: { clientId: '', vendorId: '', documentType: 'invoice', notes: '' },
   });
   const selectedClientId = form.watch('clientId');
   const { data: clientsData, isLoading: clientsLoading } = useListClients({ search: debouncedClientSearch, limit: 50 });
@@ -107,7 +111,7 @@ export function CoordinatorInvoiceSubmit() {
           ...(values.notes ? { notes: values.notes } : {}),
           documentUrl: entry.objectPath,
           amountRequested: '0',
-          paymentType: 'direct_payment',
+          documentType: values.documentType,
         },
       });
       setUploads((current) => current.map((item) => item.id === entry.id
@@ -136,6 +140,7 @@ export function CoordinatorInvoiceSubmit() {
       const results = await Promise.all(eligible.map((entry) => submitOne(entry, entry.submissionValues ?? snapshot)));
       const succeeded = results.filter(Boolean).length;
       if (succeeded > 0) {
+        void invalidateInvoiceQueries(queryClient);
         trackAnalyticsEvent('invoice_created', { role: user?.role ?? 'unknown', status: 'needs_entry', count: succeeded });
         toast({
           title: 'Invoices submitted',
@@ -205,6 +210,30 @@ export function CoordinatorInvoiceSubmit() {
                       clearLabel="None"
                       data-testid="select-coordinator-invoice-vendor"
                     />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )} />
+              <FormField control={form.control} name="documentType" render={({ field }) => (
+                <FormItem>
+                  <FormLabel id="coordinator-document-type-label">Document type <span className="text-destructive">*</span></FormLabel>
+                  <FormControl>
+                    <div role="radiogroup" aria-labelledby="coordinator-document-type-label" className="flex gap-4">
+                      {(['invoice', 'receipt'] as const).map((t) => (
+                        <label key={t} className="flex items-center gap-2 text-sm">
+                          <input
+                            type="radio"
+                            name="coordinator-document-type"
+                            value={t}
+                            checked={field.value === t}
+                            onChange={() => field.onChange(t)}
+                            disabled={submissionInProgress || hasSubmitFailures}
+                            data-testid={`radio-document-type-${t}`}
+                          />
+                          {t === 'invoice' ? 'Invoice' : 'Receipt'}
+                        </label>
+                      ))}
+                    </div>
                   </FormControl>
                   <FormMessage />
                 </FormItem>

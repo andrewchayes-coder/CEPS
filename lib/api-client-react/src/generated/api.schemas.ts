@@ -1094,6 +1094,14 @@ export const InvoicePaymentType = {
   reimbursement: 'reimbursement',
 } as const;
 
+export type InvoiceDocumentType = typeof InvoiceDocumentType[keyof typeof InvoiceDocumentType];
+
+
+export const InvoiceDocumentType = {
+  invoice: 'invoice',
+  receipt: 'receipt',
+} as const;
+
 export type InvoiceStatus = typeof InvoiceStatus[keyof typeof InvoiceStatus];
 
 
@@ -1111,6 +1119,8 @@ export interface InvoiceLineItem {
   authorizationId: string;
   /** @nullable */
   authNumber?: string | null;
+  /** @nullable */
+  serviceCode?: string | null;
   /** @pattern ^\d{4}-(0[1-9]|1[0-2])$ */
   serviceMonth: string;
   /** @pattern ^\d+(\.\d{1,2})?$ */
@@ -1141,6 +1151,9 @@ export interface Invoice {
   serviceMonth: string | null;
   amountRequested: string;
   paymentType: InvoicePaymentType;
+  documentType: InvoiceDocumentType;
+  /** Distinct authorization service codes from invoice lines, sorted ascending. */
+  serviceCodes: string[];
   /** @nullable */
   documentUrl?: string | null;
   status: InvoiceStatus;
@@ -2241,6 +2254,14 @@ export const InvoiceInputPaymentType = {
   reimbursement: 'reimbursement',
 } as const;
 
+export type InvoiceInputDocumentType = typeof InvoiceInputDocumentType[keyof typeof InvoiceInputDocumentType];
+
+
+export const InvoiceInputDocumentType = {
+  invoice: 'invoice',
+  receipt: 'receipt',
+} as const;
+
 export interface InvoiceLineItemInput {
   /** Existing line ID, used when editing to retain its document */
   id?: string;
@@ -2262,6 +2283,7 @@ export interface InvoiceInput {
   serviceMonth?: string;
   amountRequested?: string;
   paymentType?: InvoiceInputPaymentType;
+  documentType?: InvoiceInputDocumentType;
   documentUrl?: string;
   notes?: string;
   /** @minItems 1 */
@@ -2274,6 +2296,17 @@ export type InvoiceUpdatePaymentType = typeof InvoiceUpdatePaymentType[keyof typ
 export const InvoiceUpdatePaymentType = {
   direct_payment: 'direct_payment',
   reimbursement: 'reimbursement',
+} as const;
+
+/**
+ * Omit to preserve the current document type.
+ */
+export type InvoiceUpdateDocumentType = typeof InvoiceUpdateDocumentType[keyof typeof InvoiceUpdateDocumentType];
+
+
+export const InvoiceUpdateDocumentType = {
+  invoice: 'invoice',
+  receipt: 'receipt',
 } as const;
 
 export type InvoiceUpdateStatus = typeof InvoiceUpdateStatus[keyof typeof InvoiceUpdateStatus];
@@ -2296,6 +2329,8 @@ export interface InvoiceUpdate {
   serviceMonth?: string;
   amountRequested?: string;
   paymentType?: InvoiceUpdatePaymentType;
+  /** Omit to preserve the current document type. */
+  documentType?: InvoiceUpdateDocumentType;
   status?: InvoiceUpdateStatus;
   notes?: string;
   /** @nullable */
@@ -3406,6 +3441,8 @@ offset?: number;
 
 export type ListInvoicesParams = {
 status?: string;
+documentType?: ListInvoicesDocumentType;
+serviceCode?: ListInvoicesServiceCode;
 clientId?: string;
 vendorId?: string;
 search?: string;
@@ -3417,14 +3454,33 @@ sortBy?: ListInvoicesSortBy;
 sortDirection?: ListInvoicesSortDirection;
 };
 
+export type ListInvoicesDocumentType = typeof ListInvoicesDocumentType[keyof typeof ListInvoicesDocumentType];
+
+
+export const ListInvoicesDocumentType = {
+  invoice: 'invoice',
+  receipt: 'receipt',
+} as const;
+
+export type ListInvoicesServiceCode = typeof ListInvoicesServiceCode[keyof typeof ListInvoicesServiceCode];
+
+
+export const ListInvoicesServiceCode = {
+  NUMBER_459: '459',
+  NUMBER_024: '024',
+  NUMBER_490: '490',
+} as const;
+
 export type ListInvoicesSortBy = typeof ListInvoicesSortBy[keyof typeof ListInvoicesSortBy];
 
 
 export const ListInvoicesSortBy = {
   serviceMonth: 'serviceMonth',
+  documentType: 'documentType',
   vendorName: 'vendorName',
   clientName: 'clientName',
   authNumber: 'authNumber',
+  serviceCode: 'serviceCode',
   amountRequested: 'amountRequested',
   status: 'status',
   submittedDate: 'submittedDate',

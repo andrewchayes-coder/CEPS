@@ -11,6 +11,8 @@ export interface InvoiceLineItem {
   authorizationId: string;
   /** @nullable */
   authNumber?: string | null;
+  /** @nullable */
+  serviceCode?: string | null;
   /** @pattern ^\d{4}-(0[1-9]|1[0-2])$ */
   serviceMonth: string;
   /** @pattern ^\d+(\.\d{1,2})?$ */

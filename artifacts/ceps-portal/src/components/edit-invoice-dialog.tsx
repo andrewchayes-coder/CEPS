@@ -1,3 +1,5 @@
+import { useQueryClient } from '@tanstack/react-query';
+import { invalidateInvoiceQueries } from '@/lib/invoice-query-cache';
 import React, { useState, useEffect } from 'react';
 import { useForm, useFieldArray } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -30,11 +32,13 @@ import { SearchableSelect } from '@/components/searchable-select';
 import { MonthYearInput } from '@/components/month-year-input';
 import { useDebounce } from '@/hooks/use-debounce';
 import { Badge } from '@/components/ui/badge';
+import { DocumentTypeSelect, DocumentTypeMismatchHint } from '@/components/invoice-document-type';
 import { apiErrorMessage } from '@/lib/api-error';
 
 const formSchema = z.object({
   vendorId: z.string().optional(),
   paymentType: z.string(),
+  documentType: z.enum(['invoice', 'receipt']),
   notes: z.string().optional(),
   lineItems: z.array(z.object({
     id: z.string().optional(),
@@ -50,6 +54,8 @@ type InvoiceLike = {
   vendorId?: string | null;
   vendorName?: string | null;
   paymentType: string;
+  documentType?: string;
+  serviceCodes?: string[];
   status: string;
   notes?: string | null;
   lineItems: InvoiceLineItem[];
@@ -63,6 +69,7 @@ type Props = {
 };
 
 export function EditInvoiceDialog({ id, invoice, onSaved, variant = 'dialog' }: Props) {
+  const queryClient = useQueryClient();
   const { toast } = useToast();
   const updateInvoice = useUpdateInvoice();
   const [open, setOpen] = useState(false);
@@ -74,6 +81,7 @@ export function EditInvoiceDialog({ id, invoice, onSaved, variant = 'dialog' }: 
     defaultValues: {
       vendorId: invoice.vendorId ?? '',
       paymentType: invoice.paymentType,
+      documentType: invoice.documentType === 'receipt' ? 'receipt' : 'invoice',
       notes: invoice.notes ?? '',
       lineItems: invoice.lineItems.length > 0
         ? invoice.lineItems.map(l => ({ id: l.id, authorizationId: l.authorizationId, serviceMonth: l.serviceMonth, amount: l.amount }))
@@ -86,6 +94,8 @@ export function EditInvoiceDialog({ id, invoice, onSaved, variant = 'dialog' }: 
     name: "lineItems"
   });
   const lineItems = form.watch('lineItems');
+  const watchedDocType = form.watch('documentType');
+  const watchedPayType = form.watch('paymentType');
   const totalAmount = lineItems.reduce((sum, item) => sum + (parseFloat(item.amount) || 0), 0);
 
   const [vendorSearch, setVendorSearch] = useState('');
@@ -103,12 +113,20 @@ export function EditInvoiceDialog({ id, invoice, onSaved, variant = 'dialog' }: 
     { query: { enabled: isActive, queryKey: ['authorizations', { clientId: invoice.clientId, search: debouncedAuthSearch, limit: 50 }] } }
   );
   const authorizations = (authorizationsData?.items ?? []).filter((auth) => auth.paymentType !== 'fee');
+  const codeForAuth = (authId: string | undefined, lineIndex: number): string | null => {
+    if (!authId) return null;
+    const found = authorizations.find((a) => a.id === authId);
+    if (found) return found.serviceCode ?? null;
+    const existing = invoice.lineItems.find((l) => l.authorizationId === authId);
+    return existing?.serviceCode ?? null;
+  };
 
   useEffect(() => {
     if (isActive) {
       form.reset({
         vendorId: invoice.vendorId ?? '',
         paymentType: invoice.paymentType,
+        documentType: invoice.documentType === 'receipt' ? 'receipt' : 'invoice',
         notes: invoice.notes ?? '',
         lineItems: invoice.lineItems.length > 0
           ? invoice.lineItems.map(l => ({ id: l.id, authorizationId: l.authorizationId, serviceMonth: l.serviceMonth, amount: l.amount }))
@@ -122,6 +140,7 @@ export function EditInvoiceDialog({ id, invoice, onSaved, variant = 'dialog' }: 
       vendorId: data.vendorId === 'none' || data.vendorId === '' ? null : data.vendorId,
       amountRequested: totalAmount.toFixed(2),
       paymentType: data.paymentType as InvoiceUpdate['paymentType'],
+      documentType: data.documentType,
       notes: data.notes === '' ? undefined : data.notes,
       lineItems: data.lineItems,
       ...(invoice.status === 'needs_entry' ? { status: 'pending_review' as InvoiceUpdate['status'] } : {}),
@@ -130,6 +149,7 @@ export function EditInvoiceDialog({ id, invoice, onSaved, variant = 'dialog' }: 
       { id, data: updateData },
       {
         onSuccess: () => {
+          void invalidateInvoiceQueries(queryClient);
           toast({ title: 'Invoice updated' });
           if (!isInline) setOpen(false);
           onSaved?.();
@@ -148,7 +168,7 @@ export function EditInvoiceDialog({ id, invoice, onSaved, variant = 'dialog' }: 
                 <Input id="edit-invoice-participant" value={invoice.clientName ?? invoice.clientId} disabled />
               </div>
               <FormField control={form.control} name="vendorId" render={({ field }) => (
-                <FormItem>
+                <FormItem className="sm:col-span-2">
                   <FormLabel htmlFor="edit-invoice-vendor">Vendor</FormLabel>
                   <FormControl>
                     <SearchableSelect
@@ -181,6 +201,14 @@ export function EditInvoiceDialog({ id, invoice, onSaved, variant = 'dialog' }: 
                   <FormMessage />
                 </FormItem>
               )} />
+              <FormField control={form.control} name="documentType" render={({ field }) => (
+                <FormItem>
+                  <FormLabel htmlFor="edit-invoice-document-type">Document Type</FormLabel>
+                  <DocumentTypeSelect id="edit-invoice-document-type" value={field.value} onValueChange={field.onChange} />
+                  <FormMessage />
+                </FormItem>
+              )} />
+              <DocumentTypeMismatchHint documentType={watchedDocType} paymentType={watchedPayType} />
               <div className="space-y-2 sm:col-span-2">
                  <Label>Status</Label>
                 <div><Badge variant="secondary" className="capitalize">{invoice.status.replace(/_/g, ' ')}</Badge></div>
@@ -209,13 +237,17 @@ export function EditInvoiceDialog({ id, invoice, onSaved, variant = 'dialog' }: 
                             id={`edit-line-${index}-auth`}
                             value={form.watch(`lineItems.${index}.authorizationId`) ?? ''}
                             onValueChange={(v) => form.setValue(`lineItems.${index}.authorizationId`, v)}
-                            options={authorizations.map(a => ({ value: a.id, label: a.authNumber, subtitle: a.activityDescription ?? undefined }))}
+                            options={authorizations.map(a => ({ value: a.id, label: a.authNumber, subtitle: [a.serviceCode, a.activityDescription].filter(Boolean).join(' · ') || undefined }))}
+                            selectedLabelFallback={invoice.lineItems.find((l) => l.authorizationId === form.watch(`lineItems.${index}.authorizationId`))?.authNumber ?? undefined}
                             onSearchChange={setAuthSearch}
                             loading={authorizationsLoading}
                             placeholder="Select authorization"
                             data-testid={`select-line-${index}-authorization`}
                           />
                         </FormControl>
+                        {codeForAuth(form.watch(`lineItems.${index}.authorizationId`), index) && (
+                          <p className="text-xs text-muted-foreground" data-testid={`text-line-${index}-service-code`}>Svc Code: {codeForAuth(form.watch(`lineItems.${index}.authorizationId`), index)}</p>
+                        )}
                         <FormMessage />
                       </FormItem>
                     )} />

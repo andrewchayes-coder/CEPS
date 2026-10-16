@@ -11,9 +11,11 @@ export type ListInvoicesSortBy = typeof ListInvoicesSortBy[keyof typeof ListInvo
 
 export const ListInvoicesSortBy = {
   serviceMonth: 'serviceMonth',
+  documentType: 'documentType',
   vendorName: 'vendorName',
   clientName: 'clientName',
   authNumber: 'authNumber',
+  serviceCode: 'serviceCode',
   amountRequested: 'amountRequested',
   status: 'status',
   submittedDate: 'submittedDate',

@@ -1,0 +1,2 @@
+ALTER TABLE "invoices" ADD COLUMN "document_type" text DEFAULT 'invoice' NOT NULL;--> statement-breakpoint
+ALTER TABLE "invoices" ADD CONSTRAINT "invoices_document_type_check" CHECK ("invoices"."document_type" in ('invoice', 'receipt'));

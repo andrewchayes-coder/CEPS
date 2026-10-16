@@ -867,6 +867,8 @@ export const GetClientCaseResponse = zod.object({
   "serviceMonth": zod.string().nullable().describe('Deprecated compatibility value; line item months are authoritative.'),
   "amountRequested": zod.string(),
   "paymentType": zod.enum(['direct_payment', 'reimbursement']),
+  "documentType": zod.enum(['invoice', 'receipt']),
+  "serviceCodes": zod.array(zod.string()).describe('Distinct authorization service codes from invoice lines, sorted ascending.'),
   "documentUrl": zod.string().nullish(),
   "status": zod.enum(['needs_entry', 'pending_review', 'validated', 'approved', 'rejected', 'duplicate']),
   "reviewedBy": zod.string().nullish(),
@@ -878,6 +880,7 @@ export const GetClientCaseResponse = zod.object({
   "id": zod.string(),
   "authorizationId": zod.string(),
   "authNumber": zod.string().nullish(),
+  "serviceCode": zod.string().nullish(),
   "serviceMonth": zod.string().regex(getClientCaseResponseInvoicesItemLineItemsItemServiceMonthRegExp),
   "amount": zod.string().regex(getClientCaseResponseInvoicesItemLineItemsItemAmountRegExp),
   "documentUrl": zod.string().nullish()
@@ -2832,6 +2835,8 @@ export const ReviewUnmatchedPosResponse = zod.object({
  */
 export const ListInvoicesQueryParams = zod.object({
   "status": zod.coerce.string().optional(),
+  "documentType": zod.enum(['invoice', 'receipt']).optional(),
+  "serviceCode": zod.enum(['459', '024', '490']).optional(),
   "clientId": zod.coerce.string().optional(),
   "vendorId": zod.coerce.string().optional(),
   "search": zod.coerce.string().optional(),
@@ -2839,7 +2844,7 @@ export const ListInvoicesQueryParams = zod.object({
   "endDate": zod.coerce.string().optional(),
   "limit": zod.coerce.number().int().optional(),
   "offset": zod.coerce.number().int().optional(),
-  "sortBy": zod.enum(['serviceMonth', 'vendorName', 'clientName', 'authNumber', 'amountRequested', 'status', 'submittedDate', 'createdAt']).optional(),
+  "sortBy": zod.enum(['serviceMonth', 'documentType', 'vendorName', 'clientName', 'authNumber', 'serviceCode', 'amountRequested', 'status', 'submittedDate', 'createdAt']).optional(),
   "sortDirection": zod.enum(['asc', 'desc']).optional()
 })
 
@@ -2861,6 +2866,8 @@ export const ListInvoicesResponse = zod.object({
   "serviceMonth": zod.string().nullable().describe('Deprecated compatibility value; line item months are authoritative.'),
   "amountRequested": zod.string(),
   "paymentType": zod.enum(['direct_payment', 'reimbursement']),
+  "documentType": zod.enum(['invoice', 'receipt']),
+  "serviceCodes": zod.array(zod.string()).describe('Distinct authorization service codes from invoice lines, sorted ascending.'),
   "documentUrl": zod.string().nullish(),
   "status": zod.enum(['needs_entry', 'pending_review', 'validated', 'approved', 'rejected', 'duplicate']),
   "reviewedBy": zod.string().nullish(),
@@ -2872,6 +2879,7 @@ export const ListInvoicesResponse = zod.object({
   "id": zod.string(),
   "authorizationId": zod.string(),
   "authNumber": zod.string().nullish(),
+  "serviceCode": zod.string().nullish(),
   "serviceMonth": zod.string().regex(listInvoicesResponseItemsItemLineItemsItemServiceMonthRegExp),
   "amount": zod.string().regex(listInvoicesResponseItemsItemLineItemsItemAmountRegExp),
   "documentUrl": zod.string().nullish()
@@ -2884,6 +2892,7 @@ export const ListInvoicesResponse = zod.object({
 /**
  * @summary Submit invoice (vendor portal, parent, or staff entry)
  */
+export const createInvoiceBodyDocumentTypeDefault = `invoice`;
 export const createInvoiceBodyLineItemsItemServiceMonthRegExp = new RegExp('^\\d{4}-(0[1-9]|1[0-2])$');
 export const createInvoiceBodyLineItemsItemAmountRegExp = new RegExp('^\\d+(\\.\\d{1,2})?$');
 
@@ -2896,6 +2905,7 @@ export const CreateInvoiceBody = zod.object({
   "serviceMonth": zod.string().optional(),
   "amountRequested": zod.string().optional(),
   "paymentType": zod.enum(['direct_payment', 'reimbursement']).optional(),
+  "documentType": zod.enum(['invoice', 'receipt']).default(createInvoiceBodyDocumentTypeDefault),
   "documentUrl": zod.string().optional(),
   "notes": zod.string().optional(),
   "lineItems": zod.array(zod.object({
@@ -2924,6 +2934,8 @@ export const CreateInvoiceResponse = zod.object({
   "serviceMonth": zod.string().nullable().describe('Deprecated compatibility value; line item months are authoritative.'),
   "amountRequested": zod.string(),
   "paymentType": zod.enum(['direct_payment', 'reimbursement']),
+  "documentType": zod.enum(['invoice', 'receipt']),
+  "serviceCodes": zod.array(zod.string()).describe('Distinct authorization service codes from invoice lines, sorted ascending.'),
   "documentUrl": zod.string().nullish(),
   "status": zod.enum(['needs_entry', 'pending_review', 'validated', 'approved', 'rejected', 'duplicate']),
   "reviewedBy": zod.string().nullish(),
@@ -2935,6 +2947,7 @@ export const CreateInvoiceResponse = zod.object({
   "id": zod.string(),
   "authorizationId": zod.string(),
   "authNumber": zod.string().nullish(),
+  "serviceCode": zod.string().nullish(),
   "serviceMonth": zod.string().regex(createInvoiceResponseLineItemsItemServiceMonthRegExp),
   "amount": zod.string().regex(createInvoiceResponseLineItemsItemAmountRegExp),
   "documentUrl": zod.string().nullish()
@@ -2966,6 +2979,8 @@ export const GetInvoiceResponse = zod.object({
   "serviceMonth": zod.string().nullable().describe('Deprecated compatibility value; line item months are authoritative.'),
   "amountRequested": zod.string(),
   "paymentType": zod.enum(['direct_payment', 'reimbursement']),
+  "documentType": zod.enum(['invoice', 'receipt']),
+  "serviceCodes": zod.array(zod.string()).describe('Distinct authorization service codes from invoice lines, sorted ascending.'),
   "documentUrl": zod.string().nullish(),
   "status": zod.enum(['needs_entry', 'pending_review', 'validated', 'approved', 'rejected', 'duplicate']),
   "reviewedBy": zod.string().nullish(),
@@ -2977,6 +2992,7 @@ export const GetInvoiceResponse = zod.object({
   "id": zod.string(),
   "authorizationId": zod.string(),
   "authNumber": zod.string().nullish(),
+  "serviceCode": zod.string().nullish(),
   "serviceMonth": zod.string().regex(getInvoiceResponseLineItemsItemServiceMonthRegExp),
   "amount": zod.string().regex(getInvoiceResponseLineItemsItemAmountRegExp),
   "documentUrl": zod.string().nullish()
@@ -3002,6 +3018,7 @@ export const UpdateInvoiceBody = zod.object({
   "serviceMonth": zod.string().optional(),
   "amountRequested": zod.string().optional(),
   "paymentType": zod.enum(['direct_payment', 'reimbursement']).optional(),
+  "documentType": zod.enum(['invoice', 'receipt']).optional().describe('Omit to preserve the current document type.'),
   "status": zod.enum(['needs_entry', 'pending_review', 'validated', 'approved', 'rejected', 'duplicate']).optional(),
   "notes": zod.string().optional(),
   "documentUrl": zod.string().nullish(),
@@ -3031,6 +3048,8 @@ export const UpdateInvoiceResponse = zod.object({
   "serviceMonth": zod.string().nullable().describe('Deprecated compatibility value; line item months are authoritative.'),
   "amountRequested": zod.string(),
   "paymentType": zod.enum(['direct_payment', 'reimbursement']),
+  "documentType": zod.enum(['invoice', 'receipt']),
+  "serviceCodes": zod.array(zod.string()).describe('Distinct authorization service codes from invoice lines, sorted ascending.'),
   "documentUrl": zod.string().nullish(),
   "status": zod.enum(['needs_entry', 'pending_review', 'validated', 'approved', 'rejected', 'duplicate']),
   "reviewedBy": zod.string().nullish(),
@@ -3042,6 +3061,7 @@ export const UpdateInvoiceResponse = zod.object({
   "id": zod.string(),
   "authorizationId": zod.string(),
   "authNumber": zod.string().nullish(),
+  "serviceCode": zod.string().nullish(),
   "serviceMonth": zod.string().regex(updateInvoiceResponseLineItemsItemServiceMonthRegExp),
   "amount": zod.string().regex(updateInvoiceResponseLineItemsItemAmountRegExp),
   "documentUrl": zod.string().nullish()
@@ -3113,6 +3133,8 @@ export const DecideInvoiceResponse = zod.object({
   "serviceMonth": zod.string().nullable().describe('Deprecated compatibility value; line item months are authoritative.'),
   "amountRequested": zod.string(),
   "paymentType": zod.enum(['direct_payment', 'reimbursement']),
+  "documentType": zod.enum(['invoice', 'receipt']),
+  "serviceCodes": zod.array(zod.string()).describe('Distinct authorization service codes from invoice lines, sorted ascending.'),
   "documentUrl": zod.string().nullish(),
   "status": zod.enum(['needs_entry', 'pending_review', 'validated', 'approved', 'rejected', 'duplicate']),
   "reviewedBy": zod.string().nullish(),
@@ -3124,6 +3146,7 @@ export const DecideInvoiceResponse = zod.object({
   "id": zod.string(),
   "authorizationId": zod.string(),
   "authNumber": zod.string().nullish(),
+  "serviceCode": zod.string().nullish(),
   "serviceMonth": zod.string().regex(decideInvoiceResponseLineItemsItemServiceMonthRegExp),
   "amount": zod.string().regex(decideInvoiceResponseLineItemsItemAmountRegExp),
   "documentUrl": zod.string().nullish()
@@ -3162,6 +3185,8 @@ export const ListReadyToApproveInvoicesResponse = zod.object({
   "serviceMonth": zod.string().nullable().describe('Deprecated compatibility value; line item months are authoritative.'),
   "amountRequested": zod.string(),
   "paymentType": zod.enum(['direct_payment', 'reimbursement']),
+  "documentType": zod.enum(['invoice', 'receipt']),
+  "serviceCodes": zod.array(zod.string()).describe('Distinct authorization service codes from invoice lines, sorted ascending.'),
   "documentUrl": zod.string().nullish(),
   "status": zod.enum(['needs_entry', 'pending_review', 'validated', 'approved', 'rejected', 'duplicate']),
   "reviewedBy": zod.string().nullish(),
@@ -3173,6 +3198,7 @@ export const ListReadyToApproveInvoicesResponse = zod.object({
   "id": zod.string(),
   "authorizationId": zod.string(),
   "authNumber": zod.string().nullish(),
+  "serviceCode": zod.string().nullish(),
   "serviceMonth": zod.string().regex(listReadyToApproveInvoicesResponseItemsItemLineItemsItemServiceMonthRegExp),
   "amount": zod.string().regex(listReadyToApproveInvoicesResponseItemsItemLineItemsItemAmountRegExp),
   "documentUrl": zod.string().nullish()
@@ -3213,6 +3239,8 @@ export const ListReadyForCheckWritingInvoicesResponse = zod.object({
   "serviceMonth": zod.string().nullable().describe('Deprecated compatibility value; line item months are authoritative.'),
   "amountRequested": zod.string(),
   "paymentType": zod.enum(['direct_payment', 'reimbursement']),
+  "documentType": zod.enum(['invoice', 'receipt']),
+  "serviceCodes": zod.array(zod.string()).describe('Distinct authorization service codes from invoice lines, sorted ascending.'),
   "documentUrl": zod.string().nullish(),
   "status": zod.enum(['needs_entry', 'pending_review', 'validated', 'approved', 'rejected', 'duplicate']),
   "reviewedBy": zod.string().nullish(),
@@ -3224,6 +3252,7 @@ export const ListReadyForCheckWritingInvoicesResponse = zod.object({
   "id": zod.string(),
   "authorizationId": zod.string(),
   "authNumber": zod.string().nullish(),
+  "serviceCode": zod.string().nullish(),
   "serviceMonth": zod.string().regex(listReadyForCheckWritingInvoicesResponseItemsItemLineItemsItemServiceMonthRegExp),
   "amount": zod.string().regex(listReadyForCheckWritingInvoicesResponseItemsItemLineItemsItemAmountRegExp),
   "documentUrl": zod.string().nullish()

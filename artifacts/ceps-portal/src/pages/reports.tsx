@@ -19,6 +19,7 @@ import { stableSort, useTableSort } from '@/lib/table-sorting';
 import { SearchableSelect } from '@/components/searchable-select';
 import { useDebounce } from '@/hooks/use-debounce';
 import { DateRangeFilter } from '@/components/date-range-filter';
+import { resolveReportTab } from '@/lib/dashboard-models';
 import { Label } from '@/components/ui/label';
 
 export interface GlobalReportFilters {
@@ -27,8 +28,6 @@ export interface GlobalReportFilters {
   startDate?: string;
   endDate?: string;
 }
-
-const VALID_TABS = ['vendor-payments', 'case-status', 'pending-auth', 'missing-docs', 'expiring-auth'];
 
 export default function ReportsPage() {
   const { user } = useAuth();
@@ -40,7 +39,7 @@ export default function ReportsPage() {
 
   const [searchParams, setSearchParams] = useSearchParams();
   const tabParam = searchParams.get('tab') ?? '';
-  const activeTab = VALID_TABS.includes(tabParam) ? tabParam : 'vendor-payments';
+  const activeTab = resolveReportTab(user?.role, tabParam);
   const docTypeParam = searchParams.get('docType') ?? undefined;
   const statusParam = searchParams.get('status') ?? undefined;
 
@@ -145,16 +144,21 @@ export default function ReportsPage() {
 
       <Tabs value={activeTab} onValueChange={onTabChange} className="space-y-4">
         <TabsList className="flex flex-wrap h-auto">
-          <TabsTrigger value="vendor-payments" data-testid="tab-vendor-payments">Vendor Payments</TabsTrigger>
+          {!isCoordinator && <TabsTrigger value="vendor-payments" data-testid="tab-vendor-payments">Vendor Payments</TabsTrigger>}
           {isStaff && <TabsTrigger value="case-status" data-testid="tab-case-status">Case Status</TabsTrigger>}
           {showPendingAuth && <TabsTrigger value="pending-auth" data-testid="tab-pending-auth">Pending Authorization</TabsTrigger>}
           {isStaff && <TabsTrigger value="missing-docs" data-testid="tab-missing-docs">Missing Documents</TabsTrigger>}
           {showExpiringAuth && <TabsTrigger value="expiring-auth" data-testid="tab-expiring-auth">Expiring Authorizations</TabsTrigger>}
         </TabsList>
 
-        <TabsContent value="vendor-payments">
-          <VendorPaymentsReport filters={globalFilters} />
-        </TabsContent>
+        {isCoordinator && (
+          <p className="text-sm text-muted-foreground" data-testid="text-caseload-caption">Showing participants on your caseload only</p>
+        )}
+        {!isCoordinator && (
+          <TabsContent value="vendor-payments">
+            <VendorPaymentsReport filters={globalFilters} />
+          </TabsContent>
+        )}
         {isStaff && (
           <TabsContent value="case-status">
             <CaseStatusReport filters={globalFilters} initialStatus={statusParam} />

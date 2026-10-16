@@ -110,6 +110,12 @@ router.get("/dashboard/summary", requireAuth, async (req, res): Promise<void> =>
   const missingW9 = vendors.filter((v) => v.active && v.w9Status !== "on_file");
   const unmatchedRemits = remits.filter((r) => r.status !== "matched");
   const today = new Date().toISOString().slice(0, 10);
+  const expiringThrough = new Date(`${today}T00:00:00Z`);
+  expiringThrough.setUTCDate(expiringThrough.getUTCDate() + 30);
+  const expiringThroughDate = expiringThrough.toISOString().slice(0, 10);
+  const expiringAuthorizations = withStatus.filter(({ a, status }) =>
+    status === "active" && a.servicePeriodEnd >= today && a.servicePeriodEnd <= expiringThroughDate,
+  ).length;
   let exhaustedActiveAlerts: {
     kind: string;
     message: string;
@@ -251,6 +257,8 @@ router.get("/dashboard/summary", requireAuth, async (req, res): Promise<void> =>
         activeClients: clients.filter((c) => c.status === "active").length,
         activeAuthorizations: withStatus.filter((x) => x.status === "active").length,
         pendingInvoices: invoices.filter((i) => i.status === "pending_review" || i.status === "validated").length,
+        invoicesInReview: invoices.filter((i) => ["needs_entry", "pending_review", "validated"].includes(i.status)).length,
+        expiringAuthorizations,
         needsEntryInvoices: invoices.filter((i) => i.status === "needs_entry").length,
         vendorsMissingW9: missingW9.length,
         paymentsThisMonth: paymentsThisMonth.toFixed(2),

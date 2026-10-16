@@ -4621,6 +4621,8 @@ components:
             activeClients: { type: integer }
             activeAuthorizations: { type: integer }
             pendingInvoices: { type: integer }
+            invoicesInReview: { type: integer, description: Scoped invoices awaiting CEPS entry, review or approval. }
+            expiringAuthorizations: { type: integer, description: Full scoped count of derived-active authorizations ending within the next 30 days, independent of the alert cap. }
             needsEntryInvoices: { type: integer }
             vendorsMissingW9: { type: integer }
             paymentsThisMonth: { type: ["string", "null"] }

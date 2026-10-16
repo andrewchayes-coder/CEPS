@@ -10,6 +10,10 @@ export type DashboardSummaryTotals = {
   activeClients: number;
   activeAuthorizations: number;
   pendingInvoices: number;
+  /** Scoped invoices awaiting CEPS entry */
+  invoicesInReview?: number;
+  /** Full scoped count of derived-active authorizations ending within the next 30 days */
+  expiringAuthorizations?: number;
   needsEntryInvoices: number;
   vendorsMissingW9: number;
   /** @nullable */

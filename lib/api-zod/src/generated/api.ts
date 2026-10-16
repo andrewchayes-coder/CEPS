@@ -4635,6 +4635,8 @@ export const GetDashboardSummaryResponse = zod.object({
   "activeClients": zod.int(),
   "activeAuthorizations": zod.int(),
   "pendingInvoices": zod.int(),
+  "invoicesInReview": zod.int().optional().describe('Scoped invoices awaiting CEPS entry'),
+  "expiringAuthorizations": zod.int().optional().describe('Full scoped count of derived-active authorizations ending within the next 30 days'),
   "needsEntryInvoices": zod.int(),
   "vendorsMissingW9": zod.int(),
   "paymentsThisMonth": zod.string().nullish(),

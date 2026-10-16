@@ -23,7 +23,8 @@ import {
 import { Skeleton } from '@/components/ui/skeleton';
 import { Link, useLocation } from 'wouter';
 import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
+import { DashboardTile } from '@/components/dashboard-tile';
+import { getCoordinatorTiles, getInvoicesInReview, filterAlertsForRole } from '@/lib/dashboard-models';
 
 export default function DashboardPage() {
   const { user } = useAuth();
@@ -50,6 +51,11 @@ export default function DashboardPage() {
     curr.status.startsWith('pending') ? acc + curr.count : acc, 0
   );
 
+  const isCoordinator = user?.role === 'service_coordinator';
+  const visibleAlerts = filterAlertsForRole(summary.alerts ?? [], user?.role);
+  const coordinatorTiles = isCoordinator ? getCoordinatorTiles(summary.totals, activeReferrals, pendingReferrals) : [];
+  const tileIcons = { expiring: <AlertTriangle className="h-4 w-4" />, referrals: <FileText className="h-4 w-4" />, participants: <Users className="h-4 w-4" /> };
+
   return (
     <div className="space-y-6">
       <div>
@@ -62,9 +68,9 @@ export default function DashboardPage() {
       </div>
 
       {/* Alerts Section (High Priority) */}
-      {summary.alerts && summary.alerts.length > 0 && (
+      {visibleAlerts.length > 0 && (
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-          {groupAlerts(summary.alerts).map((group) => group.kind === 'authorization_exhausted_active' || group.kind === 'unmatched_pos_possible_match' ? (
+          {groupAlerts(visibleAlerts).map((group) => group.kind === 'authorization_exhausted_active' || group.kind === 'unmatched_pos_possible_match' ? (
             <Card
               key={group.kind}
               className={`border-l-4 ${getAlertBorderColor(group.kind)} h-full`}
@@ -147,6 +153,19 @@ export default function DashboardPage() {
 
       {/* KPI Cards */}
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+        {coordinatorTiles.map((t) => (
+          <DashboardTile
+            key={t.key}
+            title={t.title}
+            value={t.value}
+            subtitle={t.subtitle}
+            href={t.href}
+            variant={t.variant}
+            icon={tileIcons[t.key]}
+            subtitleClassName={t.subtitleTone === 'orange' ? 'text-chart-1' : undefined}
+            testId={t.testId}
+          />
+        ))}
         {user?.role === 'staff' && (
           <Link href="/referrals?coordinatorReviewStatus=pending" className="block rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary" data-testid="link-tile-coordinator-review">
             <Card className="h-full border-primary/30 transition-colors hover:bg-primary/5">
@@ -161,7 +180,7 @@ export default function DashboardPage() {
             </Card>
           </Link>
         )}
-        {(user?.role === 'staff' || user?.role === 'service_coordinator') && (
+        {user?.role === 'staff' && (
           <Card
             className="cursor-pointer transition-colors hover:bg-accent/50"
             onClick={() => navigate('/referrals')}
@@ -185,7 +204,7 @@ export default function DashboardPage() {
           </Card>
         )}
 
-        {(user?.role === 'staff' || user?.role === 'service_coordinator') && (
+        {user?.role === 'staff' && (
           <Card
             className="cursor-pointer transition-colors hover:bg-accent/50"
             onClick={() => navigate('/clients')}
@@ -231,22 +250,24 @@ export default function DashboardPage() {
           </Card>
         )}
 
+        {!isCoordinator && (
         <Card
           className="cursor-pointer transition-colors hover:bg-accent/50"
           onClick={() => navigate('/invoices')}
           data-testid="card-kpi-invoices"
         >
           <CardHeader className="flex flex-row items-center justify-between pb-2 space-y-0">
-            <CardTitle className="text-sm font-medium">Pending Invoices</CardTitle>
+            <CardTitle className="text-sm font-medium">{user?.role === 'staff' ? 'Pending Invoices' : 'Invoices in review'}</CardTitle>
             <Receipt className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{summary.totals.pendingInvoices}</div>
+            <div className="text-2xl font-bold">{user?.role === 'staff' ? summary.totals.pendingInvoices : getInvoicesInReview(summary.totals)}</div>
             <p className="text-xs text-muted-foreground mt-1">
               Awaiting review and approval
             </p>
           </CardContent>
         </Card>
+        )}
         {user?.role === 'staff' && (
           <Card
             className="cursor-pointer transition-colors hover:bg-accent/50"

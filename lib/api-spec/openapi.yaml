@@ -3273,17 +3273,17 @@ components:
         vendorServiceCity: { type: string }
         vendorServiceZip: { type: string }
         vendorServiceState: { type: string }
-        vendorBillingDifferent: { type: string, enum: [yes, no, unknown] }
+        vendorBillingDifferent: { type: ["string", "null"], description: "Current values: yes, no, unknown. Legacy values are preserved." }
         vendorBillingStreet: { type: string }
         vendorBillingCity: { type: string }
         vendorBillingZip: { type: string }
         vendorBillingState: { type: string }
-        serviceType: { type: string, enum: [direct_pay_459, reimbursement_024] }
+        serviceType: { type: ["string", "null"], description: "Current values: direct_pay_459, reimbursement_024. Legacy values are preserved." }
         activityDescription: { type: string }
         serviceStartDate: { type: string }
         serviceEndDate: { type: string }
         authAmount: { type: string, description: Positive authorization amount stored with two decimal places }
-        serviceFrequency: { type: string, enum: [one_time, monthly] }
+        serviceFrequency: { type: ["string", "null"], description: "Current values: one_time, monthly. Legacy values are preserved." }
         posNumber: { type: string }
         posStartDate: { type: string }
         posEndDate: { type: string }
@@ -3293,7 +3293,7 @@ components:
         clientUci: { type: string }
         preferredLanguage: { type: string }
         familyRepName: { type: string }
-        familyRepRelationship: { type: string, enum: [parent, guardian, conservator, other] }
+        familyRepRelationship: { type: ["string", "null"], description: "Current values: parent, guardian, conservator, other. Legacy values are preserved." }
         familyRepPhone: { type: string }
         familyRepEmail: { type: string }
         familyRepAddress: { type: string }
@@ -3304,6 +3304,15 @@ components:
         contactCity: { type: string }
         contactZip: { type: string }
         contactState: { type: string }
+    ReferralIntakeInput:
+      allOf:
+        - $ref: "#/components/schemas/ReferralIntakeFields"
+        - type: object
+          properties:
+            vendorBillingDifferent: { type: string, enum: [yes, no, unknown] }
+            serviceType: { type: string, enum: [direct_pay_459, reimbursement_024] }
+            serviceFrequency: { type: string, enum: [one_time, monthly] }
+            familyRepRelationship: { type: string, enum: [parent, guardian, conservator, other] }
     Referral:
       type: object
       required: [id, clientId, referralDate, status]
@@ -3350,7 +3359,7 @@ components:
       type: object
       required: [intakeFields]
       properties:
-        intakeFields: { $ref: "#/components/schemas/ReferralIntakeFields" }
+        intakeFields: { $ref: "#/components/schemas/ReferralIntakeInput" }
         submittedVia: { type: string, enum: [portal, staff_manual_entry] }
         serviceFrequency: { type: string, enum: [one_time, monthly] }
         cost: { type: string, pattern: '^\d+(\.\d{1,2})?$' }
@@ -3432,8 +3441,12 @@ components:
       properties:
         intakeFields:
           type: object
-          description: Staff-only service field edits; merged with existing referral details.
+          description: Staff-only intake field edits; merged with existing referral details.
           properties:
+            serviceType: { type: string, enum: [direct_pay_459, reimbursement_024] }
+            serviceFrequency: { type: string, enum: [one_time, monthly] }
+            familyRepRelationship: { type: string, enum: [parent, guardian, conservator, other] }
+            vendorBillingDifferent: { type: string, enum: [yes, no, unknown] }
             serviceStartDate: { type: string }
             serviceEndDate: { type: string }
             authAmount: { type: string }

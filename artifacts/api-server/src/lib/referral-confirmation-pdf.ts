@@ -1,8 +1,6 @@
-import {
-  PDFDocument, StandardFonts, PDFName, PDFHexString, PDFString,
-  beginText, endText, setFontAndSize, moveText, showText, rgb,
-} from "pdf-lib";
+import { PDFDocument, rgb } from "pdf-lib";
 import type { clientsTable, referralsTable, vendorsTable } from "@workspace/db";
+import { referralPdfText } from "./referral-pdf-text";
 
 type Referral = typeof referralsTable.$inferSelect;
 type Client = typeof clientsTable.$inferSelect;
@@ -87,54 +85,20 @@ export async function createReferralConfirmationPdf(
   const pdf = await PDFDocument.create();
   pdf.setTitle("CEPS Referral Confirmation");
   pdf.setCreator("CEPS Portal");
-  const regular = await pdf.embedFont(StandardFonts.Helvetica);
-  const bold = await pdf.embedFont(StandardFonts.HelveticaBold);
-  // Standard CJK PDF font/CMap supports non-Latin saved values without a
-  // native renderer or another dependency. Explicit ToUnicode preserves text.
-  const unicodeFont = pdf.context.register(pdf.context.obj({
-    Type: "Font", Subtype: "Type0", BaseFont: "STSong-Light", Encoding: "UniGB-UCS2-H",
-    DescendantFonts: [pdf.context.register(pdf.context.obj({
-      Type: "Font", Subtype: "CIDFontType0", BaseFont: "STSong-Light", DW: 1000,
-      W: [1, [250], 2, 95, 500],
-      CIDSystemInfo: { Registry: PDFString.of("Adobe"), Ordering: PDFString.of("GB1"), Supplement: 4 },
-      FontDescriptor: pdf.context.register(pdf.context.obj({
-        Type: "FontDescriptor", FontName: "STSong-Light", Flags: 6,
-        FontBBox: [-25, -254, 1000, 880], Ascent: 880, Descent: -120, CapHeight: 880, StemV: 80,
-      })),
-    }))],
-    ToUnicode: pdf.context.register(pdf.context.stream(
-      "/CIDInit /ProcSet findresource begin 12 dict begin begincmap\n/CIDSystemInfo << /Registry (Adobe) /Ordering (UCS) /Supplement 0 >> def\n/CMapName /CEPSUnicode def /CMapType 2 def\n1 begincodespacerange <0000> <FFFF> endcodespacerange\n1 beginbfrange <0000> <FFFF> <0000> endbfrange\nendcmap CMapName currentdict /CMap defineresource pop end end",
-    )),
-  }));
+  const textLayout = await referralPdfText(pdf);
+  const regular = textLayout.regular;
   let page = pdf.addPage([612, 792]);
   let y = 744;
-  const unicodeName = PDFName.of("CEPSUnicode");
   const display = (v: unknown) => v === undefined || v === null || String(v).trim() === "" ? "—" : String(v);
   const line = (text: string, heading = false, size = 10) => {
-    const font = heading ? bold : regular;
-    let unicode = false;
-    try { font.encodeText(text); } catch { unicode = true; }
-    const width = (s: string) => unicode
-      ? Array.from(s).reduce((sum, char) => sum + (char === " " ? 0.25 : char.codePointAt(0)! < 127 ? 0.5 : 1) * size, 0)
-      : font.widthOfTextAtSize(s, size);
-    // Character-level wrapping also bounds a single long unbroken form value.
-    for (const paragraph of text.replace(/\r/g, "").split("\n")) {
-      let segment = "";
-      const draw = (s: string) => {
-        if (y < 90) { page = pdf.addPage([612, 792]); y = 744; }
-        if (unicode) {
-          page.node.setFontDictionary(unicodeName, unicodeFont);
-          const encoded = PDFHexString.fromText(s).asBytes();
-          page.pushOperators(beginText(), setFontAndSize(unicodeName, size), moveText(48, y),
-            showText(PDFHexString.of(Buffer.from(encoded.subarray(2)).toString("hex"))), endText());
-        } else page.drawText(s, { x: 48, y, size, font, color: rgb(0.1, 0.1, 0.1) });
-        y -= size + 5;
-      };
-      for (const char of paragraph) {
-        if (segment && width(segment + char) > 516) { draw(segment); segment = ""; }
-        segment += char;
+    for (const segment of textLayout.wrap(text, size, heading)) {
+      if (y < 90) { page = pdf.addPage([612, 792]); y = 744; }
+      let x = 48;
+      for (const run of textLayout.runs(segment, heading)) {
+        page.drawText(run.text, { x, y, size, font: run.font, color: rgb(0.1, 0.1, 0.1) });
+        x += run.font.widthOfTextAtSize(run.text, size);
       }
-      draw(segment);
+      y -= size + 5;
     }
   };
   line("CEPS Referral Confirmation", true, 17);

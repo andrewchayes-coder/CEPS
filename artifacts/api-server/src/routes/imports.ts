@@ -13,7 +13,7 @@
 
 import { Router, type IRouter } from "express";
 import { and, inArray } from "drizzle-orm";
-import { suggestUnmatchedPosForClient } from "../lib/posMatching";
+import { recheckPosAfterClientSave } from "../lib/posRecheck";
 import {
   db,
   clientsTable,
@@ -226,7 +226,6 @@ async function insertRow(entity: ImportEntity, values: Record<string, unknown>, 
     switch (entity) {
       case "clients": {
         const [row] = await tx.insert(clientsTable).values(values as typeof clientsTable.$inferInsert).returning();
-        await suggestUnmatchedPosForClient(txDb, row.id);
         await audit(userId, "import_client", "client", row.id, `Bulk import — UCI ${row.uciNumber}`, txDb);
         return row.id;
       }
@@ -393,6 +392,7 @@ router.post("/import/:entity/commit", requireStaff, requireImportPermission, asy
   let imported = 0;
   let skippedDuplicate = 0;
   let errored = 0;
+  const savedClientIds: string[] = [];
   const results: {
     rowNumber: number;
     status: "imported" | "skipped_duplicate" | "error";
@@ -415,6 +415,7 @@ router.post("/import/:entity/commit", requireStaff, requireImportPermission, asy
     }
     try {
       const id = await insertRow(entity, r.values, r.raw, userId);
+      if (entity === "clients") savedClientIds.push(id);
       dup.record(r.values, r.raw);
       imported++;
       results.push({ rowNumber: r.rowNumber, status: "imported", id });
@@ -438,6 +439,8 @@ router.post("/import/:entity/commit", requireStaff, requireImportPermission, asy
     }
   }
 
+  // All row saves have committed before these sequential, best-effort checks.
+  for (const clientId of savedClientIds) await recheckPosAfterClientSave(clientId);
   await audit(userId, `import_${entity}_commit`, def.auditType, undefined, `Bulk import: ${imported} imported, ${skippedDuplicate} skipped (duplicate), ${errored} errored`);
   res.json(
     CommitImportResponse.parse({ entity, imported, skippedDuplicate, errored, results }),

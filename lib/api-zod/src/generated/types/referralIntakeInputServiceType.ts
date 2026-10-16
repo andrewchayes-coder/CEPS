@@ -6,10 +6,10 @@
  * OpenAPI spec version: 0.1.0
  */
 
-export type ReferralIntakeFieldsServiceType = typeof ReferralIntakeFieldsServiceType[keyof typeof ReferralIntakeFieldsServiceType];
+export type ReferralIntakeInputServiceType = typeof ReferralIntakeInputServiceType[keyof typeof ReferralIntakeInputServiceType];
 
 
-export const ReferralIntakeFieldsServiceType = {
+export const ReferralIntakeInputServiceType = {
   direct_pay_459: 'direct_pay_459',
   reimbursement_024: 'reimbursement_024',
 } as const;

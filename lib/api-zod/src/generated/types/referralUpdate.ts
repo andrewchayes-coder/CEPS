@@ -11,7 +11,7 @@ import type { ReferralUpdateServiceFrequency } from './referralUpdateServiceFreq
 import type { ReferralUpdateStatus } from './referralUpdateStatus';
 
 export interface ReferralUpdate {
-  /** Staff-only service field edits; merged with existing referral details. */
+  /** Staff-only intake field edits; merged with existing referral details. */
   intakeFields?: ReferralUpdateIntakeFields;
   status?: ReferralUpdateStatus;
   /** @nullable */

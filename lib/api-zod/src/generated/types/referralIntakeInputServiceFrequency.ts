@@ -6,10 +6,10 @@
  * OpenAPI spec version: 0.1.0
  */
 
-export type ReferralIntakeFieldsServiceFrequency = typeof ReferralIntakeFieldsServiceFrequency[keyof typeof ReferralIntakeFieldsServiceFrequency];
+export type ReferralIntakeInputServiceFrequency = typeof ReferralIntakeInputServiceFrequency[keyof typeof ReferralIntakeInputServiceFrequency];
 
 
-export const ReferralIntakeFieldsServiceFrequency = {
+export const ReferralIntakeInputServiceFrequency = {
   one_time: 'one_time',
   monthly: 'monthly',
 } as const;

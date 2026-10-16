@@ -8,10 +8,10 @@
 import type { ReferralInputPaymentTypeRequested } from './referralInputPaymentTypeRequested';
 import type { ReferralInputServiceFrequency } from './referralInputServiceFrequency';
 import type { ReferralInputSubmittedVia } from './referralInputSubmittedVia';
-import type { ReferralIntakeFields } from './referralIntakeFields';
+import type { ReferralIntakeInput } from './referralIntakeInput';
 
 export interface ReferralInput {
-  intakeFields: ReferralIntakeFields;
+  intakeFields: ReferralIntakeInput;
   submittedVia?: ReferralInputSubmittedVia;
   serviceFrequency?: ReferralInputServiceFrequency;
   /** @pattern ^\d+(\.\d{1,2})?$ */

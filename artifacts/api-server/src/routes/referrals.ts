@@ -43,7 +43,7 @@ import {
 import { referralJson, clientNameMap, userNameMap, userContactMap } from "../lib/serializers";
 import { sortedOrder } from "../lib/sorting";
 import { logger } from "../lib/logger";
-import { suggestUnmatchedPosForClient } from "../lib/posMatching";
+import { recheckPosAfterClientSave } from "../lib/posRecheck";
 import { applyReferralClientUpdates } from "../lib/referralClientUpdates";
 
 // One display-name rule for sorting/search and response enrichment.
@@ -582,13 +582,7 @@ router.post("/referrals", requireStaffOrCoordinator, async (req, res): Promise<v
   const { client, referral, familyRepresentative, heldForReview } = result;
   // Referral creation has already committed. Suggestions are deliberately
   // best-effort and never auto-resolve a queue row or roll back the referral.
-  try {
-    await db.transaction(async (tx) => {
-      await suggestUnmatchedPosForClient(tx as unknown as typeof db, client.id);
-    });
-  } catch (error) {
-    logger.error({ error, clientId: client.id, referralId: referral.id }, "Unable to suggest unmatched POS matches after referral creation");
-  }
+  await recheckPosAfterClientSave(client.id);
   if (heldForReview) {
     res.status(202).json({
       id: referral.id,

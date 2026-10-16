@@ -6,10 +6,10 @@
  * OpenAPI spec version: 0.1.0
  */
 
-export type ReferralIntakeFieldsFamilyRepRelationship = typeof ReferralIntakeFieldsFamilyRepRelationship[keyof typeof ReferralIntakeFieldsFamilyRepRelationship];
+export type ReferralUpdateIntakeFieldsFamilyRepRelationship = typeof ReferralUpdateIntakeFieldsFamilyRepRelationship[keyof typeof ReferralUpdateIntakeFieldsFamilyRepRelationship];
 
 
-export const ReferralIntakeFieldsFamilyRepRelationship = {
+export const ReferralUpdateIntakeFieldsFamilyRepRelationship = {
   parent: 'parent',
   guardian: 'guardian',
   conservator: 'conservator',

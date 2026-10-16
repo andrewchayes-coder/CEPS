@@ -6,10 +6,10 @@
  * OpenAPI spec version: 0.1.0
  */
 
-export type ReferralIntakeFieldsVendorBillingDifferent = typeof ReferralIntakeFieldsVendorBillingDifferent[keyof typeof ReferralIntakeFieldsVendorBillingDifferent];
+export type ReferralIntakeInputVendorBillingDifferent = typeof ReferralIntakeInputVendorBillingDifferent[keyof typeof ReferralIntakeInputVendorBillingDifferent];
 
 
-export const ReferralIntakeFieldsVendorBillingDifferent = {
+export const ReferralIntakeInputVendorBillingDifferent = {
   yes: 'yes',
   no: 'no',
   unknown: 'unknown',

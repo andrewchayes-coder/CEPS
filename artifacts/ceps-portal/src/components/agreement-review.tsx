@@ -1,3 +1,4 @@
+import { referralValueLabel } from '@/lib/referral-labels';
 import { User } from 'lucide-react';
 
 export type AgreementReviewData = {
@@ -28,7 +29,7 @@ export type AgreementReviewData = {
 };
 
 const shown = (value?: string | null) => value || 'Not specified';
-const label = (value?: string | null) => value ? value.replace(/_/g, ' ') : 'Not specified';
+const label = referralValueLabel;
 
 export function AgreementReview({ data }: { data: AgreementReviewData }) {
   return (

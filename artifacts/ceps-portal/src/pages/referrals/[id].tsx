@@ -1,3 +1,4 @@
+import { referralValueLabel } from '@/lib/referral-labels';
 import React, { useState } from 'react';
 import { formatMoney } from '@/lib/utils';
 import { useLocation, useParams } from 'wouter';
@@ -248,11 +249,11 @@ export default function ReferralDetailPage() {
               <div className="space-y-1">
                 <p className="text-muted-foreground font-medium">Service Activity</p>
                 <p className="font-semibold">
-                  {intake?.serviceType === 'direct_pay_459' ? 'Direct Pay (459)' : 'Reimbursement (024)'}
+                  {referralValueLabel(intake?.serviceType)}
                 </p>
                 <p className="line-clamp-2" title={intake?.activityDescription}>{intake?.activityDescription}</p>
                 <p>Dates: {intake?.serviceStartDate || intake?.serviceEndDate ? `${intake?.serviceStartDate || '—'} to ${intake?.serviceEndDate || '—'}` : '—'}</p>
-                <p>Authorization amount: {intake?.authAmount ? `$${formatMoney(intake.authAmount)} (${(referral.serviceFrequency || intake.serviceFrequency) === 'monthly' ? 'monthly' : 'total'})` : '—'}</p>
+                <p>Authorization amount: {intake?.authAmount ? `$${formatMoney(intake.authAmount)} (${(referral.serviceFrequency || intake.serviceFrequency) === 'monthly' ? 'monthly' : (referral.serviceFrequency || intake.serviceFrequency) === 'one_time' ? 'total' : referralValueLabel(referral.serviceFrequency || intake.serviceFrequency)})` : '—'}</p>
               </div>
 
               <div className="space-y-1">

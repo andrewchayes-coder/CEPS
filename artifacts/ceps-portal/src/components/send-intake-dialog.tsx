@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { usePreviewIntakeAgreement, useSendIntake, useListFamilyRepresentatives, getListFamilyRepresentativesQueryKey, type Referral, type SignaturePage } from '@workspace/api-client-react';
+import { usePreviewIntakeAgreement, useSendIntake, useListFamilyRepresentatives, getListFamilyRepresentativesQueryKey, type Referral, type SignaturePage, type SendIntakeInput } from '@workspace/api-client-react';
 import { useToast } from '@/hooks/use-toast';
 import { Mail, AlertCircle } from 'lucide-react';
 import { Link } from 'wouter';
@@ -43,7 +43,7 @@ export function SendIntakeDialog({ referral, onSent }: { referral: Referral, onS
   );
 
   const [cost, setCost] = useState(referral.cost || referral.intakeFields?.authAmount || '');
-  const [serviceFrequency, setServiceFrequency] = useState<'' | 'one_time' | 'monthly'>(referral.serviceFrequency || referral.intakeFields?.serviceFrequency || '');
+  const [serviceFrequency, setServiceFrequency] = useState(referral.serviceFrequency || referral.intakeFields?.serviceFrequency || '');
   const [paymentSchedule, setPaymentSchedule] = useState(referral.paymentSchedule || '');
   const [paymentTypeRequested, setPaymentTypeRequested] = useState<'' | 'service_payment' | 'reimbursement'>(referral.paymentTypeRequested || '');
   const [preview, setPreview] = useState<SignaturePage | null>(null);
@@ -56,10 +56,11 @@ export function SendIntakeDialog({ referral, onSent }: { referral: Referral, onS
   const canSelectParticipant = referral.clientIsMinor === false && !!referral.participantEmail;
   const hasEligibleFamilyReps = familyReps.some(rep => !!rep.email);
   const noEligibleRecipients = !canSelectParticipant && !hasEligibleFamilyReps;
-  const agreementInput = recipient && (recipient !== 'family_rep' || familyRepresentativeId) ? {
+  const validFrequency = serviceFrequency === '' || serviceFrequency === 'one_time' || serviceFrequency === 'monthly';
+  const agreementInput: SendIntakeInput | null = recipient && validFrequency && (recipient !== 'family_rep' || familyRepresentativeId) ? {
     recipient,
     cost: cost || null,
-    serviceFrequency: serviceFrequency || null,
+    serviceFrequency: serviceFrequency === 'one_time' || serviceFrequency === 'monthly' ? serviceFrequency : null,
     paymentSchedule: paymentSchedule || null,
     paymentTypeRequested: paymentTypeRequested || null,
     ...(recipient === 'family_rep' ? { familyRepresentativeId } : {}),
@@ -274,10 +275,12 @@ export function SendIntakeDialog({ referral, onSent }: { referral: Referral, onS
                       <SelectValue placeholder="Select..." />
                     </SelectTrigger>
                     <SelectContent>
+                      {!validFrequency && <SelectItem value={serviceFrequency} disabled>{serviceFrequency}</SelectItem>}
                       <SelectItem value="one_time">One Time</SelectItem>
                       <SelectItem value="monthly">Monthly</SelectItem>
                     </SelectContent>
                   </Select>
+                  {!validFrequency && <p className="text-sm text-destructive">Select a current service frequency before previewing or sending.</p>}
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="paymentSchedule">Payment Schedule</Label>

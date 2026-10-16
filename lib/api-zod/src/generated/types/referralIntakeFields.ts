@@ -5,10 +5,6 @@
  * CEPS Portal API — referral intake, authorizations, invoices, payments, remittances, vendors, reporting
  * OpenAPI spec version: 0.1.0
  */
-import type { ReferralIntakeFieldsFamilyRepRelationship } from './referralIntakeFieldsFamilyRepRelationship';
-import type { ReferralIntakeFieldsServiceFrequency } from './referralIntakeFieldsServiceFrequency';
-import type { ReferralIntakeFieldsServiceType } from './referralIntakeFieldsServiceType';
-import type { ReferralIntakeFieldsVendorBillingDifferent } from './referralIntakeFieldsVendorBillingDifferent';
 
 /**
  * Structured referral form data (Section 9 field list)
@@ -27,18 +23,30 @@ export interface ReferralIntakeFields {
   vendorServiceCity?: string;
   vendorServiceZip?: string;
   vendorServiceState?: string;
-  vendorBillingDifferent?: ReferralIntakeFieldsVendorBillingDifferent;
+  /**
+     * Current values: yes, no, unknown. Legacy values are preserved.
+     * @nullable
+     */
+  vendorBillingDifferent?: string | null;
   vendorBillingStreet?: string;
   vendorBillingCity?: string;
   vendorBillingZip?: string;
   vendorBillingState?: string;
-  serviceType?: ReferralIntakeFieldsServiceType;
+  /**
+     * Current values: direct_pay_459, reimbursement_024. Legacy values are preserved.
+     * @nullable
+     */
+  serviceType?: string | null;
   activityDescription?: string;
   serviceStartDate?: string;
   serviceEndDate?: string;
   /** Positive authorization amount stored with two decimal places */
   authAmount?: string;
-  serviceFrequency?: ReferralIntakeFieldsServiceFrequency;
+  /**
+     * Current values: one_time, monthly. Legacy values are preserved.
+     * @nullable
+     */
+  serviceFrequency?: string | null;
   posNumber?: string;
   posStartDate?: string;
   posEndDate?: string;
@@ -48,7 +56,11 @@ export interface ReferralIntakeFields {
   clientUci?: string;
   preferredLanguage?: string;
   familyRepName?: string;
-  familyRepRelationship?: ReferralIntakeFieldsFamilyRepRelationship;
+  /**
+     * Current values: parent, guardian, conservator, other. Legacy values are preserved.
+     * @nullable
+     */
+  familyRepRelationship?: string | null;
   familyRepPhone?: string;
   familyRepEmail?: string;
   familyRepAddress?: string;

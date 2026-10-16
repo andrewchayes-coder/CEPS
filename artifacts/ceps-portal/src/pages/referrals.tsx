@@ -1,3 +1,4 @@
+import { referralValueLabel } from '@/lib/referral-labels';
 import React, { useState } from 'react';
 import { useListReferrals } from '@workspace/api-client-react';
 import { useAuth } from '@/components/auth/auth-provider';
@@ -222,11 +223,7 @@ export default function ReferralsPage() {
                       {referral.coordinatorName || 'Unassigned'}
                     </TableCell>
                     <TableCell>
-                      {referral.intakeFields?.serviceType === 'direct_pay_459' 
-                        ? 'Direct Pay (459)' 
-                        : referral.intakeFields?.serviceType === 'reimbursement_024'
-                          ? 'Reimbursement (024)'
-                          : 'Unknown'}
+                      {referralValueLabel(referral.intakeFields?.serviceType)}
                     </TableCell>
                     <TableCell>
                       <div className="flex flex-wrap items-center gap-2"><StatusBadge status={referral.status} />{referral.coordinatorReviewStatus === 'pending' && <Badge variant="outline" className="border-primary/30 bg-primary/10 text-primary">Needs CEPS review</Badge>}</div>

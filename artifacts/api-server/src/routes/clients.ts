@@ -36,7 +36,7 @@ import {
   diffDetail,
 } from "../lib/serializers";
 import { sortedOrder } from "../lib/sorting";
-import { suggestUnmatchedPosForClient } from "../lib/posMatching";
+import { recheckPosAfterClientSave } from "../lib/posRecheck";
 import { enrichPayments } from "../lib/paymentSerialization";
 import { softDeleteClient } from "../lib/participantLinks";
 import { coordinatorCanAccessClient } from "../lib/clientAccess";
@@ -215,10 +215,10 @@ router.post("/clients", requireStaffOrCoordinator, async (req, res): Promise<voi
   const client = await db.transaction(async (tx) => {
     const txDb = tx as unknown as typeof db;
     const [created] = await tx.insert(clientsTable).values(parsed.data).returning();
-    await suggestUnmatchedPosForClient(txDb, created.id);
     await audit(req.user!.id, "create_client", "client", created.id, `${created.firstName} ${created.lastName}`, txDb);
     return created;
   });
+  await recheckPosAfterClientSave(client.id);
   res.status(201).json(CreateClientResponse.parse(clientJson(client)));
 });
 
@@ -295,6 +295,7 @@ router.patch("/clients/:id", requireAuth, async (req, res): Promise<void> => {
     res.status(400).json({ error: parsed.error.message });
     return;
   }
+  let recheckPos = false;
   const client = await db.transaction(async (tx) => {
     const txDb = tx as unknown as typeof db;
     const [before] = await tx.select().from(clientsTable)
@@ -305,7 +306,7 @@ router.patch("/clients/:id", requireAuth, async (req, res): Promise<void> => {
     if (!updated) return null;
     if ((["uciNumber", "firstName", "lastName"] as const)
       .some(field => parsed.data[field] !== undefined && parsed.data[field] !== before[field])) {
-      await suggestUnmatchedPosForClient(txDb, updated.id);
+      recheckPos = true;
     }
     await audit(req.user!.id, "update_client", "client", updated.id,
       diffDetail(before, parsed.data, Object.keys(parsed.data)), txDb);
@@ -315,6 +316,7 @@ router.patch("/clients/:id", requireAuth, async (req, res): Promise<void> => {
     res.status(404).json({ error: "Client not found" });
     return;
   }
+  if (recheckPos) await recheckPosAfterClientSave(client.id);
   const names = await userNameMap([client.assignedCoordinatorId]);
   res.json(
     UpdateClientResponse.parse(

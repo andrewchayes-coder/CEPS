@@ -716,41 +716,6 @@ export const ReferralSubmittedVia = {
   staff_manual_entry: 'staff_manual_entry',
 } as const;
 
-export type ReferralIntakeFieldsVendorBillingDifferent = typeof ReferralIntakeFieldsVendorBillingDifferent[keyof typeof ReferralIntakeFieldsVendorBillingDifferent];
-
-
-export const ReferralIntakeFieldsVendorBillingDifferent = {
-  yes: 'yes',
-  no: 'no',
-  unknown: 'unknown',
-} as const;
-
-export type ReferralIntakeFieldsServiceType = typeof ReferralIntakeFieldsServiceType[keyof typeof ReferralIntakeFieldsServiceType];
-
-
-export const ReferralIntakeFieldsServiceType = {
-  direct_pay_459: 'direct_pay_459',
-  reimbursement_024: 'reimbursement_024',
-} as const;
-
-export type ReferralIntakeFieldsServiceFrequency = typeof ReferralIntakeFieldsServiceFrequency[keyof typeof ReferralIntakeFieldsServiceFrequency];
-
-
-export const ReferralIntakeFieldsServiceFrequency = {
-  one_time: 'one_time',
-  monthly: 'monthly',
-} as const;
-
-export type ReferralIntakeFieldsFamilyRepRelationship = typeof ReferralIntakeFieldsFamilyRepRelationship[keyof typeof ReferralIntakeFieldsFamilyRepRelationship];
-
-
-export const ReferralIntakeFieldsFamilyRepRelationship = {
-  parent: 'parent',
-  guardian: 'guardian',
-  conservator: 'conservator',
-  other: 'other',
-} as const;
-
 /**
  * Structured referral form data (Section 9 field list)
  */
@@ -768,18 +733,30 @@ export interface ReferralIntakeFields {
   vendorServiceCity?: string;
   vendorServiceZip?: string;
   vendorServiceState?: string;
-  vendorBillingDifferent?: ReferralIntakeFieldsVendorBillingDifferent;
+  /**
+     * Current values: yes, no, unknown. Legacy values are preserved.
+     * @nullable
+     */
+  vendorBillingDifferent?: string | null;
   vendorBillingStreet?: string;
   vendorBillingCity?: string;
   vendorBillingZip?: string;
   vendorBillingState?: string;
-  serviceType?: ReferralIntakeFieldsServiceType;
+  /**
+     * Current values: direct_pay_459, reimbursement_024. Legacy values are preserved.
+     * @nullable
+     */
+  serviceType?: string | null;
   activityDescription?: string;
   serviceStartDate?: string;
   serviceEndDate?: string;
   /** Positive authorization amount stored with two decimal places */
   authAmount?: string;
-  serviceFrequency?: ReferralIntakeFieldsServiceFrequency;
+  /**
+     * Current values: one_time, monthly. Legacy values are preserved.
+     * @nullable
+     */
+  serviceFrequency?: string | null;
   posNumber?: string;
   posStartDate?: string;
   posEndDate?: string;
@@ -789,7 +766,11 @@ export interface ReferralIntakeFields {
   clientUci?: string;
   preferredLanguage?: string;
   familyRepName?: string;
-  familyRepRelationship?: ReferralIntakeFieldsFamilyRepRelationship;
+  /**
+     * Current values: parent, guardian, conservator, other. Legacy values are preserved.
+     * @nullable
+     */
+  familyRepRelationship?: string | null;
   familyRepPhone?: string;
   familyRepEmail?: string;
   familyRepAddress?: string;
@@ -1432,6 +1413,48 @@ export interface ClientCase {
   documents: CaseDocument[];
 }
 
+export type ReferralIntakeInputVendorBillingDifferent = typeof ReferralIntakeInputVendorBillingDifferent[keyof typeof ReferralIntakeInputVendorBillingDifferent];
+
+
+export const ReferralIntakeInputVendorBillingDifferent = {
+  yes: 'yes',
+  no: 'no',
+  unknown: 'unknown',
+} as const;
+
+export type ReferralIntakeInputServiceType = typeof ReferralIntakeInputServiceType[keyof typeof ReferralIntakeInputServiceType];
+
+
+export const ReferralIntakeInputServiceType = {
+  direct_pay_459: 'direct_pay_459',
+  reimbursement_024: 'reimbursement_024',
+} as const;
+
+export type ReferralIntakeInputServiceFrequency = typeof ReferralIntakeInputServiceFrequency[keyof typeof ReferralIntakeInputServiceFrequency];
+
+
+export const ReferralIntakeInputServiceFrequency = {
+  one_time: 'one_time',
+  monthly: 'monthly',
+} as const;
+
+export type ReferralIntakeInputFamilyRepRelationship = typeof ReferralIntakeInputFamilyRepRelationship[keyof typeof ReferralIntakeInputFamilyRepRelationship];
+
+
+export const ReferralIntakeInputFamilyRepRelationship = {
+  parent: 'parent',
+  guardian: 'guardian',
+  conservator: 'conservator',
+  other: 'other',
+} as const;
+
+export type ReferralIntakeInput = ReferralIntakeFields & {
+  vendorBillingDifferent?: ReferralIntakeInputVendorBillingDifferent;
+  serviceType?: ReferralIntakeInputServiceType;
+  serviceFrequency?: ReferralIntakeInputServiceFrequency;
+  familyRepRelationship?: ReferralIntakeInputFamilyRepRelationship;
+};
+
 export type ReferralInputSubmittedVia = typeof ReferralInputSubmittedVia[keyof typeof ReferralInputSubmittedVia];
 
 
@@ -1457,7 +1480,7 @@ export const ReferralInputPaymentTypeRequested = {
 } as const;
 
 export interface ReferralInput {
-  intakeFields: ReferralIntakeFields;
+  intakeFields: ReferralIntakeInput;
   submittedVia?: ReferralInputSubmittedVia;
   serviceFrequency?: ReferralInputServiceFrequency;
   /** @pattern ^\d+(\.\d{1,2})?$ */
@@ -1566,10 +1589,49 @@ export interface CoordinatorReviewResult {
   status: CoordinatorReviewResultStatus;
 }
 
+export type ReferralUpdateIntakeFieldsServiceType = typeof ReferralUpdateIntakeFieldsServiceType[keyof typeof ReferralUpdateIntakeFieldsServiceType];
+
+
+export const ReferralUpdateIntakeFieldsServiceType = {
+  direct_pay_459: 'direct_pay_459',
+  reimbursement_024: 'reimbursement_024',
+} as const;
+
+export type ReferralUpdateIntakeFieldsServiceFrequency = typeof ReferralUpdateIntakeFieldsServiceFrequency[keyof typeof ReferralUpdateIntakeFieldsServiceFrequency];
+
+
+export const ReferralUpdateIntakeFieldsServiceFrequency = {
+  one_time: 'one_time',
+  monthly: 'monthly',
+} as const;
+
+export type ReferralUpdateIntakeFieldsFamilyRepRelationship = typeof ReferralUpdateIntakeFieldsFamilyRepRelationship[keyof typeof ReferralUpdateIntakeFieldsFamilyRepRelationship];
+
+
+export const ReferralUpdateIntakeFieldsFamilyRepRelationship = {
+  parent: 'parent',
+  guardian: 'guardian',
+  conservator: 'conservator',
+  other: 'other',
+} as const;
+
+export type ReferralUpdateIntakeFieldsVendorBillingDifferent = typeof ReferralUpdateIntakeFieldsVendorBillingDifferent[keyof typeof ReferralUpdateIntakeFieldsVendorBillingDifferent];
+
+
+export const ReferralUpdateIntakeFieldsVendorBillingDifferent = {
+  yes: 'yes',
+  no: 'no',
+  unknown: 'unknown',
+} as const;
+
 /**
- * Staff-only service field edits; merged with existing referral details.
+ * Staff-only intake field edits; merged with existing referral details.
  */
 export type ReferralUpdateIntakeFields = {
+  serviceType?: ReferralUpdateIntakeFieldsServiceType;
+  serviceFrequency?: ReferralUpdateIntakeFieldsServiceFrequency;
+  familyRepRelationship?: ReferralUpdateIntakeFieldsFamilyRepRelationship;
+  vendorBillingDifferent?: ReferralUpdateIntakeFieldsVendorBillingDifferent;
   serviceStartDate?: string;
   serviceEndDate?: string;
   authAmount?: string;
@@ -1613,7 +1675,7 @@ export const ReferralUpdatePaymentTypeRequested = {
 } as const;
 
 export interface ReferralUpdate {
-  /** Staff-only service field edits; merged with existing referral details. */
+  /** Staff-only intake field edits; merged with existing referral details. */
   intakeFields?: ReferralUpdateIntakeFields;
   status?: ReferralUpdateStatus;
   /** @nullable */

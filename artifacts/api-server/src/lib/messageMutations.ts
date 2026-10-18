@@ -1,7 +1,8 @@
-import { eq, sql } from "drizzle-orm";
+import { and, eq, isNotNull, sql } from "drizzle-orm";
 import { messagesTable, messageThreadsTable, messageThreadReadsTable, messageThreadFamilyMembersTable, type User } from "@workspace/db";
 import { MessageError, type MessageDatabase } from "./messageAccess";
 import { messageRecipients } from "./messageQueries";
+import { audit } from "./auth";
 
 export async function markMessageRead(database: MessageDatabase, threadId: string, userId: string) {
   await database.insert(messageThreadReadsTable).values({ threadId, userId, lastReadAt: sql`clock_timestamp()` })
@@ -19,6 +20,14 @@ export async function appendMessage(database: MessageDatabase, threadId: string,
     lastMessageAt: sql`(select created_at from messages where id = ${message.id})`,
     lastMessageBy: user.id, messageCount: sql`${messageThreadsTable.messageCount} + 1`,
   }).where(eq(messageThreadsTable.id, threadId));
+  const reopened = await database.update(messageThreadsTable).set({ resolvedAt: null, resolvedBy: null })
+    .where(and(eq(messageThreadsTable.id, threadId), isNotNull(messageThreadsTable.resolvedAt),
+      sql`${messageThreadsTable.resolvedBy} is distinct from ${user.id}::uuid`))
+    .returning({ id: messageThreadsTable.id });
+  if (reopened.length) {
+    await audit(user.id, "reopen_message_thread", "message_thread", clientId,
+      `Thread ${threadId}: Reopened by reply from ${user.name}`, database);
+  }
   await markMessageRead(database, threadId, user.id);
   return message.id;
 }

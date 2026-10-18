@@ -148,6 +148,46 @@ test('staff A assigns to B, who follows a dashboard notice, reads the assigned i
   } finally { await Promise.all([staffA.context.close(), staffB.context.close()]); }
 });
 
+test('resolve status controls and family replies reopen conversations', async ({ browser, baseURL }) => {
+  const staff = await signedIn(browser, baseURL!, fixture.staff);
+  const family = await signedIn(browser, baseURL!, fixture.family);
+  const coordinator = await signedIn(browser, baseURL!, fixture.coordinator);
+  try {
+    await staff.page.goto(`/messages/${fixture.recentId}`);
+    await expect(staff.page.getByTestId('select-message-status')).toHaveValue('all');
+    await staff.page.getByTestId('button-thread-status').click();
+    await expect(staff.page.getByTestId('button-thread-status')).toHaveText('Reopen');
+    await expect(staff.page.getByTestId(`badge-thread-resolved-${fixture.recentId}`)).toBeVisible();
+    await staff.page.getByTestId('textarea-reply').fill('Clarification from the resolver');
+    await staff.page.getByTestId('button-send-reply').click();
+    await expect(staff.page.getByTestId('textarea-reply')).toBeEnabled();
+    await expect(staff.page.getByTestId('badge-thread-status-resolved')).toBeVisible();
+    await staff.page.getByTestId('select-message-status').selectOption('open');
+    await expect(staff.page.getByTestId(`message-thread-${fixture.recentId}`)).toHaveCount(0);
+    await staff.page.getByTestId('select-message-status').selectOption('resolved');
+    await expect(staff.page.getByTestId(`message-thread-${fixture.recentId}`)).toBeVisible();
+    await family.page.goto(`/messages/${fixture.recentId}`);
+    await expect(family.page.getByTestId('badge-thread-status-resolved')).toBeVisible();
+    await expect(family.page.getByTestId('button-thread-status')).toHaveCount(0);
+    await family.page.getByTestId('textarea-reply').fill('Please reopen this conversation');
+    await family.page.getByTestId('button-send-reply').click();
+    await expect(family.page.getByTestId('textarea-reply')).toBeEnabled();
+    await expect(family.page.getByTestId('badge-thread-status-resolved')).toHaveCount(0);
+    await staff.page.reload();
+    await expect(staff.page.getByTestId('button-thread-status')).toHaveText('Mark resolved');
+    await expect(staff.page.getByTestId(`message-thread-${fixture.recentId}`)).toHaveCount(0);
+    await staff.page.getByTestId('select-message-status').selectOption('all');
+    await expect(staff.page.getByTestId(`message-thread-${fixture.recentId}`)).toBeVisible();
+    await coordinator.page.goto(`/messages/${fixture.recentId}`);
+    await coordinator.page.getByTestId('button-thread-status').click();
+    await expect(coordinator.page.getByTestId('button-thread-status')).toHaveText('Reopen');
+    await coordinator.page.getByTestId('button-thread-status').click();
+    await expect(coordinator.page.getByTestId('button-thread-status')).toHaveText('Mark resolved');
+  } finally {
+    await Promise.all([staff.context.close(), family.context.close(), coordinator.context.close()]);
+  }
+});
+
 test('staff creates a participant conversation, coordinator and selected family reply, staff sees unread', async ({ browser, baseURL }) => {
   test.setTimeout(90_000);
   const staff = await signedIn(browser, baseURL!, fixture.staff);

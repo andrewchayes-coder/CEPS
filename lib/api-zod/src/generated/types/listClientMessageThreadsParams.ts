@@ -11,9 +11,14 @@ import type { MessageLimitParameter } from './messageLimitParameter';
 import type { MessageOffsetParameter } from './messageOffsetParameter';
 import type { MessageRangeParameter } from './messageRangeParameter';
 import type { MessageSearchParameter } from './messageSearchParameter';
+import type { MessageStatusParameter } from './messageStatusParameter';
 import type { MessageViewParameter } from './messageViewParameter';
 
 export type ListClientMessageThreadsParams = {
+/**
+ * Defaults to open for assigned_to_me and unassigned views; all otherwise.
+ */
+status?: MessageStatusParameter;
 view?: MessageViewParameter;
 search?: MessageSearchParameter;
 /**

@@ -146,6 +146,7 @@ import type {
   RemittanceUpdate,
   SendIntakeInput,
   SessionUser,
+  SetMessageThreadStatusBody,
   SignatureInput,
   SignaturePage,
   SignatureResult,
@@ -857,6 +858,72 @@ export function useListAssignableMessageStaff<TData = Awaited<ReturnType<typeof 
 
 
 
+
+export const getSetMessageThreadStatusUrl = (threadId: string,) => {
+
+
+
+
+  return `/api/messages/threads/${threadId}/status`
+}
+
+export const setMessageThreadStatus = async (threadId: string,
+    setMessageThreadStatusBody: SetMessageThreadStatusBody, options?: Parameters<typeof customFetch>[1]): Promise<MessageThreadHeader> => {
+
+  return customFetch<MessageThreadHeader>(getSetMessageThreadStatusUrl(threadId),
+  {
+    ...options,
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(setMessageThreadStatusBody)
+  }
+);}
+
+
+
+
+
+export const getSetMessageThreadStatusMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof setMessageThreadStatus>>, TError,{threadId: string;data: BodyType<SetMessageThreadStatusBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof setMessageThreadStatus>>, TError,{threadId: string;data: BodyType<SetMessageThreadStatusBody>}, TContext> => {
+
+const mutationKey = ['setMessageThreadStatus'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof setMessageThreadStatus>>, {threadId: string;data: BodyType<SetMessageThreadStatusBody>}> = (props) => {
+          const {threadId,data} = props ?? {};
+
+          return  setMessageThreadStatus(threadId,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type SetMessageThreadStatusMutationResult = NonNullable<Awaited<ReturnType<typeof setMessageThreadStatus>>>
+    export type SetMessageThreadStatusMutationBody = BodyType<SetMessageThreadStatusBody>
+    export type SetMessageThreadStatusMutationError = ErrorType<void>
+
+    export const useSetMessageThreadStatus = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof setMessageThreadStatus>>, TError,{threadId: string;data: BodyType<SetMessageThreadStatusBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof setMessageThreadStatus>>,
+        TError,
+        {threadId: string;data: BodyType<SetMessageThreadStatusBody>},
+        TContext
+      > => {
+      return useMutation(getSetMessageThreadStatusMutationOptions(options));
+    }
 
 export const getAssignMessageThreadUrl = (threadId: string,) => {
 

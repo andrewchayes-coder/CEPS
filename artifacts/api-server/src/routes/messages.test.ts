@@ -14,6 +14,8 @@ const clients: string[] = [];
 let sequence = 0;
 const get = (role: string, path: string, query = {}) => request(app).get(`/api${path}`).set("Cookie", cookies[role]).query(query);
 const post = (role: string, path: string, body = {}) => request(app).post(`/api${path}`).set("Cookie", cookies[role]).send(body);
+const statusPatch = (role: string, id: string, status: string) => request(app).patch(`/api/messages/threads/${id}/status`)
+  .set("Cookie", cookies[role]).send({ status });
 async function create(role = "staff", body = {}, clientId = clients[0]) {
   const response = await post(role, `/clients/${clientId}/message-threads`, {
     subject: `${nonce} subject ${sequence++}`, body: "Opening message",
@@ -444,6 +446,102 @@ describe("messaging API", () => {
       expect((await request(app).patch(`/api${path}`).set("Cookie", cookies.staff).send({ body: "Changed" })).status).toBe(404);
       expect((await request(app).delete(`/api${path}`).set("Cookie", cookies.staff)).status).toBe(404);
     }
+  });
+
+  it("resolves and reopens atomically, preserves the original resolver on repeated requests, and audits transitions", async () => {
+    const { thread } = await create();
+    const response = await statusPatch("staff", thread.id, "resolved");
+    expect(response.status).toBe(200);
+    expect(response.body).toMatchObject({ resolvedBy: { userId: ids.staff }, messageCount: 1, lastMessageAt: thread.lastMessageAt });
+    expect(response.body.resolvedAt).toMatch(/\.\d{6}Z$/);
+    expect((await statusPatch("staffB", thread.id, "resolved")).body).toMatchObject({
+      resolvedAt: response.body.resolvedAt, resolvedBy: { userId: ids.staff },
+    });
+    const entries = await db.select().from(auditLogTable).where(eq(auditLogTable.action, "resolve_message_thread"));
+    expect(entries.filter(entry => entry.detail?.includes(thread.id))).toHaveLength(1);
+    expect((await statusPatch("staffB", thread.id, "open")).body).toMatchObject({ resolvedAt: null, resolvedBy: null });
+    expect((await statusPatch("staff", thread.id, "invalid")).status).toBe(400);
+    expect((await request(app).patch(`/api/messages/threads/${thread.id}/status`)
+      .set("Cookie", cookies.staff).send({})).status).toBe(400);
+    const reopened = await db.select().from(auditLogTable).where(eq(auditLogTable.action, "reopen_message_thread"));
+    expect(reopened.some(entry => entry.userId === ids.staffB && entry.detail?.includes(thread.id))).toBe(true);
+  });
+
+  it("allows only staff and the current included coordinator to change status", async () => {
+    const { thread } = await create();
+    expect((await statusPatch("coordinator", thread.id, "resolved")).status).toBe(200);
+    for (const role of ["parent", "self", "vendor"]) {
+      expect((await statusPatch(role, thread.id, "open")).status).toBe(403);
+    }
+    expect((await statusPatch("coordinatorB", thread.id, "open")).status).toBe(404);
+    expect((await request(app).patch(`/api/messages/threads/${thread.id}/status`).send({ status: "open" })).status).toBe(401);
+    const staffOnly = await create("staff", { includeCoordinator: false });
+    expect((await statusPatch("coordinator", staffOnly.thread.id, "resolved")).status).toBe(404);
+    await db.update(clientsTable).set({ assignedCoordinatorId: ids.coordinatorB }).where(eq(clientsTable.id, clients[0]));
+    try {
+      expect((await statusPatch("coordinator", thread.id, "open")).status).toBe(404);
+      expect((await statusPatch("coordinatorB", thread.id, "open")).status).toBe(200);
+    } finally {
+      await db.update(clientsTable).set({ assignedCoordinatorId: ids.coordinator }).where(eq(clientsTable.id, clients[0]));
+    }
+  });
+
+  it("keeps resolver replies resolved, reopens on other people's replies, and preserves ownership", async () => {
+    const { thread } = await create();
+    await request(app).patch(`/api/messages/threads/${thread.id}/assignee`).set("Cookie", cookies.staff).send({ assigneeUserId: ids.staffB });
+    await statusPatch("staff", thread.id, "resolved");
+    expect((await post("parent", `/messages/threads/${thread.id}/messages`, { body: " " })).status).toBe(400);
+    expect((await get("staff", `/messages/threads/${thread.id}`)).body.thread.resolvedAt).not.toBeNull();
+    await post("staff", `/messages/threads/${thread.id}/messages`, { body: "Resolver clarification" });
+    expect((await get("staff", `/messages/threads/${thread.id}`)).body.thread.resolvedBy.userId).toBe(ids.staff);
+    await post("parent", `/messages/threads/${thread.id}/messages`, { body: "Family follow-up" });
+    expect((await get("staff", `/messages/threads/${thread.id}`)).body.thread).toMatchObject({
+      resolvedAt: null, resolvedBy: null, assignee: { userId: ids.staffB }, messageCount: 3,
+    });
+    const entries = await db.select().from(auditLogTable).where(eq(auditLogTable.action, "reopen_message_thread"));
+    expect(entries.filter(entry => entry.detail === `Thread ${thread.id}: Reopened by reply from ${nonce} parent`)).toHaveLength(1);
+    await statusPatch("coordinator", thread.id, "resolved");
+    await post("coordinator", `/messages/threads/${thread.id}/messages`, { body: "Coordinator's own clarification" });
+    expect((await get("staff", `/messages/threads/${thread.id}`)).body.thread.resolvedBy.userId).toBe(ids.coordinator);
+    await post("staffB", `/messages/threads/${thread.id}/messages`, { body: "Different staff follow-up" });
+    expect((await get("staff", `/messages/threads/${thread.id}`)).body.thread.resolvedAt).toBeNull();
+  });
+
+  it("audits automatic reopening only once under concurrent replies", async () => {
+    const { thread } = await create("staff", { familyUserIds: [ids.parent, ids.parentB] });
+    await statusPatch("staff", thread.id, "resolved");
+    const replies = await Promise.all(["parent", "parentB"].map(role =>
+      post(role, `/messages/threads/${thread.id}/messages`, { body: `Concurrent reply ${role}` })));
+    expect(replies.map(response => response.status)).toEqual([201, 201]);
+    const entries = await db.select().from(auditLogTable).where(eq(auditLogTable.action, "reopen_message_thread"));
+    expect(entries.filter(entry => entry.detail?.startsWith(`Thread ${thread.id}: Reopened by reply from `))).toHaveLength(1);
+    expect((await get("staff", `/messages/threads/${thread.id}`)).body.thread).toMatchObject({ resolvedAt: null, resolvedBy: null, messageCount: 3 });
+  });
+
+  it("applies status defaults and explicit overrides and excludes resolved threads from the unassigned count", async () => {
+    const before = (await get("staff", "/messages/unread-count")).body.unassignedOpen;
+    const prefix = `${nonce} status-filter`;
+    const open = await create("staff", { subject: `${prefix} open` });
+    const resolved = await create("staff", { subject: `${prefix} resolved` });
+    expect((await get("staff", "/messages/unread-count")).body.unassignedOpen).toBe(before + 2);
+    await statusPatch("staff", resolved.thread.id, "resolved");
+    expect((await get("staff", "/messages/unread-count")).body.unassignedOpen).toBe(before + 1);
+    const list = async (query: Record<string, string>) => (await get("staff", "/messages/threads", { search: prefix, ...query })).body;
+    expect((await list({})).total).toBe(2);
+    expect((await list({ status: "open" })).items.map((t: { id: string }) => t.id)).toEqual([open.thread.id]);
+    expect((await list({ status: "resolved" })).items.map((t: { id: string }) => t.id)).toEqual([resolved.thread.id]);
+    expect((await list({ view: "unassigned" })).total).toBe(1);
+    expect((await list({ view: "unassigned", status: "all" })).total).toBe(2);
+    for (const thread of [open.thread, resolved.thread]) {
+      await request(app).patch(`/api/messages/threads/${thread.id}/assignee`).set("Cookie", cookies.staff).send({ assigneeUserId: ids.staffB });
+    }
+    const assigned = (await get("staffB", "/messages/threads", { search: prefix, view: "assigned_to_me" })).body;
+    expect(assigned.items.map((t: { id: string }) => t.id)).toEqual([open.thread.id]);
+    expect((await get("staffB", "/messages/threads", { search: prefix, view: "assigned_to_me", status: "all" })).body.total).toBe(2);
+    expect((await get("staff", `/clients/${clients[0]}/message-threads`, { search: prefix, status: "resolved" })).body.total).toBe(1);
+    expect((await get("parent", "/messages/threads", { search: prefix, status: "resolved" })).body.total).toBe(1);
+    expect((await get("staff", "/messages/threads", { status: "invalid" })).status).toBe(400);
+    expect((await get("staff", "/messages/unread-count")).body.unassignedOpen).toBe(before);
   });
 
   it("keeps deleted participant history staff-only and blocks new threads and replies", async () => {

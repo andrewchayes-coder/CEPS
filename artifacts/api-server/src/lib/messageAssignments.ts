@@ -9,7 +9,7 @@ export async function messagingCounts(database: MessageDatabase, user: User) {
   const result = await database.execute<{ count: number; assignedToMeUnread: number; unassignedOpen: number }>(sql`
     select count(*) filter (where ${unread})::int as count,
       count(*) filter (where ${unread} and ${messageThreadsTable.assigneeUserId} = ${user.id})::int as "assignedToMeUnread",
-      count(*) filter (where ${messageThreadsTable.assigneeUserId} is null)::int as "unassignedOpen"
+      count(*) filter (where ${messageThreadsTable.assigneeUserId} is null and ${messageThreadsTable.resolvedAt} is null)::int as "unassignedOpen"
     from message_threads inner join clients on clients.id = message_threads.client_id
     where ${threadFilters(user)}`);
   const row = result.rows[0];

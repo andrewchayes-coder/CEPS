@@ -3,7 +3,7 @@ import { clientsTable, messageThreadsTable, type User } from "@workspace/db";
 import { messageScope, type MessageDatabase } from "./messageAccess";
 
 export interface MessageFilters {
-  clientId?: string; view?: string; search?: string; range?: string;
+  clientId?: string; view?: string; search?: string; range?: string; status?: "open" | "resolved" | "all";
   dateFrom?: string; dateTo?: string; limit?: number; offset?: number;
 }
 export const messageTimestamp = (column: SQL) =>
@@ -22,6 +22,9 @@ export function threadFilters(user: User, filters: MessageFilters = {}): SQL {
   if (filters.view === "unread") conditions.push(unreadMessage(user.id));
   if (filters.view === "assigned_to_me") conditions.push(sql`${messageThreadsTable.assigneeUserId} = ${user.id}`);
   if (filters.view === "unassigned") conditions.push(sql`${messageThreadsTable.assigneeUserId} is null`);
+  const status = filters.status ?? (filters.view === "assigned_to_me" || filters.view === "unassigned" ? "open" : "all");
+  if (status === "open") conditions.push(sql`${messageThreadsTable.resolvedAt} is null`);
+  if (status === "resolved") conditions.push(sql`${messageThreadsTable.resolvedAt} is not null`);
   if (filters.dateFrom || filters.dateTo) {
     // Messaging intentionally uses Pacific calendar days, not audit-log UTC days.
     const date = sql`(${messageThreadsTable.lastMessageAt} at time zone 'America/Los_Angeles')::date`;
@@ -64,6 +67,8 @@ export async function threadHeaders(database: MessageDatabase, user: User, where
     case when assignee.id is null then null else jsonb_build_object('userId', assignee.id, 'name', assignee.name) end as "assignee",
      ${messageTimestamp(sql`${messageThreadsTable.assignedAt}`)} as "assignedAt",
      case when assigner.id is null then null else jsonb_build_object('userId', assigner.id, 'name', assigner.name) end as "assignedBy",
+     ${messageTimestamp(sql`${messageThreadsTable.resolvedAt}`)} as "resolvedAt",
+     case when resolver.id is null then null else jsonb_build_object('userId', resolver.id, 'name', resolver.name) end as "resolvedBy",
     ${messageTimestamp(sql`${messageThreadsTable.createdAt}`)} as "createdAt"
     ${threadFrom}
     left join users last_author on last_author.id = ${messageThreadsTable.lastMessageBy}
@@ -71,6 +76,7 @@ export async function threadHeaders(database: MessageDatabase, user: User, where
       and coordinator.role = 'service_coordinator' and coordinator.active = true
     left join users assignee on assignee.id = ${messageThreadsTable.assigneeUserId}
      left join users assigner on assigner.id = ${messageThreadsTable.assignedBy}
+     left join users resolver on resolver.id = ${messageThreadsTable.resolvedBy}
     left join lateral (select left(m.body, 140) as preview from messages m
       where m.thread_id = ${messageThreadsTable.id} order by m.created_at desc, m.id desc limit 1) latest on true
     where ${where} order by ${messageThreadsTable.lastMessageAt} desc, ${messageThreadsTable.id} desc

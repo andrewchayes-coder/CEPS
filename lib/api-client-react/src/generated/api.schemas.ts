@@ -84,6 +84,8 @@ export interface MessageThreadHeader {
   assignee: MessagePerson | null;
   assignedAt?: MessageInstant | null;
   assignedBy?: MessagePerson | null;
+  resolvedAt?: MessageInstant | null;
+  resolvedBy?: MessagePerson | null;
   createdAt: MessageInstant;
 }
 
@@ -3373,6 +3375,15 @@ export const MessageViewParameter = {
   unassigned: 'unassigned',
 } as const;
 
+export type MessageStatusParameter = typeof MessageStatusParameter[keyof typeof MessageStatusParameter];
+
+
+export const MessageStatusParameter = {
+  open: 'open',
+  resolved: 'resolved',
+  all: 'all',
+} as const;
+
 export type MessageSearchParameter = string;
 
 export type MessageRangeParameter = typeof MessageRangeParameter[keyof typeof MessageRangeParameter];
@@ -3398,6 +3409,10 @@ export type MessageLimitParameter = number;
 export type MessageOffsetParameter = number;
 
 export type ListClientMessageThreadsParams = {
+/**
+ * Defaults to open for assigned_to_me and unassigned views; all otherwise.
+ */
+status?: MessageStatusParameter;
 view?: MessageViewParameter;
 search?: MessageSearchParameter;
 /**
@@ -3426,6 +3441,10 @@ offset?: MessageOffsetParameter;
 };
 
 export type ListMessageThreadsParams = {
+/**
+ * Defaults to open for assigned_to_me and unassigned views; all otherwise.
+ */
+status?: MessageStatusParameter;
 clientId?: string;
 view?: MessageViewParameter;
 search?: MessageSearchParameter;
@@ -3480,6 +3499,18 @@ export type GetMessagingUnreadCount200 = {
   assignedToMeUnread?: number;
   /** Staff only; all unassigned threads in the recent range. */
   unassignedOpen?: number;
+};
+
+export type SetMessageThreadStatusBodyStatus = typeof SetMessageThreadStatusBodyStatus[keyof typeof SetMessageThreadStatusBodyStatus];
+
+
+export const SetMessageThreadStatusBodyStatus = {
+  open: 'open',
+  resolved: 'resolved',
+} as const;
+
+export type SetMessageThreadStatusBody = {
+  status: SetMessageThreadStatusBodyStatus;
 };
 
 export type AssignMessageThreadBody = {

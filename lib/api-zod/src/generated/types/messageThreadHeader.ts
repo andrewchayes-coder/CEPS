@@ -26,5 +26,7 @@ export interface MessageThreadHeader {
   assignee: MessagePerson | null;
   assignedAt?: MessageInstant | null;
   assignedBy?: MessagePerson | null;
+  resolvedAt?: MessageInstant | null;
+  resolvedBy?: MessagePerson | null;
   createdAt: MessageInstant;
 }

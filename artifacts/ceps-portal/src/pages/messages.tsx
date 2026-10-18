@@ -18,6 +18,7 @@ import { MessageComposeDialog } from '@/components/messaging/message-compose-dia
 import { ClientSearchList } from '@/components/messaging/client-search-list';
 
 type MessageView = 'all' | 'unread' | 'assigned_to_me' | 'unassigned';
+type MessageStatus = 'open' | 'resolved' | 'all';
 type Client = { id: string; name: string };
 
 export default function MessagesPage() {
@@ -28,7 +29,17 @@ export default function MessagesPage() {
   const urlSearch = useSearch();
   const rawView = new URLSearchParams(urlSearch).get('view');
   const view: MessageView = rawView === 'unread' || (isStaff && (rawView === 'assigned_to_me' || rawView === 'unassigned')) ? rawView : 'all';
-  const setView = (v: MessageView) => navigate(`${threadId ? `/messages/${threadId}` : '/messages'}${v === 'all' ? '' : `?view=${v}`}`);
+  const rawStatus = new URLSearchParams(urlSearch).get('status');
+  const explicitStatus: MessageStatus | null = rawStatus === 'open' || rawStatus === 'resolved' || rawStatus === 'all' ? rawStatus : null;
+  const status: MessageStatus = explicitStatus ?? (view === 'assigned_to_me' || view === 'unassigned' ? 'open' : 'all');
+  const go = (v: MessageView, s: MessageStatus | null) => {
+    const qp = new URLSearchParams();
+    if (v !== 'all') qp.set('view', v);
+    if (s) qp.set('status', s);
+    const qs = qp.toString();
+    navigate(`${threadId ? `/messages/${threadId}` : '/messages'}${qs ? `?${qs}` : ''}`);
+  };
+  const setView = (v: MessageView) => go(v, explicitStatus);
   const counts = useUnreadCount().data;
   const [q, setQ] = useState('');
   const search = useDebounce(q.trim(), 300);
@@ -40,6 +51,7 @@ export default function MessagesPage() {
 
   const params = {
     view,
+    status,
     ...rangeParams(range),
     ...(search ? { search } : {}),
     ...(client ? { clientId: client.id } : {}),
@@ -61,7 +73,7 @@ export default function MessagesPage() {
       if (user?.linkedRecordId) setCompose({ id: user.linkedRecordId, name: '' });
     } else setPicking(true);
   };
-  const noFilters = !search && !client && view === 'all' && range.mode === 'recent';
+  const noFilters = !search && !client && view === 'all' && status === 'all' && range.mode === 'recent';
 
   return (
     <div className="space-y-4" data-testid="page-messages">
@@ -85,6 +97,16 @@ export default function MessagesPage() {
                   {v === 'unassigned' && <span className="ml-1.5 rounded-full bg-primary-foreground/20 px-1.5 text-xs" data-testid="count-unassigned">{counts?.unassignedOpen ?? 0}</span>}
                 </Button>
               ))}
+            </div>
+            <div className="flex items-center gap-2">
+              <label htmlFor="select-message-status" className="text-sm text-muted-foreground">Conversation status</label>
+              <select id="select-message-status" data-testid="select-message-status" value={status}
+                onChange={(e) => go(view, e.target.value as MessageStatus)}
+                className="h-8 rounded-md border border-input bg-background px-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+                <option value="open">Open</option>
+                <option value="resolved">Resolved</option>
+                <option value="all">All</option>
+              </select>
             </div>
             <Input type="search" value={q} onChange={(e) => { setQ(e.target.value); reset(); }} placeholder="Search messages" aria-label="Search messages" data-testid="input-message-search" />
             {isStaffLike && (

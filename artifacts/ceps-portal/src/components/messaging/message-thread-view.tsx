@@ -17,6 +17,7 @@ import { cn } from '@/lib/utils';
 import { MessageBody } from './message-body';
 import { AddFamilyDialog } from './add-family-dialog';
 import { ThreadAssignment } from './thread-assignment';
+import { ThreadStatus } from './thread-status';
 
 const PARAMS = { limit: 50 };
 
@@ -118,6 +119,7 @@ export function MessageThreadView({ threadId }: { threadId: string }) {
         ? { ...old, messages: [msg, ...old.messages], thread: { ...old.thread, lastMessageAt: msg.createdAt, lastMessagePreview: msg.body } } : old);
       if (mounted.current) setPending([]);
       invalidateMessaging(qc);
+      void refetch(); // reply may auto-reopen the thread; refresh the header status
     }).catch((e) => {
       if (!mounted.current) return;
       setPending([]);
@@ -152,6 +154,7 @@ export function MessageThreadView({ threadId }: { threadId: string }) {
         {user?.role === 'service_coordinator' && (
           <p className="text-sm text-muted-foreground" data-testid="text-thread-assignment">{t.assignee ? `Assigned to ${t.assignee.name}` : 'Unassigned'}</p>
         )}
+        <ThreadStatus thread={t} qk={qk} canChange={isStaffLike} />
         {user?.role === 'staff' && <ThreadAssignment thread={t} qk={qk} currentUserId={user.id} />}
         <div className="flex flex-wrap items-center justify-between gap-2">
           <p className="text-sm text-muted-foreground" data-testid="text-thread-to">To: {toList.join(', ')}</p>

@@ -12,6 +12,7 @@ import {
   GetMessagingUnreadCountResponse,
   AssignMessageThreadParams, AssignMessageThreadBody, AssignMessageThreadResponse,
   ListAssignableMessageStaffResponse,
+  SetMessageThreadStatusParams, SetMessageThreadStatusBody, SetMessageThreadStatusResponse,
   AddMessageThreadFamilyMembersParams, AddMessageThreadFamilyMembersBody, AddMessageThreadFamilyMembersResponse,
 } from "@workspace/api-zod";
 import { requireAuth, requireRole, audit } from "../lib/auth";
@@ -157,6 +158,28 @@ router.get("/messages/assignable-staff", requireRole("staff"), async (_req, res)
   const staff = await db.select({ userId: usersTable.id, name: usersTable.name }).from(usersTable)
     .where(and(eq(usersTable.role, "staff"), eq(usersTable.active, true))).orderBy(asc(usersTable.name), asc(usersTable.id));
   res.json(ListAssignableMessageStaffResponse.parse(staff));
+});
+
+router.patch("/messages/threads/:threadId/status", requireRole("staff", "service_coordinator"), async (req, res): Promise<void> => {
+  const { threadId } = valid(SetMessageThreadStatusParams.safeParse(req.params));
+  const { status } = valid(SetMessageThreadStatusBody.safeParse(req.body));
+  const result = await db.transaction(async tx => {
+    const database = tx as unknown as MessageDatabase;
+    const actor = await messageActor(database, req.user!.id);
+    if (actor.role !== "staff" && actor.role !== "service_coordinator") throw new MessageError(403, "Staff and assigned coordinator only");
+    const { thread } = await messageThread(database, threadId, actor, true);
+    const resolved = status === "resolved";
+    if (resolved !== (thread.resolvedAt !== null)) {
+      await database.update(messageThreadsTable).set({
+        resolvedAt: resolved ? sql`clock_timestamp()` : null,
+        resolvedBy: resolved ? actor.id : null,
+      }).where(eq(messageThreadsTable.id, threadId));
+      await audit(actor.id, resolved ? "resolve_message_thread" : "reopen_message_thread", "message_thread",
+        thread.clientId, `Thread ${threadId}: ${resolved ? "Resolved" : "Reopened"} by ${actor.name}`, database);
+    }
+    return (await threadHeaders(database, actor, and(messageScope(actor), eq(messageThreadsTable.id, threadId))!))[0];
+  });
+  res.json(SetMessageThreadStatusResponse.parse(result));
 });
 
 router.patch("/messages/threads/:threadId/assignee", requireRole("staff"), async (req, res): Promise<void> => {

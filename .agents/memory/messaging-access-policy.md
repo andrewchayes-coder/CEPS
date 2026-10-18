@@ -38,3 +38,12 @@ assignment, with a seven-day window for the new-assignment notice.
 
 **Why:** CEPS wants every staff member to see every message while giving each
 thread an owner and keeping each person's unread state independent.
+
+Open/Resolved is a workflow state, not an access boundary or a prohibition on
+replies. Staff and the participant's current included coordinator may change it.
+Any new reply from someone other than the resolver automatically reopens the
+conversation; the resolver's own follow-up does not. Resolution must not change
+thread ownership or anyone's individual unread state.
+
+**Why:** CEPS explicitly requested the resolver exception and automatic reopening
+so another person's follow-up cannot remain hidden as completed work.

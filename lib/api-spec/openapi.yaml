@@ -48,6 +48,7 @@ paths:
       tags: [messages]
       operationId: listClientMessageThreads
       parameters:
+        - { $ref: '#/components/parameters/MessageStatus' }
         - { $ref: '#/components/parameters/MessageView' }
         - { $ref: '#/components/parameters/MessageSearch' }
         - { $ref: '#/components/parameters/MessageRange' }
@@ -87,6 +88,7 @@ paths:
       tags: [messages]
       operationId: listMessageThreads
       parameters:
+        - { $ref: '#/components/parameters/MessageStatus' }
         - { name: clientId, in: query, schema: { type: string, format: uuid } }
         - { $ref: '#/components/parameters/MessageView' }
         - { $ref: '#/components/parameters/MessageSearch' }
@@ -198,6 +200,30 @@ paths:
                 type: array
                 items: { $ref: '#/components/schemas/MessagePerson' }
         "403": { description: Staff only. }
+  /messages/threads/{threadId}/status:
+    patch:
+      tags: [messages]
+      operationId: setMessageThreadStatus
+      parameters:
+        - { $ref: '#/components/parameters/MessageThreadId' }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [status]
+              properties:
+                status: { type: string, enum: [open, resolved] }
+      responses:
+        "200":
+          description: Updated thread header; repeated requests preserve the original resolver.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/MessageThreadHeader' }
+        "400": { description: Invalid status. }
+        "403": { description: Staff and the current assigned coordinator only. }
+        "404": { description: Thread unavailable. }
   /messages/threads/{threadId}/assignee:
     patch:
       tags: [messages]
@@ -3071,6 +3097,11 @@ components:
       name: view
       in: query
       schema: { type: string, enum: [all, unread, assigned_to_me, unassigned], default: all }
+    MessageStatus:
+      name: status
+      in: query
+      description: Defaults to open for assigned_to_me and unassigned views; all otherwise.
+      schema: { type: string, enum: [open, resolved, all] }
     MessageSearch:
       name: search
       in: query
@@ -3175,6 +3206,14 @@ components:
             - { $ref: '#/components/schemas/MessageInstant' }
             - { type: "null" }
         assignedBy:
+          anyOf:
+            - { $ref: '#/components/schemas/MessagePerson' }
+            - { type: "null" }
+        resolvedAt:
+          anyOf:
+            - { $ref: '#/components/schemas/MessageInstant' }
+            - { type: "null" }
+        resolvedBy:
           anyOf:
             - { $ref: '#/components/schemas/MessagePerson' }
             - { type: "null" }

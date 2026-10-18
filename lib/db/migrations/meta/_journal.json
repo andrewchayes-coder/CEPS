@@ -288,6 +288,13 @@
       "when": 1792283195917,
       "tag": "0040_freezing_hellfire_club",
       "breakpoints": true
+    },
+    {
+      "idx": 41,
+      "version": "7",
+      "when": 1792286798114,
+      "tag": "0041_cynical_orphan",
+      "breakpoints": true
     }
   ]
 }

@@ -32,6 +32,9 @@ export function MessageThreadRows({ threads, selectedId, showParticipant, showAs
                 </span>
                 <span className="shrink-0 text-xs text-muted-foreground">{formatMessageClock(t.lastMessageAt)}</span>
               </span>
+              {t.resolvedAt != null && (
+                <span className="inline-block rounded-full border bg-secondary px-2 py-0.5 text-xs font-medium" data-testid={`badge-thread-resolved-${t.id}`}>Resolved</span>
+              )}
               {showParticipant && <span className={cn('block truncate', t.unread && 'font-semibold')}>{t.subject}</span>}
               <span className="block truncate text-muted-foreground">
                 {t.lastMessageByName ? `${t.lastMessageByName}: ` : ''}{t.lastMessagePreview}

@@ -57,6 +57,7 @@ export const ListClientMessageThreadsQueryParams = zod.object({
 })
 
 export const listClientMessageThreadsResponseItemsItemLastMessageAtRegExp = new RegExp('^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(?:\\.\\d{1,6})?(?:Z|[+-]\\d{2}:\\d{2})$');
+export const listClientMessageThreadsResponseItemsItemAssignedAtOneRegExp = new RegExp('^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(?:\\.\\d{1,6})?(?:Z|[+-]\\d{2}:\\d{2})$');
 export const listClientMessageThreadsResponseItemsItemCreatedAtRegExp = new RegExp('^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(?:\\.\\d{1,6})?(?:Z|[+-]\\d{2}:\\d{2})$');
 
 
@@ -78,6 +79,11 @@ export const ListClientMessageThreadsResponse = zod.object({
   "userId": zod.uuid(),
   "name": zod.string()
 }),zod.null()]),
+  "assignedAt": zod.union([zod.string().regex(listClientMessageThreadsResponseItemsItemAssignedAtOneRegExp).describe('ISO-8601 timestamp retained as a string to preserve PostgreSQL microseconds in pagination cursors. Do not coerce to a JavaScript Date.'),zod.null()]).optional(),
+  "assignedBy": zod.union([zod.object({
+  "userId": zod.uuid(),
+  "name": zod.string()
+}),zod.null()]).optional(),
   "createdAt": zod.string().regex(listClientMessageThreadsResponseItemsItemCreatedAtRegExp).describe('ISO-8601 timestamp retained as a string to preserve PostgreSQL microseconds in pagination cursors. Do not coerce to a JavaScript Date.')
 })),
   "total": zod.int()
@@ -102,6 +108,7 @@ export const CreateMessageThreadBody = zod.object({
 })
 
 export const createMessageThreadResponseThreadLastMessageAtRegExp = new RegExp('^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(?:\\.\\d{1,6})?(?:Z|[+-]\\d{2}:\\d{2})$');
+export const createMessageThreadResponseThreadAssignedAtOneRegExp = new RegExp('^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(?:\\.\\d{1,6})?(?:Z|[+-]\\d{2}:\\d{2})$');
 export const createMessageThreadResponseThreadCreatedAtRegExp = new RegExp('^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(?:\\.\\d{1,6})?(?:Z|[+-]\\d{2}:\\d{2})$');
 export const createMessageThreadResponseMessagesItemCreatedAtRegExp = new RegExp('^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(?:\\.\\d{1,6})?(?:Z|[+-]\\d{2}:\\d{2})$');
 export const createMessageThreadResponseNextCursorOneBeforeRegExp = new RegExp('^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(?:\\.\\d{1,6})?(?:Z|[+-]\\d{2}:\\d{2})$');
@@ -125,6 +132,11 @@ export const CreateMessageThreadResponse = zod.object({
   "userId": zod.uuid(),
   "name": zod.string()
 }),zod.null()]),
+  "assignedAt": zod.union([zod.string().regex(createMessageThreadResponseThreadAssignedAtOneRegExp).describe('ISO-8601 timestamp retained as a string to preserve PostgreSQL microseconds in pagination cursors. Do not coerce to a JavaScript Date.'),zod.null()]).optional(),
+  "assignedBy": zod.union([zod.object({
+  "userId": zod.uuid(),
+  "name": zod.string()
+}),zod.null()]).optional(),
   "createdAt": zod.string().regex(createMessageThreadResponseThreadCreatedAtRegExp).describe('ISO-8601 timestamp retained as a string to preserve PostgreSQL microseconds in pagination cursors. Do not coerce to a JavaScript Date.')
 }),
   "messages": zod.array(zod.object({
@@ -170,6 +182,7 @@ export const ListMessageThreadsQueryParams = zod.object({
 })
 
 export const listMessageThreadsResponseItemsItemLastMessageAtRegExp = new RegExp('^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(?:\\.\\d{1,6})?(?:Z|[+-]\\d{2}:\\d{2})$');
+export const listMessageThreadsResponseItemsItemAssignedAtOneRegExp = new RegExp('^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(?:\\.\\d{1,6})?(?:Z|[+-]\\d{2}:\\d{2})$');
 export const listMessageThreadsResponseItemsItemCreatedAtRegExp = new RegExp('^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(?:\\.\\d{1,6})?(?:Z|[+-]\\d{2}:\\d{2})$');
 
 
@@ -191,6 +204,11 @@ export const ListMessageThreadsResponse = zod.object({
   "userId": zod.uuid(),
   "name": zod.string()
 }),zod.null()]),
+  "assignedAt": zod.union([zod.string().regex(listMessageThreadsResponseItemsItemAssignedAtOneRegExp).describe('ISO-8601 timestamp retained as a string to preserve PostgreSQL microseconds in pagination cursors. Do not coerce to a JavaScript Date.'),zod.null()]).optional(),
+  "assignedBy": zod.union([zod.object({
+  "userId": zod.uuid(),
+  "name": zod.string()
+}),zod.null()]).optional(),
   "createdAt": zod.string().regex(listMessageThreadsResponseItemsItemCreatedAtRegExp).describe('ISO-8601 timestamp retained as a string to preserve PostgreSQL microseconds in pagination cursors. Do not coerce to a JavaScript Date.')
 })),
   "total": zod.int()
@@ -214,6 +232,7 @@ export const GetMessageThreadQueryParams = zod.object({
 })
 
 export const getMessageThreadResponseThreadLastMessageAtRegExp = new RegExp('^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(?:\\.\\d{1,6})?(?:Z|[+-]\\d{2}:\\d{2})$');
+export const getMessageThreadResponseThreadAssignedAtOneRegExp = new RegExp('^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(?:\\.\\d{1,6})?(?:Z|[+-]\\d{2}:\\d{2})$');
 export const getMessageThreadResponseThreadCreatedAtRegExp = new RegExp('^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(?:\\.\\d{1,6})?(?:Z|[+-]\\d{2}:\\d{2})$');
 export const getMessageThreadResponseMessagesItemCreatedAtRegExp = new RegExp('^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(?:\\.\\d{1,6})?(?:Z|[+-]\\d{2}:\\d{2})$');
 export const getMessageThreadResponseNextCursorOneBeforeRegExp = new RegExp('^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(?:\\.\\d{1,6})?(?:Z|[+-]\\d{2}:\\d{2})$');
@@ -237,6 +256,11 @@ export const GetMessageThreadResponse = zod.object({
   "userId": zod.uuid(),
   "name": zod.string()
 }),zod.null()]),
+  "assignedAt": zod.union([zod.string().regex(getMessageThreadResponseThreadAssignedAtOneRegExp).describe('ISO-8601 timestamp retained as a string to preserve PostgreSQL microseconds in pagination cursors. Do not coerce to a JavaScript Date.'),zod.null()]).optional(),
+  "assignedBy": zod.union([zod.object({
+  "userId": zod.uuid(),
+  "name": zod.string()
+}),zod.null()]).optional(),
   "createdAt": zod.string().regex(getMessageThreadResponseThreadCreatedAtRegExp).describe('ISO-8601 timestamp retained as a string to preserve PostgreSQL microseconds in pagination cursors. Do not coerce to a JavaScript Date.')
 }),
   "messages": zod.array(zod.object({
@@ -296,7 +320,55 @@ export const MarkMessageThreadReadResponse = zod.object({
 
 
 export const GetMessagingUnreadCountResponse = zod.object({
-  "count": zod.int()
+  "count": zod.int(),
+  "assignedToMeUnread": zod.int().optional().describe('Staff only; recent assigned threads unread for this user.'),
+  "unassignedOpen": zod.int().optional().describe('Staff only; all unassigned threads in the recent range.')
+})
+
+
+export const ListAssignableMessageStaffResponseItem = zod.object({
+  "userId": zod.uuid(),
+  "name": zod.string()
+})
+export const ListAssignableMessageStaffResponse = zod.array(ListAssignableMessageStaffResponseItem)
+
+
+export const AssignMessageThreadParams = zod.object({
+  "threadId": zod.uuid()
+})
+
+export const AssignMessageThreadBody = zod.object({
+  "assigneeUserId": zod.uuid().nullable()
+})
+
+export const assignMessageThreadResponseLastMessageAtRegExp = new RegExp('^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(?:\\.\\d{1,6})?(?:Z|[+-]\\d{2}:\\d{2})$');
+export const assignMessageThreadResponseAssignedAtOneRegExp = new RegExp('^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(?:\\.\\d{1,6})?(?:Z|[+-]\\d{2}:\\d{2})$');
+export const assignMessageThreadResponseCreatedAtRegExp = new RegExp('^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(?:\\.\\d{1,6})?(?:Z|[+-]\\d{2}:\\d{2})$');
+
+
+export const AssignMessageThreadResponse = zod.object({
+  "id": zod.uuid(),
+  "clientId": zod.uuid(),
+  "clientName": zod.string(),
+  "subject": zod.string(),
+  "lastMessageAt": zod.string().regex(assignMessageThreadResponseLastMessageAtRegExp).describe('ISO-8601 timestamp retained as a string to preserve PostgreSQL microseconds in pagination cursors. Do not coerce to a JavaScript Date.'),
+  "lastMessagePreview": zod.string(),
+  "lastMessageByName": zod.string().nullable(),
+  "messageCount": zod.int(),
+  "unread": zod.boolean(),
+  "includeCoordinator": zod.boolean(),
+  "coordinatorName": zod.string().nullable(),
+  "familyMemberNames": zod.array(zod.string()),
+  "assignee": zod.union([zod.object({
+  "userId": zod.uuid(),
+  "name": zod.string()
+}),zod.null()]),
+  "assignedAt": zod.union([zod.string().regex(assignMessageThreadResponseAssignedAtOneRegExp).describe('ISO-8601 timestamp retained as a string to preserve PostgreSQL microseconds in pagination cursors. Do not coerce to a JavaScript Date.'),zod.null()]).optional(),
+  "assignedBy": zod.union([zod.object({
+  "userId": zod.uuid(),
+  "name": zod.string()
+}),zod.null()]).optional(),
+  "createdAt": zod.string().regex(assignMessageThreadResponseCreatedAtRegExp).describe('ISO-8601 timestamp retained as a string to preserve PostgreSQL microseconds in pagination cursors. Do not coerce to a JavaScript Date.')
 })
 
 
@@ -312,6 +384,7 @@ export const AddMessageThreadFamilyMembersBody = zod.object({
 })
 
 export const addMessageThreadFamilyMembersResponseLastMessageAtRegExp = new RegExp('^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(?:\\.\\d{1,6})?(?:Z|[+-]\\d{2}:\\d{2})$');
+export const addMessageThreadFamilyMembersResponseAssignedAtOneRegExp = new RegExp('^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(?:\\.\\d{1,6})?(?:Z|[+-]\\d{2}:\\d{2})$');
 export const addMessageThreadFamilyMembersResponseCreatedAtRegExp = new RegExp('^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(?:\\.\\d{1,6})?(?:Z|[+-]\\d{2}:\\d{2})$');
 
 
@@ -332,6 +405,11 @@ export const AddMessageThreadFamilyMembersResponse = zod.object({
   "userId": zod.uuid(),
   "name": zod.string()
 }),zod.null()]),
+  "assignedAt": zod.union([zod.string().regex(addMessageThreadFamilyMembersResponseAssignedAtOneRegExp).describe('ISO-8601 timestamp retained as a string to preserve PostgreSQL microseconds in pagination cursors. Do not coerce to a JavaScript Date.'),zod.null()]).optional(),
+  "assignedBy": zod.union([zod.object({
+  "userId": zod.uuid(),
+  "name": zod.string()
+}),zod.null()]).optional(),
   "createdAt": zod.string().regex(addMessageThreadFamilyMembersResponseCreatedAtRegExp).describe('ISO-8601 timestamp retained as a string to preserve PostgreSQL microseconds in pagination cursors. Do not coerce to a JavaScript Date.')
 })
 
@@ -4976,7 +5054,7 @@ export const GetDashboardSummaryResponse = zod.object({
   "pendingCoordinatorReview": zod.int()
 }),
   "alerts": zod.array(zod.object({
-  "kind": zod.enum(['expiring_authorization', 'missing_document', 'pending_w9', 'unmatched_remittance', 'authorization_exhausted_active', 'unmatched_pos', 'unmatched_pos_possible_match', 'pending_signature', 'recently_completed', 'family_updated_participant', 'coordinator_review']),
+  "kind": zod.enum(['expiring_authorization', 'missing_document', 'pending_w9', 'unmatched_remittance', 'authorization_exhausted_active', 'unmatched_pos', 'unmatched_pos_possible_match', 'pending_signature', 'recently_completed', 'family_updated_participant', 'coordinator_review', 'message_assigned_to_you', 'message_assigned_new']),
   "message": zod.string(),
   "entityType": zod.string().nullish(),
   "entityId": zod.string().nullish()

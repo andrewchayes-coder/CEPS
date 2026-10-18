@@ -21,4 +21,6 @@ export const DashboardSummaryAlertsItemKind = {
   recently_completed: 'recently_completed',
   family_updated_participant: 'family_updated_participant',
   coordinator_review: 'coordinator_review',
+  message_assigned_to_you: 'message_assigned_to_you',
+  message_assigned_new: 'message_assigned_new',
 } as const;

@@ -8,4 +8,8 @@
 
 export type GetMessagingUnreadCount200 = {
   count: number;
+  /** Staff only; recent assigned threads unread for this user. */
+  assignedToMeUnread?: number;
+  /** Staff only; all unassigned threads in the recent range. */
+  unassignedOpen?: number;
 };

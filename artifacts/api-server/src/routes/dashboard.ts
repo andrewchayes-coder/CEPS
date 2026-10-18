@@ -31,6 +31,7 @@ import { userNameMap, clientNameMap, vendorNameMap, authorizationTotalsPaid, eff
 import { money, sumMoney } from "../lib/money";
 import Decimal from "decimal.js";
 import { sortedOrder, sortRows } from "../lib/sorting";
+import { messageAssignmentAlerts } from "../lib/messageAssignments";
 
 const router: IRouter = Router();
 
@@ -147,6 +148,7 @@ router.get("/dashboard/summary", requireAuth, async (req, res): Promise<void> =>
           entityId: null,
         });
       }
+      alerts.push(...await messageAssignmentAlerts(db, u));
     const recentSignedReferrals = referrals
       .filter((r) => r.parentSignedAt && r.parentSignedAt.getTime() >= Date.now() - 7 * 86400000)
       .sort((a, b) => (b.parentSignedAt?.getTime() ?? 0) - (a.parentSignedAt?.getTime() ?? 0));

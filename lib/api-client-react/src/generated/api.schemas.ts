@@ -82,6 +82,8 @@ export interface MessageThreadHeader {
   coordinatorName: string | null;
   familyMemberNames: string[];
   assignee: MessagePerson | null;
+  assignedAt?: MessageInstant | null;
+  assignedBy?: MessagePerson | null;
   createdAt: MessageInstant;
 }
 
@@ -3264,6 +3266,8 @@ export const DashboardSummaryAlertsItemKind = {
   recently_completed: 'recently_completed',
   family_updated_participant: 'family_updated_participant',
   coordinator_review: 'coordinator_review',
+  message_assigned_to_you: 'message_assigned_to_you',
+  message_assigned_new: 'message_assigned_new',
 } as const;
 
 export type DashboardSummaryAlertsItem = {
@@ -3472,6 +3476,15 @@ export type MarkMessageThreadRead200 = {
 
 export type GetMessagingUnreadCount200 = {
   count: number;
+  /** Staff only; recent assigned threads unread for this user. */
+  assignedToMeUnread?: number;
+  /** Staff only; all unassigned threads in the recent range. */
+  unassignedOpen?: number;
+};
+
+export type AssignMessageThreadBody = {
+  /** @nullable */
+  assigneeUserId: string | null;
 };
 
 export type AddMessageThreadFamilyMembersBody = {

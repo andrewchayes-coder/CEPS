@@ -16,6 +16,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { cn } from '@/lib/utils';
 import { MessageBody } from './message-body';
 import { AddFamilyDialog } from './add-family-dialog';
+import { ThreadAssignment } from './thread-assignment';
 
 const PARAMS = { limit: 50 };
 
@@ -66,7 +67,8 @@ export function MessageThreadView({ threadId }: { threadId: string }) {
   const hasMore = olderLoaded ? olderHasMore : !!data?.hasMore;
 
   // Mark read for this thread only, and again when new incoming messages arrive while viewing.
-  const incomingId = data?.messages.find((m) => !m.isMine)?.id ?? 'none';
+  const selfAssignedAt = data?.thread.assignee?.userId === user?.id ? data?.thread.assignedAt ?? '' : '';
+  const incomingId = `${data?.messages.find((m) => !m.isMine)?.id ?? 'none'}|${selfAssignedAt}`;
   const loaded = !!data;
   useEffect(() => {
     if (!loaded || markedFor.current === incomingId) return;
@@ -147,6 +149,10 @@ export function MessageThreadView({ threadId }: { threadId: string }) {
           Participant:{' '}
           {isStaffLike ? <Link href={`/clients/${t.clientId}`} className="text-primary hover:underline" data-testid="link-thread-client">{t.clientName}</Link> : t.clientName}
         </p>
+        {user?.role === 'service_coordinator' && (
+          <p className="text-sm text-muted-foreground" data-testid="text-thread-assignment">{t.assignee ? `Assigned to ${t.assignee.name}` : 'Unassigned'}</p>
+        )}
+        {user?.role === 'staff' && <ThreadAssignment thread={t} qk={qk} currentUserId={user.id} />}
         <div className="flex flex-wrap items-center justify-between gap-2">
           <p className="text-sm text-muted-foreground" data-testid="text-thread-to">To: {toList.join(', ')}</p>
           {isStaffLike && <AddFamilyDialog thread={t} />}

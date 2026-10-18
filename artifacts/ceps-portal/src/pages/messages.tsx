@@ -1,7 +1,7 @@
 import { useState } from 'react';
-import { useLocation, useParams } from 'wouter';
+import { useLocation, useParams, useSearch } from 'wouter';
 import { Inbox, Plus, X } from 'lucide-react';
-import { useMessagingRole, useThreadList } from '@/hooks/use-messaging';
+import { useMessagingRole, useThreadList, useUnreadCount } from '@/hooks/use-messaging';
 import { useDebounce } from '@/hooks/use-debounce';
 import { rangeParams, DEFAULT_RANGE, type MessageRange } from '@/lib/messaging';
 import { Button } from '@/components/ui/button';
@@ -17,13 +17,19 @@ import { MessageThreadView } from '@/components/messaging/message-thread-view';
 import { MessageComposeDialog } from '@/components/messaging/message-compose-dialog';
 import { ClientSearchList } from '@/components/messaging/client-search-list';
 
+type MessageView = 'all' | 'unread' | 'assigned_to_me' | 'unassigned';
 type Client = { id: string; name: string };
 
 export default function MessagesPage() {
   const { user, isMessagingUser, isStaffLike, isFamily } = useMessagingRole();
+  const isStaff = user?.role === 'staff';
   const { threadId } = useParams<{ threadId?: string }>();
   const [, navigate] = useLocation();
-  const [view, setView] = useState<'all' | 'unread'>('all');
+  const urlSearch = useSearch();
+  const rawView = new URLSearchParams(urlSearch).get('view');
+  const view: MessageView = rawView === 'unread' || (isStaff && (rawView === 'assigned_to_me' || rawView === 'unassigned')) ? rawView : 'all';
+  const setView = (v: MessageView) => navigate(`${threadId ? `/messages/${threadId}` : '/messages'}${v === 'all' ? '' : `?view=${v}`}`);
+  const counts = useUnreadCount().data;
   const [q, setQ] = useState('');
   const search = useDebounce(q.trim(), 300);
   const [range, setRange] = useState<MessageRange>(DEFAULT_RANGE);
@@ -70,10 +76,14 @@ export default function MessagesPage() {
       <div className="grid h-[calc(100dvh-14rem)] min-h-[480px] overflow-hidden rounded-lg border bg-card md:grid-cols-[minmax(300px,380px)_1fr]">
         <div className={cn('flex min-h-0 flex-col border-r', threadId && 'hidden md:flex')} data-testid="message-list-pane">
           <div className="space-y-2 border-b p-3">
-            <div className="flex gap-2" role="tablist" aria-label="Message views">
-              {(['all', 'unread'] as const).map((v) => (
+            <div className="flex flex-wrap gap-2" role="tablist" aria-label="Message views">
+              {((isStaff ? ['all', 'unread', 'assigned_to_me', 'unassigned'] : ['all', 'unread']) as MessageView[]).map((v) => (
                 <Button key={v} size="sm" role="tab" aria-selected={view === v} variant={view === v ? 'default' : 'outline'}
-                  onClick={() => { setView(v); reset(); }} data-testid={`tab-messages-${v}`}>{v === 'all' ? 'All' : 'Unread'}</Button>
+                  onClick={() => { setView(v); reset(); }} data-testid={`tab-messages-${v}`}>
+                  {v === 'all' ? 'All' : v === 'unread' ? 'Unread' : v === 'assigned_to_me' ? 'Assigned to me' : 'Unassigned'}
+                  {v === 'assigned_to_me' && <span className="ml-1.5 rounded-full bg-primary-foreground/20 px-1.5 text-xs" data-testid="count-assigned-to-me">{counts?.assignedToMeUnread ?? 0}</span>}
+                  {v === 'unassigned' && <span className="ml-1.5 rounded-full bg-primary-foreground/20 px-1.5 text-xs" data-testid="count-unassigned">{counts?.unassignedOpen ?? 0}</span>}
+                </Button>
               ))}
             </div>
             <Input type="search" value={q} onChange={(e) => { setQ(e.target.value); reset(); }} placeholder="Search messages" aria-label="Search messages" data-testid="input-message-search" />
@@ -112,7 +122,7 @@ export default function MessagesPage() {
               </div>
             ) : (
               <>
-                <MessageThreadRows threads={items} selectedId={threadId} showParticipant={isStaffLike} />
+                <MessageThreadRows threads={items} selectedId={threadId} showParticipant={isStaffLike} showAssignee={isStaffLike} />
                 {hasNextPage && (
                   <div className="p-3 text-center">
                     <Button variant="outline" size="sm" onClick={() => void fetchNextPage()} disabled={isFetchingNextPage} data-testid="button-load-more-threads">{isFetchingNextPage ? 'Loading...' : 'Load more'}</Button>

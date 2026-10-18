@@ -6,7 +6,7 @@ import { expect, test, type Browser, type Page } from '@playwright/test';
 type Actor = { id: string; name: string; token: string };
 type Fixture = {
   clientId: string; clientName: string; archiveId: string; archiveSubject: string; archiveDay: string; historyId: string; recentId: string;
-  staff: Actor; coordinator: Actor; family: Actor; self: Actor; vendor: Actor;
+  staff: Actor; staffB: Actor; coordinator: Actor; family: Actor; self: Actor; vendor: Actor;
 };
 const root = fileURLToPath(new URL('../../../', import.meta.url));
 let fixture: Fixture;
@@ -30,7 +30,7 @@ test.beforeAll(() => {
     (async () => {
       const nonce = 'msg-ui-' + randomBytes(6).toString('hex'), actors = {};
       await db.transaction(async tx => {
-        for (const [key, role] of Object.entries({staff:'staff', coordinator:'service_coordinator',
+        for (const [key, role] of Object.entries({staff:'staff', staffB:'staff', coordinator:'service_coordinator',
           family:'parent_guardian', self:'self', vendor:'vendor'})) {
           const name = nonce + ' ' + key;
           const [user] = await tx.insert(usersTable).values({name, email:name.replaceAll(' ','-')+'@example.test', role}).returning();
@@ -76,7 +76,7 @@ test.beforeAll(() => {
 
 test.afterAll(() => {
   if (!fixture) return;
-  const ids = ['staff', 'coordinator', 'family', 'self', 'vendor'].map((key) => fixture[key as keyof Fixture] as Actor).map((a) => a.id);
+  const ids = ['staff', 'staffB', 'coordinator', 'family', 'self', 'vendor'].map((key) => fixture[key as keyof Fixture] as Actor).map((a) => a.id);
   database(`
     import { db,pool,usersTable,clientsTable,sessionsTable,familyRepresentativesTable,auditLogTable,
       messageThreadsTable,messagesTable,messageThreadFamilyMembersTable,messageThreadReadsTable } from './src/index.ts';
@@ -119,6 +119,34 @@ async function chooseRange(page: Page, label: string) {
   await page.getByTestId('select-message-range').click();
   await page.getByRole('option', { name: label, exact: true }).click();
 }
+
+test('staff A assigns to B, who follows a dashboard notice, reads the assigned inbox and clears the notices', async ({ browser, baseURL }) => {
+  const staffA = await signedIn(browser, baseURL!, fixture.staff);
+  const staffB = await signedIn(browser, baseURL!, fixture.staffB);
+  try {
+    await staffA.page.goto(`/messages/${fixture.recentId}`);
+    await staffA.page.getByTestId('select-thread-assignee').selectOption(fixture.staffB.id);
+    await expect(staffA.page.getByTestId('text-thread-assignment')).toContainText(fixture.staff.name);
+    await expect(staffA.page.getByTestId('select-thread-assignee')).toHaveValue(fixture.staffB.id);
+    await staffB.page.goto('/');
+    await expect(staffB.page.getByTestId('card-alert-message_assigned_new')).toContainText(fixture.staff.name);
+    await expect(staffB.page.getByTestId(`link-alert-message_assigned_new-${fixture.recentId}`))
+      .toHaveAttribute('href', `/messages/${fixture.recentId}`);
+    await staffB.page.getByTestId('card-alert-message_assigned_to_you').click();
+    await expect(staffB.page).toHaveURL(/\/messages\?view=assigned_to_me$/);
+    await expect(staffB.page.getByTestId('tab-messages-assigned_to_me')).toHaveAttribute('aria-selected', 'true');
+    await expect(staffB.page.getByTestId('count-assigned-to-me')).toHaveText('1');
+    await expect(staffB.page.getByTestId(`text-row-assignee-${fixture.recentId}`)).toContainText(fixture.staffB.name);
+    await staffB.page.getByTestId(`message-thread-${fixture.recentId}`).click();
+    await expect(staffB.page.getByTestId('message-thread-view')).toContainText('Recent fixture message');
+    await expect(staffB.page.getByTestId('count-assigned-to-me')).toHaveText('0');
+    await staffB.page.goto('/');
+    await expect(staffB.page.getByTestId('card-alert-message_assigned_new')).toHaveCount(0);
+    await expect(staffB.page.getByTestId('card-alert-message_assigned_to_you')).toHaveCount(0);
+    await staffA.page.goto(`/clients/${fixture.clientId}`);
+    await expect(staffA.page.getByTestId(`text-row-assignee-${fixture.recentId}`)).toContainText(fixture.staffB.name);
+  } finally { await Promise.all([staffA.context.close(), staffB.context.close()]); }
+});
 
 test('staff creates a participant conversation, coordinator and selected family reply, staff sees unread', async ({ browser, baseURL }) => {
   test.setTimeout(90_000);

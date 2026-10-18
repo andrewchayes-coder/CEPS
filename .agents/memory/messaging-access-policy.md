@@ -29,3 +29,12 @@ Help guides must tell users to check Messages when signing in and use the
 unread badge, not promise automatic email.
 
 **Why:** The user explicitly scoped the messaging screens and help copy this way.
+
+Thread assignment routes work; it never makes a staff conversation private.
+Any active staff member may assign or unassign a thread without a new permission.
+Staff replies must leave ownership unchanged. Assignment notices are in-app:
+new assignments remain pending until the assignee opens the thread after
+assignment, with a seven-day window for the new-assignment notice.
+
+**Why:** CEPS wants every staff member to see every message while giving each
+thread an owner and keeping each person's unread state independent.

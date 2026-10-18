@@ -182,7 +182,49 @@ paths:
                 required: [count]
                 properties:
                   count: { type: integer }
+                  assignedToMeUnread: { type: integer, description: Staff only; recent assigned threads unread for this user. }
+                  unassignedOpen: { type: integer, description: Staff only; all unassigned threads in the recent range. }
         "403": { description: Vendors cannot use messaging. }
+  /messages/assignable-staff:
+    get:
+      tags: [messages]
+      operationId: listAssignableMessageStaff
+      responses:
+        "200":
+          description: Active staff, ordered by name.
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/MessagePerson' }
+        "403": { description: Staff only. }
+  /messages/threads/{threadId}/assignee:
+    patch:
+      tags: [messages]
+      operationId: assignMessageThread
+      parameters:
+        - name: threadId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [assigneeUserId]
+              properties:
+                assigneeUserId: { type: ["string", "null"], format: uuid }
+      responses:
+        "200":
+          description: Updated thread header.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/MessageThreadHeader' }
+        "400": { description: Assignee must be an active staff user. }
+        "403": { description: Staff only. }
+        "404": { description: Thread unavailable. }
   /messages/threads/{threadId}/family-members:
     post:
       tags: [messages]
@@ -3128,6 +3170,14 @@ components:
           anyOf:
             - { $ref: '#/components/schemas/MessagePerson' }
             - { type: "null" }
+        assignedAt:
+          anyOf:
+            - { $ref: '#/components/schemas/MessageInstant' }
+            - { type: "null" }
+        assignedBy:
+          anyOf:
+            - { $ref: '#/components/schemas/MessagePerson' }
+            - { type: "null" }
         createdAt: { $ref: '#/components/schemas/MessageInstant' }
     MessageThreadList:
       type: object
@@ -4971,7 +5021,7 @@ components:
             type: object
             required: [kind, message]
             properties:
-              kind: { type: string, enum: [expiring_authorization, missing_document, pending_w9, unmatched_remittance, authorization_exhausted_active, unmatched_pos, unmatched_pos_possible_match, pending_signature, recently_completed, family_updated_participant, coordinator_review] }
+              kind: { type: string, enum: [expiring_authorization, missing_document, pending_w9, unmatched_remittance, authorization_exhausted_active, unmatched_pos, unmatched_pos_possible_match, pending_signature, recently_completed, family_updated_participant, coordinator_review, message_assigned_to_you, message_assigned_new] }
               message: { type: string }
               entityType: { type: ["string", "null"] }
               entityId: { type: ["string", "null"] }

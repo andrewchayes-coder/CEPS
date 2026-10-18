@@ -26,6 +26,7 @@ import type {
   AltaFmsPaymentImportResult,
   AltaRemittanceImportInput,
   AltaRemittanceImportResult,
+  AssignMessageThreadBody,
   AuditEntry,
   AuditMonthlyFeesParams,
   Authorization,
@@ -119,6 +120,7 @@ import type {
   MagicLinkResult,
   MarkMessageThreadRead200,
   MessageInput,
+  MessagePerson,
   MessageRecipients,
   MessageThreadDetail,
   MessageThreadHeader,
@@ -784,6 +786,143 @@ export function useGetMessagingUnreadCount<TData = Awaited<ReturnType<typeof get
 
 
 
+
+export const getListAssignableMessageStaffUrl = () => {
+
+
+
+
+  return `/api/messages/assignable-staff`
+}
+
+export const listAssignableMessageStaff = async ( options?: Parameters<typeof customFetch>[1]): Promise<MessagePerson[]> => {
+
+  return customFetch<MessagePerson[]>(getListAssignableMessageStaffUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListAssignableMessageStaffQueryKey = () => {
+    return [
+    `/api/messages/assignable-staff`
+    ] as const;
+    }
+
+
+export const getListAssignableMessageStaffQueryOptions = <TData = Awaited<ReturnType<typeof listAssignableMessageStaff>>, TError = ErrorType<void>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listAssignableMessageStaff>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListAssignableMessageStaffQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listAssignableMessageStaff>>> = ({ signal }) => listAssignableMessageStaff({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listAssignableMessageStaff>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListAssignableMessageStaffQueryResult = NonNullable<Awaited<ReturnType<typeof listAssignableMessageStaff>>>
+export type ListAssignableMessageStaffQueryError = ErrorType<void>
+
+
+
+export function useListAssignableMessageStaff<TData = Awaited<ReturnType<typeof listAssignableMessageStaff>>, TError = ErrorType<void>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listAssignableMessageStaff>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListAssignableMessageStaffQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getAssignMessageThreadUrl = (threadId: string,) => {
+
+
+
+
+  return `/api/messages/threads/${threadId}/assignee`
+}
+
+export const assignMessageThread = async (threadId: string,
+    assignMessageThreadBody: AssignMessageThreadBody, options?: Parameters<typeof customFetch>[1]): Promise<MessageThreadHeader> => {
+
+  return customFetch<MessageThreadHeader>(getAssignMessageThreadUrl(threadId),
+  {
+    ...options,
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(assignMessageThreadBody)
+  }
+);}
+
+
+
+
+
+export const getAssignMessageThreadMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof assignMessageThread>>, TError,{threadId: string;data: BodyType<AssignMessageThreadBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof assignMessageThread>>, TError,{threadId: string;data: BodyType<AssignMessageThreadBody>}, TContext> => {
+
+const mutationKey = ['assignMessageThread'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof assignMessageThread>>, {threadId: string;data: BodyType<AssignMessageThreadBody>}> = (props) => {
+          const {threadId,data} = props ?? {};
+
+          return  assignMessageThread(threadId,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type AssignMessageThreadMutationResult = NonNullable<Awaited<ReturnType<typeof assignMessageThread>>>
+    export type AssignMessageThreadMutationBody = BodyType<AssignMessageThreadBody>
+    export type AssignMessageThreadMutationError = ErrorType<void>
+
+    export const useAssignMessageThread = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof assignMessageThread>>, TError,{threadId: string;data: BodyType<AssignMessageThreadBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof assignMessageThread>>,
+        TError,
+        {threadId: string;data: BodyType<AssignMessageThreadBody>},
+        TContext
+      > => {
+      return useMutation(getAssignMessageThreadMutationOptions(options));
+    }
 
 export const getAddMessageThreadFamilyMembersUrl = (threadId: string,) => {
 

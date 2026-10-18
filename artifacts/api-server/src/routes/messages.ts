@@ -1,6 +1,6 @@
 import { Router, type IRouter, type ErrorRequestHandler } from "express";
-import { and, eq } from "drizzle-orm";
-import { db, messageThreadsTable } from "@workspace/db";
+import { and, asc, eq, sql } from "drizzle-orm";
+import { db, messageThreadsTable, usersTable } from "@workspace/db";
 import {
   ListMessageRecipientsParams, ListMessageRecipientsResponse,
   ListMessageThreadsQueryParams, ListMessageThreadsResponse,
@@ -10,12 +10,15 @@ import {
   SendMessageParams, SendMessageBody, SendMessageResponse,
   MarkMessageThreadReadParams, MarkMessageThreadReadResponse,
   GetMessagingUnreadCountResponse,
+  AssignMessageThreadParams, AssignMessageThreadBody, AssignMessageThreadResponse,
+  ListAssignableMessageStaffResponse,
   AddMessageThreadFamilyMembersParams, AddMessageThreadFamilyMembersBody, AddMessageThreadFamilyMembersResponse,
 } from "@workspace/api-zod";
 import { requireAuth, requireRole, audit } from "../lib/auth";
 import { MessageError, messageActor, messageClient, messageScope, messageThread, type MessageDatabase } from "../lib/messageAccess";
 import { threadFilters, threadHeaders, threadCount, messageRecipients, messagePage, type MessageFilters } from "../lib/messageQueries";
 import { addFamilyMembers, appendMessage, markMessageRead, validateFamilyRecipients } from "../lib/messageMutations";
+import { messagingCounts } from "../lib/messageAssignments";
 
 const router: IRouter = Router();
 router.use(["/messages", "/clients/:id/message-threads", "/clients/:id/message-recipients"],
@@ -147,7 +150,43 @@ router.post("/messages/threads/:threadId/read", async (req, res): Promise<void> 
 
 router.get("/messages/unread-count", async (req, res): Promise<void> => {
   // Exactly one indexed count query, with no header/preview lookups.
-  res.json(GetMessagingUnreadCountResponse.parse({ count: await threadCount(db, threadFilters(req.user!, { view: "unread" })) }));
+  res.json(GetMessagingUnreadCountResponse.parse(await messagingCounts(db, req.user!)));
+});
+
+router.get("/messages/assignable-staff", requireRole("staff"), async (_req, res): Promise<void> => {
+  const staff = await db.select({ userId: usersTable.id, name: usersTable.name }).from(usersTable)
+    .where(and(eq(usersTable.role, "staff"), eq(usersTable.active, true))).orderBy(asc(usersTable.name), asc(usersTable.id));
+  res.json(ListAssignableMessageStaffResponse.parse(staff));
+});
+
+router.patch("/messages/threads/:threadId/assignee", requireRole("staff"), async (req, res): Promise<void> => {
+  const { threadId } = valid(AssignMessageThreadParams.safeParse(req.params));
+  const { assigneeUserId } = valid(AssignMessageThreadBody.safeParse(req.body));
+  const result = await db.transaction(async tx => {
+    const database = tx as unknown as MessageDatabase;
+    const actor = await messageActor(database, req.user!.id);
+    if (actor.role !== "staff") throw new MessageError(403, "Staff only");
+    const { thread } = await messageThread(database, threadId, actor, true);
+    let nextName = "Unassigned";
+    if (assigneeUserId !== null) {
+      const [assignee] = await database.select().from(usersTable).where(and(
+        eq(usersTable.id, assigneeUserId), eq(usersTable.active, true), eq(usersTable.role, "staff"),
+      )).for("share");
+      if (!assignee) throw new MessageError(400, "Assignee must be an active staff user");
+      nextName = assignee.name;
+    }
+    const [previous] = thread.assigneeUserId ? await database.select({ name: usersTable.name })
+      .from(usersTable).where(eq(usersTable.id, thread.assigneeUserId)) : [];
+    await database.update(messageThreadsTable).set({
+      assigneeUserId,
+      assignedAt: assigneeUserId ? sql`clock_timestamp()` : null,
+      assignedBy: assigneeUserId ? actor.id : null,
+    }).where(eq(messageThreadsTable.id, threadId));
+    await audit(actor.id, "assign_message_thread", "message_thread", thread.clientId,
+      `Thread ${threadId}: assignee "${previous?.name ?? "Unassigned"}" → "${nextName}"`, database);
+    return (await threadHeaders(database, actor, and(messageScope(actor), eq(messageThreadsTable.id, threadId))!))[0];
+  });
+  res.json(AssignMessageThreadResponse.parse(result));
 });
 
 router.post("/messages/threads/:threadId/family-members", async (req, res): Promise<void> => {

@@ -21,6 +21,7 @@ export * from './altaRemittanceImportInput';
 export * from './altaRemittanceImportResult';
 export * from './altaRemittanceImportRowResult';
 export * from './altaRemittanceImportRowResultOutcome';
+export * from './assignMessageThreadBody';
 export * from './auditEntry';
 export * from './auditMonthlyFeesParams';
 export * from './authorization';

@@ -5,6 +5,7 @@ export * from "./generated/types";
 export {
   GetMessageThreadParams, ListClientMessageThreadsParams,
   AddMessageThreadFamilyMembersBody,
+  AssignMessageThreadBody,
 } from "./generated/api";
 export type {
   GetMessageThreadParams as MessageThreadQuery,

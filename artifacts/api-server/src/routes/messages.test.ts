@@ -73,6 +73,121 @@ afterAll(async () => {
 });
 
 describe("messaging API", () => {
+  it("only allows staff to assign or list active assignable staff, without a permission key", async () => {
+    const { thread } = await create();
+    for (const role of ["coordinator", "parent", "self", "vendor"]) {
+      const response = await request(app).patch(`/api/messages/threads/${thread.id}/assignee`)
+        .set("Cookie", cookies[role]).send({ assigneeUserId: ids.staffB });
+      expect(response.status, role).toBe(403);
+      expect((await get(role, "/messages/assignable-staff")).status, role).toBe(403);
+    }
+    const result = await get("staff", "/messages/assignable-staff");
+    expect(result.status).toBe(200);
+    expect(result.body.filter((person: { userId: string }) => [ids.staff, ids.staffB].includes(person.userId))
+      .map((person: { userId: string }) => person.userId)).toEqual([ids.staff, ids.staffB]);
+    expect(result.body.some((person: { userId: string }) => person.userId === ids.coordinator)).toBe(false);
+    const response = await request(app).patch(`/api/messages/threads/${thread.id}/assignee`)
+      .set("Cookie", cookies.staff).send({ assigneeUserId: ids.staffB });
+    expect(response.status).toBe(200);
+    expect(response.body).toMatchObject({
+      assignee: { userId: ids.staffB }, assignedBy: { userId: ids.staff },
+    });
+    expect(response.body.assignedAt).toMatch(/\.\d{6}Z$/);
+    expect((await get("staff", `/messages/threads/${thread.id}`)).status).toBe(200);
+  });
+
+  it("rejects nonstaff, inactive and unknown assignees atomically", async () => {
+    const { thread } = await create();
+    const before = await db.select().from(auditLogTable).where(and(eq(auditLogTable.action, "assign_message_thread"),
+      eq(auditLogTable.entityId, clients[0])));
+    await db.update(usersTable).set({ active: false }).where(eq(usersTable.id, ids.staffB));
+    try {
+      for (const target of [ids.coordinator, ids.parent, ids.staffB, "00000000-0000-4000-8000-000000000001"]) {
+        expect((await request(app).patch(`/api/messages/threads/${thread.id}/assignee`)
+          .set("Cookie", cookies.staff).send({ assigneeUserId: target })).status).toBe(400);
+      }
+      expect((await get("staff", "/messages/assignable-staff")).body.some((person: { userId: string }) => person.userId === ids.staffB)).toBe(false);
+      expect((await get("staff", `/messages/threads/${thread.id}`)).body.thread.assignee).toBeNull();
+      expect(await db.select().from(auditLogTable).where(and(eq(auditLogTable.action, "assign_message_thread"),
+        eq(auditLogTable.entityId, clients[0])))).toHaveLength(before.length);
+    } finally {
+      await db.update(usersTable).set({ active: true }).where(eq(usersTable.id, ids.staffB));
+    }
+  });
+
+  it("unassigns all metadata, audits before/after, and never reassigns on staff replies", async () => {
+    const { thread } = await create();
+    const assign = (id: string | null) => request(app).patch(`/api/messages/threads/${thread.id}/assignee`)
+      .set("Cookie", cookies.staff).send({ assigneeUserId: id });
+    expect((await assign(ids.staffB)).status).toBe(200);
+    await post("staff", `/messages/threads/${thread.id}/messages`, { body: "Staff reply keeps the owner" });
+    expect((await get("staff", `/messages/threads/${thread.id}`)).body.thread.assignee.userId).toBe(ids.staffB);
+    expect((await assign(null)).body).toMatchObject({ assignee: null, assignedAt: null, assignedBy: null });
+    const [row] = await db.select().from(messageThreadsTable).where(eq(messageThreadsTable.id, thread.id));
+    expect([row.assigneeUserId, row.assignedAt, row.assignedBy]).toEqual([null, null, null]);
+    const entries = await db.select().from(auditLogTable).where(and(eq(auditLogTable.action, "assign_message_thread"), eq(auditLogTable.entityId, clients[0])));
+    expect(entries.some(entry => entry.detail === `Thread ${thread.id}: assignee "Unassigned" → "${nonce} staffB"`)).toBe(true);
+    expect(entries.some(entry => entry.detail === `Thread ${thread.id}: assignee "${nonce} staffB" → "Unassigned"`)).toBe(true);
+  });
+
+  it("matches staff assignment badges to recent scoped queues; other roles receive only count", async () => {
+    const { thread } = await create();
+    await request(app).patch(`/api/messages/threads/${thread.id}/assignee`)
+      .set("Cookie", cookies.staff).send({ assigneeUserId: ids.staffB });
+    for (const role of ["staff", "staffB"]) {
+      const counts = (await get(role, "/messages/unread-count")).body;
+      const assigned = (await get(role, "/messages/threads", { view: "assigned_to_me", limit: 1000 })).body.items;
+      const unassigned = (await get(role, "/messages/threads", { view: "unassigned" })).body.total;
+      expect(counts.assignedToMeUnread).toBe(assigned.filter((item: { unread: boolean }) => item.unread).length);
+      expect(counts.unassignedOpen).toBe(unassigned);
+    }
+    for (const role of ["coordinator", "parent", "self"]) {
+      const counts = (await get(role, "/messages/unread-count")).body;
+      expect(Object.keys(counts)).toEqual(["count"]);
+    }
+  });
+
+  it("shows assignment dashboard alerts only to the owner and clears them on read", async () => {
+    const { thread } = await create();
+    await post("staffB", `/messages/threads/${thread.id}/read`);
+    await request(app).patch(`/api/messages/threads/${thread.id}/assignee`)
+      .set("Cookie", cookies.staff).send({ assigneeUserId: ids.staffB });
+    const owner = await get("staffB", "/dashboard/summary");
+    expect(owner.status).toBe(200);
+    expect(owner.body.alerts.some((a: { kind: string; entityId: string }) => a.kind === "message_assigned_new" && a.entityId === thread.id)).toBe(true);
+    for (const role of ["staff", "coordinator", "parent"]) {
+      expect((await get(role, "/dashboard/summary")).body.alerts.some((a: { kind: string; entityId: string }) => a.kind === "message_assigned_new" && a.entityId === thread.id)).toBe(false);
+    }
+    await post("staffB", `/messages/threads/${thread.id}/read`);
+    let summary = (await get("staffB", "/dashboard/summary")).body;
+    expect(summary.alerts.some((a: { kind: string; entityId: string }) => a.kind === "message_assigned_new" && a.entityId === thread.id)).toBe(false);
+    const before = (await get("staffB", "/messages/unread-count")).body.assignedToMeUnread;
+    await post("parent", `/messages/threads/${thread.id}/messages`, { body: "A family follow-up for the owner" });
+    expect((await get("staffB", "/messages/unread-count")).body.assignedToMeUnread).toBe(before + 1);
+    summary = (await get("staffB", "/dashboard/summary")).body;
+    expect(summary.alerts.some((a: { kind: string }) => a.kind === "message_assigned_to_you")).toBe(true);
+    expect((await get("staffB", `/messages/threads/${thread.id}`)).body.thread.assignee.userId).toBe(ids.staffB);
+    await post("staffB", `/messages/threads/${thread.id}/read`);
+    expect((await get("staffB", "/messages/unread-count")).body.assignedToMeUnread).toBe(before);
+  });
+
+  it("expires new-assignment notices after seven days and transfers them to the current owner", async () => {
+    const { thread } = await create();
+    const assign = (id: string) => request(app).patch(`/api/messages/threads/${thread.id}/assignee`)
+      .set("Cookie", cookies.staff).send({ assigneeUserId: id });
+    await assign(ids.staffB);
+    await db.update(messageThreadsTable).set({ assignedAt: new Date(Date.now() - 8 * 86400000) })
+      .where(eq(messageThreadsTable.id, thread.id));
+    const hasNotice = async (role: string) => (await get(role, "/dashboard/summary")).body.alerts
+      .some((a: { kind: string; entityId: string }) => a.kind === "message_assigned_new" && a.entityId === thread.id);
+    expect(await hasNotice("staffB")).toBe(false);
+    await assign(ids.staff);
+    expect(await hasNotice("staffB")).toBe(false);
+    expect(await hasNotice("staff")).toBe(true);
+    await post("staff", `/messages/threads/${thread.id}/read`);
+    expect(await hasNotice("staff")).toBe(false);
+  });
+
   it("returns only eligible portal users, representative names/relationships and separate no-portal representatives", async () => {
     for (const role of ["staff", "coordinator", "parent", "self"]) {
       const response = await get(role, `/clients/${clients[0]}/message-recipients`);
@@ -265,6 +380,8 @@ describe("messaging API", () => {
   });
 
   it("supports assignment views without widening role scope, full totals, and stable inbox pagination", async () => {
+    await db.update(messageThreadsTable).set({ assigneeUserId: null, assignedBy: null, assignedAt: null })
+      .where(eq(messageThreadsTable.clientId, clients[0]));
     const assigned = await create();
     await db.update(messageThreadsTable).set({ assigneeUserId: ids.staffB, assignedBy: ids.staff, assignedAt: new Date() }).where(eq(messageThreadsTable.id, assigned.thread.id));
     const page = await get("staffB", "/messages/threads", { clientId: clients[0], view: "assigned_to_me", limit: 1 });

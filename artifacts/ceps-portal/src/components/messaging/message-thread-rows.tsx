@@ -1,17 +1,19 @@
-import { Link } from 'wouter';
+import { Link, useSearch } from 'wouter';
 import type { MessageThreadHeader } from '@workspace/api-client-react';
 import { formatMessageClock } from '@/lib/datetime';
 import { cn } from '@/lib/utils';
 
-export function MessageThreadRows({ threads, selectedId, showParticipant }: {
-  threads: MessageThreadHeader[]; selectedId?: string; showParticipant: boolean;
+export function MessageThreadRows({ threads, selectedId, showParticipant, showAssignee = false }: {
+  threads: MessageThreadHeader[]; selectedId?: string; showParticipant: boolean; showAssignee?: boolean;
 }) {
+  const search = useSearch();
+  const qs = search ? `?${search}` : '';
   return (
     <ul className="divide-y" data-testid="list-message-threads">
       {threads.map((t) => (
         <li key={t.id}>
           <Link
-            href={`/messages/${t.id}`}
+            href={`/messages/${t.id}${qs}`}
             aria-current={t.id === selectedId ? 'true' : undefined}
             data-testid={`message-thread-${t.id}`}
             data-unread={t.unread ? 'true' : 'false'}
@@ -34,6 +36,11 @@ export function MessageThreadRows({ threads, selectedId, showParticipant }: {
               <span className="block truncate text-muted-foreground">
                 {t.lastMessageByName ? `${t.lastMessageByName}: ` : ''}{t.lastMessagePreview}
               </span>
+              {showAssignee && (
+                <span className={cn('block truncate text-xs', t.assignee ? 'text-foreground' : 'text-muted-foreground/70 italic')} data-testid={`text-row-assignee-${t.id}`}>
+                  {t.assignee ? `Assigned to ${t.assignee.name}` : 'Unassigned'}
+                </span>
+              )}
               <span className="block text-xs text-muted-foreground">{t.messageCount} {t.messageCount === 1 ? 'message' : 'messages'}</span>
             </span>
           </Link>

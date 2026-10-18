@@ -1,8 +1,15 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  getCoordinatorTiles, getInvoicesInReview, filterAlertsForRole, resolveReportTab, getAllowedReportTabs, TILE_VARIANT_STYLES,
+  getCoordinatorTiles, getInvoicesInReview, filterAlertsForRole, resolveReportTab, getAllowedReportTabs, TILE_VARIANT_STYLES, getMessageAlertHref,
 } from './dashboard-models.ts';
+
+test('message assignment links select the owned inbox or the assigned thread', () => {
+  assert.equal(getMessageAlertHref('message_assigned_to_you'), '/messages?view=assigned_to_me');
+  assert.equal(getMessageAlertHref('message_assigned_new', 'thread-id'), '/messages/thread-id');
+  assert.equal(getMessageAlertHref('message_assigned_new'), '/messages?view=assigned_to_me');
+  assert.equal(getMessageAlertHref('pending_w9'), undefined);
+});
 
 test('coordinator tiles: expiring first, red when >0', () => {
   const t = getCoordinatorTiles({ expiringAuthorizations: 3, activeClients: 7 }, 4, 2);

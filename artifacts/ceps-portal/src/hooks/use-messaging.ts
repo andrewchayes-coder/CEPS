@@ -1,7 +1,7 @@
 import { keepPreviousData, useInfiniteQuery, useQueryClient, type QueryClient } from '@tanstack/react-query';
 import {
   useGetMessagingUnreadCount, listMessageThreads, useListClientMessageThreads,
-  getGetMessagingUnreadCountQueryKey, getListMessageThreadsQueryKey, getListClientMessageThreadsQueryKey,
+  getGetMessagingUnreadCountQueryKey, getGetDashboardSummaryQueryKey, getListMessageThreadsQueryKey, getListClientMessageThreadsQueryKey,
   type ListMessageThreadsParams, type ListClientMessageThreadsParams,
 } from '@workspace/api-client-react';
 import { useAuth } from '@/components/auth/auth-provider';
@@ -73,6 +73,7 @@ export function useClientThreadList(clientId: string, params: ListClientMessageT
 export function invalidateMessaging(qc: QueryClient) {
   void qc.invalidateQueries({ queryKey: getListMessageThreadsQueryKey() });
   void qc.invalidateQueries({ queryKey: getGetMessagingUnreadCountQueryKey() });
+  void qc.invalidateQueries({ queryKey: getGetDashboardSummaryQueryKey() });
   void qc.invalidateQueries({
     predicate: (q) => {
       const k = q.queryKey[0];

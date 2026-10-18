@@ -1,5 +1,13 @@
 export type TileVariant = 'alert' | 'neutral' | 'primary' | 'turquoise';
 
+export const MESSAGE_ALERT_KINDS = ['message_assigned_to_you', 'message_assigned_new'] as const;
+
+export function getMessageAlertHref(kind: string, threadId?: string | null): string | undefined {
+  if (kind === 'message_assigned_new' && threadId) return `/messages/${threadId}`;
+  if ((MESSAGE_ALERT_KINDS as readonly string[]).includes(kind)) return '/messages?view=assigned_to_me';
+  return undefined;
+}
+
 export interface TileTotals {
   expiringAuthorizations?: number;
   invoicesInReview?: number;

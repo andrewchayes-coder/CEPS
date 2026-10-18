@@ -22,9 +22,10 @@ import {
 } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Link, useLocation } from 'wouter';
+import { MessageSquare } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { DashboardTile } from '@/components/dashboard-tile';
-import { getCoordinatorTiles, getInvoicesInReview, filterAlertsForRole } from '@/lib/dashboard-models';
+import { getCoordinatorTiles, getInvoicesInReview, filterAlertsForRole, getMessageAlertHref } from '@/lib/dashboard-models';
 
 export default function DashboardPage() {
   const { user } = useAuth();
@@ -70,7 +71,7 @@ export default function DashboardPage() {
       {/* Alerts Section (High Priority) */}
       {visibleAlerts.length > 0 && (
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-          {groupAlerts(visibleAlerts).map((group) => group.kind === 'authorization_exhausted_active' || group.kind === 'unmatched_pos_possible_match' ? (
+          {groupAlerts(visibleAlerts).map((group) => group.kind === 'authorization_exhausted_active' || group.kind === 'unmatched_pos_possible_match' || group.kind === 'message_assigned_new' ? (
             <Card
               key={group.kind}
               className={`border-l-4 ${getAlertBorderColor(group.kind)} h-full`}
@@ -84,6 +85,7 @@ export default function DashboardPage() {
                   <p className="text-sm font-semibold">
                      {group.kind === 'authorization_exhausted_active'
                        ? getExhaustedAlertTitle(group.alerts.length)
+                       : group.kind === 'message_assigned_new' ? `${group.alerts.length} new message assignment${group.alerts.length === 1 ? '' : 's'}`
                        : `${group.alerts.length} possible POS participant matches`}
                   </p>
                   <ul className="mt-1.5 max-h-48 space-y-1 overflow-y-auto">
@@ -92,7 +94,7 @@ export default function DashboardPage() {
                         <Link
                             href={group.kind === 'authorization_exhausted_active'
                               ? `/authorizations/${alert.entityId}`
-                              : `/authorizations/review?id=${alert.entityId}`}
+                              : getMessageAlertHref(group.kind, alert.entityId) ?? `/authorizations/review?id=${alert.entityId}`}
                           className="text-primary hover:underline"
                            data-testid={group.kind === 'authorization_exhausted_active'
                              ? `link-alert-authorization-${alert.entityId ?? i}`
@@ -114,7 +116,9 @@ export default function DashboardPage() {
               >
                 <CardContent className="p-4 flex gap-4 items-start">
                   <div className={`mt-0.5 ${getAlertIconColor(group.kind)}`}>
-                    {group.kind === 'recently_completed' ? (
+                    {group.kind === 'message_assigned_to_you' || group.kind === 'message_assigned_new' ? (
+                      <MessageSquare className="h-5 w-5" />
+                    ) : group.kind === 'recently_completed' ? (
                       <CheckCircle2 className="h-5 w-5" />
                     ) : (
                       <AlertTriangle className="h-5 w-5" />
@@ -459,6 +463,8 @@ function getAlertGroupTitle(type: string) {
     case 'unmatched_pos_possible_match': return 'possible POS participant matches';
     case 'authorization_exhausted_active': return 'authorizations needing review';
     case 'recently_completed': return 'recently completed referrals';
+    case 'message_assigned_to_you': return 'message threads assigned to you';
+    case 'message_assigned_new': return 'new assigned messages';
     default: return 'alerts';
   }
 }
@@ -480,6 +486,7 @@ function getAlertBorderColor(type: string) {
     case 'authorization_exhausted_active': return 'border-destructive';
     case 'pending_signature': return 'border-chart-4';
     case 'recently_completed': return 'border-chart-5';
+    case 'message_assigned_to_you': case 'message_assigned_new': return 'border-primary';
     default: return 'border-primary';
   }
 }
@@ -503,6 +510,11 @@ function getAlertLink(group: { kind: string; alerts: DashboardAlert[] }) {
   if (group.kind === 'coordinator_review') return '/referrals?coordinatorReviewStatus=pending';
   if (group.alerts.length === 1 && group.alerts[0].entityId && group.alerts[0].entityType === 'referral') {
     return `/referrals/${group.alerts[0].entityId}`;
+  }
+  if (group.kind === 'message_assigned_to_you') return '/messages?view=assigned_to_me';
+  if (group.kind === 'message_assigned_new') {
+    const a = group.alerts[0];
+    return group.alerts.length === 1 && a?.entityId && a.entityType === 'message_thread' ? `/messages/${a.entityId}` : '/messages?view=assigned_to_me';
   }
   switch (group.kind) {
     case 'expiring_authorization': return '/reports?tab=expiring-auth';

@@ -24,5 +24,7 @@ export interface MessageThreadHeader {
   coordinatorName: string | null;
   familyMemberNames: string[];
   assignee: MessagePerson | null;
+  assignedAt?: MessageInstant | null;
+  assignedBy?: MessagePerson | null;
   createdAt: MessageInstant;
 }

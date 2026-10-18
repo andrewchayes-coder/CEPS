@@ -62,12 +62,15 @@ export async function threadHeaders(database: MessageDatabase, user: User, where
         and rep.client_id = ${messageThreadsTable.clientId} and rep.is_deleted = false
       where fm.thread_id = ${messageThreadsTable.id}), array[]::text[]) as "familyMemberNames",
     case when assignee.id is null then null else jsonb_build_object('userId', assignee.id, 'name', assignee.name) end as "assignee",
+     ${messageTimestamp(sql`${messageThreadsTable.assignedAt}`)} as "assignedAt",
+     case when assigner.id is null then null else jsonb_build_object('userId', assigner.id, 'name', assigner.name) end as "assignedBy",
     ${messageTimestamp(sql`${messageThreadsTable.createdAt}`)} as "createdAt"
     ${threadFrom}
     left join users last_author on last_author.id = ${messageThreadsTable.lastMessageBy}
     left join users coordinator on coordinator.id = ${clientsTable.assignedCoordinatorId}
       and coordinator.role = 'service_coordinator' and coordinator.active = true
     left join users assignee on assignee.id = ${messageThreadsTable.assigneeUserId}
+     left join users assigner on assigner.id = ${messageThreadsTable.assignedBy}
     left join lateral (select left(m.body, 140) as preview from messages m
       where m.thread_id = ${messageThreadsTable.id} order by m.created_at desc, m.id desc limit 1) latest on true
     where ${where} order by ${messageThreadsTable.lastMessageAt} desc, ${messageThreadsTable.id} desc

@@ -5,6 +5,117 @@
  * CEPS Portal API — referral intake, authorizations, invoices, payments, remittances, vendors, reporting
  * OpenAPI spec version: 0.1.0
  */
+/**
+ * ISO-8601 timestamp retained as a string to preserve PostgreSQL microseconds in pagination cursors. Do not coerce to a JavaScript Date.
+ * @pattern ^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,6})?(?:Z|[+-]\d{2}:\d{2})$
+ */
+export type MessageInstant = string;
+
+export interface MessagePerson {
+  userId: string;
+  name: string;
+}
+
+export type MessageRecipientsFamilyItemRole = typeof MessageRecipientsFamilyItemRole[keyof typeof MessageRecipientsFamilyItemRole];
+
+
+export const MessageRecipientsFamilyItemRole = {
+  parent_guardian: 'parent_guardian',
+  self: 'self',
+} as const;
+
+export type MessageRecipientsFamilyItem = {
+  userId: string;
+  name: string;
+  role: MessageRecipientsFamilyItemRole;
+  /** @nullable */
+  relationship: string | null;
+};
+
+export type MessageRecipientsFamilyWithoutPortalItem = {
+  familyRepresentativeId: string;
+  name: string;
+};
+
+export interface MessageRecipients {
+  coordinator: MessagePerson | null;
+  family: MessageRecipientsFamilyItem[];
+  familyWithoutPortal: MessageRecipientsFamilyWithoutPortalItem[];
+}
+
+export interface MessageInput {
+  /**
+     * @minLength 1
+     * @maxLength 5000
+     */
+  body: string;
+}
+
+export interface CreateMessageThreadInput {
+  /**
+     * @minLength 1
+     * @maxLength 200
+     */
+  subject: string;
+  /**
+     * @minLength 1
+     * @maxLength 5000
+     */
+  body: string;
+  includeCoordinator?: boolean;
+  familyUserIds?: string[];
+}
+
+export interface MessageThreadHeader {
+  id: string;
+  clientId: string;
+  clientName: string;
+  subject: string;
+  lastMessageAt: MessageInstant;
+  lastMessagePreview: string;
+  /** @nullable */
+  lastMessageByName: string | null;
+  messageCount: number;
+  unread: boolean;
+  includeCoordinator: boolean;
+  /** @nullable */
+  coordinatorName: string | null;
+  familyMemberNames: string[];
+  assignee: MessagePerson | null;
+  createdAt: MessageInstant;
+}
+
+export interface MessageThreadList {
+  items: MessageThreadHeader[];
+  total: number;
+}
+
+export type ThreadMessageAuthor = {
+  userId: string;
+  name: string;
+  role: string;
+};
+
+export interface ThreadMessage {
+  id: string;
+  body: string;
+  createdAt: MessageInstant;
+  author: ThreadMessageAuthor;
+  isMine: boolean;
+}
+
+export interface MessageCursor {
+  before: MessageInstant;
+  beforeId: string;
+}
+
+export interface MessageThreadDetail {
+  thread: MessageThreadHeader;
+  messages: ThreadMessage[];
+  hasMore: boolean;
+  nextCursor: MessageCursor | null;
+}
+
 export type FamilyRepresentativeRelationship = typeof FamilyRepresentativeRelationship[keyof typeof FamilyRepresentativeRelationship] | null;
 
 
@@ -3247,6 +3358,126 @@ export interface ExpiringAuthRow {
   /** @nullable */
   maxPeriodAmount?: string | null;
 }
+
+export type MessageViewParameter = typeof MessageViewParameter[keyof typeof MessageViewParameter];
+
+
+export const MessageViewParameter = {
+  all: 'all',
+  unread: 'unread',
+  assigned_to_me: 'assigned_to_me',
+  unassigned: 'unassigned',
+} as const;
+
+export type MessageSearchParameter = string;
+
+export type MessageRangeParameter = typeof MessageRangeParameter[keyof typeof MessageRangeParameter];
+
+
+export const MessageRangeParameter = {
+  recent: 'recent',
+  archive: 'archive',
+} as const;
+
+/**
+ * Inclusive America/Los_Angeles calendar day on lastMessageAt (unlike audit-log UTC date boundaries).
+ */
+export type MessageDateFromParameter = string;
+
+/**
+ * Inclusive America/Los_Angeles calendar day on lastMessageAt.
+ */
+export type MessageDateToParameter = string;
+
+export type MessageLimitParameter = number;
+
+export type MessageOffsetParameter = number;
+
+export type ListClientMessageThreadsParams = {
+view?: MessageViewParameter;
+search?: MessageSearchParameter;
+/**
+ * Recent is the last 183 days; archive is older. Explicit date bounds override this range.
+ */
+range?: MessageRangeParameter;
+/**
+ * Inclusive America/Los_Angeles calendar day on lastMessageAt (unlike audit-log UTC date boundaries).
+ * @pattern ^\d{4}-\d{2}-\d{2}$
+ */
+dateFrom?: MessageDateFromParameter;
+/**
+ * Inclusive America/Los_Angeles calendar day on lastMessageAt.
+ * @pattern ^\d{4}-\d{2}-\d{2}$
+ */
+dateTo?: MessageDateToParameter;
+/**
+ * @minimum 1
+ * @maximum 1000
+ */
+limit?: MessageLimitParameter;
+/**
+ * @minimum 0
+ */
+offset?: MessageOffsetParameter;
+};
+
+export type ListMessageThreadsParams = {
+clientId?: string;
+view?: MessageViewParameter;
+search?: MessageSearchParameter;
+/**
+ * Recent is the last 183 days; archive is older. Explicit date bounds override this range.
+ */
+range?: MessageRangeParameter;
+/**
+ * Inclusive America/Los_Angeles calendar day on lastMessageAt (unlike audit-log UTC date boundaries).
+ * @pattern ^\d{4}-\d{2}-\d{2}$
+ */
+dateFrom?: MessageDateFromParameter;
+/**
+ * Inclusive America/Los_Angeles calendar day on lastMessageAt.
+ * @pattern ^\d{4}-\d{2}-\d{2}$
+ */
+dateTo?: MessageDateToParameter;
+/**
+ * @minimum 1
+ * @maximum 1000
+ */
+limit?: MessageLimitParameter;
+/**
+ * @minimum 0
+ */
+offset?: MessageOffsetParameter;
+};
+
+export type GetMessageThreadParams = {
+/**
+ * Exclusive timestamp cursor. Use nextCursor.before and beforeId together to preserve tied timestamps and microsecond precision.
+ */
+before?: MessageInstant;
+/**
+ * UUID tie-breaker from nextCursor, required for complete timestamp-and-id pagination.
+ */
+beforeId?: string;
+/**
+ * @minimum 1
+ * @maximum 50
+ */
+limit?: number;
+};
+
+export type MarkMessageThreadRead200 = {
+  success: boolean;
+};
+
+export type GetMessagingUnreadCount200 = {
+  count: number;
+};
+
+export type AddMessageThreadFamilyMembersBody = {
+  /** @minItems 1 */
+  userIds: string[];
+};
 
 export type ListUsersParams = {
 role?: string;

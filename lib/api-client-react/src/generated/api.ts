@@ -20,6 +20,7 @@ import type {
 } from '@tanstack/react-query';
 
 import type {
+  AddMessageThreadFamilyMembersBody,
   AltaFmsPaymentAuditResult,
   AltaFmsPaymentImportInput,
   AltaFmsPaymentImportResult,
@@ -47,6 +48,7 @@ import type {
   CoordinatorReviewDetails,
   CoordinatorReviewInput,
   CoordinatorReviewResult,
+  CreateMessageThreadInput,
   DashboardSummary,
   DuplicatePaymentError,
   ErrorEnvelope,
@@ -61,6 +63,8 @@ import type {
   GetCaseStatusReportParams,
   GetExpiringAuthReport200,
   GetExpiringAuthReportParams,
+  GetMessageThreadParams,
+  GetMessagingUnreadCount200,
   GetMissingDocumentsReport200,
   GetMissingDocumentsReportParams,
   GetPendingAuthReport200,
@@ -87,12 +91,14 @@ import type {
   ListAuditLogParams,
   ListAuthorizations200,
   ListAuthorizationsParams,
+  ListClientMessageThreadsParams,
   ListClients200,
   ListClientsParams,
   ListFamilyRepresentativesParams,
   ListFeesParams,
   ListInvoices200,
   ListInvoicesParams,
+  ListMessageThreadsParams,
   ListPayments200,
   ListPaymentsParams,
   ListReadyForCheckWritingInvoicesParams,
@@ -111,6 +117,12 @@ import type {
   MagicLinkConsumeInput,
   MagicLinkRequestInput,
   MagicLinkResult,
+  MarkMessageThreadRead200,
+  MessageInput,
+  MessageRecipients,
+  MessageThreadDetail,
+  MessageThreadHeader,
+  MessageThreadList,
   MonthlyFeeAuditReport,
   MonthlyFeeRepairInput,
   MonthlyFeeRepairResult,
@@ -139,6 +151,7 @@ import type {
   StaffRole,
   StaffRoleInput,
   StaffRoleUpdate,
+  ThreadMessage,
   UnmatchedPosBatchInput,
   UnmatchedPosBatchProgress,
   UnmatchedPosBatchQueued,
@@ -188,6 +201,655 @@ const withQueryKey = <T extends object, K>(query: T, queryKey: K): T & { queryKe
   }
   return result;
 };
+
+export const getListMessageRecipientsUrl = (id: string,) => {
+
+
+
+
+  return `/api/clients/${id}/message-recipients`
+}
+
+export const listMessageRecipients = async (id: string, options?: Parameters<typeof customFetch>[1]): Promise<MessageRecipients> => {
+
+  return customFetch<MessageRecipients>(getListMessageRecipientsUrl(id),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListMessageRecipientsQueryKey = (id: string,) => {
+    return [
+    `/api/clients/${id}/message-recipients`
+    ] as const;
+    }
+
+
+export const getListMessageRecipientsQueryOptions = <TData = Awaited<ReturnType<typeof listMessageRecipients>>, TError = ErrorType<void>>(id: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listMessageRecipients>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListMessageRecipientsQueryKey(id);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listMessageRecipients>>> = ({ signal }) => listMessageRecipients(id, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: id !== null && id !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listMessageRecipients>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListMessageRecipientsQueryResult = NonNullable<Awaited<ReturnType<typeof listMessageRecipients>>>
+export type ListMessageRecipientsQueryError = ErrorType<void>
+
+
+
+export function useListMessageRecipients<TData = Awaited<ReturnType<typeof listMessageRecipients>>, TError = ErrorType<void>>(
+ id: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listMessageRecipients>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListMessageRecipientsQueryOptions(id,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getListClientMessageThreadsUrl = (id: string,
+    params?: ListClientMessageThreadsParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/clients/${id}/message-threads?${stringifiedParams}` : `/api/clients/${id}/message-threads`
+}
+
+export const listClientMessageThreads = async (id: string,
+    params?: ListClientMessageThreadsParams, options?: Parameters<typeof customFetch>[1]): Promise<MessageThreadList> => {
+
+  return customFetch<MessageThreadList>(getListClientMessageThreadsUrl(id,params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListClientMessageThreadsQueryKey = (id: string,
+    params?: ListClientMessageThreadsParams,) => {
+    return [
+    `/api/clients/${id}/message-threads`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getListClientMessageThreadsQueryOptions = <TData = Awaited<ReturnType<typeof listClientMessageThreads>>, TError = ErrorType<void>>(id: string,
+    params?: ListClientMessageThreadsParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listClientMessageThreads>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListClientMessageThreadsQueryKey(id,params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listClientMessageThreads>>> = ({ signal }) => listClientMessageThreads(id,params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: id !== null && id !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listClientMessageThreads>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListClientMessageThreadsQueryResult = NonNullable<Awaited<ReturnType<typeof listClientMessageThreads>>>
+export type ListClientMessageThreadsQueryError = ErrorType<void>
+
+
+
+export function useListClientMessageThreads<TData = Awaited<ReturnType<typeof listClientMessageThreads>>, TError = ErrorType<void>>(
+ id: string,
+    params?: ListClientMessageThreadsParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listClientMessageThreads>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListClientMessageThreadsQueryOptions(id,params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getCreateMessageThreadUrl = (id: string,) => {
+
+
+
+
+  return `/api/clients/${id}/message-threads`
+}
+
+export const createMessageThread = async (id: string,
+    createMessageThreadInput: CreateMessageThreadInput, options?: Parameters<typeof customFetch>[1]): Promise<MessageThreadDetail> => {
+
+  return customFetch<MessageThreadDetail>(getCreateMessageThreadUrl(id),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(createMessageThreadInput)
+  }
+);}
+
+
+
+
+
+export const getCreateMessageThreadMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createMessageThread>>, TError,{id: string;data: BodyType<CreateMessageThreadInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof createMessageThread>>, TError,{id: string;data: BodyType<CreateMessageThreadInput>}, TContext> => {
+
+const mutationKey = ['createMessageThread'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof createMessageThread>>, {id: string;data: BodyType<CreateMessageThreadInput>}> = (props) => {
+          const {id,data} = props ?? {};
+
+          return  createMessageThread(id,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type CreateMessageThreadMutationResult = NonNullable<Awaited<ReturnType<typeof createMessageThread>>>
+    export type CreateMessageThreadMutationBody = BodyType<CreateMessageThreadInput>
+    export type CreateMessageThreadMutationError = ErrorType<void>
+
+    export const useCreateMessageThread = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createMessageThread>>, TError,{id: string;data: BodyType<CreateMessageThreadInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof createMessageThread>>,
+        TError,
+        {id: string;data: BodyType<CreateMessageThreadInput>},
+        TContext
+      > => {
+      return useMutation(getCreateMessageThreadMutationOptions(options));
+    }
+
+export const getListMessageThreadsUrl = (params?: ListMessageThreadsParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/messages/threads?${stringifiedParams}` : `/api/messages/threads`
+}
+
+export const listMessageThreads = async (params?: ListMessageThreadsParams, options?: Parameters<typeof customFetch>[1]): Promise<MessageThreadList> => {
+
+  return customFetch<MessageThreadList>(getListMessageThreadsUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListMessageThreadsQueryKey = (params?: ListMessageThreadsParams,) => {
+    return [
+    `/api/messages/threads`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getListMessageThreadsQueryOptions = <TData = Awaited<ReturnType<typeof listMessageThreads>>, TError = ErrorType<void>>(params?: ListMessageThreadsParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listMessageThreads>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListMessageThreadsQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listMessageThreads>>> = ({ signal }) => listMessageThreads(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listMessageThreads>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListMessageThreadsQueryResult = NonNullable<Awaited<ReturnType<typeof listMessageThreads>>>
+export type ListMessageThreadsQueryError = ErrorType<void>
+
+
+
+export function useListMessageThreads<TData = Awaited<ReturnType<typeof listMessageThreads>>, TError = ErrorType<void>>(
+ params?: ListMessageThreadsParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listMessageThreads>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListMessageThreadsQueryOptions(params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getGetMessageThreadUrl = (threadId: string,
+    params?: GetMessageThreadParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/messages/threads/${threadId}?${stringifiedParams}` : `/api/messages/threads/${threadId}`
+}
+
+export const getMessageThread = async (threadId: string,
+    params?: GetMessageThreadParams, options?: Parameters<typeof customFetch>[1]): Promise<MessageThreadDetail> => {
+
+  return customFetch<MessageThreadDetail>(getGetMessageThreadUrl(threadId,params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetMessageThreadQueryKey = (threadId: string,
+    params?: GetMessageThreadParams,) => {
+    return [
+    `/api/messages/threads/${threadId}`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getGetMessageThreadQueryOptions = <TData = Awaited<ReturnType<typeof getMessageThread>>, TError = ErrorType<void>>(threadId: string,
+    params?: GetMessageThreadParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getMessageThread>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetMessageThreadQueryKey(threadId,params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getMessageThread>>> = ({ signal }) => getMessageThread(threadId,params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: threadId !== null && threadId !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getMessageThread>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetMessageThreadQueryResult = NonNullable<Awaited<ReturnType<typeof getMessageThread>>>
+export type GetMessageThreadQueryError = ErrorType<void>
+
+
+
+export function useGetMessageThread<TData = Awaited<ReturnType<typeof getMessageThread>>, TError = ErrorType<void>>(
+ threadId: string,
+    params?: GetMessageThreadParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getMessageThread>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetMessageThreadQueryOptions(threadId,params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getSendMessageUrl = (threadId: string,) => {
+
+
+
+
+  return `/api/messages/threads/${threadId}/messages`
+}
+
+export const sendMessage = async (threadId: string,
+    messageInput: MessageInput, options?: Parameters<typeof customFetch>[1]): Promise<ThreadMessage> => {
+
+  return customFetch<ThreadMessage>(getSendMessageUrl(threadId),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(messageInput)
+  }
+);}
+
+
+
+
+
+export const getSendMessageMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof sendMessage>>, TError,{threadId: string;data: BodyType<MessageInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof sendMessage>>, TError,{threadId: string;data: BodyType<MessageInput>}, TContext> => {
+
+const mutationKey = ['sendMessage'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof sendMessage>>, {threadId: string;data: BodyType<MessageInput>}> = (props) => {
+          const {threadId,data} = props ?? {};
+
+          return  sendMessage(threadId,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type SendMessageMutationResult = NonNullable<Awaited<ReturnType<typeof sendMessage>>>
+    export type SendMessageMutationBody = BodyType<MessageInput>
+    export type SendMessageMutationError = ErrorType<void>
+
+    export const useSendMessage = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof sendMessage>>, TError,{threadId: string;data: BodyType<MessageInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof sendMessage>>,
+        TError,
+        {threadId: string;data: BodyType<MessageInput>},
+        TContext
+      > => {
+      return useMutation(getSendMessageMutationOptions(options));
+    }
+
+export const getMarkMessageThreadReadUrl = (threadId: string,) => {
+
+
+
+
+  return `/api/messages/threads/${threadId}/read`
+}
+
+export const markMessageThreadRead = async (threadId: string, options?: Parameters<typeof customFetch>[1]): Promise<MarkMessageThreadRead200> => {
+
+  return customFetch<MarkMessageThreadRead200>(getMarkMessageThreadReadUrl(threadId),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+
+
+export const getMarkMessageThreadReadMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof markMessageThreadRead>>, TError,{threadId: string}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof markMessageThreadRead>>, TError,{threadId: string}, TContext> => {
+
+const mutationKey = ['markMessageThreadRead'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof markMessageThreadRead>>, {threadId: string}> = (props) => {
+          const {threadId} = props ?? {};
+
+          return  markMessageThreadRead(threadId,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type MarkMessageThreadReadMutationResult = NonNullable<Awaited<ReturnType<typeof markMessageThreadRead>>>
+
+    export type MarkMessageThreadReadMutationError = ErrorType<void>
+
+    export const useMarkMessageThreadRead = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof markMessageThreadRead>>, TError,{threadId: string}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof markMessageThreadRead>>,
+        TError,
+        {threadId: string},
+        TContext
+      > => {
+      return useMutation(getMarkMessageThreadReadMutationOptions(options));
+    }
+
+export const getGetMessagingUnreadCountUrl = () => {
+
+
+
+
+  return `/api/messages/unread-count`
+}
+
+export const getMessagingUnreadCount = async ( options?: Parameters<typeof customFetch>[1]): Promise<GetMessagingUnreadCount200> => {
+
+  return customFetch<GetMessagingUnreadCount200>(getGetMessagingUnreadCountUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetMessagingUnreadCountQueryKey = () => {
+    return [
+    `/api/messages/unread-count`
+    ] as const;
+    }
+
+
+export const getGetMessagingUnreadCountQueryOptions = <TData = Awaited<ReturnType<typeof getMessagingUnreadCount>>, TError = ErrorType<void>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getMessagingUnreadCount>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetMessagingUnreadCountQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getMessagingUnreadCount>>> = ({ signal }) => getMessagingUnreadCount({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getMessagingUnreadCount>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetMessagingUnreadCountQueryResult = NonNullable<Awaited<ReturnType<typeof getMessagingUnreadCount>>>
+export type GetMessagingUnreadCountQueryError = ErrorType<void>
+
+
+
+export function useGetMessagingUnreadCount<TData = Awaited<ReturnType<typeof getMessagingUnreadCount>>, TError = ErrorType<void>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getMessagingUnreadCount>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetMessagingUnreadCountQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getAddMessageThreadFamilyMembersUrl = (threadId: string,) => {
+
+
+
+
+  return `/api/messages/threads/${threadId}/family-members`
+}
+
+export const addMessageThreadFamilyMembers = async (threadId: string,
+    addMessageThreadFamilyMembersBody: AddMessageThreadFamilyMembersBody, options?: Parameters<typeof customFetch>[1]): Promise<MessageThreadHeader> => {
+
+  return customFetch<MessageThreadHeader>(getAddMessageThreadFamilyMembersUrl(threadId),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(addMessageThreadFamilyMembersBody)
+  }
+);}
+
+
+
+
+
+export const getAddMessageThreadFamilyMembersMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof addMessageThreadFamilyMembers>>, TError,{threadId: string;data: BodyType<AddMessageThreadFamilyMembersBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof addMessageThreadFamilyMembers>>, TError,{threadId: string;data: BodyType<AddMessageThreadFamilyMembersBody>}, TContext> => {
+
+const mutationKey = ['addMessageThreadFamilyMembers'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof addMessageThreadFamilyMembers>>, {threadId: string;data: BodyType<AddMessageThreadFamilyMembersBody>}> = (props) => {
+          const {threadId,data} = props ?? {};
+
+          return  addMessageThreadFamilyMembers(threadId,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type AddMessageThreadFamilyMembersMutationResult = NonNullable<Awaited<ReturnType<typeof addMessageThreadFamilyMembers>>>
+    export type AddMessageThreadFamilyMembersMutationBody = BodyType<AddMessageThreadFamilyMembersBody>
+    export type AddMessageThreadFamilyMembersMutationError = ErrorType<void>
+
+    export const useAddMessageThreadFamilyMembers = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof addMessageThreadFamilyMembers>>, TError,{threadId: string;data: BodyType<AddMessageThreadFamilyMembersBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof addMessageThreadFamilyMembers>>,
+        TError,
+        {threadId: string;data: BodyType<AddMessageThreadFamilyMembersBody>},
+        TContext
+      > => {
+      return useMutation(getAddMessageThreadFamilyMembersMutationOptions(options));
+    }
 
 export const getRequestUploadUrlUrl = () => {
 

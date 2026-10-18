@@ -281,6 +281,13 @@
       "when": 1792175023770,
       "tag": "0039_stormy_dagger",
       "breakpoints": true
+    },
+    {
+      "idx": 40,
+      "version": "7",
+      "when": 1792283195917,
+      "tag": "0040_freezing_hellfire_club",
+      "breakpoints": true
     }
   ]
 }

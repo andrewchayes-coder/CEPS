@@ -34,3 +34,4 @@
 - [Simplified invoice boundary](simplified-invoice-boundary.md) — coordinators and family submit documents and dates for CEPS entry; coordinator global vendor search is intentional for referrals.
 - [Coordinator dashboard priorities](coordinator-dashboard-priorities.md) — coordinators focus on caseload expiry; family/vendor invoice review includes CEPS entry, unlike staff pending counts.
 - [Help guide visibility](help-guide-visibility.md) — coordinator access to both family guides is intentional assistance, not permission to act on family accounts.
+- [Messaging access policy](messaging-access-policy.md) — shared staff inbox, individual unread state, current coordinator inheritance, and explicit family membership.

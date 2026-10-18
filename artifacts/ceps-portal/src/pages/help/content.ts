@@ -34,6 +34,20 @@ const invoiceStatusSteps: WorkflowStep[] = [
   { title: 'Duplicate', description: 'The invoice has been flagged as a possible duplicate. CEPS needs to check it before approval.' },
 ];
 
+function messagesWorkflow(start: string): Workflow {
+  return {
+    name: 'Messages',
+    summary: 'Keep conversations with CEPS attached to the participant record.',
+    steps: [
+      { title: 'Start a message', description: start },
+      { title: 'Check who can see it', description: 'All CEPS staff see every thread in their shared inbox. The participant’s current service coordinator sees threads that include the coordinator, and selected family portal users see only threads they are on. Check the To: line before replying.' },
+      { title: 'Read and reply', description: 'Open a thread to read its messages and mark it read for your account. Write a reply and select Send, or use Ctrl+Enter or Cmd+Enter. Messages are permanent: they cannot be edited or deleted.' },
+      { title: 'Find older conversations', description: 'Messages starts with threads whose last message is in the last 6 months. Choose Archive (older) for older conversations, or Custom range to select dates. Search and the All / Unread views help you find a thread.' },
+      { title: 'Check for replies', description: 'There are no email notifications yet. Check Messages when you sign in; the unread badge shows new replies.' },
+    ],
+  };
+}
+
 export const roleDocs: RoleDoc[] = [
   {
     role: 'staff',
@@ -51,6 +65,7 @@ export const roleDocs: RoleDoc[] = [
       { as: 'a CEPS staff member', want: 'to view program-wide reports', soThat: 'I can monitor spending, vendor activity, and participant status at a glance' },
     ],
     workflows: [
+      messagesWorkflow('Open a participant record and choose New message in Messages, or open Messages in the left navigation, choose New message, and select the participant. Enter a subject and message, choose the coordinator and/or family portal recipients, then send. Staff can add eligible family members to an existing thread.'),
       {
         name: 'Referrals & participant onboarding',
         summary: 'Turn a new referral from a service coordinator into an active participant.',
@@ -125,6 +140,7 @@ export const roleDocs: RoleDoc[] = [
       { as: 'a service coordinator', want: 'to submit an invoice or receipt with service dates and supporting files', soThat: 'CEPS can enter the billing details and review it for payment' },
     ],
     workflows: [
+      messagesWorkflow('Open a participant on your caseload and choose New message in Messages, or choose New message from Messages in the left navigation and select the participant. Enter a subject and message, optionally include family portal users, and send. CEPS staff and you are included. You can also add eligible family members to a thread you can see.'),
       {
         name: 'Submitting a referral',
         summary: 'Refer a participant into the CEPS program.',
@@ -186,6 +202,7 @@ export const roleDocs: RoleDoc[] = [
       { as: 'a parent or guardian', want: 'to sign in with a link provided by CEPS', soThat: 'I don\u2019t have to remember another password' },
     ],
     workflows: [
+      messagesWorkflow('Open Messages in the left navigation or use Messages with CEPS on your family member’s record. Choose New message, enter a subject and message, and send it to CEPS staff and the coordinator shown. You can also reply to conversations you have been included in.'),
       {
         name: 'Enrolling your family member',
         summary: 'From referral to active services.',
@@ -230,6 +247,7 @@ export const roleDocs: RoleDoc[] = [
       { as: 'a self-representing participant', want: 'to sign in with a link provided by CEPS', soThat: 'access is simple and secure' },
     ],
     workflows: [
+      messagesWorkflow('Open Messages in the left navigation or use Messages with CEPS on your participant record. Choose New message, enter a subject and message, and send it to CEPS staff and the coordinator shown. You can also reply to conversations you have been included in.'),
       {
         name: 'Joining the program',
         summary: 'Enroll and get access to your portal.',

@@ -27,6 +27,7 @@ import { getInvoiceDisplayMonth } from '@/lib/invoice-utils';
 import { earliestPaymentServiceMonth, formatPaymentServiceMonths } from '@/lib/payment-utils';
 import { MonthlyAmount, MonthlyAmountLine } from '@/components/authorization-monthly-amount';
 import { ParticipantNotes } from '@/components/participant-notes';
+import { ParticipantMessagesCard } from '@/components/messaging/participant-messages-card';
 import { PaymentRemittedState } from '@/components/payment-remitted-state';
 
 type PaymentRow = { payment: Payment; line: PaymentAllocation | null };
@@ -431,6 +432,7 @@ export default function ClientDetailPage() {
                   </CardContent>
                 </Card>
               )}
+            <ParticipantMessagesCard key={`msg-${client.id}`} clientId={client.id} clientName={`${client.firstName} ${client.lastName}`} assignedCoordinatorId={client.assignedCoordinatorId} />
             <ParticipantNotes key={client.id} clientId={client.id} />
             </div>
 

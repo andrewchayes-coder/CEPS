@@ -47,6 +47,7 @@ import AdminImportPage from '@/pages/admin/import';
 import MonthlyFeeCleanupPage from '@/pages/admin/monthly-fees';
 import AuditLogPage from '@/pages/audit-log';
 import HelpPage from '@/pages/help';
+import MessagesPage from '@/pages/messages';
 import AccountPage from '@/pages/account';
 
 const queryClient = new QueryClient({
@@ -73,6 +74,8 @@ function ProtectedRoutes() {
     <AppShell>
       <Switch>
         <Route path="/" component={DashboardPage} />
+        <Route path="/messages" component={MessagesPage} />
+        <Route path="/messages/:threadId" component={MessagesPage} />
         <Route path="/referrals" component={ReferralsPage} />
         <Route path="/referrals/new" component={ReferralNewPage} />
         <Route path="/referrals/:id" component={ReferralDetailPage} />

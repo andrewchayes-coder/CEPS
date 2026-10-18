@@ -20,10 +20,13 @@ import {
   Upload,
   UserCog,
   ClipboardList,
-  Wrench
+  Wrench,
+  Inbox
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
+import { useUnreadCount } from '@/hooks/use-messaging';
+import { unreadBadgeLabel } from '@/lib/messaging';
 
 interface NavItem {
   title: string;
@@ -35,6 +38,7 @@ interface NavItem {
 
 const navItems: NavItem[] = [
   { title: 'Dashboard', href: '/', icon: LayoutDashboard, roles: ['staff', 'service_coordinator', 'vendor', 'parent_guardian', 'self'] },
+  { title: 'Messages', href: '/messages', icon: Inbox, roles: ['staff', 'service_coordinator', 'parent_guardian', 'self'] },
   { title: 'Referrals', href: '/referrals', icon: FileText, roles: ['staff', 'service_coordinator'] },
   { title: 'Participants', href: '/clients', icon: Users, roles: ['staff', 'service_coordinator'] },
   { title: 'Authorizations', href: '/authorizations', icon: FileCheck, roles: ['staff', 'service_coordinator', 'vendor'] },
@@ -56,6 +60,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const { user } = useAuth();
   const [location, setLocation] = useLocation();
   const logout = useLogout();
+  const unread = useUnreadCount();
+  const badge = unreadBadgeLabel(unread.data?.count);
+  const messagesAllowed = !!user && ['staff', 'service_coordinator', 'parent_guardian', 'self'].includes(user.role);
 
   const handleLogout = () => {
     logout.mutate(undefined, {
@@ -100,6 +107,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               <Link
                 key={item.href}
                 href={item.href}
+                data-testid={item.href === '/messages' ? 'nav-messages' : undefined}
                 className={cn(
                   "flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium transition-colors",
                   isActive
@@ -109,6 +117,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               >
                 <item.icon className="w-4 h-4 shrink-0" />
                 {item.title}
+                {item.href === '/messages' && badge && (
+                  <span className="ml-auto rounded-full bg-primary px-1.5 py-0.5 text-[10px] font-semibold leading-none text-primary-foreground ring-1 ring-primary-foreground/40" data-testid="messaging-unread-badge" aria-label={`${badge} unread messages`}>{badge}</span>
+                )}
               </Link>
             );
           })}
@@ -145,9 +156,19 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         {/* Mobile Header */}
         <header className="h-16 border-b bg-card flex items-center justify-between px-4 md:hidden shrink-0">
           <BrandLogo className="h-7" />
-          <Button variant="ghost" size="sm" onClick={handleLogout}>
-            <LogOut className="w-4 h-4" />
-          </Button>
+          <div className="flex items-center gap-1">
+            {messagesAllowed && (
+              <Button asChild variant="ghost" size="sm" className="relative">
+                <Link href="/messages" aria-label="Messages" data-testid="nav-messages-mobile">
+                  <Inbox className="w-4 h-4" />
+                  {badge && <span className="absolute -right-1 -top-1 rounded-full bg-primary px-1.5 py-0.5 text-[10px] leading-none text-primary-foreground">{badge}</span>}
+                </Link>
+              </Button>
+            )}
+            <Button variant="ghost" size="sm" onClick={handleLogout}>
+              <LogOut className="w-4 h-4" />
+            </Button>
+          </div>
         </header>
 
         <div className="flex-1 overflow-y-auto p-4 md:p-8">

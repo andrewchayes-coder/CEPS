@@ -19,17 +19,9 @@ import {
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
 import { StickyNote } from 'lucide-react';
+import { formatPacific } from '@/lib/datetime';
 
 const MAX = 5000;
-
-export function formatPacific(ts: string): string {
-  const d = new Date(ts);
-  const date = new Intl.DateTimeFormat('en-US', {
-    timeZone: 'America/Los_Angeles', month: 'short', day: 'numeric', year: 'numeric',
-    hour: 'numeric', minute: '2-digit', timeZoneName: 'short',
-  }).format(d);
-  return date;
-}
 
 function errMessage(e: unknown): string {
   const m = (e as { data?: { error?: string }; message?: string } | null);

@@ -23,3 +23,9 @@ per conversation.
 participant-profile, reply, read-count and assignment features. Staff may read
 deleted-participant history; everyone else loses visibility. No new thread or
 reply may be posted on a deleted participant.
+
+The first messaging release is in-app only, with no email notifications yet.
+Help guides must tell users to check Messages when signing in and use the
+unread badge, not promise automatic email.
+
+**Why:** The user explicitly scoped the messaging screens and help copy this way.

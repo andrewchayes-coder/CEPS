@@ -40,10 +40,10 @@ export function DateRangeFilter({
   useEffect(() => {
     if (!startDate && !endDate) {
       setPreset('');
-    } else if (!preset) {
-      setPreset('custom');
+    } else {
+      setPreset((current) => current || 'custom');
     }
-  }, [startDate, endDate, preset]);
+  }, [startDate, endDate]);
 
   const today = startOfToday();
 

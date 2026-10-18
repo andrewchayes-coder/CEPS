@@ -83,3 +83,16 @@ test('no role guide promises automatic email notifications', () => {
     assert.doesNotMatch(render(role), /(?:receive an email|email link|emailed to you|link sent to my email)/i);
   }
 });
+
+test('messaging help renders for supported roles only and states the visibility, archive and permanence rules', () => {
+  for (const role of ['staff', 'service_coordinator', 'parent_guardian', 'self']) {
+    const html = render(role);
+    for (const text of [
+      '>Messages</div>', 'All CEPS staff see every thread', 'selected family portal users',
+      'Archive (older)', 'Custom range', 'cannot be edited or deleted',
+      'There are no email notifications yet.',
+      'Check Messages when you sign in; the unread badge shows new replies.',
+    ]) assert.ok(html.includes(text), `Missing messaging help for ${role}: ${text}`);
+  }
+  assert.ok(!roleDocs.find((doc) => doc.role === 'vendor')!.workflows.some((workflow) => workflow.name === 'Messages'));
+});

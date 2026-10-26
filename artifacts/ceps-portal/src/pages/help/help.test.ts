@@ -108,4 +108,8 @@ test('messaging help renders for supported roles only and states the visibility,
     ]) assert.ok(html.includes(text), `Missing messaging help for ${role}: ${text}`);
   }
   assert.ok(!roleDocs.find((doc) => doc.role === 'vendor')!.workflows.some((workflow) => workflow.name === 'Messages'));
+  assert.match(render('staff'), /only admins can reassign a thread to another staff member/);
+  for (const role of ['service_coordinator', 'parent_guardian', 'self']) {
+    assert.doesNotMatch(render(role), /Claim a conversation/);
+  }
 });

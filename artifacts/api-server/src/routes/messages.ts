@@ -15,7 +15,7 @@ import {
   SetMessageThreadStatusParams, SetMessageThreadStatusBody, SetMessageThreadStatusResponse,
   AddMessageThreadFamilyMembersParams, AddMessageThreadFamilyMembersBody, AddMessageThreadFamilyMembersResponse,
 } from "@workspace/api-zod";
-import { requireAuth, requireRole, audit } from "../lib/auth";
+import { requireAuth, requireRole, audit, getUserPermissions, hasUserPermissionInTransaction } from "../lib/auth";
 import { MessageError, messageActor, messageClient, messageScope, messageThread, type MessageDatabase } from "../lib/messageAccess";
 import { threadFilters, threadHeaders, threadCount, messageRecipients, messagePage, type MessageFilters } from "../lib/messageQueries";
 import { addFamilyMembers, appendMessage, markMessageRead, validateFamilyRecipients } from "../lib/messageMutations";
@@ -156,9 +156,11 @@ router.get("/messages/unread-count", async (req, res): Promise<void> => {
   res.json(GetMessagingUnreadCountResponse.parse(await messagingCounts(db, req.user!)));
 });
 
-router.get("/messages/assignable-staff", requireRole("staff"), async (_req, res): Promise<void> => {
+router.get("/messages/assignable-staff", requireRole("staff"), async (req, res): Promise<void> => {
+  const canAssignOthers = (await getUserPermissions(req.user!.id, db, req)).includes("manage_users");
   const staff = await db.select({ userId: usersTable.id, name: usersTable.name }).from(usersTable)
-    .where(and(eq(usersTable.role, "staff"), eq(usersTable.active, true))).orderBy(asc(usersTable.name), asc(usersTable.id));
+    .where(and(eq(usersTable.role, "staff"), eq(usersTable.active, true),
+      canAssignOthers ? undefined : eq(usersTable.id, req.user!.id))).orderBy(asc(usersTable.name), asc(usersTable.id));
   res.json(ListAssignableMessageStaffResponse.parse(staff));
 });
 
@@ -192,6 +194,15 @@ router.patch("/messages/threads/:threadId/assignee", requireRole("staff"), async
     const actor = await messageActor(database, req.user!.id);
     if (actor.role !== "staff") throw new MessageError(403, "Staff only");
     const { thread } = await messageThread(database, threadId, actor, true);
+    const canAssignOthers = await hasUserPermissionInTransaction(tx, actor.id, "manage_users");
+    if (!canAssignOthers) {
+      if (thread.assigneeUserId && thread.assigneeUserId !== actor.id) {
+        throw new MessageError(403, "Only an admin can reassign a message that someone else has claimed");
+      }
+      if (assigneeUserId !== actor.id && !(assigneeUserId === null && thread.assigneeUserId === actor.id)) {
+        throw new MessageError(403, "Only an admin can assign a message to someone else");
+      }
+    }
     let nextName = "Unassigned";
     if (assigneeUserId !== null) {
       const [assignee] = await database.select().from(usersTable).where(and(

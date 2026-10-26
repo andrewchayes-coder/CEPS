@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import React, { useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import {
   useListAssignableMessageStaff, useAssignMessageThread, getGetMessageThreadQueryKey,
@@ -10,10 +10,14 @@ import { Button } from '@/components/ui/button';
 
 const NONE = '';
 
-export function ThreadAssignment({ thread, qk, currentUserId }: { thread: MessageThreadHeader; qk: readonly unknown[]; currentUserId: string }) {
+export function ThreadAssignment({ thread, qk, currentUserId, canAssignOthers }: {
+  thread: MessageThreadHeader; qk: readonly unknown[]; currentUserId: string; canAssignOthers: boolean;
+}) {
   const qc = useQueryClient();
   const [error, setError] = useState<string | null>(null);
-  const staff = useListAssignableMessageStaff({ query: { queryKey: ['/api/messages/assignable-staff', currentUserId] } });
+  const staff = useListAssignableMessageStaff({ query: {
+    queryKey: ['/api/messages/assignable-staff', currentUserId, canAssignOthers], enabled: canAssignOthers,
+  } });
   const assign = useAssignMessageThread();
   const people = staff.data ?? [];
   const current = thread.assignee?.userId ?? NONE;
@@ -37,6 +41,7 @@ export function ThreadAssignment({ thread, qk, currentUserId }: { thread: Messag
   return (
     <div className="space-y-1" data-testid="thread-assignment">
       <div className="flex flex-wrap items-center gap-2">
+        {canAssignOthers ? <>
         <label htmlFor="select-thread-assignee" className="text-sm text-muted-foreground">Assigned to</label>
         <select id="select-thread-assignee" data-testid="select-thread-assignee" value={current} disabled={pending || staff.isLoading || staff.isError}
           onChange={(e) => run(e.target.value === NONE ? null : e.target.value)}
@@ -48,13 +53,21 @@ export function ThreadAssignment({ thread, qk, currentUserId }: { thread: Messag
         {current !== currentUserId && (
           <Button size="sm" variant="outline" disabled={pending} onClick={() => run(currentUserId)} data-testid="button-assign-to-me">Assign to me</Button>
         )}
+        </> : current === NONE ? (
+          <Button size="sm" variant="outline" disabled={pending} onClick={() => run(currentUserId)} data-testid="button-claim-thread">Claim</Button>
+        ) : current === currentUserId ? (
+          <>
+            <span className="text-sm">Assigned to {thread.assignee!.name}</span>
+            <Button size="sm" variant="outline" disabled={pending} onClick={() => run(null)} data-testid="button-release-thread">Release</Button>
+          </>
+        ) : <span className="text-sm" data-testid="text-thread-owner">Assigned to {thread.assignee!.name}</span>}
       </div>
       <p className="text-xs text-muted-foreground" data-testid="text-thread-assignment">
         {thread.assignee
           ? thread.assignedBy ? `Assigned by ${thread.assignedBy.name}${thread.assignedAt ? `, ${formatPacific(thread.assignedAt)}` : ''}` : `Assigned to ${thread.assignee.name}`
           : 'Unassigned'}
       </p>
-      {staff.isError && <p role="alert" className="text-xs text-destructive">Staff could not be loaded. <Button variant="link" size="sm" onClick={() => void staff.refetch()}>Retry</Button></p>}
+      {canAssignOthers && staff.isError && <p role="alert" className="text-xs text-destructive">Staff could not be loaded. <Button variant="link" size="sm" onClick={() => void staff.refetch()}>Retry</Button></p>}
       {error && <p role="alert" className="text-xs text-destructive" data-testid="error-assignment">{error}</p>}
     </div>
   );

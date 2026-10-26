@@ -929,6 +929,9 @@ export const getAssignMessageThreadUrl = (threadId: string,) => {
   return `/api/messages/threads/${threadId}/assignee`
 }
 
+/**
+ * Staff with manage_users can assign any active staff member or unassign. Other staff can only claim unassigned threads, retain their own claim, or release their own claim.
+ */
 export const assignMessageThread = async (threadId: string,
     assignMessageThreadBody: AssignMessageThreadBody, options?: Parameters<typeof customFetch>[1]): Promise<MessageThreadHeader> => {
 

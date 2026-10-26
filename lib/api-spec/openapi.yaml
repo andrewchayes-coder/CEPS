@@ -197,7 +197,7 @@ paths:
       operationId: listAssignableMessageStaff
       responses:
         "200":
-          description: Active staff, ordered by name.
+          description: Admins (staff with manage_users) receive all active staff ordered by name; other staff receive only themselves.
           content:
             application/json:
               schema:
@@ -232,6 +232,7 @@ paths:
     patch:
       tags: [messages]
       operationId: assignMessageThread
+      description: Staff with manage_users can assign any active staff member or unassign. Other staff can only claim unassigned threads, retain their own claim, or release their own claim.
       parameters:
         - name: threadId
           in: path
@@ -253,7 +254,7 @@ paths:
             application/json:
               schema: { $ref: '#/components/schemas/MessageThreadHeader' }
         "400": { description: Assignee must be an active staff user. }
-        "403": { description: Staff only. }
+        "403": { description: Staff only; only admins can assign others or change another person's claim. }
         "404": { description: Thread unavailable. }
   /messages/threads/{threadId}/family-members:
     post:

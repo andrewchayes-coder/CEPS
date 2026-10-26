@@ -7,6 +7,7 @@ type Actor = { id: string; name: string; token: string };
 type Fixture = {
   clientId: string; clientName: string; archiveId: string; archiveSubject: string; archiveDay: string; historyId: string; recentId: string;
   customRangeId: string; customRangeSubject: string; customOldDay: string; customYesterdayDay: string;
+  adminRoleId: string;
   staff: Actor; staffB: Actor; coordinator: Actor; family: Actor; self: Actor; vendor: Actor;
 };
 const root = fileURLToPath(new URL('../../../', import.meta.url));
@@ -26,15 +27,18 @@ test.beforeAll(() => {
   const output = database(`
     import { randomBytes } from 'node:crypto';
     import { db, pool, usersTable, clientsTable, sessionsTable, familyRepresentativesTable,
-      messageThreadsTable, messagesTable, messageThreadFamilyMembersTable } from './src/index.ts';
+      messageThreadsTable, messagesTable, messageThreadFamilyMembersTable, staffRolesTable, staffRolePermissionsTable } from './src/index.ts';
     import { inArray } from 'drizzle-orm';
     (async () => {
       const nonce = 'msg-ui-' + randomBytes(6).toString('hex'), actors = {};
       await db.transaction(async tx => {
+        const [adminRole] = await tx.insert(staffRolesTable).values({name:nonce+' dispatcher'}).returning();
+        await tx.insert(staffRolePermissionsTable).values({roleId:adminRole.id,permission:'manage_users'});
         for (const [key, role] of Object.entries({staff:'staff', staffB:'staff', coordinator:'service_coordinator',
           family:'parent_guardian', self:'self', vendor:'vendor'})) {
           const name = nonce + ' ' + key;
-          const [user] = await tx.insert(usersTable).values({name, email:name.replaceAll(' ','-')+'@example.test', role}).returning();
+          const [user] = await tx.insert(usersTable).values({name, email:name.replaceAll(' ','-')+'@example.test', role,
+            staffRoleId:key==='staff'?adminRole.id:null}).returning();
           const token = randomBytes(32).toString('hex');
           await tx.insert(sessionsTable).values({userId:user.id, token, expiresAt:new Date(Date.now()+3600000)});
           actors[key] = {id:user.id, name, token};
@@ -83,7 +87,7 @@ test.beforeAll(() => {
         const archiveDay = new Intl.DateTimeFormat('en-CA',{timeZone:'America/Los_Angeles',year:'numeric',month:'2-digit',day:'2-digit'}).format(old);
         console.log('MESSAGING_FIXTURE='+JSON.stringify({clientId:client.id,clientName:client.firstName+' '+client.lastName,
           archiveId:thread.id,archiveSubject,archiveDay,historyId:history.id,recentId:recent.id,
-          customRangeId:customRange.id,customRangeSubject,customOldDay,customYesterdayDay,...actors}));
+          customRangeId:customRange.id,customRangeSubject,customOldDay,customYesterdayDay,adminRoleId:adminRole.id,...actors}));
       });
       await pool.end();
     })().catch(e=>{console.error(e);process.exit(1)});
@@ -97,7 +101,7 @@ test.afterAll(() => {
   const ids = ['staff', 'staffB', 'coordinator', 'family', 'self', 'vendor'].map((key) => fixture[key as keyof Fixture] as Actor).map((a) => a.id);
   database(`
     import { db,pool,usersTable,clientsTable,sessionsTable,familyRepresentativesTable,auditLogTable,
-      messageThreadsTable,messagesTable,messageThreadFamilyMembersTable,messageThreadReadsTable } from './src/index.ts';
+      messageThreadsTable,messagesTable,messageThreadFamilyMembersTable,messageThreadReadsTable,staffRolesTable,staffRolePermissionsTable } from './src/index.ts';
     import { eq,inArray } from 'drizzle-orm';
     (async()=>{
       await db.transaction(async tx=>{
@@ -115,6 +119,8 @@ test.afterAll(() => {
         await tx.delete(sessionsTable).where(inArray(sessionsTable.userId,userIds));
         await tx.delete(clientsTable).where(eq(clientsTable.id,clientId));
         await tx.delete(usersTable).where(inArray(usersTable.id,userIds));
+        await tx.delete(staffRolePermissionsTable).where(eq(staffRolePermissionsTable.roleId,'${fixture.adminRoleId}'));
+        await tx.delete(staffRolesTable).where(eq(staffRolesTable.id,'${fixture.adminRoleId}'));
       });await pool.end();
     })().catch(e=>{console.error(e);process.exit(1)});
   `);

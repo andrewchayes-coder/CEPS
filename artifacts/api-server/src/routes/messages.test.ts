@@ -4,6 +4,7 @@ import { and, eq, inArray, sql } from "drizzle-orm";
 import {
   db, usersTable, sessionsTable, clientsTable, familyRepresentativesTable, auditLogTable,
   messageThreadsTable, messagesTable, messageThreadFamilyMembersTable, messageThreadReadsTable,
+  staffRolesTable, staffRolePermissionsTable,
 } from "@workspace/db";
 import app from "../app";
 import { newToken } from "../lib/auth";
@@ -12,6 +13,7 @@ const nonce = `messaging-${Date.now().toString(36)}`;
 const ids: Record<string, string> = {}, cookies: Record<string, string> = {};
 const clients: string[] = [];
 let sequence = 0;
+let adminRoleId: string;
 const get = (role: string, path: string, query = {}) => request(app).get(`/api${path}`).set("Cookie", cookies[role]).query(query);
 const post = (role: string, path: string, body = {}) => request(app).post(`/api${path}`).set("Cookie", cookies[role]).send(body);
 const statusPatch = (role: string, id: string, status: string) => request(app).patch(`/api/messages/threads/${id}/status`)
@@ -25,13 +27,17 @@ async function create(role = "staff", body = {}, clientId = clients[0]) {
   return response.body;
 }
 beforeAll(async () => {
+  const [adminRole] = await db.insert(staffRolesTable).values({ name: `${nonce} dispatcher` }).returning();
+  adminRoleId = adminRole.id;
+  await db.insert(staffRolePermissionsTable).values({ roleId: adminRoleId, permission: "manage_users" });
   for (const [key, role] of Object.entries({
-    staff: "staff", staffB: "staff", coordinator: "service_coordinator", coordinatorB: "service_coordinator",
+    staff: "staff", staffB: "staff", staffC: "staff", coordinator: "service_coordinator", coordinatorB: "service_coordinator",
     parent: "parent_guardian", parentB: "parent_guardian", self: "self", outsider: "parent_guardian",
     inactive: "parent_guardian", unlinked: "parent_guardian", vendor: "vendor",
   })) {
     const [user] = await db.insert(usersTable).values({
       name: `${nonce} ${key}`, email: `${nonce}-${key}@test.local`, role, active: key !== "inactive",
+      staffRoleId: key === "staff" ? adminRoleId : null,
     }).returning();
     ids[key] = user.id;
     const token = newToken();
@@ -72,10 +78,14 @@ afterAll(async () => {
     await db.delete(sessionsTable).where(inArray(sessionsTable.userId, Object.values(ids)));
     await db.delete(usersTable).where(inArray(usersTable.id, Object.values(ids)));
   }
+  if (adminRoleId) {
+    await db.delete(staffRolePermissionsTable).where(eq(staffRolePermissionsTable.roleId, adminRoleId));
+    await db.delete(staffRolesTable).where(eq(staffRolesTable.id, adminRoleId));
+  }
 });
 
 describe("messaging API", () => {
-  it("only allows staff to assign or list active assignable staff, without a permission key", async () => {
+  it("only allows staff to assign, and scopes assignable staff by manage_users", async () => {
     const { thread } = await create();
     for (const role of ["coordinator", "parent", "self", "vendor"]) {
       const response = await request(app).patch(`/api/messages/threads/${thread.id}/assignee`)
@@ -96,6 +106,61 @@ describe("messaging API", () => {
     });
     expect(response.body.assignedAt).toMatch(/\.\d{6}Z$/);
     expect((await get("staff", `/messages/threads/${thread.id}`)).status).toBe(200);
+    for (const role of ["staffB", "staffC"]) {
+      expect((await get(role, "/messages/assignable-staff")).body).toEqual([{ userId: ids[role], name: `${nonce} ${role}` }]);
+    }
+  });
+
+  it("lets non-admins claim and retain their own thread, release only their own claim, and never assign others", async () => {
+    const { thread } = await create();
+    const assign = (role: string, target: string | null) => request(app).patch(`/api/messages/threads/${thread.id}/assignee`)
+      .set("Cookie", cookies[role]).send({ assigneeUserId: target });
+    const forbidden = "Only an admin can assign a message to someone else";
+    expect((await assign("staffB", ids.staffC)).body).toEqual({ error: forbidden });
+    expect((await assign("staffB", ids.staffC)).status).toBe(403);
+    expect((await assign("staffB", null)).status).toBe(403);
+    const claim = await assign("staffB", ids.staffB);
+    expect(claim.status).toBe(200);
+    expect(claim.body).toMatchObject({ assignee: { userId: ids.staffB }, assignedBy: { userId: ids.staffB } });
+    expect((await assign("staffB", ids.staffB)).status).toBe(200);
+    expect((await assign("staffB", ids.staffC)).status).toBe(403);
+    const release = await assign("staffB", null);
+    expect(release.status).toBe(200);
+    expect(release.body).toMatchObject({ assignee: null, assignedAt: null, assignedBy: null });
+    expect((await assign("staff", ids.staffC)).status).toBe(200);
+    const before = await db.select().from(auditLogTable).where(and(eq(auditLogTable.entityId, clients[0]), eq(auditLogTable.action, "assign_message_thread")));
+    for (const target of [ids.staffB, ids.staffC, null]) {
+      const denied = await assign("staffB", target);
+      expect(denied.status).toBe(403);
+      expect(denied.body).toEqual({ error: "Only an admin can reassign a message that someone else has claimed" });
+    }
+    const after = await db.select().from(auditLogTable).where(and(eq(auditLogTable.entityId, clients[0]), eq(auditLogTable.action, "assign_message_thread")));
+    expect(after.length).toBe(before.length);
+    expect((await get("staffB", `/messages/threads/${thread.id}`)).body.thread.assignee.userId).toBe(ids.staffC);
+    expect((await assign("staff", ids.staffB)).status).toBe(200);
+    expect((await assign("staff", null)).status).toBe(200);
+  });
+
+  it("checks current role permissions, not a role name or an auth response flag", async () => {
+    const { thread } = await create();
+    await db.delete(staffRolePermissionsTable).where(eq(staffRolePermissionsTable.roleId, adminRoleId));
+    try {
+      expect((await get("staff", "/messages/assignable-staff")).body).toEqual([{ userId: ids.staff, name: `${nonce} staff` }]);
+      const denied = await request(app).patch(`/api/messages/threads/${thread.id}/assignee`)
+        .set("Cookie", cookies.staff).send({ assigneeUserId: ids.staffB });
+      expect(denied.status).toBe(403);
+    } finally {
+      await db.insert(staffRolePermissionsTable).values({ roleId: adminRoleId, permission: "manage_users" });
+    }
+  });
+
+  it("serializes competing claims so only one non-admin becomes the owner", async () => {
+    const { thread } = await create();
+    const results = await Promise.all(["staffB", "staffC"].map(role => request(app)
+      .patch(`/api/messages/threads/${thread.id}/assignee`).set("Cookie", cookies[role]).send({ assigneeUserId: ids[role] })));
+    expect(results.map(r => r.status).sort()).toEqual([200, 403]);
+    const winner = results.find(r => r.status === 200)!;
+    expect((await get("staff", `/messages/threads/${thread.id}`)).body.thread.assignee.userId).toBe(winner.body.assignee.userId);
   });
 
   it("rejects nonstaff, inactive and unknown assignees atomically", async () => {

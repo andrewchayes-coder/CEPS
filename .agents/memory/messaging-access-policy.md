@@ -31,13 +31,18 @@ unread badge, not promise automatic email.
 **Why:** The user explicitly scoped the messaging screens and help copy this way.
 
 Thread assignment routes work; it never makes a staff conversation private.
-Any active staff member may assign or unassign a thread without a new permission.
+Staff with the existing `manage_users` permission may assign any active staff
+member or unassign. Other staff may claim an unassigned thread, keep their own
+claim, or release only their own claim; they cannot take or release another
+person's claim. Admin status follows permission grants, not the role name.
 Staff replies must leave ownership unchanged. Assignment notices are in-app:
 new assignments remain pending until the assignee opens the thread after
 assignment, with a seven-day window for the new-assignment notice.
 
-**Why:** CEPS wants every staff member to see every message while giving each
-thread an owner and keeping each person's unread state independent.
+**Why:** CEPS's 2026-10-23 decision uses claiming to prevent multiple staff
+answering the same message. Only admins may reassign work. Reuse `manage_users`
+to avoid adding a permission key and changing production permission constraints.
+All staff still see all threads, with independent unread state.
 
 Open/Resolved is a workflow state, not an access boundary or a prohibition on
 replies. Staff and the participant's current included coordinator may change it.

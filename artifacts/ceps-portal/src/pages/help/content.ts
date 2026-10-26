@@ -35,13 +35,14 @@ export const invoiceStatusSteps: (WorkflowStep & { status: InvoiceStatus })[] = 
   { status: 'duplicate', title: 'Duplicate', description: 'The invoice has been flagged as a possible duplicate. CEPS needs to check it before approval.' },
 ];
 
-function messagesWorkflow(start: string): Workflow {
+function messagesWorkflow(start: string, staff = false): Workflow {
   return {
     name: 'Messages',
     summary: 'Keep conversations with CEPS attached to the participant record.',
     steps: [
       { title: 'Start a message', description: start },
       { title: 'Check who can see it', description: 'All CEPS staff see every thread in their shared inbox. The participant’s current service coordinator sees threads that include the coordinator, and selected family portal users see only threads they are on. Check the To: line before replying.' },
+      ...(staff ? [{ title: 'Claim a conversation', description: 'Select Claim to take an unassigned thread and Release to give up your own claim; only admins can reassign a thread to another staff member.' }] : []),
       { title: 'Read and reply', description: 'Open a thread to read its messages and mark it read for your account. Write a reply and select Send, or use Ctrl+Enter or Cmd+Enter. Messages are permanent: they cannot be edited or deleted.' },
       { title: 'Find older conversations', description: 'Messages starts with threads whose last message is in the last 6 months. Choose Archive (older) for older conversations, or Custom range to select dates. Search and the All / Unread views help you find a thread.' },
       { title: 'Open and resolved threads', description: 'Use the Open / Resolved / All filter to find conversations. Staff and the assigned coordinator can mark a thread resolved or reopen it. A new reply from someone other than the person who resolved it reopens the thread automatically.' },
@@ -67,7 +68,7 @@ export const roleDocs: RoleDoc[] = [
       { as: 'a CEPS staff member', want: 'to view program-wide reports', soThat: 'I can monitor spending, vendor activity, and participant status at a glance' },
     ],
     workflows: [
-      messagesWorkflow('Open a participant record and choose New message in Messages, or open Messages in the left navigation, choose New message, and select the participant. Enter a subject and message, choose the coordinator and/or family portal recipients, then send. Staff can add eligible family members to an existing thread.'),
+      messagesWorkflow('Open a participant record and choose New message in Messages, or open Messages in the left navigation, choose New message, and select the participant. Enter a subject and message, choose the coordinator and/or family portal recipients, then send. Staff can add eligible family members to an existing thread.', true),
       {
         name: 'Referrals & participant onboarding',
         summary: 'Turn a new referral from a service coordinator into an active participant.',

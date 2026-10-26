@@ -167,7 +167,7 @@ export function MessageThreadView({ threadId, untilDate }: { threadId: string; u
           <p className="text-sm text-muted-foreground" data-testid="text-thread-assignment">{t.assignee ? `Assigned to ${t.assignee.name}` : 'Unassigned'}</p>
         )}
         <ThreadStatus thread={t} qk={qk} canChange={isStaffLike} />
-        {user?.role === 'staff' && <ThreadAssignment thread={t} qk={qk} currentUserId={user.id} />}
+        {user?.role === 'staff' && <ThreadAssignment thread={t} qk={qk} currentUserId={user.id} canAssignOthers={(user.permissions ?? []).includes('manage_users')} />}
         <div className="flex flex-wrap items-center justify-between gap-2">
           <p className="text-sm text-muted-foreground" data-testid="text-thread-to">To: {toList.join(', ')}</p>
           {isStaffLike && <AddFamilyDialog thread={t} />}

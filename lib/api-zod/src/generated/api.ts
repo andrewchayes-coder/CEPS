@@ -423,6 +423,9 @@ export const SetMessageThreadStatusResponse = zod.object({
 })
 
 
+/**
+ * Staff with manage_users can assign any active staff member or unassign. Other staff can only claim unassigned threads, retain their own claim, or release their own claim.
+ */
 export const AssignMessageThreadParams = zod.object({
   "threadId": zod.uuid()
 })

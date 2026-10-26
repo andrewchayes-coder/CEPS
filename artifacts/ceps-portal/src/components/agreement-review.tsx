@@ -74,7 +74,7 @@ export function AgreementReview({ data }: { data: AgreementReviewData }) {
           <h3 className="font-semibold text-base border-b pb-2 mb-3">Vendor & Activity Information</h3>
           <div className="grid sm:grid-cols-3 gap-4">
             <div><p className="text-muted-foreground text-xs uppercase tracking-wider">Vendor/Program Name</p><p className="font-medium">{shown(data.vendorName)}</p></div>
-            <div className="sm:col-span-2"><p className="text-muted-foreground text-xs uppercase tracking-wider">Activity Description</p><p className="font-medium">{shown(data.activityDescription)}</p></div>
+            <div className="sm:col-span-2"><p className="text-muted-foreground text-xs uppercase tracking-wider">Comments</p><p className="font-medium">{shown(data.activityDescription)}</p></div>
             <div><p className="text-muted-foreground text-xs uppercase tracking-wider">Contact Name</p><p className="font-medium">{shown(data.activityContactName)}</p></div>
             <div><p className="text-muted-foreground text-xs uppercase tracking-wider">Contact Phone</p><p className="font-medium">{shown(data.activityContactPhone)}</p></div>
             <div><p className="text-muted-foreground text-xs uppercase tracking-wider">Mailing Address</p><p className="font-medium">{shown(data.activityMailingAddress)}</p></div>

@@ -778,6 +778,23 @@ describe("POST /import/authorizations/commit", () => {
     expect(updated.altaAuthReceivedAt).toBeInstanceOf(Date);
   });
 
+  it.each(["Comments", "Activity Description"])("imports authorization comments from the %s CSV heading", async (header) => {
+    const authNumber = `${nonce}-COMMENT-${header === "Comments" ? "NEW" : "LEGACY"}`;
+    const csv = [
+      `Client UCI *,Auth Number *,Service Code *,Service Period Start *,Service Period End *,Max Period Amount *,${header}`,
+      `${uciA},${authNumber},459,2026-01-01,2026-06-30,3000.00,Unchanged full comment`,
+    ].join("\n");
+    const result = await request(app).post("/api/import/authorizations/commit").set("Cookie", cookie).send({ csvText: csv });
+    expect(result.status).toBe(200);
+    expect(result.body.imported).toBe(1);
+    const [auth] = await db.select().from(authorizationsTable).where(eq(authorizationsTable.authNumber, authNumber));
+    expect(auth.activityDescription).toBe("Unchanged full comment");
+    const template = await request(app).get("/api/import/authorizations/template").set("Cookie", cookie);
+    expect(template.status).toBe(200);
+    expect(template.text.split("\n")[0]).toContain(",Comments,");
+    expect(template.text.split("\n")[0]).not.toContain("Activity Description");
+  });
+
   it("imports an authorization, deriving payment type from service code", async () => {
     const csv = [
       "Client UCI *,Auth Number *,Service Code *,Service Period Start *,Service Period End *,Max Period Amount *",

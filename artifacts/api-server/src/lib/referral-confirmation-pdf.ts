@@ -50,7 +50,7 @@ export function confirmationSections(referral: Referral, client: Client, vendor?
     ["Activity", [
       ["Service type", fields.serviceType === "direct_pay_459" ? "Direct pay (459)" : fields.serviceType === "reimbursement_024" ? "Reimbursement (024)" : fields.serviceType],
       ["Service frequency", frequency === "monthly" ? "Monthly" : frequency === "one_time" ? "One-time" : frequency],
-      ["Description", value("activityDescription")],
+      ["Comments", value("activityDescription")],
       ["Service start date", value("serviceStartDate")], ["Service end date", value("serviceEndDate")],
       [frequency === "monthly" ? "Monthly authorization amount" : "Total authorization amount", fields.authAmount ? `$${fields.authAmount}` : null],
       ["POS number", value("posNumber")], ["POS start date", value("posStartDate")], ["POS end date", value("posEndDate")],

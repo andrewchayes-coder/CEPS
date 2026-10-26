@@ -9,6 +9,7 @@ export type SearchableSelectOption = {
   value: string;
   label: string;
   subtitle?: string;
+  keywords?: string[];
 };
 
 export type SearchableSelectProps = {
@@ -115,7 +116,8 @@ export function SearchableSelect({
               {options.map((option) => (
                 <CommandItem
                   key={option.value}
-                  value={`${option.label} ${option.subtitle || ''} ${option.value}`}
+                    value={`${option.label} ${option.subtitle || ''} ${option.value}`}
+                    keywords={option.keywords}
                   onSelect={() => {
                     onValueChange(option.value);
                     setRememberedLabel(option.label);

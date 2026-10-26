@@ -211,17 +211,17 @@ export default function DashboardPage() {
         {user?.role === 'staff' && (
           <Card
             className="cursor-pointer transition-colors hover:bg-accent/50"
-            onClick={() => navigate('/clients')}
+            onClick={() => navigate('/clients?status=active')}
             data-testid="card-kpi-clients"
           >
             <CardHeader className="flex flex-row items-center justify-between pb-2 space-y-0">
-              <CardTitle className="text-sm font-medium">Total Participants</CardTitle>
+              <CardTitle className="text-sm font-medium">Active Participants</CardTitle>
               <Users className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-bold">{summary.totals.activeClients}</div>
               <p className="text-xs text-muted-foreground mt-1">
-                Across all programs
+                Currently active
               </p>
             </CardContent>
           </Card>

@@ -52,7 +52,8 @@ function mapColumns(def: EntityDef, headers: string[]): { colOf: Map<string, num
   const colOf = new Map<string, number>();
   const missingRequired: string[] = [];
   for (const field of def.fields) {
-    const idx = norm.indexOf(normalizeHeader(field.header));
+    const idx = [field.header, ...(field.aliases ?? [])]
+      .map(header => norm.indexOf(normalizeHeader(header))).find(index => index !== -1) ?? -1;
     if (idx !== -1) colOf.set(field.key, idx);
     else if (field.required) missingRequired.push(field.header);
   }
@@ -180,7 +181,8 @@ export function collectFieldValues(def: EntityDef, grid: string[][], fieldKey: s
   const norm = grid[0].map(normalizeHeader);
   const field = def.fields.find((f) => f.key === fieldKey);
   if (!field) return [];
-  const idx = norm.indexOf(normalizeHeader(field.header));
+  const idx = [field.header, ...(field.aliases ?? [])]
+    .map(header => norm.indexOf(normalizeHeader(header))).find(index => index !== -1) ?? -1;
   if (idx === -1) return [];
   const out = new Set<string>();
   for (const r of grid.slice(1)) {

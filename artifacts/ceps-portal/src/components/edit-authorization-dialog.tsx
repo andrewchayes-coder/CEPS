@@ -170,7 +170,7 @@ export function EditAuthorizationDialog({ id, authorization, onSaved }: Props) {
             </Select>
           </div>
           <div className="space-y-2 col-span-2">
-            <Label>Service Description</Label>
+            <Label>Comments</Label>
             <Textarea value={form.activityDescription} onChange={(e) => set('activityDescription', e.target.value)} data-testid="input-auth-description" />
           </div>
           <div className="space-y-2">

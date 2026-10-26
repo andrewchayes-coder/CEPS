@@ -37,3 +37,4 @@
 - [Help guide visibility](help-guide-visibility.md) — coordinator access to both family guides is intentional assistance, not permission to act on family accounts.
 - [Messaging access policy](messaging-access-policy.md) — shared staff inbox, individual unread state, current coordinator inheritance, and explicit family membership.
 - [Isolated UI test routing](isolated-ui-test-routing.md) — isolated Vite servers bypass the artifact gateway; real-API tests need explicit request forwarding.
+- [Authorization comments](authorization-comments-policy.md) — Comments and verbatim PDF-derived POS Notes must stay separate; renamed optional CSV headers need legacy aliases.

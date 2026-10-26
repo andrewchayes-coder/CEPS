@@ -1,6 +1,6 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useListClients } from '@workspace/api-client-react';
-import { Link } from 'wouter';
+import { Link, useLocation, useSearch } from 'wouter';
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow, SortableTableHead, useTableSort } from '@/components/ui/table';
 import { Input } from '@/components/ui/input';
@@ -15,11 +15,23 @@ import { DateRangeFilter } from '@/components/date-range-filter';
 const PAGE_SIZE = 50;
 
 export default function ClientsPage() {
+  const [location, navigate] = useLocation();
+  const urlSearch = useSearch();
+  const rawStatus = new URLSearchParams(urlSearch).get('status');
+  const status = rawStatus === 'active' || rawStatus === 'inactive' ? rawStatus : 'all';
   const [search, setSearch] = useState('');
   const debouncedSearch = useDebounce(search, 300);
   const [startDate, setStartDate] = useState<string>();
   const [endDate, setEndDate] = useState<string>();
   const [page, setPage] = useState(0);
+  useEffect(() => { setPage(0); }, [status]);
+  const setStatus = (value: string) => {
+    const params = new URLSearchParams(urlSearch);
+    if (value === 'all') params.delete('status');
+    else params.set('status', value);
+    setPage(0);
+    navigate(`${location}${params.size ? `?${params}` : ''}`);
+  };
   const sort = useTableSort<'name' | 'uciNumber' | 'dateOfBirth' | 'assignedCoordinatorName' | 'status'>();
   const onSort = (key: Parameters<typeof sort.toggleSort>[0]) => {
     sort.toggleSort(key);
@@ -28,6 +40,7 @@ export default function ClientsPage() {
 
   // Server-driven search (name + UCI) + pagination — mirrors the audit-log page.
   const params = {
+    ...(status !== 'all' ? { status } : {}),
     ...(debouncedSearch ? { search: debouncedSearch } : {}),
     ...(startDate ? { startDate } : {}),
     ...(endDate ? { endDate } : {}),
@@ -69,7 +82,16 @@ export default function ClientsPage() {
                 onChange={(e) => onSearch(e.target.value)}
               />
             </div>
-            <div className="w-full sm:w-auto">
+            <div className="flex w-full flex-wrap items-center gap-3 sm:w-auto">
+              <label className="flex items-center gap-2 text-sm">
+                Status
+                <select aria-label="Participant status" data-testid="select-participant-status" value={status} onChange={(event) => setStatus(event.target.value)}
+                  className="h-9 rounded-md border border-input bg-background px-3 text-sm">
+                  <option value="active">Active</option>
+                  <option value="inactive">Inactive</option>
+                  <option value="all">All</option>
+                </select>
+              </label>
               <DateRangeFilter
                 label="Created date"
                 startDate={startDate}

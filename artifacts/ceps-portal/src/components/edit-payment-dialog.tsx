@@ -1,3 +1,4 @@
+import { authorizationCommentSubtitle } from '@/lib/authorization-comments';
 import React, { useState } from 'react';
 import { apiErrorMessage } from '@/lib/api-error';
 import { useUpdatePayment, useListVendors, useListInvoices, useGetInvoice, useListAuthorizations, type PaymentAllocation } from '@workspace/api-client-react';
@@ -274,7 +275,8 @@ export function EditPaymentDialog({ id, payment, onSaved }: Props) {
                   options={authorizations.map((a) => ({
                     value: a.id,
                     label: a.authNumber,
-                    subtitle: a.activityDescription ?? undefined
+                    subtitle: authorizationCommentSubtitle(a.activityDescription),
+                    keywords: [a.activityDescription ?? ''],
                   }))}
                   onSearchChange={setAuthSearch}
                   loading={authorizationsLoading}

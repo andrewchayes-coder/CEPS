@@ -264,7 +264,7 @@ function ReviewEditor({ item, onSkip, onDone }: { item: ReviewItem; onSkip: () =
             value={fields.units ?? ''} onChange={event => setFields(previous => ({ ...previous, units: event.target.value === '' ? null : Number(event.target.value) }))} />
         </div>
       </div>
-      <div className="space-y-2"><Label htmlFor="review-activity">Activity description</Label>
+      <div className="space-y-2"><Label htmlFor="review-activity">Comments</Label>
         <Textarea id="review-activity" data-testid="input-review-activity" disabled={hasSuggestedAuth}
           value={fields.activityDescription ?? ''} onChange={event => setField('activityDescription', event.target.value)} rows={2} />
       </div>

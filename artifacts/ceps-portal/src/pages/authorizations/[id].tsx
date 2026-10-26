@@ -18,7 +18,7 @@ import { MetricHelp } from '@/components/metric-help';
 const changedFieldLabels: Record<string, string> = {
   authNumber: 'Auth #',
   serviceCode: 'Service code',
-  activityDescription: 'Activity',
+  activityDescription: 'Comments',
   monthlyAmount: 'Monthly amount',
   oneTimeAmount: 'One-time amount',
   maxPeriodAmount: 'Max period amount',
@@ -102,7 +102,7 @@ export default function AuthorizationDetailPage() {
               <dt className="text-muted-foreground">Payment Type:</dt><dd className="col-span-2 capitalize">{auth.paymentType?.replace('_', ' ')}</dd>
               {auth.activityDescription && (
                 <>
-                  <dt className="text-muted-foreground">Activity:</dt><dd className="col-span-2">{auth.activityDescription}</dd>
+                  <dt className="text-muted-foreground">Comments:</dt><dd className="col-span-2">{auth.activityDescription}</dd>
                 </>
               )}
               <dt className="text-muted-foreground">Service Period:</dt>

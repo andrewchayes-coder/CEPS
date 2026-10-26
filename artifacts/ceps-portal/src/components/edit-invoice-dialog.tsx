@@ -1,3 +1,4 @@
+import { authorizationCommentSubtitle } from '@/lib/authorization-comments';
 import { useQueryClient } from '@tanstack/react-query';
 import { invalidateInvoiceQueries } from '@/lib/invoice-query-cache';
 import React, { useState, useEffect } from 'react';
@@ -245,7 +246,7 @@ export function EditInvoiceDialog({ id, invoice, onSaved, variant = 'dialog' }: 
                             id={`edit-line-${index}-auth`}
                             value={form.watch(`lineItems.${index}.authorizationId`) ?? ''}
                             onValueChange={(v) => form.setValue(`lineItems.${index}.authorizationId`, v)}
-                            options={authorizations.map(a => ({ value: a.id, label: a.authNumber, subtitle: [a.serviceCode, a.activityDescription].filter(Boolean).join(' · ') || undefined }))}
+                            options={authorizations.map(a => ({ value: a.id, label: a.authNumber, subtitle: [a.serviceCode, authorizationCommentSubtitle(a.activityDescription)].filter(Boolean).join(' · ') || undefined, keywords: [a.activityDescription ?? ''] }))}
                             selectedLabelFallback={invoice.lineItems.find((l) => l.authorizationId === form.watch(`lineItems.${index}.authorizationId`))?.authNumber ?? undefined}
                             onSearchChange={setAuthSearch}
                             loading={authorizationsLoading}

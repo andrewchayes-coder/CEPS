@@ -41,6 +41,13 @@ const secondary = {
   portalAccountStatus: 'none',
 };
 
+const primaryWithoutPortal = {
+  ...primary,
+  userId: null,
+  hasPortalAccount: false,
+  portalAccountStatus: 'none',
+};
+
 async function setup(page: Page, isMinor: boolean, reps: typeof primary[], role = 'staff') {
   let current = reps;
   let updated: { id: string; data: Record<string, unknown> } | undefined;
@@ -55,6 +62,9 @@ async function setup(page: Page, isMinor: boolean, reps: typeof primary[], role 
   }));
   await page.route('**/api/fees?*', (route) => route.fulfill({ json: [] }));
   await page.route('**/api/family-representatives?*', (route) => route.fulfill({ json: current }));
+  await page.route('**/api/clients/contact-client/message-threads*', (route) => route.fulfill({ json: { items: [], total: 0 } }));
+  await page.route('**/api/clients/contact-client/notes', (route) => route.fulfill({ json: [] }));
+  await page.route('**/api/messages/unread-count', (route) => route.fulfill({ json: { count: 0 } }));
   await page.route('**/api/family-representatives/*', (route) => {
     if (route.request().method() !== 'PATCH') return route.fallback();
     const id = route.request().url().split('/').pop()!;
@@ -67,6 +77,10 @@ async function setup(page: Page, isMinor: boolean, reps: typeof primary[], role 
   await expect(page.getByTestId('contact-subheader')).toBeVisible();
   return { getUpdated: () => updated };
 }
+
+test.afterEach(async ({ page }) => {
+  await page.unrouteAll({ behavior: 'wait' });
+});
 
 test('minor primary is the main contact, editable through the representative endpoint, without a duplicate row', async ({ page }) => {
   const state = await setup(page, true, [primary]);
@@ -118,6 +132,61 @@ test('adult with reps shows own contact above a vertical representative card', a
   await expect(page.getByTestId('contact-phone')).toHaveText(client.phone);
   await expect(page.getByTestId('rep-row-primary-rep')).toContainText(primary.name);
   await expect(page.getByTestId('rep-address-primary-rep')).toContainText(primary.address);
+});
+
+test('adult participant invite is inside Contact Information and opens a participant-named dialog', async ({ page }) => {
+  await setup(page, false, [primary, secondary]);
+  const contactCard = page.getByTestId('card-contact-information');
+  await expect(contactCard.getByTestId('button-invite-portal')).toHaveText('Invite participant to portal');
+  await expect(page.getByTestId('rep-row-second-rep').getByTestId('button-invite-portal')).toHaveText('Invite to portal');
+  await expect(page.getByTestId('button-invite-portal')).toHaveCount(2);
+
+  await contactCard.getByTestId('button-invite-portal').click();
+  await expect(page.getByRole('heading', { name: 'Invite to portal' })).toBeVisible();
+  await expect(page.getByText(/Send a portal invite for Ari Rivera\./)).toBeVisible();
+});
+
+test('minor links to family representatives while retaining secondary representative invite', async ({ page }) => {
+  await setup(page, true, [primary, secondary]);
+  const contactCard = page.getByTestId('card-contact-information');
+  const familyInviteLink = contactCard.getByTestId('link-invite-family-representatives');
+  await expect(familyInviteLink).toHaveText('Invite parents or guardians from the Family Representatives section.');
+  await expect(contactCard.getByTestId('button-invite-portal')).toHaveCount(0);
+  await expect(page.getByTestId('rep-row-second-rep').getByTestId('button-invite-portal')).toBeVisible();
+  await familyInviteLink.click();
+  await expect(page).toHaveURL(/#family-representatives$/);
+  await expect(page.getByTestId('card-family-representatives')).toBeInViewport();
+});
+
+test('minor primary without portal access gets an invite at the top of the representatives section, not a duplicate row', async ({ page }) => {
+  await setup(page, true, [primaryWithoutPortal, secondary]);
+  const section = page.getByTestId('card-family-representatives');
+  await expect(page.getByTestId('rep-row-primary-rep')).toHaveCount(0);
+  await expect(section.getByTestId('primary-representative-invite')).toBeVisible();
+  await expect(section.getByTestId('primary-representative-invite').getByTestId('button-invite-portal')).toBeVisible();
+  await expect(page.getByTestId('rep-row-second-rep').getByTestId('button-invite-portal')).toBeVisible();
+
+  await section.getByTestId('primary-representative-invite').getByTestId('button-invite-portal').click();
+  await expect(page.getByText(/Send a portal invite for Mara Rivera\./)).toBeVisible();
+  await expect(page.getByTestId('input-invite-email')).toHaveValue(primary.email);
+});
+
+test('coordinator and family users cannot see participant invite or minor staff-only link', async ({ browser }) => {
+  for (const role of ['service_coordinator', 'parent_guardian']) {
+    for (const isMinor of [false, true]) {
+      const context = await browser.newContext();
+      const page = await context.newPage();
+      try {
+        await setup(page, isMinor, [primary, secondary], role);
+        const contactCard = page.getByTestId('card-contact-information');
+        await expect(contactCard.getByTestId('button-invite-portal')).toHaveCount(0);
+        await expect(contactCard.getByTestId('link-invite-family-representatives')).toHaveCount(0);
+      } finally {
+        await page.unrouteAll({ behavior: 'wait' });
+        await context.close();
+      }
+    }
+  }
 });
 
 test('minor with multiple reps shows only remaining reps below, with wrapped actions and no overflow', async ({ page }) => {

@@ -31,9 +31,10 @@ type Props = {
   defaultEmail?: string;
   defaultName?: string;
   onSuccess?: () => void;
+  triggerLabel?: string;
 };
 
-export function InvitePortalDialog({ linkedRecordType, linkedRecordId, recordName, familyRepresentativeId, defaultEmail, defaultName, onSuccess }: Props) {
+export function InvitePortalDialog({ linkedRecordType, linkedRecordId, recordName, familyRepresentativeId, defaultEmail, defaultName, onSuccess, triggerLabel = 'Invite to portal' }: Props) {
   const { toast } = useToast();
   const createInvite = useCreateInvite();
   const [open, setOpen] = useState(false);
@@ -100,7 +101,7 @@ export function InvitePortalDialog({ linkedRecordType, linkedRecordId, recordNam
     >
       <DialogTrigger asChild>
         <Button variant="outline" size="sm" data-testid="button-invite-portal">
-          <UserPlus className="w-4 h-4 mr-2" /> Invite to portal
+          <UserPlus className="w-4 h-4 mr-2" /> {triggerLabel}
         </Button>
       </DialogTrigger>
       <DialogContent>

@@ -1,3 +1,4 @@
+import { authorizationCommentSubtitle } from '@/lib/authorization-comments';
 import React, { useState } from 'react';
 import {
   useCreatePayment,
@@ -358,7 +359,8 @@ export function LogPaymentDialog({ onSaved, defaultClientId, defaultInvoiceId }:
                   options={authorizations?.map((a) => ({
                     value: a.id,
                     label: a.authNumber,
-                    subtitle: a.activityDescription ?? undefined
+                    subtitle: authorizationCommentSubtitle(a.activityDescription),
+                    keywords: [a.activityDescription ?? ''],
                   })) ?? []}
                   onSearchChange={setAuthSearch}
                   loading={authorizationsLoading}

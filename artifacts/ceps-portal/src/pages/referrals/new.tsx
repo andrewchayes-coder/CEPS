@@ -74,7 +74,7 @@ const vendorSchema = z.object(vendorSchemaBase).superRefine(validateBilling);
 const activitySchema = z.object({
   serviceType: z.enum(['direct_pay_459', 'reimbursement_024']),
   serviceFrequency: z.enum(['one_time', 'monthly']),
-  activityDescription: z.string().min(1, 'Description is required'),
+  activityDescription: z.string().min(1, 'Comments are required'),
   serviceStartDate: z.string().min(1, 'Service start date is required').refine(v => !v || isServiceDate(v), 'Enter a valid service start date'),
   serviceEndDate: z.string().min(1, 'Service end date is required').refine(v => !v || isServiceDate(v), 'Enter a valid service end date'),
   authAmount: z.string().trim().min(1, 'Authorization amount is required')
@@ -558,7 +558,7 @@ export default function ReferralNewPage() {
 
                 <FormField control={form.control} name="activityDescription" render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Description of Activity</FormLabel>
+                    <FormLabel>Comments</FormLabel>
                     <FormControl><Textarea placeholder="e.g. Weekly art therapy sessions" {...field} /></FormControl>
                     <FormMessage />
                   </FormItem>
@@ -861,7 +861,7 @@ export default function ReferralNewPage() {
                       <h4 className="font-semibold text-primary border-b pb-1 mb-2">Activity</h4>
                       <dl className="grid grid-cols-3 gap-1">
                         <dt className="text-muted-foreground">Type:</dt><dd className="col-span-2">{watch('serviceType') === 'direct_pay_459' ? 'Direct Pay' : 'Reimbursement'}</dd>
-                        <dt className="text-muted-foreground">Desc:</dt><dd className="col-span-2 truncate" title={watch('activityDescription')}>{watch('activityDescription')}</dd>
+                        <dt className="text-muted-foreground">Comments:</dt><dd className="col-span-2 truncate" title={watch('activityDescription')}>{watch('activityDescription')}</dd>
                         <dt className="text-muted-foreground">Start:</dt><dd className="col-span-2">{watch('serviceStartDate')}</dd>
                         <dt className="text-muted-foreground">End:</dt><dd className="col-span-2">{watch('serviceEndDate')}</dd>
                         <dt className="text-muted-foreground">{watch('serviceFrequency') === 'monthly' ? 'Monthly authorization amount:' : 'Total authorization amount:'}</dt>

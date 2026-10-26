@@ -21,6 +21,16 @@ Mock document-storage requests explicitly in route-mocked invoice tests, even wh
 
 **How to apply:** Return an actual document response or an explicit storage error for fixture documents; do not let unhandled storage URLs fall through to Vite.
 
+Route-mocked page tests must also mock requests from secondary panels.
+
+**Why:** An unhandled notes request can return SPA HTML. A typed array consumer
+may iterate that string and fail in sorting, disguising the missing mock as an
+unrelated participant-profile regression.
+
+**How to apply:** When adding page panels, update older fixtures with empty or
+representative responses for their requests, even when those panels are not the
+subject of the test.
+
 Wait for forwarded route handlers to finish before disposing the browser context.
 
 **Why:** Background page refreshes can still be inside `route.fetch` after the final assertion. Closing the context first can report “Fetch response has been disposed” and fail an otherwise successful user journey.

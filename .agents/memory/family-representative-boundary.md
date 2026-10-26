@@ -3,6 +3,18 @@ name: Family representative workflow boundary
 description: Defines ownership and compatibility rules for representative account and intake-recipient links.
 ---
 
+Minor participants must not have a direct participant invite action. Invite their
+parents or guardians through representative-bound actions in Family
+Representatives. Adult participant invites belong in Contact Information.
+
+**Why:** CEPS requested these separate invitation paths so staff invite the
+appropriate contact rather than treating a minor as the account recipient.
+
+**How to apply:** If a primary representative's contact details are displayed
+above and their full card is omitted, keep their representative-bound invite
+available in Family Representatives. Never substitute an unbound participant
+invite for a representative invite.
+
 Family representative CRUD must not let callers assign `userId`. Account links are created only by accepting a representative-bound invite, and intake-recipient links are written only by the send-intake workflow.
 
 **Why:** Generic writes can leave orphaned portal access or let referral state disagree with the actual recipient. Pre-existing signature links may legitimately lack a representative ID.

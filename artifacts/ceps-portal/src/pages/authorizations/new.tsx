@@ -743,6 +743,16 @@ export default function AuthorizationNewPage() {
                 </div>
               </div>
 
+              <FormField control={form.control} name="activityDescription" render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Comments<AutoBadge name="activityDescription" /></FormLabel>
+                  <FormControl>
+                    <Textarea {...field} disabled={isQueued} className="min-h-[80px]" data-testid="input-auth-comments" />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )} />
+
               <FormField control={form.control} name="posNotes" render={({ field }) => (
                 <FormItem>
                   <FormLabel>POS Notes<AutoBadge name="posNotes" /></FormLabel>

@@ -61,6 +61,8 @@ export interface FieldDef {
   key: string;
   /** CSV header (without the " *" required marker). */
   header: string;
+  /** Previous CSV headings accepted when the displayed heading changes. */
+  aliases?: string[];
   required: boolean;
   type: FieldType;
   /** Allowed values for enum fields. */
@@ -309,7 +311,7 @@ export const IMPORT_REGISTRY: Record<ImportEntity, EntityDef> = {
       { key: "authNumber", header: "Auth Number", required: true, type: "string", example: "POS-2026-001", help: "Natural key (scoped to the client)" },
       { key: "serviceCode", header: "Service Code", required: true, type: "enum", enumValues: ["459", "024", "490"], example: "459" },
       { key: "paymentType", header: "Payment Type", required: false, type: "enum", enumValues: ["direct_payment", "reimbursement", "fee"], example: "direct_payment", help: "Derived from service code when blank" },
-      { key: "activityDescription", header: "Activity Description", required: false, type: "string", example: "Respite services" },
+      { key: "activityDescription", header: "Comments", aliases: ["Activity Description"], required: false, type: "string", example: "Respite services" },
       { key: "servicePeriodStart", header: "Service Period Start", required: true, type: "date", example: "2026-01-01" },
       { key: "servicePeriodEnd", header: "Service Period End", required: true, type: "date", example: "2026-12-31" },
       { key: "monthlyAmount", header: "Monthly Amount", required: false, type: "money", example: "500.00" },

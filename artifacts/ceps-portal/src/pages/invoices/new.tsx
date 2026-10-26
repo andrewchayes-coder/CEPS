@@ -1,3 +1,4 @@
+import { authorizationCommentSubtitle } from '@/lib/authorization-comments';
 import { useQueryClient } from '@tanstack/react-query';
 import { invalidateInvoiceQueries } from '@/lib/invoice-query-cache';
 import React from 'react';
@@ -277,7 +278,7 @@ function StaffInvoiceNewPage() {
                               id={`line-${index}-auth`}
                               value={field.value ?? ''}
                               onValueChange={(v) => handleAuthChange(index, v)}
-                              options={filteredAuthorizations.map(a => ({ value: a.id, label: a.authNumber, subtitle: [a.serviceCode, a.activityDescription].filter(Boolean).join(' · ') || undefined }))}
+                              options={filteredAuthorizations.map(a => ({ value: a.id, label: a.authNumber, subtitle: [a.serviceCode, authorizationCommentSubtitle(a.activityDescription)].filter(Boolean).join(' · ') || undefined, keywords: [a.activityDescription ?? ''] }))}
                               onSearchChange={setAuthSearch}
                               loading={authorizationsLoading}
                               disabled={!selectedClientId}

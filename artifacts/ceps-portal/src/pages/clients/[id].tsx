@@ -325,13 +325,6 @@ export default function ClientDetailPage() {
               </div>
             )}
           </div>
-          {user?.role === 'staff' && (
-            <InvitePortalDialog
-              linkedRecordType="client"
-              linkedRecordId={id}
-              recordName={`${client.firstName} ${client.lastName}`}
-            />
-          )}
           {(user?.role === 'parent_guardian' || user?.role === 'self') && (
             <EditContactInfoDialog
               id={id}
@@ -416,11 +409,41 @@ export default function ClientDetailPage() {
                       )}
                     </>
                   )}
+                  {isStaff && (
+                    <div className="border-t pt-3">
+                      {client.isMinor ? (
+                        <a href="#family-representatives" className="text-muted-foreground hover:underline" data-testid="link-invite-family-representatives">
+                          Invite parents or guardians from the Family Representatives section.
+                        </a>
+                      ) : (
+                        <InvitePortalDialog
+                          linkedRecordType="client"
+                          linkedRecordId={id}
+                          recordName={`${client.firstName} ${client.lastName}`}
+                          triggerLabel="Invite participant to portal"
+                        />
+                      )}
+                    </div>
+                  )}
                 </CardContent>
               </Card>
               {showRepresentativesCard && (
-                <Card data-testid="card-family-representatives">
+                <Card id="family-representatives" className="scroll-mt-4" data-testid="card-family-representatives">
                   <CardContent className="p-4 sm:p-6">
+                    {isStaff && primaryRepresentative?.portalAccountStatus === 'none' && (
+                      <div className="mb-4 flex flex-wrap items-center gap-2" data-testid="primary-representative-invite">
+                        <span className="text-sm">{primaryRepresentative.name}</span>
+                        <InvitePortalDialog
+                          linkedRecordType="client"
+                          linkedRecordId={client.id}
+                          recordName={primaryRepresentative.name}
+                          familyRepresentativeId={primaryRepresentative.id}
+                          defaultEmail={primaryRepresentative.email || ''}
+                          defaultName={primaryRepresentative.name}
+                          onSuccess={() => { void refetchReps(); }}
+                        />
+                      </div>
+                    )}
                     <FamilyRepresentativesSection
                       clientId={client.id}
                       representatives={remainingRepresentatives}

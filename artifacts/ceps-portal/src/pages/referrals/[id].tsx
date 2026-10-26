@@ -251,7 +251,7 @@ export default function ReferralDetailPage() {
                 <p className="font-semibold">
                   {referralValueLabel(intake?.serviceType)}
                 </p>
-                <p className="line-clamp-2" title={intake?.activityDescription}>{intake?.activityDescription}</p>
+                <p className="line-clamp-2" title={intake?.activityDescription}>Comments: {intake?.activityDescription || '—'}</p>
                 <p>Dates: {intake?.serviceStartDate || intake?.serviceEndDate ? `${intake?.serviceStartDate || '—'} to ${intake?.serviceEndDate || '—'}` : '—'}</p>
                 <p>Authorization amount: {intake?.authAmount ? `$${formatMoney(intake.authAmount)} (${(referral.serviceFrequency || intake.serviceFrequency) === 'monthly' ? 'monthly' : (referral.serviceFrequency || intake.serviceFrequency) === 'one_time' ? 'total' : referralValueLabel(referral.serviceFrequency || intake.serviceFrequency)})` : '—'}</p>
               </div>

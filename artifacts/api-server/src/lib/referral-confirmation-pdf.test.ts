@@ -9,6 +9,23 @@ import { createReferralConfirmationPdf } from "./referral-confirmation-pdf";
 import { referralPdfText } from "./referral-pdf-text";
 
 describe("embedded referral confirmation fonts", () => {
+  it.each([
+    { name: 'Latin only', text: 'Alex Smith', count: 2, gurmukhi: false },
+    { name: 'Punjabi', text: 'ਪੰਜਾਬੀ ਨੋਟ', count: 3, gurmukhi: true },
+  ])('embeds only needed font objects: $name', async ({ text, count, gurmukhi }) => {
+    const referral = {
+      id: '01234567-font-count', createdAt: new Date('2026-10-09T16:00:00Z'),
+      status: 'intake', intakeFields: { clientFirstName: text, clientLastName: 'Smith' },
+    } as unknown as typeof referralsTable.$inferSelect;
+    const bytes = await createReferralConfirmationPdf(referral, {} as typeof clientsTable.$inferSelect, undefined, { name: 'CEPS', role: 'staff' });
+    const pdf = await PDFDocument.load(bytes);
+    const objects = pdf.context.enumerateIndirectObjects().map(([, object]) => object.toString());
+    expect(objects.filter(object => object.includes('/Subtype /Type0'))).toHaveLength(count);
+    expect(objects.join('\n').includes('Gurmukhi')).toBe(gurmukhi);
+    expect(objects.join('\n')).not.toContain('NotoSansSC');
+    expect(objects.join('\n')).not.toContain('NotoSansArabic');
+  });
+
   it("extracts Vietnamese, accents, Punjabi and CJK with embedded font programs", async () => {
     const referral = {
       id: "01234567-test", createdAt: new Date("2026-10-09T16:00:00Z"), status: "intake",
@@ -42,8 +59,10 @@ describe("embedded referral confirmation fonts", () => {
   }, 30_000);
 
   it("wraps complete words at real 516pt widths; only splits oversized words", async () => {
-    const layout = await referralPdfText(await PDFDocument.create());
     const sentence = "A sentence with Vietnamese Nguyễn and accented José Peña words that must remain complete. ".repeat(8).trim();
+    const unknown = String.fromCodePoint(0x10ffff);
+    const scripts = `Arabic العربية Punjabi ਪੰਜਾਬੀ CJK 中文 ${unknown}`;
+    const layout = await referralPdfText(await PDFDocument.create(), [sentence, scripts, "W"]);
     const lines = layout.wrap(sentence, 10);
     expect(lines.length).toBeGreaterThan(1);
     expect(lines.join(" ")).toBe(sentence);
@@ -52,7 +71,6 @@ describe("embedded referral confirmation fonts", () => {
     const split = layout.wrap(oversized, 10);
     expect(split.join("")).toBe(oversized);
     for (const line of split) expect(layout.width(line, 10)).toBeLessThanOrEqual(516);
-    const unknown = String.fromCodePoint(0x10ffff);
-    expect(layout.runs(`Arabic العربية Punjabi ਪੰਜਾਬੀ CJK 中文 ${unknown}`).at(-1)?.text).toContain("?");
+    expect(layout.runs(scripts).at(-1)?.text).toContain("?");
   });
 });

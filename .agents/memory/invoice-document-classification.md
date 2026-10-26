@@ -12,7 +12,10 @@ retaining staff control of payment classification. The historical
 reimbursement-to-receipt backfill is a one-time cleanup and is optional while
 production contains only test data.
 
-**How to apply:** Derive payment type from document type only when a create
-request omits payment type. Never rewrite an explicitly supplied payment type,
+**How to apply:** Derive payment type from document type only when a simplified
+coordinator, parent/guardian or self create request omits payment type. Full staff
+and vendor submissions must specify payment type explicitly. CEPS clarified that
+defaulting full submissions would bypass their intentional payment classification.
+Never rewrite an explicitly supplied payment type,
 reclassify documents on unrelated edits, or run the historical backfill
 automatically once staff are making intentional distinctions.

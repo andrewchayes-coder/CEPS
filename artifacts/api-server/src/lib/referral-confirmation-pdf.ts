@@ -85,11 +85,28 @@ export async function createReferralConfirmationPdf(
   const pdf = await PDFDocument.create();
   pdf.setTitle("CEPS Referral Confirmation");
   pdf.setCreator("CEPS Portal");
-  const textLayout = await referralPdfText(pdf);
+  const display = (v: unknown) => v === undefined || v === null || String(v).trim() === "" ? "—" : String(v);
+  const sections = confirmationSections(referral, client, vendor, filename);
+  const heading = "CEPS Referral Confirmation";
+  const headers = [
+    `Referral ID: ${referral.id.slice(0, 8)}`,
+    `Submitted: ${new Intl.DateTimeFormat("en-US", {
+      timeZone: "America/Los_Angeles", dateStyle: "medium", timeStyle: "long",
+    }).format(referral.createdAt)}`,
+    `Submitted by: ${display(submitter?.name)} (${display(submitter ? roleNames[submitter.role] ?? submitter.role : null)})`,
+    `Status at download: ${referral.coordinatorReviewStatus === "pending"
+      ? "Submitted — pending CEPS review" : referral.coordinatorReviewStatus === "rejected"
+        ? "Submitted — CEPS review rejected" : referral.status.replace(/_/g, " ")}`,
+  ];
+  const footer = "This confirms CEPS received the referral. It is not an authorization or an agreement.";
+  const textLayout = await referralPdfText(pdf, [
+    heading, ...headers,
+    ...sections.flatMap(([section, fields]) => [section, ...fields.map(([label, value]) => `${label}: ${display(value)}`)]),
+    footer, "Page 0123456789 of 0123456789",
+  ]);
   const regular = textLayout.regular;
   let page = pdf.addPage([612, 792]);
   let y = 744;
-  const display = (v: unknown) => v === undefined || v === null || String(v).trim() === "" ? "—" : String(v);
   const line = (text: string, heading = false, size = 10) => {
     for (const segment of textLayout.wrap(text, size, heading)) {
       if (y < 90) { page = pdf.addPage([612, 792]); y = 744; }
@@ -101,16 +118,9 @@ export async function createReferralConfirmationPdf(
       y -= size + 5;
     }
   };
-  line("CEPS Referral Confirmation", true, 17);
-  line(`Referral ID: ${referral.id.slice(0, 8)}`);
-  line(`Submitted: ${new Intl.DateTimeFormat("en-US", {
-    timeZone: "America/Los_Angeles", dateStyle: "medium", timeStyle: "long",
-  }).format(referral.createdAt)}`);
-  line(`Submitted by: ${display(submitter?.name)} (${display(submitter ? roleNames[submitter.role] ?? submitter.role : null)})`);
-  line(`Status at download: ${referral.coordinatorReviewStatus === "pending"
-    ? "Submitted — pending CEPS review" : referral.coordinatorReviewStatus === "rejected"
-      ? "Submitted — CEPS review rejected" : referral.status.replace(/_/g, " ")}`);
-  for (const [section, fields] of confirmationSections(referral, client, vendor, filename)) {
+  line(heading, true, 17);
+  for (const header of headers) line(header);
+  for (const [section, fields] of sections) {
     if (y < 120) { page = pdf.addPage([612, 792]); y = 744; }
     y -= 10;
     line(section, true, 12);
@@ -118,7 +128,7 @@ export async function createReferralConfirmationPdf(
   }
   const pages = pdf.getPages();
   for (const [index, p] of pages.entries()) {
-    p.drawText("This confirms CEPS received the referral. It is not an authorization or an agreement.", { x: 48, y: 48, size: 8, font: regular });
+    p.drawText(footer, { x: 48, y: 48, size: 8, font: regular });
     p.drawText(`Page ${index + 1} of ${pages.length}`, { x: 48, y: 34, size: 8, font: regular });
   }
   return Buffer.from(await pdf.save());

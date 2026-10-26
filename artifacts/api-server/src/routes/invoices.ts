@@ -173,6 +173,10 @@ router.post("/invoices", requireAuth, async (req, res): Promise<void> => {
   const u = req.user!;
   const isCoordinator = u.role === "service_coordinator";
   const isSimplified = isCoordinator || u.role === "parent_guardian" || u.role === "self";
+  if (!isSimplified && parsed.data.paymentType === undefined) {
+    res.status(400).json({ error: "paymentType is required" });
+    return;
+  }
   const submittedByRole = u.role === "vendor" ? "vendor" : u.role === "parent_guardian" || u.role === "self" ? "parent" : isCoordinator ? "service_coordinator" : "staff";
   // Non-staff may only submit for their own linked records
   if (submittedByRole === "parent" && (u.linkedRecordType !== "client" || parsed.data.clientId !== u.linkedRecordId)) {

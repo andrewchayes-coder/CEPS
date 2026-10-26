@@ -58,7 +58,7 @@ async function create(data: Record<string, unknown>, coordinator = false) {
   const response = await request(app).post("/api/invoices").set("Cookie", coordinator ? coordCookie : staffCookie).send({
     clientId, documentUrl: `/objects/uploads/${userId}/${randomUUID()}`,
     ...(coordinator ? { serviceStartDate: "2026-10-01", serviceEndDate: "2026-10-31" } : {}),
-    ...(!coordinator ? { lineItems: [{ authorizationId: auth459, serviceMonth: "2026-10", amount: "10.00" }] } : {}),
+    ...(!coordinator ? { paymentType: "direct_payment", lineItems: [{ authorizationId: auth459, serviceMonth: "2026-10", amount: "10.00" }] } : {}),
     ...data,
   });
   if (response.status === 201) invoiceIds.push(response.body.id);
@@ -70,8 +70,8 @@ async function list(params: Record<string, string> = {}) {
   return response.body;
 }
 describe("invoice document type and line authorization codes", () => {
-  it("defaults receipt payment type to reimbursement, including coordinator submission", async () => {
-    const staff = await create({ documentType: "receipt", lineItems: [{ authorizationId: auth024, serviceMonth: "2026-10", amount: "10.00" }] });
+  it("preserves explicit staff receipt payment type and defaults coordinator submissions", async () => {
+    const staff = await create({ documentType: "receipt", paymentType: "reimbursement", lineItems: [{ authorizationId: auth024, serviceMonth: "2026-10", amount: "10.00" }] });
     expect(staff.status, JSON.stringify(staff.body)).toBe(201);
     expect(staff.body).toMatchObject({ documentType: "receipt", paymentType: "reimbursement", serviceCodes: ["024"] });
     receiptId = staff.body.id;

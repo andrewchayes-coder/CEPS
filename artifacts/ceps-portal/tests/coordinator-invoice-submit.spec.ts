@@ -45,6 +45,8 @@ test('coordinator submits each attached file separately and retries only a faile
     { name: 'invoice-a.pdf', mimeType: 'application/pdf', buffer: Buffer.from('%PDF invoice a') },
     { name: 'invoice-b.pdf', mimeType: 'application/pdf', buffer: Buffer.from('%PDF invoice b') },
   ]);
+  await page.getByTestId('input-serviceStartDate').fill('2026-09-15');
+  await page.getByTestId('input-serviceEndDate').fill('2026-11-02');
   await expect(page.getByText('Ready to submit')).toHaveCount(2);
   await page.getByRole('button', { name: 'Submit Invoice(s)' }).click();
   await expect.poll(() => submitted.length).toBe(2);
@@ -112,7 +114,7 @@ test('staff Needs Entry queue requests oldest-first and keeps workflow actions g
   expect(needsEntryQuery.searchParams.get('sortBy')).toBe('createdAt');
   expect(needsEntryQuery.searchParams.get('sortDirection')).toBe('asc');
 
-  await page.getByRole('link', { name: 'View' }).click();
+  await page.getByRole('link', { name: 'View', exact: true }).click();
   await expect(page.getByTestId('needs-entry-workspace')).toBeVisible();
   await expect(page.getByTestId('inline-invoice-editor')).toBeVisible();
   await expect(page.getByTestId('select-line-0-authorization')).toBeVisible();
@@ -131,4 +133,83 @@ test('staff Needs Entry queue requests oldest-first and keeps workflow actions g
   expect(updateBody?.lineItems).toHaveLength(1);
   await expect(page.getByTestId('needs-entry-workspace')).toHaveCount(0);
   await expect(page.getByTestId('button-validate-invoice')).toBeVisible();
+});
+
+test('Needs Entry editor validates service dates but permits an out-of-range line month', async ({ page }, testInfo) => {
+  const uncaughtErrors: string[] = [];
+  page.on('pageerror', (error) => uncaughtErrors.push(error.message));
+  const invoice = {
+    id: 'invoice-date-entry-1',
+    clientId: 'client-1',
+    clientName: 'Pat Participant',
+    vendorId: null,
+    vendorName: null,
+    amountRequested: '125.00',
+    status: 'needs_entry',
+    submittedByRole: 'service_coordinator',
+    submittedDate: '2026-11-03',
+    serviceMonth: '2026-10',
+    serviceStartDate: '2026-09-15',
+    serviceEndDate: '2026-11-02',
+    paymentType: 'direct_payment',
+    documentType: 'invoice',
+    documentUrl: '/objects/uploads/invoice.pdf',
+    lineItems: [{
+      id: 'line-date-1',
+      authorizationId: 'auth-1',
+      authNumber: 'AUTH-1',
+      serviceCode: 'SVC-1',
+      serviceMonth: '2026-10',
+      amount: '125.00',
+    }],
+  };
+  await page.route('**/api/auth/me', (route) => route.fulfill({
+    json: { id: 'staff-date-1', name: 'CEPS Staff', email: 'staff@test', role: 'staff', active: true, permissions: ['invoice_log_validate'] },
+  }));
+  await page.route('**/api/invoices?*', (route) => route.fulfill({ json: { items: [invoice], total: 1 } }));
+  await page.route('**/api/authorizations?*', (route) => route.fulfill({
+    json: { items: [{ id: 'auth-1', authNumber: 'AUTH-1', clientId: 'client-1', serviceCode: 'SVC-1', paymentType: 'direct_payment' }], total: 1 },
+  }));
+  await page.route('**/api/vendors?*', (route) => route.fulfill({ json: { items: [], total: 0 } }));
+
+  const patches: Record<string, unknown>[] = [];
+  // Do not let Vite's HTML fallback masquerade as the fixture's uploaded PDF.
+  // Document preview is outside this editor-only regression.
+  await page.route('**/api/storage/**', route => route.fulfill({
+    status: 404, json: { error: 'No uploaded document in this mocked editor fixture' },
+  }));
+  await page.route('**/api/invoices/invoice-date-entry-1', async (route) => {
+    if (route.request().method() === 'GET') return route.fulfill({ json: invoice });
+    if (route.request().method() !== 'PATCH') return route.fulfill({ status: 405 });
+    patches.push(route.request().postDataJSON() as Record<string, unknown>);
+    await route.fulfill({ status: 200, json: { ...invoice, ...patches.at(-1), status: 'pending_review' } });
+  });
+
+  await page.goto('/invoices');
+  await page.getByTestId('tab-invoices-needs-entry').click();
+  await page.getByRole('link', { name: 'View', exact: true }).click();
+  await expect(page.getByTestId('inline-invoice-editor')).toBeVisible();
+
+  await page.getByTestId('input-edit-serviceStartDate').fill('2026-11-03');
+  await page.getByTestId('button-save-invoice').click();
+  const dateError = 'Service end date must be on or after the start date';
+  await expect(page.getByText(dateError, { exact: true })).toHaveCount(2);
+  expect(patches).toHaveLength(0);
+  await testInfo.attach('needs-entry-date-validation.png', { body: await page.screenshot(), contentType: 'image/png' });
+
+  await page.getByTestId('input-edit-serviceStartDate').fill('2026-09-15');
+  await page.locator('#edit-line-0-month').fill('2026-12');
+  const warning = page.getByTestId('warning-line-0-service-dates');
+  await expect(warning).toHaveText('Line month 2026-12 is outside the submitted service dates 2026-09-15 – 2026-11-02');
+  await testInfo.attach('needs-entry-out-of-range-warning.png', { body: await page.screenshot(), contentType: 'image/png' });
+
+  await page.getByTestId('button-save-invoice').click();
+  await expect.poll(() => patches.length).toBe(1);
+  expect(patches[0]).toMatchObject({
+    serviceStartDate: '2026-09-15',
+    serviceEndDate: '2026-11-02',
+    lineItems: [{ id: 'line-date-1', authorizationId: 'auth-1', serviceMonth: '2026-12', amount: '125.00' }],
+  });
+  await expect(warning).toBeVisible();
+  expect(uncaughtErrors).toEqual([]);
 });

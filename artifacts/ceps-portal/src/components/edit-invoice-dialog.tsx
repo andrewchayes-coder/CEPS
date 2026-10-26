@@ -33,23 +33,9 @@ import { MonthYearInput } from '@/components/month-year-input';
 import { useDebounce } from '@/hooks/use-debounce';
 import { Badge } from '@/components/ui/badge';
 import { DocumentTypeSelect, DocumentTypeMismatchHint } from '@/components/invoice-document-type';
-import { blankLinesForServiceDates, formatServiceDates, validateServiceDateRange } from '@/lib/invoice-service-dates';
+import { blankLinesForServiceDates, formatServiceDates } from '@/lib/invoice-service-dates';
+import { invoiceEditSchema as formSchema, lineServiceDateWarning } from '@/lib/invoice-edit-schema';
 import { apiErrorMessage } from '@/lib/api-error';
-
-const formSchema = z.object({
-  vendorId: z.string().optional(),
-  paymentType: z.string(),
-  documentType: z.enum(['invoice', 'receipt']),
-  notes: z.string().optional(),
-  serviceStartDate: z.string().optional(),
-  serviceEndDate: z.string().optional(),
-  lineItems: z.array(z.object({
-    id: z.string().optional(),
-    authorizationId: z.string().min(1, 'Required'),
-    serviceMonth: z.string().regex(/^\d{4}-\d{2}$/, 'Must be YYYY-MM format'),
-    amount: z.string().min(1, 'Required').regex(/^\d+(\.\d{1,2})?$/, 'Invalid format'),
-  })).min(1, 'At least one line item is required'),
-});
 
 type InvoiceLike = {
   clientId: string;
@@ -103,6 +89,8 @@ export function EditInvoiceDialog({ id, invoice, onSaved, variant = 'dialog' }: 
   const lineItems = form.watch('lineItems');
   const watchedDocType = form.watch('documentType');
   const watchedPayType = form.watch('paymentType');
+  const serviceStartDate = form.watch('serviceStartDate');
+  const serviceEndDate = form.watch('serviceEndDate');
   const totalAmount = lineItems.reduce((sum, item) => sum + (parseFloat(item.amount) || 0), 0);
 
   const [vendorSearch, setVendorSearch] = useState('');
@@ -295,6 +283,11 @@ export function EditInvoiceDialog({ id, invoice, onSaved, variant = 'dialog' }: 
                       </FormItem>
                     )} />
                   </div>
+                  {lineServiceDateWarning(lineItems[index]?.serviceMonth ?? '', serviceStartDate, serviceEndDate) && (
+                    <p className="text-xs text-amber-700 dark:text-amber-400" data-testid={`warning-line-${index}-service-dates`}>
+                      {lineServiceDateWarning(lineItems[index]?.serviceMonth ?? '', serviceStartDate, serviceEndDate)}
+                    </p>
+                  )}
                   <div className="flex justify-end">
                     <Button
                       type="button"

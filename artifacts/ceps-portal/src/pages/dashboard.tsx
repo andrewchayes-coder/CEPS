@@ -267,7 +267,7 @@ export default function DashboardPage() {
           <CardContent>
             <div className="text-2xl font-bold">{user?.role === 'staff' ? summary.totals.pendingInvoices : getInvoicesInReview(summary.totals)}</div>
             <p className="text-xs text-muted-foreground mt-1">
-              Awaiting review and approval
+              {user?.role === 'staff' ? 'Awaiting review and approval' : 'Submitted and waiting for CEPS'}
             </p>
           </CardContent>
         </Card>

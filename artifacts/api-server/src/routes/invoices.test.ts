@@ -305,6 +305,7 @@ describe("service coordinator invoice submission and CEPS entry", () => {
   it("requires staff line items, allows staff to complete entry, and blocks validation before entry", async () => {
     const staffWithoutLines = await request(app).post("/api/invoices").set("Cookie", cookie).send({
       clientId,
+      paymentType: "direct_payment",
       documentUrl: `/objects/uploads/${staffId}/55555555-5555-4555-8555-555555555555`,
     });
     expect(staffWithoutLines.status).toBe(400);

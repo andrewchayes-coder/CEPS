@@ -17,6 +17,7 @@ export interface InvoiceInput {
   vendorId?: string | null;
   serviceMonth?: string;
   amountRequested?: string;
+  /** Required for staff and vendor submissions. Simplified coordinator, parent and self submissions default from documentType when omitted. */
   paymentType?: InvoiceInputPaymentType;
   documentType?: InvoiceInputDocumentType;
   /**

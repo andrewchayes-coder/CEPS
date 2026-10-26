@@ -3409,7 +3409,7 @@ export const CreateInvoiceBody = zod.object({
   "vendorId": zod.string().nullish(),
   "serviceMonth": zod.string().optional(),
   "amountRequested": zod.string().optional(),
-  "paymentType": zod.enum(['direct_payment', 'reimbursement']).optional(),
+  "paymentType": zod.enum(['direct_payment', 'reimbursement']).optional().describe('Required for staff and vendor submissions. Simplified coordinator, parent and self submissions default from documentType when omitted.'),
   "documentType": zod.enum(['invoice', 'receipt']).default(createInvoiceBodyDocumentTypeDefault),
   "serviceStartDate": zod.string().regex(createInvoiceBodyServiceStartDateRegExp).optional().describe('Required for simplified submissions.'),
   "serviceEndDate": zod.string().regex(createInvoiceBodyServiceEndDateRegExp).optional().describe('Required for simplified submissions.'),

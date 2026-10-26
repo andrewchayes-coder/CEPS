@@ -14,20 +14,58 @@ const fontDirectory = new URL(
   import.meta.url.endsWith(".ts") ? "../../assets/fonts/" : "./assets/fonts/",
   import.meta.url,
 );
-let fontBytes: Promise<Buffer[]> | undefined;
+type FontData = { bytes: Buffer; supported: Set<number> };
+const fontBytes = new Map<number, Promise<FontData>>();
+function loadFont(index: number): Promise<FontData> {
+  let pending = fontBytes.get(index);
+  if (!pending) {
+    pending = readFile(new URL(fontNames[index], fontDirectory)).then(bytes => ({
+      bytes, supported: new Set(fontkit.create(bytes).characterSet),
+    })).catch(error => {
+      // A transient read/parse failure must not poison all later downloads.
+      fontBytes.delete(index);
+      throw error;
+    });
+    fontBytes.set(index, pending);
+  }
+  return pending;
+}
 type FontRun = { font: PDFFont; text: string };
 
-export async function referralPdfText(pdf: PDFDocument) {
+/** Supply all document strings before drawing so fallback fonts are embedded only when needed. */
+export async function referralPdfText(pdf: PDFDocument, strings: readonly string[]) {
   pdf.registerFontkit(fontkit);
-  const bytes = await (fontBytes ??= Promise.all(fontNames.map(name => readFile(new URL(name, fontDirectory)))));
-  const fonts = await Promise.all(bytes.map(data => pdf.embedFont(data, { subset: true })));
-  const supported = fonts.map(font => new Set(font.getCharacterSet()));
+  const data = new Map<number, FontData>(await Promise.all(
+    [0, 1].map(async index => [index, await loadFont(index)] as const),
+  ));
+  const needed = new Set([0, 1]);
+  const seen = new Set<number>();
+  // One text pass. Latin documents never read or parse a fallback font; font
+  // coverage is cached across downloads, independently of per-PDF embedding.
+  for (const text of strings) {
+    for (const char of text) {
+      const code = char.codePointAt(0)!;
+      if (seen.has(code)) continue;
+      seen.add(code);
+      if (data.get(0)!.supported.has(code)) continue;
+      for (const index of [2, 3, 4]) {
+        if (!data.has(index)) data.set(index, await loadFont(index));
+        if (data.get(index)!.supported.has(code)) {
+          needed.add(index);
+          break;
+        }
+      }
+    }
+  }
+  const fonts = new Map(await Promise.all([...needed].map(async index =>
+    [index, await pdf.embedFont(data.get(index)!.bytes, { subset: true })] as const,
+  )));
   function runs(text: string, bold = false): FontRun[] {
     const order = bold ? [1, 0, 2, 3, 4] : [0, 2, 3, 4];
     const result: FontRun[] = [];
     for (const char of text) {
-      const index = order.find(i => supported[i].has(char.codePointAt(0)!));
-      const font = fonts[index ?? (bold ? 1 : 0)];
+      const index = order.find(i => fonts.has(i) && data.get(i)!.supported.has(char.codePointAt(0)!));
+      const font = fonts.get(index ?? (bold ? 1 : 0))!;
       const rendered = index === undefined ? "?" : char;
       const last = result.at(-1);
       if (last?.font === font) last.text += rendered;
@@ -61,5 +99,5 @@ export async function referralPdfText(pdf: PDFDocument) {
     }
     return lines;
   };
-  return { runs, width, wrap, regular: fonts[0] };
+  return { runs, width, wrap, regular: fonts.get(0)! };
 }

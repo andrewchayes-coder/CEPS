@@ -2,7 +2,8 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
-import { getVisibleRoleDocs, roleDocs } from './content';
+import { getVisibleRoleDocs, roleDocs, invoiceStatusSteps } from './content';
+import { InvoiceStatus } from '@workspace/api-client-react';
 import { HelpDocumentation } from './help-documentation';
 
 const visibility: Record<string, string[]> = {
@@ -13,6 +14,18 @@ const visibility: Record<string, string[]> = {
   vendor: ['vendor'],
 };
 const render = (role?: string) => renderToStaticMarkup(createElement(HelpDocumentation, { role }));
+
+test('every documented invoice status exists in the API status list', () => {
+  const statuses = Object.values(InvoiceStatus);
+  assert.deepEqual(invoiceStatusSteps.map(step => step.status).sort(), [...statuses].sort());
+  for (const step of invoiceStatusSteps) {
+    assert.ok(statuses.includes(step.status), `Unknown invoice status: ${step.title}`);
+    const expectedTitle = step.status === 'needs_entry' ? 'Awaiting CEPS Entry'
+      : step.status.split('_').map(word => word[0].toUpperCase() + word.slice(1)).join(' ');
+    assert.equal(step.title, expectedTitle);
+  }
+  assert.doesNotMatch(render('vendor'), /choose New Invoice|correct the lines, and resubmit/);
+});
 
 for (const [role, expected] of Object.entries(visibility)) {
   test(`${role}: exact visible guide list, own default, and correct tab strip`, () => {
@@ -59,7 +72,7 @@ test('both family guides render simplified submission, all invoice states, and p
     for (const text of [
       'Submitting an invoice or receipt', 'Invoice or Receipt', 'service start and end dates',
       'one or more files', 'Awaiting CEPS Entry', 'Pending Review', 'Validated',
-      'Approved', 'Paid', 'Rejected', 'Duplicate', 'Payments', 'Fees',
+      'Approved', 'Rejected', 'Duplicate', 'Payments', 'Fees',
     ]) assert.ok(html.includes(text), `Missing ${role} workflow text: ${text}`);
     assert.doesNotMatch(html, /see the invoices (?:vendors|my vendors) submit/);
   }

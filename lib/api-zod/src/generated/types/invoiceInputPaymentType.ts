@@ -6,6 +6,9 @@
  * OpenAPI spec version: 0.1.0
  */
 
+/**
+ * Required for staff and vendor submissions. Simplified coordinator, parent and self submissions default from documentType when omitted.
+ */
 export type InvoiceInputPaymentType = typeof InvoiceInputPaymentType[keyof typeof InvoiceInputPaymentType];
 
 

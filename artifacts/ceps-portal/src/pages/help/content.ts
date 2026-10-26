@@ -1,3 +1,5 @@
+import type { InvoiceStatus } from '@workspace/api-client-react';
+
 export interface UserStory {
   as: string;
   want: string;
@@ -24,14 +26,13 @@ export interface RoleDoc {
   workflows: Workflow[];
 }
 
-const invoiceStatusSteps: WorkflowStep[] = [
-  { title: 'Awaiting CEPS Entry', description: 'Your document has been submitted. CEPS still needs to enter its invoice lines and review the details.' },
-  { title: 'Pending Review', description: 'The invoice has been entered and is waiting for review and validation.' },
-  { title: 'Validated', description: 'The invoice has passed validation checks and is waiting for CEPS approval.' },
-  { title: 'Approved', description: 'CEPS has approved the invoice for payment. Approval does not mean it has been paid yet.' },
-  { title: 'Paid', description: 'A payment has been recorded for the invoice.' },
-  { title: 'Rejected', description: 'The invoice was not approved. Read the reason and contact CEPS about the correction needed.' },
-  { title: 'Duplicate', description: 'The invoice has been flagged as a possible duplicate. CEPS needs to check it before approval.' },
+export const invoiceStatusSteps: (WorkflowStep & { status: InvoiceStatus })[] = [
+  { status: 'needs_entry', title: 'Awaiting CEPS Entry', description: 'Your document has been submitted. CEPS still needs to enter its invoice lines and review the details.' },
+  { status: 'pending_review', title: 'Pending Review', description: 'The invoice has been entered and is waiting for review and validation.' },
+  { status: 'validated', title: 'Validated', description: 'The invoice has passed validation checks and is waiting for CEPS approval.' },
+  { status: 'approved', title: 'Approved', description: 'CEPS has approved the invoice for payment. Open Payments to see when the check was issued.' },
+  { status: 'rejected', title: 'Rejected', description: 'The invoice was not approved. Read the reason and contact CEPS about the correction needed.' },
+  { status: 'duplicate', title: 'Duplicate', description: 'The invoice has been flagged as a possible duplicate. CEPS needs to check it before approval.' },
 ];
 
 function messagesWorkflow(start: string): Workflow {
@@ -43,6 +44,7 @@ function messagesWorkflow(start: string): Workflow {
       { title: 'Check who can see it', description: 'All CEPS staff see every thread in their shared inbox. The participant’s current service coordinator sees threads that include the coordinator, and selected family portal users see only threads they are on. Check the To: line before replying.' },
       { title: 'Read and reply', description: 'Open a thread to read its messages and mark it read for your account. Write a reply and select Send, or use Ctrl+Enter or Cmd+Enter. Messages are permanent: they cannot be edited or deleted.' },
       { title: 'Find older conversations', description: 'Messages starts with threads whose last message is in the last 6 months. Choose Archive (older) for older conversations, or Custom range to select dates. Search and the All / Unread views help you find a thread.' },
+      { title: 'Open and resolved threads', description: 'Use the Open / Resolved / All filter to find conversations. Staff and the assigned coordinator can mark a thread resolved or reopen it. A new reply from someone other than the person who resolved it reopens the thread automatically.' },
       { title: 'Check for replies', description: 'There are no email notifications yet. Check Messages when you sign in; the unread badge shows new replies.' },
     ],
   };
@@ -71,16 +73,16 @@ export const roleDocs: RoleDoc[] = [
         summary: 'Turn a new referral from a service coordinator into an active participant.',
         steps: [
           { title: 'Review the referral', description: 'Open Referrals, review participant details, UCI number, and the coordinator\u2019s notes.' },
-          { title: 'Convert to participant', description: 'Accept the referral to create the participant record, or follow up with the coordinator if information is missing.' },
+          { title: 'Review participant updates', description: 'Submitting a referral creates or links the participant record. If the referral is awaiting CEPS review, use Coordinator referral review to compare the submitted details and approve or reject the proposed changes.' },
           { title: 'Send the agreement', description: 'Send the CEPS participation agreement for e-signature to the parent/guardian or self-representing participant.' },
-          { title: 'Activate the participant', description: 'Once the agreement is signed, the participant becomes active and services can be authorized.' },
+          { title: 'Track enrollment', description: 'After the agreement is signed, check the referral status and outstanding authorization, vendor W-9, and invoice requirements. Signing alone does not complete those steps.' },
         ],
       },
       {
         name: 'Authorization management',
         summary: 'Create and maintain purchase-of-service authorizations tied to Alta POS documents.',
         steps: [
-          { title: 'Create the authorization', description: 'From Authorizations, choose the participant and vendor, then enter service code, units, rate, and date range. You can also upload the Alta POS PDF for AI-assisted drafting, then review before saving.' },
+          { title: 'Create the authorization', description: 'From Authorizations, choose the participant and vendor, then enter the POS Number, Service Code, Period Start Date, Period End Date, Received Date, and Max Period Amount. Monthly Amount is optional. You can also upload the Alta POS PDF for AI-assisted drafting, then review before saving.' },
           { title: 'Resolve warnings', description: 'If the system flags overlaps or missing data, review the warnings and correct the draft before saving.' },
           { title: 'Monitor utilization', description: 'Track authorization usage as payments are recorded; fee authorizations track monthly fees. Renew or amend an authorization before it expires.' },
         ],
@@ -112,7 +114,7 @@ export const roleDocs: RoleDoc[] = [
         steps: [
           { title: 'Import the remittance', description: 'From Remittances, add the Remittance Report for the funding period.' },
           { title: 'Match line items', description: 'Match each remittance to a check line or monthly fee. Open a payment to see which remittance paid each line; investigate unmatched or partially funded lines.' },
-          { title: 'Close the period', description: 'When all lines are matched or explained, mark the remittance reconciled.' },
+          { title: 'Check the remaining balance', description: 'Review the remaining amount and allocation lines. A fully allocated remittance is marked matched automatically; there is no separate Mark reconciled action.' },
         ],
       },
       {
@@ -146,7 +148,7 @@ export const roleDocs: RoleDoc[] = [
         summary: 'Refer a participant into the CEPS program.',
         steps: [
           { title: 'Start the referral', description: 'From Referrals, choose New Referral and enter the participant\u2019s details, UCI number, and the services being requested.' },
-          { title: 'Add context', description: 'Include notes about the family\u2019s situation and who will represent the participant (parent/guardian or self).' },
+          { title: 'Complete the details', description: 'Enter the vendor and addresses, service dates and required authorization amount, participant details, preferred language, and any family representative details. Attach supporting documents if available.' },
           { title: 'Track progress', description: 'Watch the referral status \u2014 CEPS staff will accept it, request more information, or contact the family directly.' },
         ],
       },
@@ -154,10 +156,10 @@ export const roleDocs: RoleDoc[] = [
         name: 'Submitting an invoice or receipt',
         summary: 'Send supporting documents to CEPS for entry and review.',
         steps: [
-          { title: 'Choose the participant', description: 'From Invoices, choose New Invoice and select a participant on your caseload. Select the vendor if known; it is optional at submission.' },
+          { title: 'Choose the participant', description: 'From Invoices, choose Submit Invoice and select a participant on your caseload. Select the vendor if known; it is optional at submission.' },
           { title: 'Identify the document and dates', description: 'Choose Invoice or Receipt and enter the service start and end dates.' },
           { title: 'Attach and submit files', description: 'Attach one or more supporting files and submit them to CEPS. Each file becomes a separate submission; check each file’s result and retry any that failed.' },
-          { title: 'Follow the review', description: 'Each submission starts as Awaiting CEPS Entry. CEPS enters the invoice lines and reviews them, then the status moves through Pending Review, Validated, approval, and payment as applicable. Check the invoice for any rejection or duplicate warning.' },
+          { title: 'Follow the review', description: 'Each submission starts as Awaiting CEPS Entry. CEPS enters the invoice lines and reviews them, then the status moves through Pending Review, Validated, and Approved as applicable. Open Payments to see issued checks. Check the invoice for any rejection or duplicate warning.' },
         ],
       },
       {
@@ -216,7 +218,7 @@ export const roleDocs: RoleDoc[] = [
         name: 'Submitting an invoice or receipt',
         summary: 'Send documents for your family member without entering invoice lines.',
         steps: [
-          { title: 'Start the submission', description: 'From Invoices, choose New Invoice. The submission is linked to your family member; select a vendor if known.' },
+          { title: 'Start the submission', description: 'From Invoices, choose Submit Invoice. The submission is linked to your family member; select a vendor if known.' },
           { title: 'Add the document details', description: 'Choose Invoice or Receipt and enter the service start and end dates.' },
           { title: 'Attach and submit files', description: 'Attach one or more files, then submit them to CEPS. Each file becomes a separate submission. Check each result and retry any failed files.' },
           { title: 'Leave billing entry to CEPS', description: 'The status starts as Awaiting CEPS Entry. CEPS enters the invoice lines and reviews the submission; you do not need to enter amounts or authorization lines.' },
@@ -261,7 +263,7 @@ export const roleDocs: RoleDoc[] = [
         name: 'Submitting an invoice or receipt',
         summary: 'Send your documents to CEPS for billing entry and review.',
         steps: [
-          { title: 'Start the submission', description: 'From Invoices, choose New Invoice. The submission is linked to your participant record; select a vendor if known.' },
+          { title: 'Start the submission', description: 'From Invoices, choose Submit Invoice. The submission is linked to your participant record; select a vendor if known.' },
           { title: 'Add the document details', description: 'Choose Invoice or Receipt and enter the service start and end dates.' },
           { title: 'Attach and submit files', description: 'Attach one or more files and submit them to CEPS. Each file becomes a separate submission; check each result and retry any failed files.' },
           { title: 'Leave billing entry to CEPS', description: 'Your submission starts as Awaiting CEPS Entry. CEPS enters the invoice lines and reviews them. You do not need to enter amounts or authorization lines.' },
@@ -288,7 +290,7 @@ export const roleDocs: RoleDoc[] = [
     stories: [
       { as: 'a vendor', want: 'to see my active authorizations with remaining funding', soThat: 'I never deliver services beyond what is approved' },
       { as: 'a vendor', want: 'to submit invoices online against an authorization', soThat: 'I get paid faster with fewer back-and-forth corrections' },
-      { as: 'a vendor', want: 'to see the status of my invoices', soThat: 'I know what has been approved, rejected, or paid' },
+      { as: 'a vendor', want: 'to see the status of my invoices and payment history', soThat: 'I know what has been approved or rejected and which checks have been issued' },
       { as: 'a vendor', want: 'to see my payment history and reports', soThat: 'my bookkeeping matches CEPS records' },
     ],
     workflows: [
@@ -297,16 +299,16 @@ export const roleDocs: RoleDoc[] = [
         summary: 'Bill for services delivered under an authorization.',
         steps: [
           { title: 'Check the authorization', description: 'Open Authorizations and confirm the participant, service code, remaining funding, and date range.' },
-          { title: 'Create the invoice', description: 'From Invoices, choose New Invoice, select the participant, confirm the vendor, choose the payment type and Invoice or Receipt document type, and attach the document. For each line, select an authorization and enter its service month and amount.' },
+          { title: 'Create the invoice', description: 'From Invoices, choose Submit Invoice, select the participant, confirm the vendor, choose the payment type and Invoice or Receipt document type, and attach the document. For each line, select an authorization and enter its service month and amount.' },
           { title: 'Submit for review', description: 'Submit the invoice \u2014 CEPS staff will review it against the authorization.' },
-          { title: 'Fix rejections quickly', description: 'If an invoice is rejected, read the note, correct the lines, and resubmit.' },
+          { title: 'Fix rejections quickly', description: 'If an invoice is rejected, read the note, then submit a corrected invoice as a new submission (or contact CEPS).' },
         ],
       },
       {
         name: 'Tracking payments',
         summary: 'Reconcile what CEPS has paid you.',
         steps: [
-          { title: 'Watch invoice status', description: 'Approved invoices move to payment; the status updates on the Invoices page.' },
+          { title: 'Watch invoice status', description: 'Approved means CEPS approved the invoice for payment, not that a check has been issued. Open Payments to check issued payments.' },
           { title: 'Review payments', description: 'Open Payments to see check details, service months, and remittance status for your payments.' },
           { title: 'Run reports', description: 'Use Reports for a summary of payments over a period to match your own records.' },
         ],

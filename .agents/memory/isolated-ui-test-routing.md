@@ -15,6 +15,12 @@ misleading user-role rendering exception.
 differently from the workspace preview. Keep forwarding in the test harness,
 not hardcoded localhost URLs in application code.
 
+Mock document-storage requests explicitly in route-mocked invoice tests, even when the document preview is not the subject of the test.
+
+**Why:** Vite's successful HTML fallback can be fetched as a document blob and opened in a preview iframe. Its development scripts then report invalid module URLs, falsely failing an otherwise successful invoice editor test.
+
+**How to apply:** Return an actual document response or an explicit storage error for fixture documents; do not let unhandled storage URLs fall through to Vite.
+
 Wait for forwarded route handlers to finish before disposing the browser context.
 
 **Why:** Background page refreshes can still be inside `route.fetch` after the final assertion. Closing the context first can report “Fetch response has been disposed” and fail an otherwise successful user journey.

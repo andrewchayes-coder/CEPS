@@ -75,6 +75,21 @@ function line(month = "2026-10") {
   return { authorizationId: authId, serviceMonth: month, amount: "25.00" };
 }
 describe("simplified invoice service dates and participant boundaries", () => {
+  it.each(["staff", "vendor"])("%s full submission requires an explicit payment type", async role => {
+    const missing = await post(role, { lineItems: [line()] });
+    expect(missing.status).toBe(400);
+    expect(missing.body.error).toBe("paymentType is required");
+    const explicit = await post(role, { paymentType: "direct_payment", lineItems: [line()] });
+    expect(explicit.status, JSON.stringify(explicit.body)).toBe(201);
+    expect(explicit.body.paymentType).toBe("direct_payment");
+  });
+  it.each(["service_coordinator", "parent_guardian", "self"])("%s simplified submission defaults payment type from document type", async role => {
+    for (const documentType of ["invoice", "receipt"]) {
+      const response = await post(role, { documentType });
+      expect(response.status, JSON.stringify(response.body)).toBe(201);
+      expect(response.body.paymentType).toBe(documentType === "invoice" ? "direct_payment" : "reimbursement");
+    }
+  });
   it.each(["service_coordinator", "parent_guardian", "self"])("%s requires both dates and creates needs_entry with dates", async (role) => {
     for (const missing of [{ serviceStartDate: undefined }, { serviceEndDate: undefined }]) {
       const response = await post(role, missing);
@@ -129,7 +144,7 @@ describe("simplified invoice service dates and participant boundaries", () => {
     expect(a.body.id).toBe(b.body.id);
   });
   it.each(["staff", "vendor"])("%s keeps full line-item submission with optional dates", async (role) => {
-    const response = await post(role, { serviceStartDate: undefined, serviceEndDate: undefined, lineItems: [line()] });
+    const response = await post(role, { paymentType: "direct_payment", serviceStartDate: undefined, serviceEndDate: undefined, lineItems: [line()] });
     expect(response.status, JSON.stringify(response.body)).toBe(201);
     expect(response.body).toMatchObject({ status: "pending_review", serviceStartDate: null, serviceEndDate: null });
     expect(response.body.lineItems).toHaveLength(1);

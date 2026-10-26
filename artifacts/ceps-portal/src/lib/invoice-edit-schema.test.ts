@@ -25,9 +25,9 @@ test('legacy dates stay optional and out-of-range line months are warnings, not 
   const dates = { serviceStartDate: '2026-10-15', serviceEndDate: '2026-11-02' };
   assert.ok(invoiceEditSchema.safeParse({ ...base, ...dates }).success);
   assert.equal(lineServiceDateWarning('2026-09', dates.serviceStartDate, dates.serviceEndDate),
-    'Line month 2026-09 is outside the submitted service dates 2026-10-15 – 2026-11-02');
+    'Line month 09/2026 is outside the submitted service dates 10/15/2026 – 11/02/2026');
   assert.equal(lineServiceDateWarning('2026-12', dates.serviceStartDate, dates.serviceEndDate),
-    'Line month 2026-12 is outside the submitted service dates 2026-10-15 – 2026-11-02');
+    'Line month 12/2026 is outside the submitted service dates 10/15/2026 – 11/02/2026');
   for (const month of ['2026-10', '2026-11']) {
     assert.equal(lineServiceDateWarning(month, dates.serviceStartDate, dates.serviceEndDate), null);
   }

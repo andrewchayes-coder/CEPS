@@ -12,7 +12,7 @@ import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow, SortableTableHead, useTableSort } from '@/components/ui/table';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
-import { format } from 'date-fns';
+import { formatDate } from '@/lib/dates';
 import { Search, CheckCircle2, ChevronLeft, ChevronRight } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
 import { DateRangeFilter } from '@/components/date-range-filter';
@@ -125,7 +125,7 @@ export default function PaymentsPage() {
               ) : (
                 payments.map(p => (
                   <TableRow key={p.id}>
-                    <TableCell className="whitespace-nowrap">{format(new Date(p.checkDate), 'MMM d, yyyy')}</TableCell>
+                    <TableCell className="whitespace-nowrap">{formatDate(p.checkDate)}</TableCell>
                     <TableCell className="font-mono text-sm">
                       <Link href={`/payments/${p.id}`} className="text-primary hover:underline" data-testid="link-payment">
                         {p.qbCheckNumber}

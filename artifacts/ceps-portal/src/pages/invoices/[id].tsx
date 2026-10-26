@@ -1,3 +1,4 @@
+import { formatMonth } from '@/lib/dates';
 import React, { useState } from 'react';
 import { useLocation, useParams } from 'wouter';
 import { useGetInvoice, useValidateInvoice, useDecideInvoice, useUpdateInvoice, useDeleteInvoice, InvoiceValidationResult } from '@workspace/api-client-react';
@@ -162,7 +163,7 @@ export default function InvoiceDetailPage() {
                 {invoice.lineItems.map((line, index) => (
                   <div key={line.id || index} className="p-3 bg-muted/30 rounded-md border text-sm flex flex-col gap-1" data-testid={`text-line-item-${index}`}>
                     <div className="flex justify-between font-medium">
-                      <span>{line.serviceMonth}</span>
+                      <span>{formatMonth(line.serviceMonth)}</span>
                       <span>${parseFloat(line.amount).toFixed(2)}</span>
                     </div>
                     <div className="text-muted-foreground">

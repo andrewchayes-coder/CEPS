@@ -1,3 +1,4 @@
+import { formatDate } from '@/lib/dates';
 import React, { useState, useRef } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { useForm } from 'react-hook-form';
@@ -782,8 +783,8 @@ export default function AuthorizationNewPage() {
                       <div>Proposed</div>
                     </div>
 
-                    <DiffRow label="Start Date" current={existingAuth.servicePeriodStart?.slice(0, 10)} proposed={form.watch('servicePeriodStart')} />
-                    <DiffRow label="End Date" current={existingAuth.servicePeriodEnd?.slice(0, 10)} proposed={form.watch('servicePeriodEnd')} />
+                    <DiffRow label="Start Date" current={formatDate(existingAuth.servicePeriodStart)} proposed={formatDate(form.watch('servicePeriodStart'))} />
+                    <DiffRow label="End Date" current={formatDate(existingAuth.servicePeriodEnd)} proposed={formatDate(form.watch('servicePeriodEnd'))} />
                     <DiffRow label="Monthly Amount" current={existingAuth.monthlyAmount} proposed={form.watch('monthlyAmount')} />
                     <DiffRow label="Max Period Amount" current={existingAuth.maxPeriodAmount} proposed={form.watch('maxPeriodAmount')} />
                     <DiffRow label="POS Notes" current={existingAuth.posNotes} proposed={form.watch('posNotes')} />

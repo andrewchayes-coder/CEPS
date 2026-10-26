@@ -1,3 +1,4 @@
+import { formatDate } from '@/lib/dates';
 import React, { useState, useEffect } from 'react';
 import {
   useGetExpiringAuthReport,
@@ -72,7 +73,7 @@ export default function ExpiringAuthReport({ filters }: { filters: GlobalReportF
         r.clientName ?? '',
         r.vendorName ?? '',
         r.serviceCode ?? '',
-        r.servicePeriodEnd ?? '',
+        formatDate(r.servicePeriodEnd),
         r.daysUntilExpiry ?? '',
         r.maxPeriodAmount != null ? formatMoney(r.maxPeriodAmount) : '',
       ]);
@@ -133,7 +134,7 @@ export default function ExpiringAuthReport({ filters }: { filters: GlobalReportF
                   </TableCell>
                   <TableCell className="font-medium"><ClientLink id={r.clientId} name={r.clientName} /></TableCell>
                   <TableCell className="text-muted-foreground"><VendorLink id={r.vendorId} name={r.vendorName} className="text-muted-foreground hover:underline" /></TableCell>
-                  <TableCell className="text-muted-foreground">{r.servicePeriodEnd}</TableCell>
+                  <TableCell className="text-muted-foreground">{formatDate(r.servicePeriodEnd)}</TableCell>
                   <TableCell className="text-right">
                     <Badge variant="outline" className="bg-chart-1/10 text-chart-1 border-chart-1/20">{r.daysUntilExpiry}</Badge>
                   </TableCell>

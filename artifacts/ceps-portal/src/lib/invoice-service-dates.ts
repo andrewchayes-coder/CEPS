@@ -1,3 +1,4 @@
+import { formatDateRange } from './dates';
 export const SERVICE_DATE_MAX_MONTHS = 12;
 
 export function isValidIsoDate(value: string | null | undefined): value is string {
@@ -43,5 +44,5 @@ export function blankLinesForServiceDates(
 }
 
 export function formatServiceDates(start?: string | null, end?: string | null): string | null {
-  return start && end ? `${start} – ${end}` : null;
+  return start && end ? formatDateRange(start, end) : null;
 }

@@ -200,7 +200,7 @@ test('Needs Entry editor validates service dates but permits an out-of-range lin
   await page.getByTestId('input-edit-serviceStartDate').fill('2026-09-15');
   await page.locator('#edit-line-0-month').fill('2026-12');
   const warning = page.getByTestId('warning-line-0-service-dates');
-  await expect(warning).toHaveText('Line month 2026-12 is outside the submitted service dates 2026-09-15 – 2026-11-02');
+  await expect(warning).toHaveText('Line month 12/2026 is outside the submitted service dates 09/15/2026 – 11/02/2026');
   await testInfo.attach('needs-entry-out-of-range-warning.png', { body: await page.screenshot(), contentType: 'image/png' });
 
   await page.getByTestId('button-save-invoice').click();

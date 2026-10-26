@@ -3,7 +3,7 @@ import React, { useState } from 'react';
 import { useListReferrals } from '@workspace/api-client-react';
 import { useAuth } from '@/components/auth/auth-provider';
 import { Link, useLocation, useSearch } from 'wouter';
-import { format, parseISO } from 'date-fns';
+import { formatDate } from '@/lib/dates';
 import { 
   Table, 
   TableBody, 
@@ -193,7 +193,7 @@ export default function ReferralsPage() {
                   <TableRow><TableCell colSpan={4} className="h-24 text-center text-muted-foreground">You have not submitted any referrals yet.</TableCell></TableRow>
                 ) : referrals.map((item) => (
                   <TableRow key={item.id} data-testid={`row-submission-${item.id}`}>
-                    <TableCell className="font-medium whitespace-nowrap">{format(parseISO(item.referralDate), 'MMM d, yyyy')}</TableCell>
+                    <TableCell className="font-medium whitespace-nowrap">{formatDate(item.referralDate)}</TableCell>
                     <TableCell>{item.clientName || 'Unknown Participant'}</TableCell>
                     <TableCell>{item.status === 'pending_review' ? <Badge variant="outline" className="border-primary/30 bg-primary/10 text-primary">Pending CEPS review</Badge> : <StatusBadge status={item.status} />}</TableCell>
                     <TableCell className="text-right"><DownloadReferralConfirmation id={item.id} label="Download" variant="ghost" size="sm" testId={`button-download-${item.id}`} /></TableCell>
@@ -213,7 +213,7 @@ export default function ReferralsPage() {
                 referrals?.map((item) => { if (!('clientId' in item)) return null; const referral = item; return (
                   <TableRow key={referral.id}>
                     <TableCell className="font-medium whitespace-nowrap">
-                      {format(new Date(referral.referralDate), 'MMM d, yyyy')}
+                      {formatDate(referral.referralDate)}
                     </TableCell>
                     <TableCell>
                       <ClientLink id={referral.clientId} name={referral.clientName || 'Unknown Participant'} />

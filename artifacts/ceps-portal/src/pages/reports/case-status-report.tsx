@@ -1,3 +1,4 @@
+import { formatDate } from '@/lib/dates';
 import React, { useState, useEffect } from 'react';
 import {
   useGetCaseStatusReport,
@@ -86,7 +87,7 @@ export default function CaseStatusReport({ initialStatus, filters }: { initialSt
       const rows = all.map((r: any) => [
         r.clientName ?? '',
         STATUS_LABELS[r.status] ?? r.status,
-        r.referralDate ?? '',
+        formatDate(r.referralDate),
         r.coordinatorName ?? '',
       ]);
       downloadCSV('case_status_overview.csv', headers, rows);
@@ -142,7 +143,7 @@ export default function CaseStatusReport({ initialStatus, filters }: { initialSt
                 <TableRow key={r.referralId} data-testid={`row-case-status-${r.referralId}`}>
                   <TableCell className="font-medium"><ClientLink id={r.clientId} name={r.clientName} /></TableCell>
                   <TableCell><Badge variant="secondary">{STATUS_LABELS[r.status] ?? r.status}</Badge></TableCell>
-                  <TableCell className="text-muted-foreground">{r.referralDate}</TableCell>
+                  <TableCell className="text-muted-foreground">{formatDate(r.referralDate)}</TableCell>
                   <TableCell className="text-muted-foreground">{r.coordinatorName ?? '—'}</TableCell>
                 </TableRow>
               ))

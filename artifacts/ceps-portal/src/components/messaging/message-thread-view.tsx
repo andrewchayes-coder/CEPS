@@ -1,3 +1,4 @@
+import { formatDate } from '@/lib/dates';
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { Link, useLocation, useSearch } from 'wouter';
@@ -175,7 +176,7 @@ export function MessageThreadView({ threadId, untilDate }: { threadId: string; u
       </header>
       {untilDate && (
         <div className="flex items-center justify-between gap-2 border-b bg-secondary px-4 py-2 text-sm" data-testid="banner-message-history">
-          <span>Showing messages up to {untilDate}.</span>
+          <span>Showing messages up to {formatDate(untilDate)}.</span>
           <Button size="sm" variant="outline" onClick={jumpToLatest} data-testid="button-jump-to-latest">Jump to latest</Button>
         </div>
       )}

@@ -8,6 +8,7 @@ async function setup(page: Page, role: string, notes: any[]) {
   await page.route('**/api/clients/notes-client/case', (r) => r.fulfill({ json: { client, authorizations: [], invoices: [], payments: [], remittances: [], referrals: [], documents: [] } }));
   await page.route('**/api/fees**', (r) => r.fulfill({ json: [] }));
   await page.route('**/api/family-representatives**', (r) => r.fulfill({ json: [] }));
+  await page.route('**/api/clients/notes-client/message-threads**', (r) => r.fulfill({ json: { total: 0, items: [] } }));
   await page.route('**/api/clients/notes-client/notes**', async (r) => {
     const m = r.request().method();
     const url = r.request().url();
@@ -66,8 +67,8 @@ test('Pacific timestamps across DST', async ({ page }) => {
     { ...base, id: 's', body: 's', createdAt: '2025-07-15T20:30:00.000Z' },
   ]);
   await page.goto('/clients/notes-client');
-  await expect(page.getByTestId('note-created-w')).toHaveText('Jan 15, 2025, 12:30 PM PST');
-  await expect(page.getByTestId('note-created-s')).toHaveText('Jul 15, 2025, 1:30 PM PDT');
+  await expect(page.getByTestId('note-created-w')).toHaveText('01/15/2025 12:30 PM PT');
+  await expect(page.getByTestId('note-created-s')).toHaveText('07/15/2025 1:30 PM PT');
 });
 
 for (const role of ['parent_guardian', 'self', 'vendor']) {

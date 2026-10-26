@@ -181,7 +181,7 @@ describe("simplified invoice service dates and participant boundaries", () => {
     const warnings = result.body.checks.filter((c: { warning?: boolean }) => c.warning);
     expect(warnings).toEqual([{
       check: "submitted_service_dates", warning: true, passed: true,
-      message: "Line month 2026-11 is outside the submitted service dates 2026-09-01 – 2026-10-31",
+      message: "Line month 11/2026 is outside the submitted service dates 09/01/2026 – 10/31/2026",
     }]);
     expect(result.body.valid).toBe(result.body.checks.filter((c: { warning?: boolean }) => !c.warning).every((c: { passed: boolean }) => c.passed));
     await request(app).patch(path).set("Cookie", cookie).send({ lineItems: [line()], status: "pending_review" });

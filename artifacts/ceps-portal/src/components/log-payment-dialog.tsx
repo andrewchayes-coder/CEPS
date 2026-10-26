@@ -1,3 +1,4 @@
+import { formatMonth } from '@/lib/dates';
 import { authorizationCommentSubtitle } from '@/lib/authorization-comments';
 import React, { useState } from 'react';
 import {
@@ -426,7 +427,7 @@ export function LogPaymentDialog({ onSaved, defaultClientId, defaultInvoiceId }:
             <ul className="text-sm text-amber-900 space-y-1 pl-7 list-disc">
               {duplicate.map((p) => (
                 <li key={p.id} data-testid={`text-existing-payment-${p.id}`}>
-                  {`Check ${p.qbCheckNumber} — $${parseFloat(p.amount).toFixed(2)}${p.paymentMonth ? ` (${p.paymentMonth})` : ''}`}
+                  {`Check ${p.qbCheckNumber} — $${parseFloat(p.amount).toFixed(2)}${p.paymentMonth ? ` (${formatMonth(p.paymentMonth)})` : ''}`}
                 </li>
               ))}
             </ul>

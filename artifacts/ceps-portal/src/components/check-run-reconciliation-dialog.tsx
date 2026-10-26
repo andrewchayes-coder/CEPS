@@ -1,3 +1,4 @@
+import { formatDate } from '@/lib/dates';
 import { useRef, useState } from "react";
 import { useReconcileCheckRun, type CheckRunReconciliationResponse } from "@workspace/api-client-react";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
@@ -23,7 +24,7 @@ function Bucket({ title, rows, amountMismatch = false }: { title: string; rows: 
                 <td className="p-2">{row.payment?.vendorName ?? row.check?.vendorName ?? "Unknown vendor"}</td>
                 <td className="p-2">{row.payment ? `$${row.payment.amount}` : "-"}</td>
                 <td className="p-2">{row.check ? `$${row.check.amount}` : "-"}</td>
-                <td className="p-2">{row.check?.checkNumber ?? row.payment?.checkNumber ?? "Not available"} / {row.check?.checkDate ?? row.payment?.checkDate ?? "Not available"}</td>
+                <td className="p-2">{row.check?.checkNumber ?? row.payment?.checkNumber ?? "Not available"} / {formatDate(row.check?.checkDate ?? row.payment?.checkDate)}</td>
                 <td className="p-2 min-w-[220px]">
                   <div><span className="font-medium">Uploaded check address:</span> {row.check?.address || "Not available"}</div>
                   <div><span className="font-medium">Current billing address:</span> {row.payment?.address || "Not available"}</div>

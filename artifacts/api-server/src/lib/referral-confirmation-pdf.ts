@@ -1,6 +1,7 @@
 import { PDFDocument, rgb } from "pdf-lib";
 import type { clientsTable, referralsTable, vendorsTable } from "@workspace/db";
 import { referralPdfText } from "./referral-pdf-text";
+import { formatDate, formatDateTime } from "./dates";
 
 type Referral = typeof referralsTable.$inferSelect;
 type Client = typeof clientsTable.$inferSelect;
@@ -51,13 +52,13 @@ export function confirmationSections(referral: Referral, client: Client, vendor?
       ["Service type", fields.serviceType === "direct_pay_459" ? "Direct pay (459)" : fields.serviceType === "reimbursement_024" ? "Reimbursement (024)" : fields.serviceType],
       ["Service frequency", frequency === "monthly" ? "Monthly" : frequency === "one_time" ? "One-time" : frequency],
       ["Comments", value("activityDescription")],
-      ["Service start date", value("serviceStartDate")], ["Service end date", value("serviceEndDate")],
+      ["Service start date", formatDate(value("serviceStartDate") as string | null)], ["Service end date", formatDate(value("serviceEndDate") as string | null)],
       [frequency === "monthly" ? "Monthly authorization amount" : "Total authorization amount", fields.authAmount ? `$${fields.authAmount}` : null],
-      ["POS number", value("posNumber")], ["POS start date", value("posStartDate")], ["POS end date", value("posEndDate")],
+      ["POS number", value("posNumber")], ["POS start date", formatDate(value("posStartDate") as string | null)], ["POS end date", formatDate(value("posEndDate") as string | null)],
     ]],
     ["Participant", [
       ["First name", value("clientFirstName", client.firstName)], ["Last name", value("clientLastName", client.lastName)],
-      ["Date of birth", value("clientDob", client.dateOfBirth)], ["UCI", value("clientUci", client.uciNumber)],
+      ["Date of birth", formatDate(value("clientDob", client.dateOfBirth) as string | null)], ["UCI", value("clientUci", client.uciNumber)],
       ["Preferred language", value("preferredLanguage", client.preferredLanguage)],
       ["Minor / adult", typeof minor === "boolean" ? minor ? "Minor" : "Adult" : null],
       ["Contact email", value("contactEmail", minor ? legacyFamily?.familyRepEmail : legacyFamily?.email)],
@@ -90,9 +91,7 @@ export async function createReferralConfirmationPdf(
   const heading = "CEPS Referral Confirmation";
   const headers = [
     `Referral ID: ${referral.id.slice(0, 8)}`,
-    `Submitted: ${new Intl.DateTimeFormat("en-US", {
-      timeZone: "America/Los_Angeles", dateStyle: "medium", timeStyle: "long",
-    }).format(referral.createdAt)}`,
+    `Submitted: ${formatDateTime(referral.createdAt)} PT`,
     `Submitted by: ${display(submitter?.name)} (${display(submitter ? roleNames[submitter.role] ?? submitter.role : null)})`,
     `Status at download: ${referral.coordinatorReviewStatus === "pending"
       ? "Submitted — pending CEPS review" : referral.coordinatorReviewStatus === "rejected"

@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
-import { format } from 'date-fns';
+import { formatDate } from '@/lib/dates';
 import { AlertTriangle, Plus, Power, Users } from 'lucide-react';
 import {
   getListStaffRolesQueryKey, getListUsersQueryKey, getGetCurrentUserQueryKey,
@@ -129,7 +129,7 @@ export default function UsersPage() {
               <TableCell className="font-medium">{u.name}</TableCell><TableCell>{u.email}</TableCell><TableCell className="text-muted-foreground">{u.phone || '—'}</TableCell>
               <TableCell>{u.role === 'staff' ? u.staffRole ? <Badge variant="secondary">{u.staffRole.name}</Badge> : <span className="inline-flex items-center gap-1 text-chart-1"><AlertTriangle className="h-3.5 w-3.5" />Unassigned</span> : <span className="text-sm">Service Coordinator</span>}</TableCell>
               <TableCell><Badge variant="outline" className={u.active ? 'border-chart-5/30 text-chart-5' : 'text-muted-foreground'}>{u.active ? 'Active' : 'Inactive'}</Badge></TableCell>
-              <TableCell className="text-sm text-muted-foreground">{u.lastLogin ? format(new Date(u.lastLogin), 'MMM d, yyyy') : 'Never'}</TableCell>
+              <TableCell className="text-sm text-muted-foreground">{u.lastLogin ? formatDate(u.lastLogin) : 'Never'}</TableCell>
               <TableCell><div className="flex justify-end gap-2">
                 <EditUserDialog id={u.id} user={u} roles={rolesQuery.data ?? []} onSaved={refresh} />
                 {currentUser?.id !== u.id && (u.active ? <AlertDialog open={deactivateId === u.id} onOpenChange={(value) => { setDeactivateId(value ? u.id : null); setActionError(''); }}><AlertDialogTrigger asChild><Button size="sm" variant="outline" className="text-destructive hover:text-destructive" data-testid={`button-deactivate-user-${u.id}`}><Power className="mr-1.5 h-4 w-4" />Deactivate</Button></AlertDialogTrigger><AlertDialogContent><AlertDialogHeader><AlertDialogTitle>Deactivate {u.name}?</AlertDialogTitle><AlertDialogDescription>This revokes their access. You cannot deactivate the last active user with user-management access.</AlertDialogDescription></AlertDialogHeader>{actionError && <p role="alert" className="text-sm text-destructive">{actionError}</p>}<AlertDialogFooter><AlertDialogCancel>Cancel</AlertDialogCancel><AlertDialogAction className="bg-destructive text-destructive-foreground hover:bg-destructive/90" onClick={(e) => { e.preventDefault(); handleDeactivate(u.id); }} disabled={deactivate.isPending} data-testid={`button-confirm-deactivate-user-${u.id}`}>{deactivate.isPending ? 'Deactivating…' : 'Deactivate'}</AlertDialogAction></AlertDialogFooter></AlertDialogContent></AlertDialog> : <Button size="sm" variant="outline" onClick={() => handleReactivate(u.id)} disabled={reactivate.isPending} data-testid={`button-reactivate-user-${u.id}`}><Power className="mr-1.5 h-4 w-4" />Reactivate</Button>)}

@@ -14,7 +14,7 @@ import { MetricHelp } from '@/components/metric-help';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { format } from 'date-fns';
+import { formatDate } from '@/lib/dates';
 import { ChevronLeft, ChevronRight, X, AlertTriangle, Search } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useDebounce } from '@/hooks/use-debounce';
@@ -236,7 +236,7 @@ export default function RemittancesPage() {
                   const review = reviewMessage(r.reviewReason, r.expectedAmount, r.amount);
                   return (
                   <TableRow key={r.id} className={startsGroup && index > 0 ? 'border-t-4 border-muted bg-muted/20' : ''}>
-                    <TableCell className="whitespace-nowrap">{format(new Date(r.remittanceDate), 'MMM d, yyyy')}</TableCell>
+                    <TableCell className="whitespace-nowrap">{formatDate(r.remittanceDate)}</TableCell>
                     <TableCell className="font-mono text-sm">
                       {r.altaReference || '—'}
                       {review && <div className="mt-1 flex items-start gap-1 text-xs text-destructive"><AlertTriangle className="mt-0.5 h-3 w-3 shrink-0" />{review}</div>}

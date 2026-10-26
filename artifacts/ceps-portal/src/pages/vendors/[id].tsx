@@ -41,7 +41,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { DateRangeFilter } from '@/components/date-range-filter';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow, SortableTableHead, useTableSort } from '@/components/ui/table';
 import { useDebounce } from '@/hooks/use-debounce';
-import { format } from 'date-fns';
+import { formatDate } from '@/lib/dates';
 import { formatMoney } from '@/lib/utils';
 import { ClientLink } from '@/components/entity-links';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -472,7 +472,7 @@ function VendorPaymentsTab({ vendorId }: { vendorId: string }) {
               ) : (
                 payments.map((p: any) => (
                   <TableRow key={p.id}>
-                    <TableCell className="whitespace-nowrap">{format(new Date(p.checkDate), 'MMM d, yyyy')}</TableCell>
+                    <TableCell className="whitespace-nowrap">{formatDate(p.checkDate)}</TableCell>
                     <TableCell className="font-mono text-sm">
                       <Link href={`/payments/${p.id}`} className="text-primary hover:underline" data-testid="link-payment">
                         {p.qbCheckNumber}

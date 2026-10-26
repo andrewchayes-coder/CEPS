@@ -15,7 +15,7 @@ describe('messaging helpers', () => {
     assert.deepEqual(rangeParams({ mode: 'recent' }), { range: 'recent' });
     assert.deepEqual(rangeParams({ mode: 'archive' }), { range: 'archive' });
     assert.deepEqual(rangeParams({ mode: 'custom', from: '2025-01-01', to: '2025-02-01' }), { dateFrom: '2025-01-01', dateTo: '2025-02-01' });
-    assert.equal(rangeCaption({ mode: 'custom', from: '2025-01-01', to: '2025-02-01' }), 'Threads with messages from 2025-01-01 to 2025-02-01');
+    assert.equal(rangeCaption({ mode: 'custom', from: '2025-01-01', to: '2025-02-01' }), 'Threads with messages from 01/01/2025 to 02/01/2025');
     assert.equal(messagePacificDay('2025-04-01T06:30:00Z'), '2025-03-31');
   });
   it('linkify only http(s) and trims punctuation', () => {

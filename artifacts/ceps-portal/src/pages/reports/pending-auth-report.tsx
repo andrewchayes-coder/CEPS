@@ -1,3 +1,4 @@
+import { formatDate } from '@/lib/dates';
 import React, { useState, useEffect } from 'react';
 import {
   useGetPendingAuthReport,
@@ -56,7 +57,7 @@ export default function PendingAuthReport({ filters }: { filters: GlobalReportFi
       const headers = ['Participant', 'Referral Date', 'Days Waiting', 'Service Coordinator'];
       const rows = all.map((r: any) => [
         r.clientName ?? '',
-        r.referralDate ?? '',
+        formatDate(r.referralDate),
         r.daysWaiting ?? 0,
         r.coordinatorName ?? '',
       ]);
@@ -98,7 +99,7 @@ export default function PendingAuthReport({ filters }: { filters: GlobalReportFi
               items.map((r: any) => (
                 <TableRow key={r.referralId} data-testid={`row-pending-auth-${r.referralId}`}>
                   <TableCell className="font-medium"><ClientLink id={r.clientId} name={r.clientName} /></TableCell>
-                  <TableCell className="text-muted-foreground">{r.referralDate}</TableCell>
+                  <TableCell className="text-muted-foreground">{formatDate(r.referralDate)}</TableCell>
                   <TableCell className="text-right font-bold">{r.daysWaiting}</TableCell>
                   <TableCell className="text-muted-foreground">{r.coordinatorName ?? '—'}</TableCell>
                 </TableRow>

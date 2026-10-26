@@ -89,8 +89,8 @@ test('payments list formats service-month ranges and requests sorting by earlies
   });
 
   await page.goto('/payments');
-  await expect(page.getByTestId('text-payment-service-month-payment-month-range')).toHaveText('Jan–Mar 2026');
-  await expect(page.getByTestId('text-payment-service-month-payment-month-gap')).toHaveText('Jan, Mar 2026');
+  await expect(page.getByTestId('text-payment-service-month-payment-month-range')).toHaveText('01/2026 – 03/2026');
+  await expect(page.getByTestId('text-payment-service-month-payment-month-gap')).toHaveText('01/2026, 03/2026');
   await page.getByTestId('button-sort-serviceMonth').click();
   await expect.poll(() => sortUrl?.searchParams.get('sortBy')).toBe('serviceMonth');
 });
@@ -116,8 +116,8 @@ test('log payment dialog preserves each invoice line service month and defaults 
   await page.getByRole('option', { name: 'Pat Participant' }).click();
 
   await logDialog.getByTestId('select-payment-invoice-id').click();
-  await expect(page.getByRole('option', { name: /2026-08/ })).toBeVisible();
-  await page.getByRole('option', { name: /2026-08/ }).click();
+  await expect(page.getByRole('option', { name: /08\/2026/ })).toBeVisible();
+  await page.getByRole('option', { name: /08\/2026/ }).click();
 
   await expect(logDialog.locator('#payment-alloc-0-month')).toHaveValue('2026-08');
   await expect(logDialog.getByTestId('input-payment-alloc-0-amount')).toHaveValue('100.00');
@@ -208,7 +208,7 @@ test('edit payment keeps allocation service months and invoice selection repopul
   await expect(dialog.locator('#edit-payment-alloc-0-month')).toHaveValue('2026-08');
   await expect(dialog.locator('#edit-payment-alloc-1-month')).toHaveValue('2026-07');
   await dialog.getByTestId('select-payment-invoice-id').click();
-  await page.getByRole('option', { name: /2026-08/ }).click();
+  await page.getByRole('option', { name: /08\/2026/ }).click();
   await expect(dialog.locator('#edit-payment-alloc-0-month')).toHaveValue('2026-08');
   await expect(dialog.locator('#edit-payment-alloc-1-month')).toHaveValue('2026-07');
   await dialog.getByTestId('button-save-payment').click();

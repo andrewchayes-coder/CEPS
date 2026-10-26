@@ -1,3 +1,4 @@
+import { formatMonth, formatMonthRange } from './dates';
 type MonthAllocation = { serviceMonth?: string | null };
 
 type PaymentWithServiceMonths = {
@@ -27,41 +28,21 @@ function serviceMonthsForPayment(payment: PaymentWithServiceMonths): string[] {
   return payment.paymentMonth && SERVICE_MONTH_PATTERN.test(payment.paymentMonth) ? [payment.paymentMonth] : [];
 }
 
-function dateForServiceMonth(month: string): Date {
-  const [year, monthNumber] = month.split('-').map(Number);
-  return new Date(year, monthNumber - 1, 1);
-}
-
-function formatServiceMonth(month: string): string {
-  return dateForServiceMonth(month).toLocaleString('en-US', { month: 'short', year: 'numeric' });
-}
-
 export function formatPaymentServiceMonths(payment: PaymentWithServiceMonths): string {
   const months = serviceMonthsForPayment(payment);
   if (months.length === 0) return '—';
-  if (months.length === 1) return formatServiceMonth(months[0]);
+  if (months.length === 1) return formatMonth(months[0]);
 
   const timestamps = months.map((month) => {
     const [year, monthNumber] = month.split('-').map(Number);
     return year * 12 + monthNumber;
   });
   const contiguous = timestamps[timestamps.length - 1] - timestamps[0] === months.length - 1;
-  const firstDate = dateForServiceMonth(months[0]);
-  const lastDate = dateForServiceMonth(months[months.length - 1]);
   if (contiguous) {
-    const firstLabel = firstDate.toLocaleString('en-US', { month: 'short' });
-    const lastLabel = lastDate.toLocaleString('en-US', { month: 'short', year: 'numeric' });
-    if (firstDate.getFullYear() !== lastDate.getFullYear()) {
-      return `${formatServiceMonth(months[0])}–${lastLabel}`;
-    }
-    return `${firstLabel}–${lastLabel}`;
+    return formatMonthRange(months[0], months[months.length - 1]);
   }
 
-  const sameYear = months.every((month) => month.slice(0, 4) === months[0].slice(0, 4));
-  if (sameYear) {
-    return `${months.map((month) => dateForServiceMonth(month).toLocaleString('en-US', { month: 'short' })).join(', ')} ${months[0].slice(0, 4)}`;
-  }
-  return months.map(formatServiceMonth).join(', ');
+  return months.map(formatMonth).join(', ');
 }
 
 export function earliestPaymentServiceMonth(payment: PaymentWithServiceMonths): string {

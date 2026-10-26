@@ -1,3 +1,4 @@
+import { formatDate, formatDateTime } from '@/lib/dates';
 import { useRef, useState } from 'react';
 import { readSheet, type CellValue } from 'read-excel-file/browser';
 import {
@@ -295,7 +296,7 @@ export function AltaFmsPaymentImport({ onImported }: { onImported: () => void })
                         const skipped = unacknowledgeableResults.includes(row.result);
                         return <tr key={row.rowNumber} className={row.result === 'match' ? 'bg-green-50/60' : 'bg-amber-50/40'} data-testid={`row-alta-fms-audit-${row.rowNumber}`}>
                           <td className="px-3 py-3 align-top"><span className="font-mono text-xs text-muted-foreground">#{row.rowNumber}</span><div className="font-medium">{row.checkNumber || 'No check #'}</div></td>
-                          <td className="px-3 py-3 align-top whitespace-nowrap">{row.checkDate || '—'}</td>
+                          <td className="px-3 py-3 align-top whitespace-nowrap">{formatDate(row.checkDate)}</td>
                           <td className="px-3 py-3 align-top"><div>{row.participantName || 'Unknown'}</div><div className="font-mono text-xs text-muted-foreground">{row.uciNumber || '—'}</div></td>
                           <td className="px-3 py-3 align-top"><div>{row.payeeName || '—'}</div><div className="text-xs text-muted-foreground">Approved: {row.invoiceVendor || 'Not found'}</div></td>
                           <td className="px-3 py-3 align-top whitespace-nowrap"><div>{row.checkAmount ?? '—'}</div><div className="text-xs text-muted-foreground">Approved: {row.approvedAmount ?? '—'}<br />Remaining: {row.remainingAmount ?? '—'}</div></td>
@@ -319,7 +320,7 @@ export function AltaFmsPaymentImport({ onImported }: { onImported: () => void })
                                       onChange={() => setInvoiceChoices(prev => ({ ...prev, [row.rowNumber]: candidate.invoiceId }))}
                                       data-testid={`radio-alta-fms-audit-invoice-${row.rowNumber}-${index}`} className="mt-0.5 accent-primary" />
                                     <span><strong>{candidate.vendorName || 'Unknown vendor'}</strong><br />Approved: {candidate.approvedAmount ?? '—'} · Remaining: {candidate.remainingAmount ?? 'Uncertain (unlinked allocations)'}
-                                      {candidate.reviewedBy && <><br />Reviewed by {candidate.reviewedBy}{candidate.reviewedAt ? ` · ${candidate.reviewedAt}` : ''}</>}
+                                      {candidate.reviewedBy && <><br />Reviewed by {candidate.reviewedBy}{candidate.reviewedAt ? ` · ${formatDateTime(candidate.reviewedAt)}` : ''}</>}
                                     </span>
                                   </label>
                                   <Link href={`/invoices/${candidate.invoiceId}`} target="_blank" rel="noopener noreferrer"
@@ -330,7 +331,7 @@ export function AltaFmsPaymentImport({ onImported }: { onImported: () => void })
                           </td>
                           <td className="px-3 py-3 align-top">
                             {row.invoiceId ? <Link href={`/invoices/${row.invoiceId}`} target="_blank" rel="noopener noreferrer" data-testid={`link-alta-fms-audit-invoice-${row.rowNumber}`} className="text-primary underline underline-offset-2">View invoice</Link> : '—'}
-                            {row.reviewedBy && <p className="mt-1 text-xs text-muted-foreground">Approved by {row.reviewedBy}{row.reviewedAt ? ` · ${row.reviewedAt}` : ''}</p>}
+                            {row.reviewedBy && <p className="mt-1 text-xs text-muted-foreground">Approved by {row.reviewedBy}{row.reviewedAt ? ` · ${formatDateTime(row.reviewedAt)}` : ''}</p>}
                           </td>
                         </tr>;
                       })}

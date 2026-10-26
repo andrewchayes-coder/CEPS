@@ -9,7 +9,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { ArrowLeft, CheckCircle2 } from 'lucide-react';
-import { format } from 'date-fns';
+import { formatDate } from '@/lib/dates';
 import { MetricHelp } from '@/components/metric-help';
 import { formatPaymentServiceMonths } from '@/lib/payment-utils';
 import { PaymentRemittedState } from '@/components/payment-remitted-state';
@@ -78,7 +78,7 @@ export default function PaymentDetailPage() {
               </>
             )}
             <dt className="text-muted-foreground">Check Date:</dt>
-            <dd className="col-span-2">{format(new Date(payment.checkDate), 'MMM d, yyyy')}</dd>
+            <dd className="col-span-2">{formatDate(payment.checkDate)}</dd>
             <dt className="text-muted-foreground">Amount:</dt>
             <dd className="col-span-2 font-bold text-lg">${parseFloat(payment.amount).toFixed(2)}</dd>
             <dt className="text-muted-foreground">Payment Type:</dt>
@@ -127,7 +127,7 @@ export default function PaymentDetailPage() {
                         <React.Fragment key={remittance.id}>
                           {remittanceIndex > 0 && ', '}
                           <Link href={`/remittances/${remittance.id}`} className="text-primary hover:underline" data-testid={`link-payment-line-remittance-${alloc.id}-${remittance.id}`}>
-                            {remittance.reference || `Remittance ${format(new Date(remittance.date), 'MMM d, yyyy')}`} (${Number(remittance.amount).toFixed(2)})
+                            {remittance.reference || `Remittance ${formatDate(remittance.date)}`} (${Number(remittance.amount).toFixed(2)})
                           </Link>
                         </React.Fragment>
                       ))}

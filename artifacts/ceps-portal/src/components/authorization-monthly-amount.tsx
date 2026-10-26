@@ -1,6 +1,6 @@
 import React from 'react';
 import type { Authorization } from '@workspace/api-client-react';
-import { format } from 'date-fns';
+import { formatDate } from '@/lib/dates';
 import { formatMoney } from '@/lib/utils';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 
@@ -11,11 +11,6 @@ export type MonthlyAmountFields = Pick<Authorization,
 const present = (v: string | null | undefined): v is string => v !== null && v !== undefined && v !== '';
 const money = (v: string) => `$${formatMoney(v)}`;
 
-export function parseDateOnly(value: string): Date | null {
-  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(value);
-  return m ? new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3])) : null;
-}
-
 export function monthlyAmountText(a: MonthlyAmountFields): string {
   if (present(a.monthlyAmount)) return money(a.monthlyAmount);
   if (present(a.oneTimeAmount)) return `${money(a.oneTimeAmount)} one-time`;
@@ -24,8 +19,8 @@ export function monthlyAmountText(a: MonthlyAmountFields): string {
 
 export function changedTooltipText(a: MonthlyAmountFields): string {
   const was = present(a.previousMonthlyAmount) ? money(a.previousMonthlyAmount) : '—';
-  const d = a.monthlyAmountChangedReceivedDate ? parseDateOnly(a.monthlyAmountChangedReceivedDate) : null;
-  return `Was ${was} until ${d ? format(d, 'MM/dd/yyyy') : 'Received date not recorded'}`;
+  const date = formatDate(a.monthlyAmountChangedReceivedDate);
+  return `Was ${was} until ${date !== '—' ? date : 'Received date not recorded'}`;
 }
 
 export function MonthlyAmount({ auth }: { auth: MonthlyAmountFields }) {

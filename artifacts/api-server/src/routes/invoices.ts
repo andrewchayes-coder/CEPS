@@ -1,3 +1,4 @@
+import { formatMonth, formatDateRange } from "../lib/dates";
 import { Router, type IRouter } from "express";
 import { eq, and, desc, sql, count, ilike, or, gte, lte, inArray, type SQL } from "drizzle-orm";
 import { db, invoicesTable, invoiceLineItemsTable, authorizationsTable, paymentsTable, paymentAllocationsTable, vendorsTable, clientsTable } from "@workspace/db";
@@ -624,7 +625,7 @@ router.post("/invoices/:id/validate", requirePermission("invoice_log_validate"),
           check: "submitted_service_dates",
           passed: true,
           warning: true,
-          message: `Line month ${month} is outside the submitted service dates ${invoice.serviceStartDate} – ${invoice.serviceEndDate}`,
+          message: `Line month ${formatMonth(month)} is outside the submitted service dates ${formatDateRange(invoice.serviceStartDate, invoice.serviceEndDate)}`,
         });
       }
     }

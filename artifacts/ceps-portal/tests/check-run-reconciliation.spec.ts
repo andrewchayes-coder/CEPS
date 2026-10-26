@@ -87,7 +87,7 @@ test("report renders all buckets, addresses, amounts, and unknown vendor", async
   await expect(page.getByText("Current billing address: Current M")).toBeVisible();
   await expect(page.getByText("Unknown vendor")).toBeVisible();
   await expect(page.getByText("Review amount/address")).toBeVisible();
-  await expect(page.getByText("C4 / 2026-01-04")).toBeVisible();
+  await expect(page.getByText("C4 / 01/04/2026")).toBeVisible();
 });
 
 test("client validation rejects missing CSV and reversed dates without API call", async ({ page }) => {

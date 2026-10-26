@@ -340,7 +340,7 @@ test('staff Documents tab formats document and signature statuses as compact sem
   await expect(page.getByTestId('signature-group-document-doc-pending')).toContainText('Signature');
   await expect(page.locator('[data-status-kind="document"]')).toHaveCount(4);
   await expect(page.locator('[data-status-kind="signature"]')).toHaveCount(3);
-  await expect(page.getByTestId('row-document-doc-received')).toContainText('Sep 3, 2026');
+  await expect(page.getByTestId('row-document-doc-received')).toContainText('09/03/2026');
   await expect(page.getByTestId('row-document-doc-fallback')).toContainText('-');
 });
 
@@ -399,7 +399,7 @@ test('fee-blocked participant deletion opens the Fees tab and closes the conflic
           type: 'fee',
           label: 'Fees',
           count: 1,
-          records: [{ id: fee.id, label: 'Fee for 2026-09', href: `/clients/${participantId}?tab=fees` }],
+          records: [{ id: fee.id, label: 'Fee for 09/2026', href: `/clients/${participantId}?tab=fees` }],
         }],
       }),
     }),
@@ -411,7 +411,7 @@ test('fee-blocked participant deletion opens the Fees tab and closes the conflic
   await page.getByTestId('button-confirm-delete').click();
   await expect(page.getByTestId('delete-conflict-details')).toContainText('1 Fee');
 
-  await page.getByRole('link', { name: 'Fee for 2026-09' }).click();
+  await page.getByRole('link', { name: 'Fee for 09/2026' }).click();
 
   await expect(page).toHaveURL(new RegExp(`/clients/${participantId}\\?tab=fees$`));
   await expect(page.getByTestId('delete-conflict-details')).toHaveCount(0);

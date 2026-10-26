@@ -15,6 +15,16 @@ const visibility: Record<string, string[]> = {
 };
 const render = (role?: string) => renderToStaticMarkup(createElement(HelpDocumentation, { role }));
 
+test('all role guides share numeric date/month examples and Pacific time guidance', () => {
+  for (const role of Object.keys(visibility)) {
+    const html = render(role);
+    assert.match(html, /10\/22\/2026/);
+    assert.match(html, /10\/2026/);
+    assert.match(html, /3:05 PM/);
+    assert.match(html, /Pacific time/);
+  }
+});
+
 test('every documented invoice status exists in the API status list', () => {
   const statuses = Object.values(InvoiceStatus);
   assert.deepEqual(invoiceStatusSteps.map(step => step.status).sort(), [...statuses].sort());

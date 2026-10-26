@@ -1,4 +1,5 @@
 import type { ListMessageThreadsParams, ThreadMessage } from '@workspace/api-client-react';
+import { formatDate } from './dates';
 
 export type RangeMode = 'recent' | 'archive' | 'custom';
 export interface MessageRange { mode: RangeMode; from?: string; to?: string }
@@ -18,7 +19,7 @@ export function rangeParams(r: MessageRange): Pick<ListMessageThreadsParams, 'ra
 
 export function rangeCaption(r: MessageRange): string {
   if (r.mode === 'archive') return 'Showing archived messages (older than 6 months)';
-  if (r.mode === 'custom' && (r.from || r.to)) return `Threads with messages from ${r.from ?? 'the beginning'} to ${r.to ?? 'today'}`;
+  if (r.mode === 'custom' && (r.from || r.to)) return `Threads with messages from ${r.from ? formatDate(r.from) : 'the beginning'} to ${r.to ? formatDate(r.to) : 'today'}`;
   return 'Showing the last 6 months';
 }
 

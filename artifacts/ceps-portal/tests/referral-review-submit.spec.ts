@@ -117,7 +117,7 @@ test.describe('download-only submission list', () => {
     await page.goto('/referrals');
     await page.getByText('My submissions', { exact: true }).click();
     const row = page.getByTestId('row-submission-receipt-1');
-    await expect(row).toContainText('Oct 9, 2026');
+    await expect(row).toContainText('10/09/2026');
     await expect(row).toContainText('Receipt Participant');
     await expect(row).toContainText('Pending CEPS review');
     await expect(row.locator('a')).toHaveCount(0);
@@ -181,8 +181,8 @@ test('Documents Next opens Review without creating a referral; only Submit creat
 
   await page.getByRole('button', { name: 'Next' }).click();
   await expect(page.getByText('Review & Submit', { exact: true })).toBeVisible();
-  await expect(page.getByText('2026-10-01', { exact: true })).toBeVisible();
-  await expect(page.getByText('2027-05-01', { exact: true })).toBeVisible();
+  await expect(page.getByText('10/01/2026', { exact: true })).toBeVisible();
+  await expect(page.getByText('05/01/2027', { exact: true })).toBeVisible();
   await expect(page.getByText('Monthly authorization amount:', { exact: true })).toBeVisible();
   await expect(page.getByText('$123.45', { exact: true })).toBeVisible();
   await expect(page.getByTestId('review-preferred-language')).toHaveText('Spanish');

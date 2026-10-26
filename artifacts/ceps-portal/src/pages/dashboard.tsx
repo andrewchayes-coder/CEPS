@@ -1,3 +1,4 @@
+import { formatDate, formatDateTime } from '@/lib/dates';
 import React, { useState } from 'react';
 import { useGetDashboardSummary } from '@workspace/api-client-react';
 import { useAuth } from '@/components/auth/auth-provider';
@@ -296,7 +297,7 @@ export default function DashboardPage() {
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-bold">{summary.totals.pendingPosReview ?? summary.totals.unmatchedPosDocuments ?? 0}</div>
-              <p className="text-xs text-muted-foreground mt-1">Oldest: {summary.totals.oldestPendingPosDate ? new Date(summary.totals.oldestPendingPosDate).toLocaleDateString() : '—'}</p>
+              <p className="text-xs text-muted-foreground mt-1">Oldest: {formatDate(summary.totals.oldestPendingPosDate)}</p>
               <p className="text-xs text-muted-foreground">{summary.totals.pendingPosWithoutClient ?? 0} with no matching participant</p>
               <Link href="/authorizations/review" onClick={(e) => e.stopPropagation()} className="text-xs text-primary hover:underline mt-1 inline-block" data-testid="link-tile-pos-review">
                 Review queue →
@@ -325,9 +326,7 @@ export default function DashboardPage() {
                       <p className="text-sm font-medium leading-none capitalize">{activity.action.replace(/_/g, ' ')}</p>
                       {activity.detail && <p className="text-sm text-muted-foreground">{activity.detail}</p>}
                       <p className="text-xs text-muted-foreground">
-                        {new Date(activity.createdAt).toLocaleDateString(undefined, { 
-                          month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' 
-                        })}
+                        {formatDateTime(activity.createdAt)}
                       </p>
                     </div>
                   </div>

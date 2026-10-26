@@ -11,7 +11,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
 import { ArrowLeft, AlertCircle, ExternalLink } from 'lucide-react';
-import { format } from 'date-fns';
+import { formatDate, formatDateTime, formatDateRange } from '@/lib/dates';
 import { DocumentPreview } from '@/components/document-preview';
 import { MetricHelp } from '@/components/metric-help';
 
@@ -107,7 +107,7 @@ export default function AuthorizationDetailPage() {
               )}
               <dt className="text-muted-foreground">Service Period:</dt>
               <dd className="col-span-2">
-                {format(new Date(auth.servicePeriodStart), 'MM/dd/yy')} - {format(new Date(auth.servicePeriodEnd), 'MM/dd/yy')}
+                {formatDateRange(auth.servicePeriodStart, auth.servicePeriodEnd)}
               </dd>
               {auth.monthlyAmount && (
                 <>
@@ -126,7 +126,7 @@ export default function AuthorizationDetailPage() {
               )}
               {auth.receivedDate && (
                 <>
-                  <dt className="text-muted-foreground">Received:</dt><dd className="col-span-2">{auth.receivedDate}</dd>
+                  <dt className="text-muted-foreground">Received:</dt><dd className="col-span-2">{formatDate(auth.receivedDate)}</dd>
                 </>
               )}
               {auth.posNotes && (
@@ -183,7 +183,7 @@ export default function AuthorizationDetailPage() {
                 ) : versions.map((version) => (
                   <div key={version.id} className="border-b pb-3 last:border-0 last:pb-0">
                     <div className="flex justify-between gap-3 text-sm">
-                      <span>{format(new Date(version.changedAt), 'MM/dd/yy h:mm a')}</span>
+                      <span>{formatDateTime(version.changedAt)}</span>
                       <span className="text-muted-foreground">{version.changedByName ?? 'Staff'}</span>
                     </div>
                     <p className="text-xs text-muted-foreground mt-1">
@@ -192,7 +192,7 @@ export default function AuthorizationDetailPage() {
                         : 'authorization details'}
                     </p>
                     <div className="flex gap-3 text-xs mt-1">
-                      <span>{version.receivedDate ? `Received ${version.receivedDate}` : 'Received date not recorded'}</span>
+                      <span>{version.receivedDate ? `Received ${formatDate(version.receivedDate)}` : 'Received date not recorded'}</span>
                       {version.posPdfUrl && <a href={`${import.meta.env.BASE_URL}api/storage${version.posPdfUrl}`} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-primary hover:underline">POS PDF <ExternalLink className="w-3 h-3" /></a>}
                     </div>
                   </div>

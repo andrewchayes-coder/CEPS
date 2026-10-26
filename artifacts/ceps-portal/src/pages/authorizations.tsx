@@ -5,7 +5,7 @@ import { EditAuthorizationDialog } from '@/components/edit-authorization-dialog'
 import { CancelAuthorizationDialog } from '@/components/cancel-authorization-dialog';
 import { ClientLink, VendorLink } from '@/components/entity-links';
 import { Link } from 'wouter';
-import { format } from 'date-fns';
+import { formatDateRange } from '@/lib/dates';
 import { 
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow, SortableTableHead, useTableSort
 } from '@/components/ui/table';
@@ -133,7 +133,7 @@ export default function AuthorizationsPage() {
                       <TableCell><ClientLink id={auth.clientId} name={auth.clientName} /></TableCell>
                       <TableCell><VendorLink id={auth.vendorId} name={auth.vendorName} /></TableCell>
                       <TableCell className="text-sm whitespace-nowrap">
-                        {format(new Date(auth.servicePeriodStart), 'MM/dd/yy')} - {format(new Date(auth.servicePeriodEnd), 'MM/dd/yy')}
+                        {formatDateRange(auth.servicePeriodStart, auth.servicePeriodEnd)}
                         {isExpiring && (
                            <span className="flex items-center text-xs text-chart-1 mt-1 font-medium">
                              <AlertCircle className="w-3 h-3 mr-1" /> {auth.daysUntilExpiry} days left

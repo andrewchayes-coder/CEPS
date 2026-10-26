@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { format, startOfToday, startOfWeek, endOfWeek, startOfMonth, endOfMonth, startOfQuarter, endOfQuarter, parseISO } from 'date-fns';
+import { startOfToday, startOfWeek, endOfWeek, startOfMonth, endOfMonth, startOfQuarter, endOfQuarter } from 'date-fns';
+import { formatDate, formatDateRange } from '@/lib/dates';
 import { Calendar as CalendarIcon, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
@@ -24,6 +25,9 @@ const PRESETS = [
   { label: 'This Quarter', value: 'this_quarter' },
   { label: 'Custom Range', value: 'custom' },
 ];
+
+// Native date-input values remain ISO local-calendar dates, not display text.
+const inputDate = (date: Date) => `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
 
 export function DateRangeFilter({
   startDate,
@@ -75,8 +79,8 @@ export function DateRangeFilter({
 
     if (newStart && newEnd) {
       onChange({
-        startDate: format(newStart, 'yyyy-MM-dd'),
-        endDate: format(newEnd, 'yyyy-MM-dd'),
+        startDate: inputDate(newStart),
+        endDate: inputDate(newEnd),
       });
     }
   };
@@ -89,17 +93,17 @@ export function DateRangeFilter({
   let displayValue = label;
   if (startDate && endDate) {
     try {
-      displayValue = `${format(parseISO(startDate), 'MMM d, yy')} - ${format(parseISO(endDate), 'MMM d, yy')}`;
+      displayValue = formatDateRange(startDate, endDate);
     } catch {
       displayValue = label;
     }
   } else if (startDate) {
     try {
-      displayValue = `From ${format(parseISO(startDate), 'MMM d, yy')}`;
+      displayValue = `From ${formatDate(startDate)}`;
     } catch { }
   } else if (endDate) {
     try {
-      displayValue = `Until ${format(parseISO(endDate), 'MMM d, yy')}`;
+      displayValue = `Until ${formatDate(endDate)}`;
     } catch { }
   }
 

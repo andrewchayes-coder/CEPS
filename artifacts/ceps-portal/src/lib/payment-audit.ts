@@ -1,3 +1,4 @@
+import { formatDate, formatDateTime, formatMonth } from './dates';
 /** UI boundary for the preflight report. Keep wire-shape adaptation here. */
 export type AuditResultKind = 'match' | 'payee_mismatch' | 'amount_mismatch' | 'no_approved_invoice' | 'already_paid' | 'unknown_client' | 'unknown_authorization' | 'duplicate_row';
 
@@ -60,10 +61,10 @@ export function downloadPaymentAudit(report: PaymentAuditReport, downloadCSV: (f
   downloadCSV('alta_fms_payment_preflight_audit.csv',
     ['Source row', 'Check #', 'Date', 'UCI', 'Participant', 'Payee on check', 'Approved vendor', 'Check amount', 'Approved amount', 'Remaining amount', 'Authorization', 'Service month', 'Result', 'Reason', 'Invoice', 'Reviewed by', 'Reviewed at', 'Possible approved invoices'],
     report.rows.map(row => [
-      row.rowNumber, row.checkNumber ?? '', row.checkDate ?? '', row.uciNumber ?? '', row.participantName ?? '',
+      row.rowNumber, row.checkNumber ?? '', row.checkDate ? formatDate(row.checkDate) : '', row.uciNumber ?? '', row.participantName ?? '',
       row.payeeName ?? '', row.invoiceVendor ?? '', row.checkAmount ?? '', row.approvedAmount ?? '',
-      row.remainingAmount ?? '', row.authNumber ?? '', row.serviceMonth ?? '', auditLabel(row.result),
-      row.reason ?? '', row.invoiceId ? 'Invoice available in portal' : '', row.reviewedBy ?? '', row.reviewedAt ?? '',
+      row.remainingAmount ?? '', row.authNumber ?? '', row.serviceMonth ? formatMonth(row.serviceMonth) : '', auditLabel(row.result),
+      row.reason ?? '', row.invoiceId ? 'Invoice available in portal' : '', row.reviewedBy ?? '', row.reviewedAt ? formatDateTime(row.reviewedAt) : '',
       row.candidates?.map(candidate => `${candidate.vendorName ?? 'Unknown vendor'} (approved ${candidate.approvedAmount ?? '—'}, remaining ${candidate.remainingAmount ?? 'uncertain'}${candidate.reviewedBy ? `, reviewed by ${candidate.reviewedBy}` : ''})`).join('; ') ?? '',
     ]),
   );

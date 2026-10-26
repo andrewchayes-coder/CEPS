@@ -3,6 +3,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
 import { getVisibleRoleDocs, type RoleDoc } from './content';
+import { formatDate, formatDateTime, formatMonth } from '@/lib/dates';
 
 export function HelpDocumentation({ role }: { role?: string }) {
   const docs = getVisibleRoleDocs(role);
@@ -25,6 +26,14 @@ export function HelpDocumentation({ role }: { role?: string }) {
               : 'User stories and step-by-step workflows for your role in the CEPS program.'}
         </p>
       </div>
+      {docs.length > 0 && (
+        <p className="text-sm text-muted-foreground" data-testid="help-date-formats">
+          Dates use MM/DD/YYYY (for example, {formatDate('2026-10-22')}).
+          Dates with times use Pacific time (for example, {formatDateTime('2026-10-22T22:05:00Z')}).
+          Service months use MM/YYYY (for example, {formatMonth('2026-10')}).
+          Native date and month inputs follow your computer&apos;s settings.
+        </p>
+      )}
       {docs.length === 0 ? (
         <p className="text-muted-foreground">No help guide is available for this account.</p>
       ) : docs.length === 1 ? (

@@ -50,7 +50,7 @@ for (const submitterRole of ['staff', 'service_coordinator']) {
     await expect(status).toBeVisible();
     await expect(status).toHaveCSS('text-transform', 'capitalize');
     const label = submitterRole === 'staff' ? 'Staff' : 'Service Coordinator';
-    await expect(page.getByTestId('text-referral-original-submitter')).toHaveText(`Submitted by: Original Submitter (${label}) on Sep 1, 2026`);
+    await expect(page.getByTestId('text-referral-original-submitter')).toHaveText(`Submitted by: Original Submitter (${label}) on 09/01/2026`);
     await expect(page.getByText('Referral contact (as entered on the form): Form Contact · form@test.local')).toBeVisible();
     const history = page.getByTestId('referral-history');
     await expect(history.locator('li')).toHaveCount(2);

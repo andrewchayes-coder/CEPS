@@ -10,7 +10,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { ArrowLeft, AlertTriangle } from 'lucide-react';
-import { format } from 'date-fns';
+import { formatDate, formatMonth } from '@/lib/dates';
 import { MetricHelp } from '@/components/metric-help';
 
 export default function RemittanceDetailPage() {
@@ -108,9 +108,9 @@ export default function RemittanceDetailPage() {
               </>
             )}
             <dt className="text-muted-foreground">Date Received:</dt>
-            <dd className="col-span-2">{format(new Date(remittance.remittanceDate), 'MMM d, yyyy')}</dd>
+            <dd className="col-span-2">{formatDate(remittance.remittanceDate)}</dd>
             <dt className="text-muted-foreground">Service Month:</dt>
-            <dd className="col-span-2">{remittance.paymentMonth || '-'}</dd>
+            <dd className="col-span-2">{formatMonth(remittance.paymentMonth)}</dd>
             <dt className="text-muted-foreground">Amount:</dt>
             <dd className="col-span-2 font-bold text-lg">${parseFloat(remittance.amount).toFixed(2)}</dd>
             <dt className="text-muted-foreground"><MetricHelp label="Allocated" explanation="Amount matched to payments." /></dt>
@@ -121,7 +121,7 @@ export default function RemittanceDetailPage() {
               <dt className="text-muted-foreground">Allocation ({allocation.targetKind === 'fee' ? 'Fee' : 'Payment line'}):</dt>
               <dd className="col-span-2">
                 {allocation.targetKind === 'fee' ? (
-                  <span>${parseFloat(allocation.amount).toFixed(2)} — Fee {allocation.feeMonth ?? '-'} · Auth {allocation.authNumber ?? '—'}</span>
+                  <span>${parseFloat(allocation.amount).toFixed(2)} — Fee {formatMonth(allocation.feeMonth)} · Auth {allocation.authNumber ?? '—'}</span>
                 ) : (
                   <>
                     {allocation.paymentId ? <Link href={`/payments/${allocation.paymentId}`} className="text-primary hover:underline">${parseFloat(allocation.amount).toFixed(2)} — Check #{allocation.checkNumber ?? '—'}</Link> : <span>${parseFloat(allocation.amount).toFixed(2)} — Check #{allocation.checkNumber ?? '—'}</span>}

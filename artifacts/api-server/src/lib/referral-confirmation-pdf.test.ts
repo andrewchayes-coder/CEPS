@@ -32,6 +32,7 @@ describe("embedded referral confirmation fonts", () => {
       intakeFields: {
         clientFirstName: "Nguyễn Thị", clientLastName: "Hương", familyRepName: "José Peña",
         activityDescription: "ਪੰਜਾਬੀ ਨੋਟ", coordinatorName: "中文",
+        serviceStartDate: "2026-03-01", serviceEndDate: "2026-10-31", clientDob: "1990-03-01",
       },
     } as unknown as typeof referralsTable.$inferSelect;
     const client = { firstName: "Nguyễn Thị", lastName: "Hương" } as typeof clientsTable.$inferSelect;
@@ -46,6 +47,10 @@ describe("embedded referral confirmation fonts", () => {
       expect(text).toContain("José Peña");
       expect(text).toContain("ਪੰਜਾਬੀ ਨੋਟ");
       expect(text).toContain("中文");
+      expect(text).toContain("10/09/2026 9:00 AM PT");
+      expect(text).toContain("03/01/2026");
+      expect(text).toContain("10/31/2026");
+      expect(text).toContain("03/01/1990");
       expect(bytes.toString("latin1")).not.toContain("STSong-Light");
       const loaded = await PDFDocument.load(bytes);
       const objects = loaded.context.enumerateIndirectObjects().map(([, object]) => object.toString()).join("\n");

@@ -14,6 +14,7 @@ async function mockReportsApis(page: Page) {
   await page.route('**/api/auth/me', (route) => route.fulfill({ json: staffUser }));
   await page.route('**/api/clients?*', (route) => route.fulfill({ json: { items: [], total: 0 } }));
   await page.route('**/api/users?*', (route) => route.fulfill({ json: [] }));
+  await page.route('**/api/user-directory**', (route) => route.fulfill({ json: [] }));
   await page.route('**/api/vendors?*', (route) => route.fulfill({ json: { items: [], total: 0 } }));
   await page.route('**/api/reports/vendor-payments?*', (route) => route.fulfill({ json: [] }));
   await page.route('**/api/dashboard/summary', (route) =>
@@ -63,7 +64,7 @@ test('Reports uses a single-level date range menu for presets, custom dates, and
 
   await startDate.fill('2026-09-01');
   await endDate.fill('2026-09-15');
-  await expect(control.getByTestId('date-range-display')).toHaveText('Sep 1, 26 - Sep 15, 26');
+  await expect(control.getByTestId('date-range-display')).toHaveText('09/01/2026 – 09/15/2026');
   await expect(startDate).toHaveAttribute('max', '2026-09-15');
   await expect(endDate).toHaveAttribute('min', '2026-09-01');
 

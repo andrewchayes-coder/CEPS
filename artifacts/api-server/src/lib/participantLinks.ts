@@ -3,6 +3,7 @@ import {
   authorizationsTable, clientsTable, db, feesTable, invoicesTable, invoiceLineItemsTable, paymentsTable, paymentAllocationsTable, remittancesTable, vendorsTable, unmatchedPosDocumentsTable,
 } from "@workspace/db";
 import { notDeleted } from "./serializers";
+import { formatMonth } from "./dates";
 
 type DbHandle = typeof db;
 export type ParticipantLinkValidation = {
@@ -65,8 +66,8 @@ export async function softDeleteAuthorization(
   const remittances = await tx.select({ id: remittancesTable.id, reference: remittancesTable.altaReference }).from(remittancesTable)
     .where(and(eq(remittancesTable.authorizationId, id), notDeleted(remittancesTable)));
   const blockers = activeBlockers([
-    blocker("fee", "Fees", fees.map((row) => ({ id: row.id, label: row.feeMonth ? `Fee for ${row.feeMonth}` : "Fee record", href: `/clients/${authorization.clientId}?tab=fees` }))),
-    blocker("invoice", "Invoices", invoices.map((row) => ({ id: row.id, label: `Invoice for ${row.serviceMonth}`, href: `/invoices/${row.id}` }))),
+    blocker("fee", "Fees", fees.map((row) => ({ id: row.id, label: row.feeMonth ? `Fee for ${formatMonth(row.feeMonth)}` : "Fee record", href: `/clients/${authorization.clientId}?tab=fees` }))),
+    blocker("invoice", "Invoices", invoices.map((row) => ({ id: row.id, label: `Invoice for ${formatMonth(row.serviceMonth)}`, href: `/invoices/${row.id}` }))),
     blocker("payment", "Payments", payments.map((row) => ({ id: row.id, label: `Check ${row.checkNumber}`, href: `/payments/${row.id}` }))),
     blocker("remittance", "Remittances", remittances.map((row) => ({ id: row.id, label: row.reference ? `Remittance ${row.reference}` : "Remittance record", href: `/remittances/${row.id}` }))),
   ]);
@@ -124,8 +125,8 @@ export async function softDeleteClient(
     .where(and(eq(remittancesTable.clientId, id), notDeleted(remittancesTable)));
   const blockers = activeBlockers([
     blocker("authorization", "Authorizations", authorizations.map((row) => ({ id: row.id, label: `Authorization ${row.authNumber}`, href: `/authorizations/${row.id}` }))),
-    blocker("fee", "Fees", fees.map((row) => ({ id: row.id, label: row.feeMonth ? `Fee for ${row.feeMonth}` : "Fee record", href: `/clients/${id}?tab=fees` }))),
-    blocker("invoice", "Invoices", invoices.map((row) => ({ id: row.id, label: `Invoice for ${row.serviceMonth}`, href: `/invoices/${row.id}` }))),
+    blocker("fee", "Fees", fees.map((row) => ({ id: row.id, label: row.feeMonth ? `Fee for ${formatMonth(row.feeMonth)}` : "Fee record", href: `/clients/${id}?tab=fees` }))),
+    blocker("invoice", "Invoices", invoices.map((row) => ({ id: row.id, label: `Invoice for ${formatMonth(row.serviceMonth)}`, href: `/invoices/${row.id}` }))),
     blocker("payment", "Payments", payments.map((row) => ({ id: row.id, label: `Check ${row.checkNumber}`, href: `/payments/${row.id}` }))),
     blocker("remittance", "Remittances", remittances.map((row) => ({ id: row.id, label: row.reference ? `Remittance ${row.reference}` : "Remittance record", href: `/remittances/${row.id}` }))),
   ]);

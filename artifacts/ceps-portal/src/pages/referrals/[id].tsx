@@ -15,7 +15,7 @@ import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
 import { useToast } from '@/hooks/use-toast';
 import { CheckCircle2, AlertTriangle, FileText, ArrowLeft } from 'lucide-react';
-import { format, parseISO } from 'date-fns';
+import { formatDate, formatDateTime, formatDateRange } from '@/lib/dates';
 import { Link } from 'wouter';
 import { DownloadReferralConfirmation } from '@/components/download-referral-confirmation';
 import { ClientLink } from '@/components/entity-links';
@@ -174,7 +174,7 @@ export default function ReferralDetailPage() {
           <h1 className="text-3xl font-bold tracking-tight">
             Referral: <ClientLink id={referral.clientId} name={referral.clientName || 'Unknown Participant'} />
           </h1>
-          <p className="text-muted-foreground mt-1">Submitted on {format(new Date(referral.referralDate), 'MMMM d, yyyy')}</p>
+          <p className="text-muted-foreground mt-1">Submitted on {formatDate(referral.referralDate)}</p>
         </div>
         <div className="flex items-center gap-2">
           <Badge variant="outline" className="text-sm px-3 py-1">
@@ -252,7 +252,7 @@ export default function ReferralDetailPage() {
                   {referralValueLabel(intake?.serviceType)}
                 </p>
                 <p className="line-clamp-2" title={intake?.activityDescription}>Comments: {intake?.activityDescription || '—'}</p>
-                <p>Dates: {intake?.serviceStartDate || intake?.serviceEndDate ? `${intake?.serviceStartDate || '—'} to ${intake?.serviceEndDate || '—'}` : '—'}</p>
+                <p>Dates: {formatDateRange(intake?.serviceStartDate, intake?.serviceEndDate)}</p>
                 <p>Authorization amount: {intake?.authAmount ? `$${formatMoney(intake.authAmount)} (${(referral.serviceFrequency || intake.serviceFrequency) === 'monthly' ? 'monthly' : (referral.serviceFrequency || intake.serviceFrequency) === 'one_time' ? 'total' : referralValueLabel(referral.serviceFrequency || intake.serviceFrequency)})` : '—'}</p>
               </div>
 
@@ -269,7 +269,7 @@ export default function ReferralDetailPage() {
                 <p className="text-xs text-muted-foreground" data-testid="text-referral-original-submitter">
                   Submitted by: {referral.submittedByName || 'Not recorded'}
                   {referral.submittedByRole === 'staff' ? ' (Staff)' : referral.submittedByRole === 'service_coordinator' ? ' (Service Coordinator)' : ''}
-                  {' '}on {format(parseISO(referral.referralDate), 'MMM d, yyyy')}
+                  {' '}on {formatDate(referral.referralDate)}
                 </p>
                 <p>{intake?.regionalCenterName}</p>
                 {intake?.coordinatorName && <p className="text-xs text-muted-foreground">Referral contact (as entered on the form): {intake.coordinatorName} · {intake.coordinatorEmail}</p>}
@@ -282,7 +282,7 @@ export default function ReferralDetailPage() {
                 <CardTitle className="text-lg">Accepted Agreement</CardTitle>
                 <CardDescription>
                   Immutable copy accepted by {referral.agreementSnapshot.signedByName} on{' '}
-                  {format(new Date(referral.agreementSnapshot.signedAt), 'MMMM d, yyyy \'at\' h:mm a')}
+                  {formatDateTime(referral.agreementSnapshot.signedAt)}
                   {' · '}{referral.agreementSnapshot.signerRelationship.replace('_', ' ')}
                   {' · '}{referral.agreementSnapshot.recipientEmail}
                 </CardDescription>
@@ -306,7 +306,7 @@ export default function ReferralDetailPage() {
                   <CheckCircle2 className="w-5 h-5 shrink-0" />
                   <div className="text-sm">
                     <p className="font-semibold">
-                      Signed on {format(new Date(referral.parentSignedAt), 'MMM d, yyyy')}
+                      Signed on {formatDate(referral.parentSignedAt)}
                     </p>
                     <p className="opacity-90">
                       By {referral.signedByName}
@@ -320,7 +320,7 @@ export default function ReferralDetailPage() {
                   <div className="text-sm space-y-1">
                     <p className="font-semibold">Awaiting Signature</p>
                     <p className="opacity-90">
-                      Sent to {referral.intakeSentTo === 'participant' ? 'Participant' : 'Family Rep'} on {format(new Date(referral.intakeSentAt), 'MMM d, yyyy')}
+                      Sent to {referral.intakeSentTo === 'participant' ? 'Participant' : 'Family Rep'} on {formatDate(referral.intakeSentAt)}
                     </p>
                   </div>
                 </div>
@@ -349,7 +349,7 @@ export default function ReferralDetailPage() {
                {referral.altaAuthReceivedAt ? (
                   <div className="flex items-center gap-2 text-sm text-muted-foreground">
                     <CheckCircle2 className="w-4 h-4 text-chart-5" />
-                    Received {format(new Date(referral.altaAuthReceivedAt), 'MMM d, yyyy')}
+                    Received {formatDate(referral.altaAuthReceivedAt)}
                   </div>
                 ) : (
                   <p className="text-sm text-muted-foreground">Waiting for official POS authorization from Regional Center.</p>
@@ -376,7 +376,7 @@ function ReferralHistory({ id }: { id: string }) {
           : !entries?.length ? <p className="text-sm text-muted-foreground">No history recorded.</p>
           : <ol className="space-y-3 max-h-80 overflow-y-auto">
             {entries.map(entry => <li key={entry.id} className="border-b pb-3 last:border-b-0 text-sm">
-              <p className="text-xs text-muted-foreground">{format(new Date(entry.createdAt), 'MMM d, yyyy h:mm a')} · {entry.userName || 'Unknown user'}</p>
+              <p className="text-xs text-muted-foreground">{formatDateTime(entry.createdAt)} · {entry.userName || 'Unknown user'}</p>
               <p className="font-medium">{entry.action.replaceAll('_', ' ')}</p>
               {entry.detail && <p className="text-muted-foreground break-words">{entry.detail}</p>}
             </li>)}

@@ -1,5 +1,6 @@
 import * as z from 'zod';
 import { validateServiceDateRange } from './invoice-service-dates';
+import { formatMonth, formatDateRange } from './dates';
 
 export const invoiceEditSchema = z.object({
   vendorId: z.string().optional(),
@@ -28,6 +29,6 @@ export const invoiceEditSchema = z.object({
 export function lineServiceDateWarning(month: string, start?: string, end?: string): string | null {
   if (!start || !end || validateServiceDateRange(start, end) || !/^\d{4}-\d{2}$/.test(month)) return null;
   return month < start.slice(0, 7) || month > end.slice(0, 7)
-    ? `Line month ${month} is outside the submitted service dates ${start} – ${end}`
+    ? `Line month ${formatMonth(month)} is outside the submitted service dates ${formatDateRange(start, end)}`
     : null;
 }

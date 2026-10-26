@@ -70,7 +70,7 @@ async function detail(page: Page, fields: Record<string, unknown>, own: Record<s
 
 test('detail displays service dates and amount, and agreement uses editable intake defaults', async ({ page }) => {
   await detail(page, { serviceStartDate: '2026-09-01', serviceEndDate: '2026-12-31', authAmount: '123.45', serviceFrequency: 'monthly' });
-  await expect(page.getByText('Dates: 2026-09-01 to 2026-12-31', { exact: true })).toBeVisible();
+  await expect(page.getByText('Dates: 09/01/2026 – 12/31/2026', { exact: true })).toBeVisible();
   await expect(page.getByText('Authorization amount: $123.45 (monthly)', { exact: true })).toBeVisible();
   await page.getByTestId('button-open-send-intake').click();
   await expect(page.getByTestId('input-intake-cost')).toHaveValue('123.45');

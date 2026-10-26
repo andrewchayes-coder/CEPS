@@ -9,7 +9,7 @@ import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { Download, ChevronLeft, ChevronRight } from 'lucide-react';
-import { format } from 'date-fns';
+import { formatDateTime } from '@/lib/dates';
 import { Link } from 'wouter';
 import { downloadCSV } from '@/lib/csv';
 import { useToast } from '@/hooks/use-toast';
@@ -71,7 +71,7 @@ export default function AuditLogPage() {
   };
 
   const formatTs = (ts?: string | null) =>
-    ts ? format(new Date(ts), 'MMM d, yyyy h:mm a') : '';
+    ts ? formatDateTime(ts) : '';
 
   const exportAuditLog = async () => {
     setExporting(true);

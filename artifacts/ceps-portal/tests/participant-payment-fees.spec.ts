@@ -62,7 +62,7 @@ test('participant payment lines and legacy checks keep separate remittance state
   await expect(sep).toBeVisible();
   await expect(oct).toBeVisible();
   await expect(legacy).toBeVisible();
-  await expect(page.getByTestId('participant-payment-row-line-aug').getByText('Aug 2026')).toBeVisible();
+  await expect(page.getByTestId('participant-payment-row-line-aug').getByText('08/2026')).toBeVisible();
   await expect(aug.getByLabel('Fully remitted')).toBeVisible();
   await expect(sep).toContainText('$100.00 of $300.00');
   await expect(oct.getByRole('cell').last()).toHaveText('-');
@@ -76,7 +76,7 @@ test('participant payment lines and legacy checks keep separate remittance state
 
   await page.getByRole('tab', { name: /Fees/ }).click();
   const feeRows = page.locator('[data-testid="content-fees"] tbody tr');
-  await expect(feeRows.first()).toContainText('Aug 2026');
+  await expect(feeRows.first()).toContainText('08/2026');
   await expect(feeRows.first()).toContainText('Paid');
   await expect(feeRows.first()).toContainText('$160.00 of $160.00');
   await expect(feeRows.first().getByRole('link', { name: 'FEE-490' })).toHaveAttribute('href', '/authorizations/auth-490');

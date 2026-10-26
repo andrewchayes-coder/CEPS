@@ -1,3 +1,4 @@
+import { formatDate } from '@/lib/dates';
 import React, { useEffect, useState } from 'react';
 import { useListClients } from '@workspace/api-client-react';
 import { Link, useLocation, useSearch } from 'wouter';
@@ -133,7 +134,7 @@ export default function ClientsPage() {
                       <ClientLink id={client.id} name={`${client.firstName} ${client.lastName}`} />
                     </TableCell>
                     <TableCell className="font-mono text-sm">{client.uciNumber}</TableCell>
-                    <TableCell>{client.dateOfBirth}</TableCell>
+                    <TableCell>{formatDate(client.dateOfBirth)}</TableCell>
                     <TableCell className="text-muted-foreground">{client.assignedCoordinatorName || 'Unassigned'}</TableCell>
                     <TableCell>
                       <Badge variant={client.status === 'active' ? 'default' : 'secondary'} className={client.status === 'active' ? 'bg-chart-5 text-white hover:bg-chart-5/90' : ''}>

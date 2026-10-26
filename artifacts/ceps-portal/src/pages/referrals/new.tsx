@@ -1,3 +1,4 @@
+import { formatDate } from '@/lib/dates';
 import React, { useState } from 'react';
 import { apiErrorMessage } from '@/lib/api-error';
 import { isAuthorizationAmount, normalizeAuthorizationAmount, isServiceDate } from '@/lib/referral-service';
@@ -862,8 +863,8 @@ export default function ReferralNewPage() {
                       <dl className="grid grid-cols-3 gap-1">
                         <dt className="text-muted-foreground">Type:</dt><dd className="col-span-2">{watch('serviceType') === 'direct_pay_459' ? 'Direct Pay' : 'Reimbursement'}</dd>
                         <dt className="text-muted-foreground">Comments:</dt><dd className="col-span-2 truncate" title={watch('activityDescription')}>{watch('activityDescription')}</dd>
-                        <dt className="text-muted-foreground">Start:</dt><dd className="col-span-2">{watch('serviceStartDate')}</dd>
-                        <dt className="text-muted-foreground">End:</dt><dd className="col-span-2">{watch('serviceEndDate')}</dd>
+                        <dt className="text-muted-foreground">Start:</dt><dd className="col-span-2">{formatDate(watch('serviceStartDate'))}</dd>
+                        <dt className="text-muted-foreground">End:</dt><dd className="col-span-2">{formatDate(watch('serviceEndDate'))}</dd>
                         <dt className="text-muted-foreground">{watch('serviceFrequency') === 'monthly' ? 'Monthly authorization amount:' : 'Total authorization amount:'}</dt>
                         <dd className="col-span-2">${normalizeAuthorizationAmount(watch('authAmount') || '0')}</dd>
                       </dl>

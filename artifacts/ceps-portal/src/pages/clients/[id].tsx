@@ -17,13 +17,13 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { ArrowLeft, User, FileText, FileCheck, Receipt, CreditCard, FolderSync, AlertCircle, CheckCircle2, Phone, Mail, MapPin } from 'lucide-react';
 import { Link } from 'wouter';
-import { format } from 'date-fns';
+import { formatDate, formatDateRange, formatMonth } from '@/lib/dates';
 import { Progress } from '@/components/ui/progress';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow, SortableTableHead } from '@/components/ui/table';
 import { stableSort, useTableSort } from '@/lib/table-sorting';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { DocumentPreview } from '@/components/document-preview';
-import { getInvoiceDisplayMonth } from '@/lib/invoice-utils';
+import { getInvoiceDisplayMonth, getInvoiceSortMonth } from '@/lib/invoice-utils';
 import { earliestPaymentServiceMonth, formatPaymentServiceMonths } from '@/lib/payment-utils';
 import { MonthlyAmount, MonthlyAmountLine } from '@/components/authorization-monthly-amount';
 import { ParticipantNotes } from '@/components/participant-notes';
@@ -59,9 +59,7 @@ function groupedPaymentRows(payments: Payment[], sort: { key: PaymentSortKey; di
 }
 
 function serviceMonthLabel(month: string | null | undefined): string {
-  return month && /^\d{4}-(0[1-9]|1[0-2])$/.test(month)
-    ? format(new Date(`${month}-01T12:00:00`), 'MMM yyyy')
-    : '-';
+  return formatMonth(month);
 }
 
 const documentStatusPresentation: Record<string, { label: string; className: string }> = {
@@ -249,7 +247,7 @@ export default function ClientDetailPage() {
     status: (auth) => auth.status,
   });
   const sortedInvoices = stableSort(invoices, invoicesSort.sort, {
-    serviceMonth: (invoice) => getInvoiceDisplayMonth(invoice),
+    serviceMonth: (invoice) => getInvoiceSortMonth(invoice),
     vendorName: (invoice) => invoice.vendorName,
     authNumber: (invoice) => invoice.authNumber,
     amountRequested: (invoice) => Number(invoice.amountRequested),
@@ -293,7 +291,7 @@ export default function ClientDetailPage() {
             </h1>
             <div className="flex items-center gap-3 mt-1 text-sm text-muted-foreground">
               <span className="font-mono bg-muted px-1.5 py-0.5 rounded">UCI: {client.uciNumber}</span>
-              <span>DOB: {client.dateOfBirth}</span>
+              <span>DOB: {formatDate(client.dateOfBirth)}</span>
             </div>
             {isFamily && !primaryRepresentative && (
               <div className="mt-2 text-sm text-muted-foreground space-y-0.5" data-testid="header-contact-info">
@@ -538,7 +536,7 @@ export default function ClientDetailPage() {
                       <TableCell><VendorLink id={auth.vendorId} name={auth.vendorName} /></TableCell>
                       <TableCell>{auth.serviceCode}</TableCell>
                       <TableCell className="text-xs whitespace-nowrap">
-                        {format(new Date(auth.servicePeriodStart), 'MM/dd/yy')} - {format(new Date(auth.servicePeriodEnd), 'MM/dd/yy')}
+                        {formatDateRange(auth.servicePeriodStart, auth.servicePeriodEnd)}
                       </TableCell>
                       <TableCell className="text-right whitespace-nowrap"><MonthlyAmount auth={auth} /></TableCell>
                       <TableCell className="text-right">${parseFloat(auth.maxPeriodAmount).toFixed(2)}</TableCell>
@@ -633,7 +631,7 @@ export default function ClientDetailPage() {
                 <TableBody>
                   {sortedPayments.map(({ payment: p, line }, index) => (
                     <TableRow key={line?.id ?? p.id} data-testid={`participant-payment-row-${line?.id ?? p.id}`}>
-                      <TableCell className="whitespace-nowrap">{format(new Date(p.checkDate), 'MMM d, yyyy')}</TableCell>
+                      <TableCell className="whitespace-nowrap">{formatDate(p.checkDate)}</TableCell>
                       <TableCell className="font-mono text-sm">
                         <Link href={`/payments/${p.id}`} className="text-primary hover:underline" data-testid="link-client-payment">
                           {p.qbCheckNumber}
@@ -675,7 +673,7 @@ export default function ClientDetailPage() {
                  <TableBody>
                    {remittances.map((remittance) => (
                      <TableRow key={remittance.id}>
-                       <TableCell className="whitespace-nowrap">{format(new Date(remittance.remittanceDate), 'MMM d, yyyy')}</TableCell>
+                       <TableCell className="whitespace-nowrap">{formatDate(remittance.remittanceDate)}</TableCell>
                        <TableCell className="font-mono text-sm">{remittance.altaReference || '—'}</TableCell>
                        <TableCell>{remittance.authorizationId ? <Link href={`/authorizations/${remittance.authorizationId}`} className="text-primary hover:underline">{remittance.authNumber}</Link> : (remittance.authNumber || '—')}</TableCell>
                        <TableCell className="text-right font-medium">
@@ -722,7 +720,7 @@ export default function ClientDetailPage() {
                   {sortedFees.map(fee => (
                     <TableRow key={fee.id}>
                       <TableCell className="whitespace-nowrap">
-                        <span title={fee.createdAt ? `Created ${format(new Date(fee.createdAt), 'MMM d, yyyy')}` : 'Created date unavailable'}>{serviceMonthLabel(fee.feeMonth)}</span>
+                        <span title={fee.createdAt ? `Created ${formatDate(fee.createdAt)}` : 'Created date unavailable'}>{serviceMonthLabel(fee.feeMonth)}</span>
                       </TableCell>
                       <TableCell>
                         {fee.authorizationId ? <Link href={`/authorizations/${fee.authorizationId}`} className="text-primary hover:underline">{fee.authNumber || 'View authorization'}</Link> : '-'}
@@ -771,7 +769,7 @@ export default function ClientDetailPage() {
                 <TableBody>
                   {sortedReferrals.map(r => (
                     <TableRow key={r.id}>
-                      <TableCell className="font-medium whitespace-nowrap">{format(new Date(r.referralDate), 'MMM d, yyyy')}</TableCell>
+                      <TableCell className="font-medium whitespace-nowrap">{formatDate(r.referralDate)}</TableCell>
                       <TableCell>{r.coordinatorName}</TableCell>
                       <TableCell><Badge variant="outline">{r.status}</Badge></TableCell>
                       <TableCell className="text-right">
@@ -824,7 +822,7 @@ export default function ClientDetailPage() {
                           <DocumentStatusGroup document={doc} />
                         </TableCell>
                         <TableCell className="text-sm text-muted-foreground whitespace-nowrap">
-                          {doc.statusDate ? format(new Date(doc.statusDate), 'MMM d, yyyy') : '-'}
+                          {doc.statusDate ? formatDate(doc.statusDate) : '-'}
                         </TableCell>
                         <TableCell className="text-right">
                           {doc.objectPath ? (

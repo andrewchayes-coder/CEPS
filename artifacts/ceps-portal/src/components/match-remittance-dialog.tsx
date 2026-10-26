@@ -14,7 +14,7 @@ import { Input } from '@/components/ui/input';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { useToast } from '@/hooks/use-toast';
 import { Link2 } from 'lucide-react';
-import { format } from 'date-fns';
+import { formatDate } from '@/lib/dates';
 import { trackAnalyticsEvent } from '@/lib/analytics';
 import { useAuth } from '@/components/auth/auth-provider';
 
@@ -137,7 +137,7 @@ export function MatchRemittanceDialog({ remittance, onSaved }: { remittance: Rem
           const content = target.kind === 'line'
             ? <>
                 <div className="font-medium">Check #{target.payment?.qbCheckNumber} · {target.allocation?.serviceMonth} · Auth {target.allocation?.authNumber ?? '—'}</div>
-                <div className="text-muted-foreground">{target.payment?.checkDate ? format(new Date(target.payment.checkDate), 'MMM d, yyyy') : '—'} · {target.payment?.vendorName ?? 'Payee unavailable'} · Line ${Number(target.allocation?.amount ?? 0).toFixed(2)} · ${target.remaining.toFixed(2)} remaining</div>
+                <div className="text-muted-foreground">{formatDate(target.payment?.checkDate)} · {target.payment?.vendorName ?? 'Payee unavailable'} · Line ${Number(target.allocation?.amount ?? 0).toFixed(2)} · ${target.remaining.toFixed(2)} remaining</div>
               </>
             : <>
                 <div className="font-medium">Fee · {target.fee?.feeMonth ?? 'Month unavailable'} · Auth {target.fee?.authNumber ?? (target.fee?.feeAuthorizationMissing ? 'Missing authorization' : '—')}</div>

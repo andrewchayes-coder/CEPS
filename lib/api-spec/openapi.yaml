@@ -3647,6 +3647,16 @@ components:
         recordLabel: { type: string }
         objectPath: { type: ["string", "null"] }
         statusDate: { type: ["string", "null"] }
+    USState:
+      type: string
+      description: Two-letter code for a US state, District of Columbia, or Puerto Rico.
+      enum: [AL, AK, AZ, AR, CA, CO, CT, DE, DC, FL, GA, HI, ID, IL, IN, IA, KS, KY, LA, ME, MD, MA, MI, MN, MS, MO, MT, NE, NV, NH, NJ, NM, NY, NC, ND, OH, OK, OR, PA, PR, RI, SC, SD, TN, TX, UT, VT, VA, WA, WV, WI, WY]
+    ReferralAddressStateInput:
+      description: Empty only when the corresponding address block is not in use.
+      oneOf:
+        - $ref: "#/components/schemas/USState"
+        - type: string
+          enum: [""]
     ReferralIntakeFields:
       type: object
       description: Structured referral form data (Section 9 field list)
@@ -3700,6 +3710,9 @@ components:
         - $ref: "#/components/schemas/ReferralIntakeFields"
         - type: object
           properties:
+            vendorServiceState: { $ref: "#/components/schemas/ReferralAddressStateInput" }
+            vendorBillingState: { $ref: "#/components/schemas/ReferralAddressStateInput" }
+            contactState: { $ref: "#/components/schemas/ReferralAddressStateInput" }
             vendorBillingDifferent: { type: string, enum: [yes, no, unknown] }
             serviceType: { type: string, enum: [direct_pay_459, reimbursement_024] }
             serviceFrequency: { type: string, enum: [one_time, monthly] }
@@ -3834,6 +3847,9 @@ components:
           type: object
           description: Staff-only intake field edits; merged with existing referral details.
           properties:
+            vendorServiceState: { $ref: "#/components/schemas/ReferralAddressStateInput" }
+            vendorBillingState: { $ref: "#/components/schemas/ReferralAddressStateInput" }
+            contactState: { $ref: "#/components/schemas/ReferralAddressStateInput" }
             serviceType: { type: string, enum: [direct_pay_459, reimbursement_024] }
             serviceFrequency: { type: string, enum: [one_time, monthly] }
             familyRepRelationship: { type: string, enum: [parent, guardian, conservator, other] }

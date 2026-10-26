@@ -14,3 +14,9 @@ misleading user-role rendering exception.
 **How to apply:** Check response content types when a test-only server behaves
 differently from the workspace preview. Keep forwarding in the test harness,
 not hardcoded localhost URLs in application code.
+
+Wait for forwarded route handlers to finish before disposing the browser context.
+
+**Why:** Background page refreshes can still be inside `route.fetch` after the final assertion. Closing the context first can report “Fetch response has been disposed” and fail an otherwise successful user journey.
+
+**How to apply:** Drain intercepted requests during test teardown before closing the page or context; distinguish teardown failures from failed application requests.

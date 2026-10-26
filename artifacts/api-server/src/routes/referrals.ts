@@ -46,6 +46,33 @@ import { logger } from "../lib/logger";
 import { recheckPosAfterClientSave } from "../lib/posRecheck";
 import { applyReferralClientUpdates } from "../lib/referralClientUpdates";
 
+function addressStateError(fields: Record<string, unknown>, changed?: Record<string, unknown>): string | null {
+  for (const [prefix, label] of [
+    ["vendorService", "Vendor service"], ["vendorBilling", "Vendor billing"], ["contact", "Participant mailing"],
+  ]) {
+    // PATCH must not revalidate untouched legacy addresses.
+    if (changed && !Object.keys(changed).some(key => key.startsWith(prefix))) continue;
+    const inUse = prefix === "vendorBilling"
+      ? fields.vendorBillingDifferent === "yes"
+      : ["Street", "City", "Zip"].some(part => clean(fields[`${prefix}${part}`] as string | undefined));
+    if (inUse && !fields[`${prefix}State`]) return `${label} state is required (two-letter US state code)`;
+  }
+  return null;
+}
+
+function referralAddress(street: unknown, city: unknown, state: unknown, zip: unknown): string {
+  const text = (value: unknown) => typeof value === "string" ? value.trim() : "";
+  return [text(street), text(city), [text(state), text(zip)].filter(Boolean).join(" ")]
+    .filter(Boolean).join(", ");
+}
+
+function referralInputError(error: { issues: { path: PropertyKey[] }[]; message: string }): string {
+  const stateIssue = error.issues.find(issue => ["vendorServiceState", "vendorBillingState", "contactState"].includes(String(issue.path.at(-1))));
+  return stateIssue
+    ? `${String(stateIssue.path.at(-1))}: select a valid two-letter US state code (50 states, DC or PR)`
+    : error.message;
+}
+
 // One display-name rule for sorting/search and response enrichment.
 const referralVendorNameSql = sql<string | null>`case when ${referralsTable.vendorId} is null
   then ${referralsTable.intakeFields}->>'vendorName'
@@ -390,10 +417,15 @@ router.post("/referrals", requireStaffOrCoordinator, async (req, res): Promise<v
   }
   const parsed = CreateReferralBody.safeParse(req.body);
   if (!parsed.success) {
-    res.status(400).json({ error: parsed.error.message });
+    res.status(400).json({ error: referralInputError(parsed.error) });
     return;
   }
   const f = parsed.data.intakeFields;
+  const stateError = addressStateError(f);
+  if (stateError) {
+    res.status(400).json({ error: stateError });
+    return;
+  }
   const serviceError = referralServiceError(f);
   if (serviceError) {
     res.status(400).json({ error: serviceError });
@@ -517,11 +549,10 @@ router.post("/referrals", requireStaffOrCoordinator, async (req, res): Promise<v
       let [vendor] = await findVendorByNormalizedName();
       if (!vendor) {
         const serviceAddress = [f.vendorServiceStreet, f.vendorServiceCity, f.vendorServiceState, f.vendorServiceZip]
-          .filter(Boolean)
-          .join(", ");
+          .filter(Boolean).join(", ");
         const billingAddress =
           f.vendorBillingDifferent === "yes"
-            ? [f.vendorBillingStreet, f.vendorBillingCity, f.vendorBillingState, f.vendorBillingZip].filter(Boolean).join(", ")
+            ? referralAddress(f.vendorBillingStreet, f.vendorBillingCity, f.vendorBillingState, f.vendorBillingZip)
             : serviceAddress;
         [vendor] = await tx.insert(vendorsTable).values({
           name: vendorName,
@@ -846,7 +877,7 @@ router.patch("/referrals/:id", requireStaffOrCoordinator, async (req, res): Prom
   }
   const parsed = UpdateReferralBody.safeParse(req.body);
   if (!parsed.success) {
-    res.status(400).json({ error: parsed.error.message });
+    res.status(400).json({ error: referralInputError(parsed.error) });
     return;
   }
   const { altaAuthReceivedAt, ...rest } = parsed.data;
@@ -867,6 +898,8 @@ router.patch("/referrals/:id", requireStaffOrCoordinator, async (req, res): Prom
     if (parsed.data.intakeFields && Object.keys(parsed.data.intakeFields).length) {
       if (req.user!.role !== "staff") return { error: "Only staff can edit referral service dates and authorization amount", status: 403 };
       const fields = { ...(existing.intakeFields as Record<string, unknown> ?? {}), ...parsed.data.intakeFields };
+      const stateError = addressStateError(fields, parsed.data.intakeFields);
+      if (stateError) return { error: stateError, status: 400 };
       const serviceError = referralServiceError(fields);
       if (serviceError) return { error: serviceError, status: 400 };
       fields.authAmount = normalizeAuthorizationAmount(fields.authAmount as string);

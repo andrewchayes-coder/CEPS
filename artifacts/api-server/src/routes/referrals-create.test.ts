@@ -101,6 +101,65 @@ it.each([
   expect(await db.select().from(clientsTable).where(eq(clientsTable.uciNumber, uci))).toHaveLength(0);
 });
 
+it.each(['vendorServiceState', 'vendorBillingState', 'contactState'])('rejects invalid %s on POST and PATCH', async field => {
+  const uci = `${nonce}-state-${field}`, vendorName = `${uci}-vendor`;
+  createdClientUcis.push(uci);
+  createdVendorNames.push(vendorName);
+  for (const state of ['California', 'ca', 'ZZ', ' C']) {
+    const result = await request(app).post('/api/referrals').set('Cookie', staffCookie).send({
+      intakeFields: { ...baseIntake(uci, vendorName), [field]: state },
+    });
+    expect(result.status).toBe(400);
+    expect(result.body.error).toContain(field);
+    expect(result.body.error).toContain('two-letter US state code');
+    const patch = await request(app).patch(`/api/referrals/${randomUUID()}`).set('Cookie', staffCookie).send({
+      intakeFields: { [field]: state },
+    });
+    expect(patch.status).toBe(400);
+    expect(patch.body.error).toContain(field);
+  }
+  expect(await db.select().from(clientsTable).where(eq(clientsTable.uciNumber, uci))).toHaveLength(0);
+});
+
+it.each(['vendorServiceState', 'contactState'])('requires %s when its address is in use', async field => {
+  const result = await request(app).post('/api/referrals').set('Cookie', staffCookie).send({
+    intakeFields: { ...baseIntake(`${nonce}-missing-state`, `${nonce}-missing-state-vendor`), [field]: '' },
+  });
+  expect(result.status).toBe(400);
+  expect(result.body.error).toContain('state is required');
+});
+
+it('stores out-of-state addresses and keeps legacy state responses tolerant', async () => {
+  const uci = `${nonce}-nv-billing`, vendorName = `${uci}-vendor`;
+  createdClientUcis.push(uci);
+  createdVendorNames.push(vendorName);
+  const created = await request(app).post('/api/referrals').set('Cookie', staffCookie).send({
+    intakeFields: {
+      ...baseIntake(uci, vendorName),
+      vendorServiceState: 'PR', vendorBillingDifferent: 'yes',
+      vendorBillingStreet: '10 Billing St', vendorBillingCity: 'Reno', vendorBillingState: 'NV', vendorBillingZip: '89501',
+      contactState: 'OR', contactZip: '97201', clientIsMinor: false, familyRepName: '',
+    },
+  });
+  expect(created.status).toBe(201);
+  createdReferralIds.push(created.body.id);
+  const [referral] = await db.select().from(referralsTable).where(eq(referralsTable.id, created.body.id));
+  const [vendor] = await db.select().from(vendorsTable).where(eq(vendorsTable.id, referral.vendorId!));
+  const [client] = await db.select().from(clientsTable).where(eq(clientsTable.id, referral.clientId));
+  expect(vendor.billingAddress).toMatch(/NV 89501$/);
+  expect(vendor.serviceAddress).toContain('PR, ');
+  expect(client.address).toMatch(/OR, 97201$/);
+  const legacy = { ...(referral.intakeFields as object), vendorServiceState: 'California', contactState: 'Oregon' };
+  await db.update(referralsTable).set({ intakeFields: legacy }).where(eq(referralsTable.id, referral.id));
+  const detail = await request(app).get(`/api/referrals/${referral.id}`).set('Cookie', staffCookie);
+  expect(detail.status).toBe(200);
+  expect(detail.body.intakeFields.vendorServiceState).toBe('California');
+  const list = await request(app).get('/api/referrals').query({ search: uci }).set('Cookie', staffCookie);
+  expect(list.status).toBe(200);
+  const edit = await request(app).patch(`/api/referrals/${referral.id}`).set('Cookie', staffCookie).send({ notes: 'Unrelated edit' });
+  expect(edit.status).toBe(200);
+});
+
 it('normalizes the amount, accepts equal dates without a POS number, and merges valid staff edits', async () => {
   const uci = `${nonce}-service-edit`, vendorName = `${nonce}-service-edit-vendor`;
   createdClientUcis.push(uci);

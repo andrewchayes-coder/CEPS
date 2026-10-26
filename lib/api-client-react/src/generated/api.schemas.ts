@@ -1551,6 +1551,74 @@ export interface ClientCase {
   documents: CaseDocument[];
 }
 
+/**
+ * Two-letter code for a US state, District of Columbia, or Puerto Rico.
+ */
+export type USState = typeof USState[keyof typeof USState];
+
+
+export const USState = {
+  AL: 'AL',
+  AK: 'AK',
+  AZ: 'AZ',
+  AR: 'AR',
+  CA: 'CA',
+  CO: 'CO',
+  CT: 'CT',
+  DE: 'DE',
+  DC: 'DC',
+  FL: 'FL',
+  GA: 'GA',
+  HI: 'HI',
+  ID: 'ID',
+  IL: 'IL',
+  IN: 'IN',
+  IA: 'IA',
+  KS: 'KS',
+  KY: 'KY',
+  LA: 'LA',
+  ME: 'ME',
+  MD: 'MD',
+  MA: 'MA',
+  MI: 'MI',
+  MN: 'MN',
+  MS: 'MS',
+  MO: 'MO',
+  MT: 'MT',
+  NE: 'NE',
+  NV: 'NV',
+  NH: 'NH',
+  NJ: 'NJ',
+  NM: 'NM',
+  NY: 'NY',
+  NC: 'NC',
+  ND: 'ND',
+  OH: 'OH',
+  OK: 'OK',
+  OR: 'OR',
+  PA: 'PA',
+  PR: 'PR',
+  RI: 'RI',
+  SC: 'SC',
+  SD: 'SD',
+  TN: 'TN',
+  TX: 'TX',
+  UT: 'UT',
+  VT: 'VT',
+  VA: 'VA',
+  WA: 'WA',
+  WV: 'WV',
+  WI: 'WI',
+  WY: 'WY',
+} as const;
+
+/**
+ * Empty only when the corresponding address block is not in use.
+ */
+export const ReferralAddressStateInput = {...USState,  '': '',
+} as const
+export type ReferralAddressStateInput = typeof ReferralAddressStateInput[keyof typeof ReferralAddressStateInput];
+
 export type ReferralIntakeInputVendorBillingDifferent = typeof ReferralIntakeInputVendorBillingDifferent[keyof typeof ReferralIntakeInputVendorBillingDifferent];
 
 
@@ -1587,6 +1655,9 @@ export const ReferralIntakeInputFamilyRepRelationship = {
 } as const;
 
 export type ReferralIntakeInput = ReferralIntakeFields & {
+  vendorServiceState?: ReferralAddressStateInput;
+  vendorBillingState?: ReferralAddressStateInput;
+  contactState?: ReferralAddressStateInput;
   vendorBillingDifferent?: ReferralIntakeInputVendorBillingDifferent;
   serviceType?: ReferralIntakeInputServiceType;
   serviceFrequency?: ReferralIntakeInputServiceFrequency;
@@ -1766,6 +1837,9 @@ export const ReferralUpdateIntakeFieldsVendorBillingDifferent = {
  * Staff-only intake field edits; merged with existing referral details.
  */
 export type ReferralUpdateIntakeFields = {
+  vendorServiceState?: ReferralAddressStateInput;
+  vendorBillingState?: ReferralAddressStateInput;
+  contactState?: ReferralAddressStateInput;
   serviceType?: ReferralUpdateIntakeFieldsServiceType;
   serviceFrequency?: ReferralUpdateIntakeFieldsServiceFrequency;
   familyRepRelationship?: ReferralUpdateIntakeFieldsFamilyRepRelationship;

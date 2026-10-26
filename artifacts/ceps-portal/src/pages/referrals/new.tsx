@@ -25,6 +25,8 @@ import { useAuth } from '@/components/auth/auth-provider';
 import { useQueryClient } from '@tanstack/react-query';
 import { Link } from 'wouter';
 import { DownloadReferralConfirmation } from '@/components/download-referral-confirmation';
+import { SearchableSelect } from '@/components/searchable-select';
+import { isUSState, stateOptions } from '@/lib/us-states';
 
 // -----------------------------------------------------------------------------
 // Validation Schemas (Step by Step to manage complex conditional logic)
@@ -46,7 +48,7 @@ const vendorSchemaBase = {
   vendorServiceStreet: z.string().min(1, 'Street is required'),
   vendorServiceCity: z.string().min(1, 'City is required'),
   vendorServiceZip: z.string().min(5, 'ZIP is required'),
-  vendorServiceState: z.string().length(2, 'State must be 2 letters'),
+  vendorServiceState: z.string().refine(isUSState, 'Select a valid state'),
   vendorBillingDifferent: z.enum(['yes', 'no', 'unknown']),
   vendorBillingStreet: z.string().optional(),
   vendorBillingCity: z.string().optional(),
@@ -54,15 +56,20 @@ const vendorSchemaBase = {
   vendorBillingState: z.string().optional(),
 };
 
-const vendorSchema = z.object(vendorSchemaBase).refine(data => {
-  if (data.vendorBillingDifferent === 'yes') {
-    return !!data.vendorBillingStreet && !!data.vendorBillingCity && !!data.vendorBillingZip && !!data.vendorBillingState;
+function validateBilling(data: z.infer<z.ZodObject<typeof vendorSchemaBase>>, ctx: z.RefinementCtx) {
+  if (data.vendorBillingDifferent !== 'yes') return;
+  for (const [field, label] of [
+    ['vendorBillingStreet', 'Billing street'], ['vendorBillingCity', 'Billing city'],
+    ['vendorBillingZip', 'Billing ZIP'],
+  ] as const) {
+    if (!data[field]?.trim()) ctx.addIssue({ code: z.ZodIssueCode.custom, path: [field], message: `${label} is required` });
   }
-  return true;
-}, {
-  message: "Billing address fields are required if different from service address",
-  path: ["vendorBillingStreet"] // Attaches error near the fields
-});
+  if (!isUSState(data.vendorBillingState ?? '')) {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['vendorBillingState'], message: 'Select a valid billing state' });
+  }
+}
+
+const vendorSchema = z.object(vendorSchemaBase).superRefine(validateBilling);
 
 const activitySchema = z.object({
   serviceType: z.enum(['direct_pay_459', 'reimbursement_024']),
@@ -94,7 +101,7 @@ const clientSchemaBase = {
   contactStreet: z.string().min(1, 'Street is required'),
   contactCity: z.string().min(1, 'City is required'),
   contactZip: z.string().min(5, 'ZIP is required'),
-  contactState: z.string().length(2, 'State must be 2 letters'),
+  contactState: z.string().refine(isUSState, 'Select a valid state'),
 };
 
 const clientSchema = z.object(clientSchemaBase).refine(data => {
@@ -113,18 +120,10 @@ const fullSchema = z.object({
   ...activitySchema.shape,
   ...clientSchemaBase,
 })
+.superRefine(validateBilling)
 .refine(data => !data.serviceStartDate || !data.serviceEndDate || data.serviceEndDate >= data.serviceStartDate, {
   message: 'Service end date must be on or after service start date',
   path: ['serviceEndDate'],
-})
-.refine(data => {
-  if (data.vendorBillingDifferent === 'yes') {
-    return !!data.vendorBillingStreet && !!data.vendorBillingCity && !!data.vendorBillingZip && !!data.vendorBillingState;
-  }
-  return true;
-}, {
-  message: "Billing address fields are required if different from service address",
-  path: ["vendorBillingStreet"]
 })
 .refine(data => {
   if (data.clientIsMinor) {
@@ -180,6 +179,10 @@ export default function ReferralNewPage() {
       vendorServiceZip: '',
       vendorServiceState: 'CA',
       vendorBillingDifferent: 'no',
+      vendorBillingStreet: '',
+      vendorBillingCity: '',
+      vendorBillingZip: '',
+      vendorBillingState: 'CA',
       serviceType: 'direct_pay_459',
       serviceFrequency: 'monthly',
       activityDescription: '',
@@ -468,14 +471,17 @@ export default function ReferralNewPage() {
                     
                     <h3 className="text-sm font-medium">Service Address</h3>
                     <FormField control={form.control} name="vendorServiceStreet" render={({ field }) => (
-                      <FormItem><FormControl><Input placeholder="Street Address" {...field} /></FormControl></FormItem>
+                      <FormItem><FormControl><Input placeholder="Street Address" {...field} /></FormControl><FormMessage /></FormItem>
                     )} />
-                    <div className="grid grid-cols-3 gap-4">
+                    <div className="grid grid-cols-[2fr_1.5fr_1fr] gap-4">
                       <FormField control={form.control} name="vendorServiceCity" render={({ field }) => (
-                        <FormItem className="col-span-2"><FormControl><Input placeholder="City" {...field} /></FormControl></FormItem>
+                        <FormItem><FormLabel>City</FormLabel><FormControl><Input placeholder="City" {...field} /></FormControl><FormMessage /></FormItem>
+                      )} />
+                      <FormField control={form.control} name="vendorServiceState" render={({ field }) => (
+                        <FormItem><FormLabel>State</FormLabel><FormControl><SearchableSelect value={field.value} onValueChange={field.onChange} options={stateOptions} data-testid="vendorServiceState" /></FormControl><FormMessage /></FormItem>
                       )} />
                       <FormField control={form.control} name="vendorServiceZip" render={({ field }) => (
-                        <FormItem><FormControl><Input placeholder="ZIP Code" {...field} /></FormControl></FormItem>
+                        <FormItem><FormLabel>ZIP</FormLabel><FormControl><Input placeholder="ZIP Code" {...field} /></FormControl><FormMessage /></FormItem>
                       )} />
                     </div>
 
@@ -500,12 +506,15 @@ export default function ReferralNewPage() {
                         <FormField control={form.control} name="vendorBillingStreet" render={({ field }) => (
                           <FormItem><FormControl><Input placeholder="Billing Street Address" {...field} /></FormControl><FormMessage /></FormItem>
                         )} />
-                        <div className="grid grid-cols-3 gap-4">
+                        <div className="grid grid-cols-[2fr_1.5fr_1fr] gap-4">
                           <FormField control={form.control} name="vendorBillingCity" render={({ field }) => (
-                            <FormItem className="col-span-2"><FormControl><Input placeholder="City" {...field} /></FormControl></FormItem>
+                            <FormItem><FormLabel>City</FormLabel><FormControl><Input placeholder="City" {...field} /></FormControl><FormMessage /></FormItem>
+                          )} />
+                          <FormField control={form.control} name="vendorBillingState" render={({ field }) => (
+                            <FormItem><FormLabel>State</FormLabel><FormControl><SearchableSelect value={field.value ?? ''} onValueChange={field.onChange} options={stateOptions} data-testid="vendorBillingState" /></FormControl><FormMessage /></FormItem>
                           )} />
                           <FormField control={form.control} name="vendorBillingZip" render={({ field }) => (
-                            <FormItem><FormControl><Input placeholder="ZIP Code" {...field} /></FormControl></FormItem>
+                            <FormItem><FormLabel>ZIP</FormLabel><FormControl><Input placeholder="ZIP Code" {...field} /></FormControl><FormMessage /></FormItem>
                           )} />
                         </div>
                       </div>
@@ -691,12 +700,15 @@ export default function ReferralNewPage() {
                   <FormField control={form.control} name="contactStreet" render={({ field }) => (
                     <FormItem><FormLabel>Mailing Address</FormLabel><FormControl><Input placeholder="Street Address" {...field} /></FormControl><FormMessage /></FormItem>
                   )} />
-                  <div className="grid grid-cols-3 gap-4">
+                  <div className="grid grid-cols-[2fr_1.5fr_1fr] gap-4">
                     <FormField control={form.control} name="contactCity" render={({ field }) => (
-                      <FormItem className="col-span-2"><FormControl><Input placeholder="City" {...field} /></FormControl><FormMessage /></FormItem>
+                      <FormItem><FormLabel>City</FormLabel><FormControl><Input placeholder="City" {...field} /></FormControl><FormMessage /></FormItem>
+                    )} />
+                    <FormField control={form.control} name="contactState" render={({ field }) => (
+                      <FormItem><FormLabel>State</FormLabel><FormControl><SearchableSelect value={field.value} onValueChange={field.onChange} options={stateOptions} data-testid="contactState" /></FormControl><FormMessage /></FormItem>
                     )} />
                     <FormField control={form.control} name="contactZip" render={({ field }) => (
-                      <FormItem><FormControl><Input placeholder="ZIP" {...field} /></FormControl><FormMessage /></FormItem>
+                      <FormItem><FormLabel>ZIP</FormLabel><FormControl><Input placeholder="ZIP" {...field} /></FormControl><FormMessage /></FormItem>
                     )} />
                   </div>
                 </div>

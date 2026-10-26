@@ -28,6 +28,7 @@
 - [Derived authorization status](derived-authorization-status.md) — cancellation overrides; dates/usage derive other statuses; 490 exhaustion flags review, never stops fee generation.
 - [Referral terminology](referral-terminology.md) — use Referral in user-facing copy; keep the Intake status label and existing internal identifiers.
 - [Referral service requirements](referral-service-requirements.md) — dates and amount are required without a POS number; no TBD end date; preserve untouched legacy referrals.
+- [Referral addresses](referral-address-policy.md) — CEPS has out-of-state billing addresses; independent state selection, tolerant legacy responses, no address backfill.
 - [Participant notes policy](participant-notes-policy.md) — plain text without categories; author editing never expires because CEPS ruled out time windows.
 - [PDF Indic font coverage](pdf-indic-font-coverage.md) — Latin/CJK font tests can miss fontkit's undeclared runtime requirement; retain an Indic-script extraction regression.
 - [Invoice document classification](invoice-document-classification.md) — document type and payment type are independent; the reimbursement-to-receipt backfill is one-time, not an ongoing rule.

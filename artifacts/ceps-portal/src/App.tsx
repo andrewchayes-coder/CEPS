@@ -44,7 +44,6 @@ import ReportsPage from '@/pages/reports';
 import UsersPage from '@/pages/admin/users';
 import RolesPage from '@/pages/admin/roles';
 import AdminImportPage from '@/pages/admin/import';
-import MonthlyFeeCleanupPage from '@/pages/admin/monthly-fees';
 import AuditLogPage from '@/pages/audit-log';
 import HelpPage from '@/pages/help';
 import MessagesPage from '@/pages/messages';
@@ -100,7 +99,6 @@ function ProtectedRoutes() {
         <Route path="/admin/users" component={UsersPage} />
         <Route path="/admin/roles" component={RolesPage} />
         <Route path="/admin/import" component={AdminImportPage} />
-        <Route path="/admin/monthly-fees" component={MonthlyFeeCleanupPage} />
         <Route path="/audit-log" component={AuditLogPage} />
         <Route path="/help" component={HelpPage} />
         <Route path="/account" component={AccountPage} />

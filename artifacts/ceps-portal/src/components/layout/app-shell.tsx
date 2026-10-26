@@ -20,7 +20,6 @@ import {
   Upload,
   UserCog,
   ClipboardList,
-  Wrench,
   Inbox
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -49,7 +48,6 @@ const navItems: NavItem[] = [
   { title: 'Vendors', href: '/vendors', icon: Building2, roles: ['staff'] },
   { title: 'Reports', href: '/reports', icon: PieChart, roles: ['staff', 'service_coordinator', 'vendor'] },
   { title: 'Bulk Import', href: '/admin/import', icon: Upload, roles: ['staff'] },
-  { title: 'Fee Cleanup', href: '/admin/monthly-fees', icon: Wrench, roles: ['staff'] },
   { title: 'Users', href: '/admin/users', icon: Settings, roles: ['staff'], permission: 'manage_users' },
   { title: 'Roles', href: '/admin/roles', icon: UserCog, roles: ['staff'], permission: 'manage_users' },
   { title: 'Audit Log', href: '/audit-log', icon: ScrollText, roles: ['staff'] },

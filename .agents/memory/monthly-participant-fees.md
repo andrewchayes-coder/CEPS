@@ -26,3 +26,12 @@ An old fee's informational trigger check may be deleted without making notes or 
 **Why:** CEPS explicitly required these edit rules on 2026-10-09; received money must not silently move to another service month, and fees belong to their 490 rather than an old trigger check.
 
 **How to apply:** These are manual-edit rules, not permission for automatic payment reconciliation to overwrite adjusted fee amounts or for historical fee backfills.
+
+Legacy-rule maintenance tooling is intentionally retired; normal automatic
+monthly fee generation and reversal protections must remain unchanged.
+
+**Why:** CEPS plans to reset test data before go-live, so the old-rule correction
+tool is no longer needed. Its retirement does not authorize any data deletion.
+
+**How to apply:** Preserve existing fees and audit history; do not reintroduce
+legacy repair behavior into routine payment processing.

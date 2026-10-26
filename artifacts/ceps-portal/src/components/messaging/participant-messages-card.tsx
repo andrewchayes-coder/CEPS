@@ -62,7 +62,7 @@ function StaffCard({ clientId, clientName }: { clientId: string; clientName: str
           {isLoading ? <div className="space-y-2 p-3"><Skeleton className="h-12 w-full" /><Skeleton className="h-12 w-full" /></div>
             : isError ? <div className="flex items-center gap-3 p-3 text-sm text-muted-foreground">Messages could not be loaded.<Button size="sm" variant="outline" onClick={() => void refetch()}>Retry</Button></div>
             : (data?.items ?? []).length === 0 ? <p className="p-4 text-center text-sm text-muted-foreground" data-testid="participant-messages-empty">No messages found.</p>
-            : <MessageThreadRows threads={data!.items} showParticipant={false} showAssignee />}
+            : <MessageThreadRows threads={data!.items} showParticipant={false} showAssignee customRange={range.mode === 'custom'} />}
         </div>
         {data && data.total > data.items.length && <p className="text-xs text-muted-foreground">Showing {data.items.length} of {data.total}. Open Messages for the full inbox.</p>}
       </CardContent>

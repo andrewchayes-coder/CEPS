@@ -9,13 +9,17 @@ Use each module's business date for shared date-range filtering: referral date f
 
 **How to apply:** Keep ranges inclusive. Authorization results overlap when the authorization end is on/after the selected start and its start is on/before the selected end. Report-specific source dates should follow the same module mapping.
 
-Messaging is an intentional timezone exception: date bounds apply to a thread's
-last-message timestamp using inclusive **America/Los_Angeles calendar days**,
-converted with SQL `AT TIME ZONE`, not the audit log's UTC date boundaries.
-Explicit bounds override the recent/archive split (183 days).
+Messaging is an intentional timezone exception: custom date bounds find threads
+with **any message** inside inclusive **America/Los_Angeles calendar days**, not
+only threads whose latest message is in the range. The Last 6 months and Archive
+views still use the thread's latest message (183 days). Explicit bounds override
+that split. Search and message-date matching are independent AND predicates.
 
-**Why:** CEPS wants a late-night Pacific message counted on the day the person
-sent it, even when its UTC timestamp falls on the following day or month.
+**Why:** CEPS needs to retrieve messages up to 1.5 years old even after a recent
+reply. Late-night Pacific messages belong to the day the person sent them, even
+when UTC falls on the following day or month.
 
-**How to apply:** Preserve the Pacific business-day conversion across both inbox
-and participant-record thread lists, including daylight-saving transitions.
+**How to apply:** Use timestamp bounds at Pacific midnight and the next day's
+midnight, including DST transitions; never wrap the indexed message timestamp.
+Preserve this behavior across inbox and participant lists. Historical navigation
+must use the Pacific date, and must not mark newer unseen messages as read.

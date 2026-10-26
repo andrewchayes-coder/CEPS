@@ -76,6 +76,12 @@ export interface MessageThreadHeader {
   /** @nullable */
   lastMessageByName: string | null;
   messageCount: number;
+  /**
+     * Messages within explicit date bounds; null without bounds.
+     * @nullable
+     */
+  rangeMessageCount?: number | null;
+  rangeLatestAt?: MessageInstant | null;
   unread: boolean;
   includeCoordinator: boolean;
   /** @nullable */
@@ -117,6 +123,8 @@ export interface MessageThreadDetail {
   thread: MessageThreadHeader;
   messages: ThreadMessage[];
   hasMore: boolean;
+  /** Newer messages exist after this page. */
+  hasNewer: boolean;
   nextCursor: MessageCursor | null;
 }
 
@@ -3405,12 +3413,12 @@ export const MessageRangeParameter = {
 } as const;
 
 /**
- * Inclusive America/Los_Angeles calendar day on lastMessageAt (unlike audit-log UTC date boundaries).
+ * Match threads with any message on or after this inclusive America/Los_Angeles calendar day.
  */
 export type MessageDateFromParameter = string;
 
 /**
- * Inclusive America/Los_Angeles calendar day on lastMessageAt.
+ * Match threads with any message on or before this inclusive America/Los_Angeles calendar day.
  */
 export type MessageDateToParameter = string;
 
@@ -3430,12 +3438,12 @@ search?: MessageSearchParameter;
  */
 range?: MessageRangeParameter;
 /**
- * Inclusive America/Los_Angeles calendar day on lastMessageAt (unlike audit-log UTC date boundaries).
+ * Match threads with any message on or after this inclusive America/Los_Angeles calendar day.
  * @pattern ^\d{4}-\d{2}-\d{2}$
  */
 dateFrom?: MessageDateFromParameter;
 /**
- * Inclusive America/Los_Angeles calendar day on lastMessageAt.
+ * Match threads with any message on or before this inclusive America/Los_Angeles calendar day.
  * @pattern ^\d{4}-\d{2}-\d{2}$
  */
 dateTo?: MessageDateToParameter;
@@ -3463,12 +3471,12 @@ search?: MessageSearchParameter;
  */
 range?: MessageRangeParameter;
 /**
- * Inclusive America/Los_Angeles calendar day on lastMessageAt (unlike audit-log UTC date boundaries).
+ * Match threads with any message on or after this inclusive America/Los_Angeles calendar day.
  * @pattern ^\d{4}-\d{2}-\d{2}$
  */
 dateFrom?: MessageDateFromParameter;
 /**
- * Inclusive America/Los_Angeles calendar day on lastMessageAt.
+ * Match threads with any message on or before this inclusive America/Los_Angeles calendar day.
  * @pattern ^\d{4}-\d{2}-\d{2}$
  */
 dateTo?: MessageDateToParameter;
@@ -3492,6 +3500,11 @@ before?: MessageInstant;
  * UUID tie-breaker from nextCursor, required for complete timestamp-and-id pagination.
  */
 beforeId?: string;
+/**
+ * Newest messages through this inclusive Pacific calendar day. Cannot be combined with before or beforeId.
+ * @pattern ^\d{4}-\d{2}-\d{2}$
+ */
+untilDate?: string;
 /**
  * @minimum 1
  * @maximum 50

@@ -27,6 +27,7 @@ export default function MessagesPage() {
   const { threadId } = useParams<{ threadId?: string }>();
   const [, navigate] = useLocation();
   const urlSearch = useSearch();
+  const untilDate = new URLSearchParams(urlSearch).get('until') || undefined;
   const rawView = new URLSearchParams(urlSearch).get('view');
   const view: MessageView = rawView === 'unread' || (isStaff && (rawView === 'assigned_to_me' || rawView === 'unassigned')) ? rawView : 'all';
   const rawStatus = new URLSearchParams(urlSearch).get('status');
@@ -36,6 +37,7 @@ export default function MessagesPage() {
     const qp = new URLSearchParams();
     if (v !== 'all') qp.set('view', v);
     if (s) qp.set('status', s);
+    if (untilDate) qp.set('until', untilDate);
     const qs = qp.toString();
     navigate(`${threadId ? `/messages/${threadId}` : '/messages'}${qs ? `?${qs}` : ''}`);
   };
@@ -144,7 +146,7 @@ export default function MessagesPage() {
               </div>
             ) : (
               <>
-                <MessageThreadRows threads={items} selectedId={threadId} showParticipant={isStaffLike} showAssignee={isStaffLike} />
+                <MessageThreadRows threads={items} selectedId={threadId} showParticipant={isStaffLike} showAssignee={isStaffLike} customRange={range.mode === 'custom'} />
                 {hasNextPage && (
                   <div className="p-3 text-center">
                     <Button variant="outline" size="sm" onClick={() => void fetchNextPage()} disabled={isFetchingNextPage} data-testid="button-load-more-threads">{isFetchingNextPage ? 'Loading...' : 'Load more'}</Button>
@@ -157,7 +159,7 @@ export default function MessagesPage() {
         </div>
 
         <div className={cn('min-h-0 min-w-0', !threadId && 'hidden md:block')}>
-          {threadId ? <MessageThreadView key={threadId} threadId={threadId} /> : (
+          {threadId ? <MessageThreadView key={`${threadId}-${untilDate ?? 'latest'}`} threadId={threadId} untilDate={untilDate} /> : (
             <div className="flex h-full items-center justify-center p-6 text-sm text-muted-foreground">Select a conversation to read it.</div>
           )}
         </div>

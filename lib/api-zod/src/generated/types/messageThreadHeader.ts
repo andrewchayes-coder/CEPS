@@ -18,6 +18,12 @@ export interface MessageThreadHeader {
   /** @nullable */
   lastMessageByName: string | null;
   messageCount: number;
+  /**
+     * Messages within explicit date bounds; null without bounds.
+     * @nullable
+     */
+  rangeMessageCount?: number | null;
+  rangeLatestAt?: MessageInstant | null;
   unread: boolean;
   includeCoordinator: boolean;
   /** @nullable */

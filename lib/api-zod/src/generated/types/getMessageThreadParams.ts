@@ -17,6 +17,11 @@ before?: MessageInstant;
  */
 beforeId?: string;
 /**
+ * Newest messages through this inclusive Pacific calendar day. Cannot be combined with before or beforeId.
+ * @pattern ^\d{4}-\d{2}-\d{2}$
+ */
+untilDate?: string;
+/**
  * @minimum 1
  * @maximum 50
  */

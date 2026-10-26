@@ -9,6 +9,14 @@ export interface MessageFilters {
 export const messageTimestamp = (column: SQL) =>
   sql<string>`to_char(${column} at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"')`;
 
+/** Compare the indexed timestamp itself to Pacific midnight bounds (DST-safe). */
+function messageDateBounds(column: SQL, filters: MessageFilters): SQL {
+  const bounds: SQL[] = [];
+  if (filters.dateFrom) bounds.push(sql`${column} >= (${filters.dateFrom}::date)::timestamp at time zone 'America/Los_Angeles'`);
+  if (filters.dateTo) bounds.push(sql`${column} < (${filters.dateTo}::date + 1)::timestamp at time zone 'America/Los_Angeles'`);
+  return bounds.length ? sql.join(bounds, sql` and `) : sql`true`;
+}
+
 export function unreadMessage(userId: string): SQL {
   return sql`(${messageThreadsTable.lastMessageAt} > coalesce(
     (select r.last_read_at from message_thread_reads r
@@ -26,10 +34,9 @@ export function threadFilters(user: User, filters: MessageFilters = {}): SQL {
   if (status === "open") conditions.push(sql`${messageThreadsTable.resolvedAt} is null`);
   if (status === "resolved") conditions.push(sql`${messageThreadsTable.resolvedAt} is not null`);
   if (filters.dateFrom || filters.dateTo) {
-    // Messaging intentionally uses Pacific calendar days, not audit-log UTC days.
-    const date = sql`(${messageThreadsTable.lastMessageAt} at time zone 'America/Los_Angeles')::date`;
-    if (filters.dateFrom) conditions.push(sql`${date} >= ${filters.dateFrom}::date`);
-    if (filters.dateTo) conditions.push(sql`${date} <= ${filters.dateTo}::date`);
+    conditions.push(sql`exists (select 1 from messages range_message
+      where range_message.thread_id = ${messageThreadsTable.id}
+        and ${messageDateBounds(sql`range_message.created_at`, filters)})`);
   } else {
     conditions.push(filters.range === "archive"
       ? sql`${messageThreadsTable.lastMessageAt} < current_timestamp - interval '183 days'`
@@ -49,7 +56,8 @@ const threadFrom = sql`from ${messageThreadsTable}
   inner join ${clientsTable} on ${clientsTable.id} = ${messageThreadsTable.clientId}`;
 
 /** One SQL page query: latest message via indexed LATERAL, never an N+1. */
-export async function threadHeaders(database: MessageDatabase, user: User, where: SQL, limit = 50, offset = 0) {
+export async function threadHeaders(database: MessageDatabase, user: User, where: SQL, limit = 50, offset = 0, filters: MessageFilters = {}) {
+  const ranged = !!(filters.dateFrom || filters.dateTo);
   const result = await database.execute(sql`select
     ${messageThreadsTable.id} as "id", ${messageThreadsTable.clientId} as "clientId",
     concat_ws(' ', ${clientsTable.firstName}, ${clientsTable.lastName}) as "clientName",
@@ -57,6 +65,8 @@ export async function threadHeaders(database: MessageDatabase, user: User, where
     ${messageTimestamp(sql`${messageThreadsTable.lastMessageAt}`)} as "lastMessageAt",
     coalesce(latest.preview, '') as "lastMessagePreview", last_author.name as "lastMessageByName",
     ${messageThreadsTable.messageCount} as "messageCount", coalesce(${unreadMessage(user.id)}, false) as "unread",
+    ${ranged ? sql`range_stats.message_count` : sql`null::int`} as "rangeMessageCount",
+    ${ranged ? messageTimestamp(sql`range_stats.latest_at`) : sql`null::text`} as "rangeLatestAt",
     ${messageThreadsTable.includeCoordinator} as "includeCoordinator",
     case when ${messageThreadsTable.includeCoordinator} then coordinator.name else null end as "coordinatorName",
     coalesce((select array_agg(coalesce(rep.name, family_user.name) order by coalesce(rep.name, family_user.name), family_user.id)
@@ -79,6 +89,11 @@ export async function threadHeaders(database: MessageDatabase, user: User, where
      left join users resolver on resolver.id = ${messageThreadsTable.resolvedBy}
     left join lateral (select left(m.body, 140) as preview from messages m
       where m.thread_id = ${messageThreadsTable.id} order by m.created_at desc, m.id desc limit 1) latest on true
+    ${ranged ? sql`left join lateral (
+      select count(*)::int as message_count, max(range_message.created_at) as latest_at
+      from messages range_message where range_message.thread_id = ${messageThreadsTable.id}
+        and ${messageDateBounds(sql`range_message.created_at`, filters)}
+    ) range_stats on true` : sql``}
     where ${where} order by ${messageThreadsTable.lastMessageAt} desc, ${messageThreadsTable.id} desc
     limit ${limit} offset ${offset}`);
   return result.rows;
@@ -106,11 +121,11 @@ export async function messageRecipients(database: MessageDatabase, clientId: str
 }
 
 export async function messagePage(database: MessageDatabase, threadId: string, userId: string,
-  limit = 50, before?: string, beforeId?: string) {
+  limit = 50, before?: string, beforeId?: string, untilDate?: string) {
   const cursor = before
     ? beforeId ? sql`and (m.created_at, m.id) < (${before}::timestamptz, ${beforeId}::uuid)`
       : sql`and m.created_at < ${before}::timestamptz`
-    : sql``;
+    : untilDate ? sql`and ${messageDateBounds(sql`m.created_at`, { dateTo: untilDate })}` : sql``;
   const result = await database.execute<{ id: string; body: string; createdAt: string; author: { userId: string; name: string; role: string }; isMine: boolean }>(sql`
     select m.id, m.body, ${messageTimestamp(sql`m.created_at`)} as "createdAt",
       jsonb_build_object('userId', u.id, 'name', u.name, 'role', u.role) as author,
@@ -118,5 +133,11 @@ export async function messagePage(database: MessageDatabase, threadId: string, u
     from messages m inner join users u on u.id = m.author_user_id where m.thread_id = ${threadId} ${cursor}
     order by m.created_at desc, m.id desc limit ${limit + 1}`);
   const hasMore = result.rows.length > limit, messages = result.rows.slice(0, limit), oldest = messages.at(-1);
-  return { messages, hasMore, nextCursor: hasMore && oldest ? { before: oldest.createdAt, beforeId: oldest.id } : null };
+  const newest = messages[0];
+  const newer = await database.execute<{ hasNewer: boolean }>(sql`select exists(
+    select 1 from messages m where m.thread_id = ${threadId}
+      ${newest ? sql`and (m.created_at, m.id) > (${newest.createdAt}::timestamptz, ${newest.id}::uuid)` : sql``}
+  ) as "hasNewer"`);
+  return { messages, hasMore, hasNewer: newer.rows[0].hasNewer,
+    nextCursor: hasMore && oldest ? { before: oldest.createdAt, beforeId: oldest.id } : null };
 }

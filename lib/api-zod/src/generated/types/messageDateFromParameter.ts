@@ -7,6 +7,6 @@
  */
 
 /**
- * Inclusive America/Los_Angeles calendar day on lastMessageAt (unlike audit-log UTC date boundaries).
+ * Match threads with any message on or after this inclusive America/Los_Angeles calendar day.
  */
 export type MessageDateFromParameter = string;

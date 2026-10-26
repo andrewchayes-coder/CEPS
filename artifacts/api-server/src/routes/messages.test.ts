@@ -324,6 +324,7 @@ describe("messaging API", () => {
     const { thread } = await create();
     const old = new Date(Date.now() - 210 * 86400000);
     await db.update(messageThreadsTable).set({ lastMessageAt: old }).where(eq(messageThreadsTable.id, thread.id));
+    await db.update(messagesTable).set({ createdAt: old }).where(eq(messagesTable.threadId, thread.id));
     const query = { clientId: clients[0], search: thread.subject };
     expect((await get("staff", "/messages/threads", query)).body.total).toBe(0);
     expect((await get("staff", "/messages/threads", { ...query, range: "archive" })).body.total).toBe(1);
@@ -338,6 +339,7 @@ describe("messaging API", () => {
   ])("uses inclusive Pacific calendar days across month boundaries and DST: %s", async (instant, pacificDay, utcDay) => {
     const { thread } = await create();
     await db.update(messageThreadsTable).set({ lastMessageAt: new Date(instant) }).where(eq(messageThreadsTable.id, thread.id));
+    await db.update(messagesTable).set({ createdAt: new Date(instant) }).where(eq(messagesTable.threadId, thread.id));
     const query = { clientId: clients[0], search: thread.subject, range: "archive" };
     expect((await get("staff", "/messages/threads", { ...query, dateFrom: pacificDay, dateTo: pacificDay })).body.total).toBe(1);
     expect((await get("staff", "/messages/threads", { ...query, dateFrom: utcDay, dateTo: utcDay })).body.total).toBe(0);
@@ -379,6 +381,79 @@ describe("messaging API", () => {
     expect(third.body.messages).toHaveLength(20);
     expect(third.body).toMatchObject({ hasMore: false, nextCursor: null });
     expect(new Set([...first.body.messages, ...second.body.messages, ...third.body.messages].map((m: { id: string }) => m.id)).size).toBe(120);
+  });
+
+  it("finds old messages inside active threads without changing recent/archive or search scope", async () => {
+    const { thread } = await create();
+    const old = new Date();
+    old.setUTCMonth(old.getUTCMonth() - 18);
+    const yesterday = new Date(Date.now() - 86400000);
+    await db.update(messagesTable).set({ createdAt: old }).where(eq(messagesTable.threadId, thread.id));
+    await db.insert(messagesTable).values({
+      threadId: thread.id, clientId: clients[0], authorUserId: ids.staff,
+      body: `${thread.subject} newer searchable text`, createdAt: yesterday,
+    });
+    await db.update(messageThreadsTable).set({ lastMessageAt: yesterday, messageCount: 2 }).where(eq(messageThreadsTable.id, thread.id));
+    const day = new Intl.DateTimeFormat("en-CA", { timeZone: "America/Los_Angeles", year: "numeric", month: "2-digit", day: "2-digit" }).format(old);
+    const query = { clientId: clients[0], search: thread.subject };
+    expect((await get("staff", "/messages/threads", { ...query, range: "recent" })).body.items[0]).toMatchObject({
+      id: thread.id, rangeMessageCount: null, rangeLatestAt: null,
+    });
+    expect((await get("staff", "/messages/threads", { ...query, range: "archive" })).body.total).toBe(0);
+    for (const path of ["/messages/threads", `/clients/${clients[0]}/message-threads`]) {
+      const result = await get("staff", path, { ...query, dateFrom: day, dateTo: day });
+      expect(result.status).toBe(200);
+      expect(result.body.total).toBe(1);
+      expect(result.body.items[0]).toMatchObject({ id: thread.id, rangeMessageCount: 1 });
+      expect(new Date(result.body.items[0].rangeLatestAt).getTime()).toBe(old.getTime());
+    }
+    // Search and dates are independent predicates: search can match a newer message.
+    expect((await get("staff", "/messages/threads", { ...query, search: "newer searchable text", dateFrom: day, dateTo: day })).body.items.map((t: { id: string }) => t.id)).toContain(thread.id);
+    expect((await get("staff", "/messages/threads", { ...query, search: `${nonce} not present`, dateFrom: day, dateTo: day })).body.total).toBe(0);
+    expect((await get("staff", "/messages/threads", { ...query, dateTo: day })).body.items[0].rangeMessageCount).toBe(1);
+    const yesterdayDay = new Intl.DateTimeFormat("en-CA", { timeZone: "America/Los_Angeles", year: "numeric", month: "2-digit", day: "2-digit" }).format(yesterday);
+    expect((await get("staff", "/messages/threads", { ...query, dateFrom: yesterdayDay })).body.items[0].rangeMessageCount).toBe(1);
+  });
+
+  it("opens the Pacific untilDate page, preserves older cursors, and detects newer messages", async () => {
+    const { thread } = await create();
+    const old = new Date("2025-04-01T06:30:00Z"); // March 31 at 11:30 PM Pacific.
+    await db.update(messagesTable).set({ createdAt: old }).where(eq(messagesTable.threadId, thread.id));
+    await db.insert(messagesTable).values([
+      ...Array.from({ length: 59 }, (_, i) => ({
+        threadId: thread.id, clientId: clients[0], authorUserId: ids.staff, body: `old ${i}`, createdAt: old,
+      })),
+      { threadId: thread.id, clientId: clients[0], authorUserId: ids.parent, body: "newer reply", createdAt: new Date() },
+    ]);
+    const path = `/messages/threads/${thread.id}`;
+    const first = await get("staff", path, { untilDate: "2025-03-31" });
+    expect(first.status).toBe(200);
+    expect(first.body).toMatchObject({ hasMore: true, hasNewer: true });
+    expect(first.body.messages).toHaveLength(50);
+    expect(first.body.messages.every((m: { createdAt: string }) => new Date(m.createdAt).getTime() === old.getTime())).toBe(true);
+    const second = await get("staff", path, first.body.nextCursor);
+    expect(second.body).toMatchObject({ hasMore: false, hasNewer: true, nextCursor: null });
+    expect(second.body.messages).toHaveLength(10);
+    expect(new Set([...first.body.messages, ...second.body.messages].map((m: { id: string }) => m.id)).size).toBe(60);
+    expect((await get("staff", path)).body).toMatchObject({ hasNewer: false });
+    expect((await get("staff", path, { untilDate: "2025-03-30" })).body).toMatchObject({ messages: [], hasNewer: true });
+    for (const extra of [{ before: first.body.messages[0].createdAt }, { beforeId: first.body.messages[0].id }]) {
+      expect((await get("staff", path, { untilDate: "2025-03-31", ...extra })).status).toBe(400);
+    }
+    expect((await get("staff", path, { untilDate: "2025-02-30" })).status).toBe(400);
+    const query = { clientId: clients[0], search: thread.subject, dateFrom: "2025-03-31", dateTo: "2025-03-31" };
+    expect((await get("staff", "/messages/threads", query)).body.items[0].rangeMessageCount).toBe(60);
+    expect((await get("staff", "/messages/threads", { ...query, dateFrom: "2025-04-01", dateTo: "2025-04-01" })).body.total).toBe(0);
+  });
+
+  it("does not widen coordinator or family access through custom ranges or untilDate", async () => {
+    const { thread } = await create("staff", { includeCoordinator: false });
+    const query = { clientId: clients[0], search: thread.subject, dateFrom: "2000-01-01", dateTo: "2099-12-31" };
+    for (const role of ["coordinator", "coordinatorB", "parentB", "outsider"]) {
+      expect((await get(role, "/messages/threads", query)).body.total).toBe(0);
+      expect((await get(role, `/messages/threads/${thread.id}`, { untilDate: "2099-12-31" })).status).toBe(404);
+    }
+    expect((await get("parent", "/messages/threads", query)).body.total).toBe(1);
   });
 
   it("supports assignment views without widening role scope, full totals, and stable inbox pagination", async () => {

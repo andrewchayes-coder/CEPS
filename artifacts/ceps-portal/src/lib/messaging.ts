@@ -18,8 +18,15 @@ export function rangeParams(r: MessageRange): Pick<ListMessageThreadsParams, 'ra
 
 export function rangeCaption(r: MessageRange): string {
   if (r.mode === 'archive') return 'Showing archived messages (older than 6 months)';
-  if (r.mode === 'custom' && (r.from || r.to)) return `Showing ${r.from ?? 'the beginning'} to ${r.to ?? 'today'}`;
+  if (r.mode === 'custom' && (r.from || r.to)) return `Threads with messages from ${r.from ?? 'the beginning'} to ${r.to ?? 'today'}`;
   return 'Showing the last 6 months';
+}
+
+/** URL bounds must use the Pacific date, not the UTC date of the timestamp. */
+export function messagePacificDay(timestamp: string): string {
+  return new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'America/Los_Angeles', year: 'numeric', month: '2-digit', day: '2-digit',
+  }).format(new Date(timestamp));
 }
 
 export function roleLabel(role: string): string {

@@ -26,12 +26,12 @@ search?: MessageSearchParameter;
  */
 range?: MessageRangeParameter;
 /**
- * Inclusive America/Los_Angeles calendar day on lastMessageAt (unlike audit-log UTC date boundaries).
+ * Match threads with any message on or after this inclusive America/Los_Angeles calendar day.
  * @pattern ^\d{4}-\d{2}-\d{2}$
  */
 dateFrom?: MessageDateFromParameter;
 /**
- * Inclusive America/Los_Angeles calendar day on lastMessageAt.
+ * Match threads with any message on or before this inclusive America/Los_Angeles calendar day.
  * @pattern ^\d{4}-\d{2}-\d{2}$
  */
 dateTo?: MessageDateToParameter;

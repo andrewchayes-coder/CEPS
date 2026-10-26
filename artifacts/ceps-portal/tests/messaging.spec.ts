@@ -1,11 +1,12 @@
 import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-import { expect, test, type Browser, type Page } from '@playwright/test';
+import { expect, test, type Browser, type Locator, type Page } from '@playwright/test';
 
 // Real, nonce-scoped development fixtures. Never touches existing participants or accounts.
 type Actor = { id: string; name: string; token: string };
 type Fixture = {
   clientId: string; clientName: string; archiveId: string; archiveSubject: string; archiveDay: string; historyId: string; recentId: string;
+  customRangeId: string; customRangeSubject: string; customOldDay: string; customYesterdayDay: string;
   staff: Actor; staffB: Actor; coordinator: Actor; family: Actor; self: Actor; vendor: Actor;
 };
 const root = fileURLToPath(new URL('../../../', import.meta.url));
@@ -56,6 +57,22 @@ test.beforeAll(() => {
           createdBy:actors.staff.id,lastMessageBy:actors.staff.id,messageCount:1}).returning();
         await tx.insert(messagesTable).values({threadId:recent.id,clientId:client.id,authorUserId:actors.staff.id,body:'Recent fixture message'});
         await tx.insert(messageThreadFamilyMembersTable).values({threadId:recent.id,userId:actors.family.id,addedBy:actors.staff.id});
+        const parts=new Intl.DateTimeFormat('en-CA',{timeZone:'America/Los_Angeles',year:'numeric',month:'2-digit',day:'2-digit'})
+          .formatToParts(new Date()).reduce((o,p)=>(o[p.type]=p.value,o),{});
+        const y=Number(parts.year), m=Number(parts.month)-1, d=Number(parts.day);
+        const today=new Date(Date.UTC(y,m,d)), yesterday=new Date(today.getTime()-86400000);
+        const oldMonth=m-18, oldDay=new Date(Date.UTC(y,oldMonth,Math.min(d,new Date(Date.UTC(y,oldMonth+1,0)).getUTCDate())));
+        // These are calendar dates constructed from Pacific parts, not message instants.
+        const dayText=(date)=>date.toISOString().slice(0,10);
+        const customOldDay=dayText(oldDay), customYesterdayDay=dayText(yesterday);
+        const oldAt=new Date(customOldDay+'T20:00:00.000Z'), yesterdayAt=new Date(customYesterdayDay+'T20:00:00.000Z');
+        const customRangeSubject=nonce+' historical range conversation';
+        const [customRange]=await tx.insert(messageThreadsTable).values({clientId:client.id,subject:customRangeSubject,
+          createdBy:actors.staff.id,createdAt:oldAt,lastMessageAt:yesterdayAt,lastMessageBy:actors.staff.id,messageCount:2}).returning();
+        await tx.insert(messagesTable).values([
+          {threadId:customRange.id,clientId:client.id,authorUserId:actors.staff.id,body:'Historical Pacific-day message',createdAt:oldAt},
+          {threadId:customRange.id,clientId:client.id,authorUserId:actors.staff.id,body:'Yesterday Pacific-day message',createdAt:yesterdayAt}
+        ]);
         const historyAt=new Date();
         const [history]=await tx.insert(messageThreadsTable).values({clientId:client.id,subject:nonce+' pagination',
           createdBy:actors.staff.id,lastMessageAt:historyAt,lastMessageBy:actors.staff.id,messageCount:120}).returning();
@@ -65,7 +82,8 @@ test.beforeAll(() => {
         })));
         const archiveDay = new Intl.DateTimeFormat('en-CA',{timeZone:'America/Los_Angeles',year:'numeric',month:'2-digit',day:'2-digit'}).format(old);
         console.log('MESSAGING_FIXTURE='+JSON.stringify({clientId:client.id,clientName:client.firstName+' '+client.lastName,
-          archiveId:thread.id,archiveSubject,archiveDay,historyId:history.id,recentId:recent.id,...actors}));
+          archiveId:thread.id,archiveSubject,archiveDay,historyId:history.id,recentId:recent.id,
+          customRangeId:customRange.id,customRangeSubject,customOldDay,customYesterdayDay,...actors}));
       });
       await pool.end();
     })().catch(e=>{console.error(e);process.exit(1)});
@@ -272,6 +290,83 @@ test('archive and custom Pacific date range change captions and returned rows', 
     await page.getByTestId('input-message-search').fill('not-present-in-this-conversation');
     await expect(page.getByTestId(`message-thread-${fixture.archiveId}`)).toHaveCount(0);
   } finally { await context.close(); }
+});
+
+test('custom range opens old messages in an active thread', async ({ browser, baseURL }, testInfo) => {
+  test.setTimeout(90_000);
+  const { page, context } = await signedIn(browser, baseURL!, fixture.staffB);
+  const readPosts: string[] = [];
+  page.on('request', (request) => {
+    if (request.method() === 'POST' && request.url().includes(`/api/messages/threads/${fixture.customRangeId}/read`)) {
+      readPosts.push(request.url());
+    }
+  });
+  const useCustomRange = async (root: Page | Locator) => {
+    await root.getByTestId('select-message-range').click();
+    await page.getByRole('option', { name: 'Custom range', exact: true }).click();
+    await root.getByTestId('date-range-display').click();
+    await page.getByRole('combobox').last().click();
+    await page.getByRole('option', { name: 'Custom Range', exact: true }).click();
+    await page.locator('input[type="date"]').first().fill(fixture.customOldDay);
+    await page.locator('input[type="date"]').last().fill(fixture.customOldDay);
+    await page.keyboard.press('Escape');
+    await root.getByTestId('date-range-display').click();
+  };
+  try {
+    await page.goto('/messages');
+    await page.getByTestId('input-message-search').fill(fixture.customRangeSubject);
+    await useCustomRange(page);
+    const row = page.getByTestId(`message-thread-${fixture.customRangeId}`);
+    await expect(row).toBeVisible();
+    await expect(page.getByTestId(`text-thread-range-${fixture.customRangeId}`))
+      .toHaveText(`1 message in this range · latest ${fixture.customOldDay}`);
+    await expect(page.getByTestId('text-message-range-caption'))
+      .toHaveText(`Threads with messages from ${fixture.customOldDay} to ${fixture.customOldDay}`);
+    await expect(row).toHaveAttribute('data-unread', 'true');
+    await row.click();
+    await expect.poll(() => new URL(page.url()).searchParams.get('until')).toBe(fixture.customOldDay);
+    await expect(page.getByTestId('message-thread-view')).toContainText('Historical Pacific-day message');
+    await expect(page.getByTestId('message-thread-view')).not.toContainText('Yesterday Pacific-day message');
+    await expect(page.getByTestId('banner-message-history')).toBeVisible();
+    await expect(page.getByText('Historical Pacific-day message')).toBeInViewport();
+    await page.screenshot({ path: testInfo.outputPath('historical-view.png'), fullPage: false });
+    expect(readPosts).toHaveLength(0);
+    const historicalList = await page.evaluate(async ({ id, subject, day }) => {
+      const params = new URLSearchParams({ search: subject, dateFrom: day, dateTo: day });
+      const response = await fetch(`/api/messages/threads?${params}`);
+      return (await response.json()).items.find((item: { id: string }) => item.id === id);
+    }, { id: fixture.customRangeId, subject: fixture.customRangeSubject, day: fixture.customOldDay });
+    expect(historicalList?.unread).toBe(true);
+
+    const readResponse = page.waitForResponse((response) => response.request().method() === 'POST'
+      && response.url().includes(`/api/messages/threads/${fixture.customRangeId}/read`));
+    await page.getByTestId('button-jump-to-latest').click();
+    expect((await readResponse).status()).toBe(200);
+    await expect.poll(() => new URL(page.url()).searchParams.has('until')).toBe(false);
+    await expect(page.getByTestId('message-thread-view')).toContainText('Yesterday Pacific-day message');
+    await expect(page.getByTestId('banner-message-history')).toHaveCount(0);
+    await expect.poll(() => readPosts.length).toBeGreaterThan(0);
+    const latestList = await page.evaluate(async ({ id, subject }) => {
+      const params = new URLSearchParams({ search: subject });
+      const response = await fetch(`/api/messages/threads?${params}`);
+      return (await response.json()).items.find((item: { id: string }) => item.id === id);
+    }, { id: fixture.customRangeId, subject: fixture.customRangeSubject });
+    expect(latestList?.unread).toBe(false);
+
+    await page.goto(`/clients/${fixture.clientId}`);
+    const card = page.getByTestId('card-participant-messages');
+    await expect(card).toBeVisible();
+    await card.getByTestId('input-participant-message-search').fill(fixture.customRangeSubject);
+    await useCustomRange(card);
+    const participantRow = card.getByTestId(`message-thread-${fixture.customRangeId}`);
+    await expect(participantRow).toBeVisible();
+    await expect(card.getByTestId(`text-thread-range-${fixture.customRangeId}`))
+      .toHaveText(`1 message in this range · latest ${fixture.customOldDay}`);
+    await expect(participantRow).toHaveAttribute('href', `/messages/${fixture.customRangeId}?until=${fixture.customOldDay}`);
+  } finally {
+    await page.unrouteAll({ behavior: 'ignoreErrors' });
+    await context.close();
+  }
 });
 
 test('vendor has no Messages navigation, no messaging requests, and an unauthorized direct route', async ({ browser, baseURL }) => {

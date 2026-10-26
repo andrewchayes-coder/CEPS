@@ -1,6 +1,6 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
-import { Link } from 'wouter';
+import { Link, useLocation, useSearch } from 'wouter';
 import { ArrowLeft } from 'lucide-react';
 import {
   useGetMessageThread, getGetMessageThreadQueryKey, getMessageThread, sendMessage, markMessageThreadRead,
@@ -19,16 +19,23 @@ import { AddFamilyDialog } from './add-family-dialog';
 import { ThreadAssignment } from './thread-assignment';
 import { ThreadStatus } from './thread-status';
 
-const PARAMS = { limit: 50 };
-
-export function MessageThreadView({ threadId }: { threadId: string }) {
+export function MessageThreadView({ threadId, untilDate }: { threadId: string; untilDate?: string }) {
   const { user } = useAuth();
   const qc = useQueryClient();
   const isStaffLike = user?.role === 'staff' || user?.role === 'service_coordinator';
-  const qk = useMemo(() => [...getGetMessageThreadQueryKey(threadId, PARAMS), user?.id], [threadId, user?.id]);
-  const { data, dataUpdatedAt, isLoading, isError, refetch } = useGetMessageThread(threadId, PARAMS, {
+  const params = useMemo(() => ({ limit: 50, ...(untilDate ? { untilDate } : {}) }), [untilDate]);
+  const qk = useMemo(() => [...getGetMessageThreadQueryKey(threadId, params), user?.id], [threadId, user?.id, params]);
+  const { data, dataUpdatedAt, isLoading, isError, refetch } = useGetMessageThread(threadId, params, {
     query: { queryKey: qk, refetchInterval: 30000, refetchOnWindowFocus: true },
   });
+  const [, navigate] = useLocation();
+  const search = useSearch();
+  const jumpToLatest = () => {
+    const next = new URLSearchParams(search);
+    next.delete('until');
+    navigate(`/messages/${threadId}${next.size ? `?${next}` : ''}`);
+  };
+  const [viewedLatest, setViewedLatest] = useState(false);
 
   const [older, setOlder] = useState<ThreadMessage[]>([]);
   const [olderLoaded, setOlderLoaded] = useState(false);
@@ -72,7 +79,7 @@ export function MessageThreadView({ threadId }: { threadId: string }) {
   const incomingId = `${data?.messages.find((m) => !m.isMine)?.id ?? 'none'}|${selfAssignedAt}`;
   const loaded = !!data;
   useEffect(() => {
-    if (!loaded || markedFor.current === incomingId) return;
+    if (!loaded || (untilDate && (data?.hasNewer || !viewedLatest)) || markedFor.current === incomingId) return;
     const run = () => {
       if (document.hidden || markedFor.current === incomingId) return;
       markedFor.current = incomingId;
@@ -81,7 +88,7 @@ export function MessageThreadView({ threadId }: { threadId: string }) {
     if (!document.hidden) { run(); return; }
     document.addEventListener('visibilitychange', run);
     return () => document.removeEventListener('visibilitychange', run);
-  }, [loaded, incomingId, threadId, qc, dataUpdatedAt]);
+  }, [loaded, incomingId, threadId, qc, dataUpdatedAt, untilDate, data?.hasNewer, viewedLatest]);
 
   useLayoutEffect(() => {
     const el = scroller.current;
@@ -115,6 +122,11 @@ export function MessageThreadView({ threadId }: { threadId: string }) {
     nearBottom.current = true;
     setPending([p]); setDraft(''); setError(null);
     sendMessage(threadId, { body }).then((msg) => {
+      if (untilDate) {
+        invalidateMessaging(qc);
+        if (mounted.current) jumpToLatest();
+        return;
+      }
       qc.setQueryData<MessageThreadDetail>(qk, (old) => old && !old.messages.some((m) => m.id === msg.id)
         ? { ...old, messages: [msg, ...old.messages], thread: { ...old.thread, lastMessageAt: msg.createdAt, lastMessagePreview: msg.body } } : old);
       if (mounted.current) setPending([]);
@@ -161,8 +173,18 @@ export function MessageThreadView({ threadId }: { threadId: string }) {
           {isStaffLike && <AddFamilyDialog thread={t} />}
         </div>
       </header>
+      {untilDate && (
+        <div className="flex items-center justify-between gap-2 border-b bg-secondary px-4 py-2 text-sm" data-testid="banner-message-history">
+          <span>Showing messages up to {untilDate}.</span>
+          <Button size="sm" variant="outline" onClick={jumpToLatest} data-testid="button-jump-to-latest">Jump to latest</Button>
+        </div>
+      )}
       <div ref={scroller} className="min-h-0 flex-1 space-y-3 overflow-y-auto p-4" data-testid="message-thread-scroll"
-        onScroll={(e) => { const el = e.currentTarget; nearBottom.current = el.scrollHeight - el.scrollTop - el.clientHeight < 80; }}>
+        onScroll={(e) => {
+          const el = e.currentTarget;
+          nearBottom.current = el.scrollHeight - el.scrollTop - el.clientHeight < 80;
+          if (nearBottom.current && !data.hasNewer) setViewedLatest(true);
+        }}>
         {hasMore && (
           <div className="text-center">
             <Button size="sm" variant="outline" onClick={() => void loadOlder()} disabled={loadingOlder} data-testid="button-load-older-messages">

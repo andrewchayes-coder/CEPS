@@ -13,5 +13,7 @@ export interface MessageThreadDetail {
   thread: MessageThreadHeader;
   messages: ThreadMessage[];
   hasMore: boolean;
+  /** Newer messages exist after this page. */
+  hasNewer: boolean;
   nextCursor: MessageCursor | null;
 }

@@ -2,18 +2,24 @@ import { Link, useSearch } from 'wouter';
 import type { MessageThreadHeader } from '@workspace/api-client-react';
 import { formatMessageClock } from '@/lib/datetime';
 import { cn } from '@/lib/utils';
+import { messagePacificDay } from '@/lib/messaging';
 
-export function MessageThreadRows({ threads, selectedId, showParticipant, showAssignee = false }: {
-  threads: MessageThreadHeader[]; selectedId?: string; showParticipant: boolean; showAssignee?: boolean;
+export function MessageThreadRows({ threads, selectedId, showParticipant, showAssignee = false, customRange = false }: {
+  threads: MessageThreadHeader[]; selectedId?: string; showParticipant: boolean; showAssignee?: boolean; customRange?: boolean;
 }) {
   const search = useSearch();
-  const qs = search ? `?${search}` : '';
+  const threadHref = (t: MessageThreadHeader) => {
+    const params = new URLSearchParams(search);
+    params.delete('until');
+    if (customRange && t.rangeLatestAt) params.set('until', messagePacificDay(t.rangeLatestAt));
+    return `/messages/${t.id}${params.size ? `?${params}` : ''}`;
+  };
   return (
     <ul className="divide-y" data-testid="list-message-threads">
       {threads.map((t) => (
         <li key={t.id}>
           <Link
-            href={`/messages/${t.id}${qs}`}
+            href={threadHref(t)}
             aria-current={t.id === selectedId ? 'true' : undefined}
             data-testid={`message-thread-${t.id}`}
             data-unread={t.unread ? 'true' : 'false'}
@@ -45,6 +51,11 @@ export function MessageThreadRows({ threads, selectedId, showParticipant, showAs
                 </span>
               )}
               <span className="block text-xs text-muted-foreground">{t.messageCount} {t.messageCount === 1 ? 'message' : 'messages'}</span>
+              {customRange && t.rangeMessageCount != null && t.rangeLatestAt && (
+                <span className="block text-xs text-muted-foreground" data-testid={`text-thread-range-${t.id}`}>
+                  {t.rangeMessageCount} {t.rangeMessageCount === 1 ? 'message' : 'messages'} in this range · latest {messagePacificDay(t.rangeLatestAt)}
+                </span>
+              )}
             </span>
           </Link>
         </li>

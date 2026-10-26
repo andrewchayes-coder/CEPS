@@ -7,6 +7,6 @@
  */
 
 /**
- * Inclusive America/Los_Angeles calendar day on lastMessageAt.
+ * Match threads with any message on or before this inclusive America/Los_Angeles calendar day.
  */
 export type MessageDateToParameter = string;

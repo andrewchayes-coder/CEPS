@@ -17,7 +17,7 @@ export function MessageRangeControl({ value, onChange }: { value: MessageRange; 
       </Select>
       {value.mode === 'custom' && (
         <DateRangeFilter
-          label="Last message date"
+          label="Message date"
           startDate={value.from}
           endDate={value.to}
           onChange={(r) => onChange({ mode: 'custom', from: r.startDate, to: r.endDate })}

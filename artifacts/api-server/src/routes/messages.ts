@@ -60,7 +60,7 @@ router.get("/messages/threads", async (req, res): Promise<void> => {
   checkDates(filters);
   const where = threadFilters(req.user!, filters);
   const [items, total] = await Promise.all([
-    threadHeaders(db, req.user!, where, filters.limit, filters.offset), threadCount(db, where),
+    threadHeaders(db, req.user!, where, filters.limit, filters.offset, filters), threadCount(db, where),
   ]);
   res.json(ListMessageThreadsResponse.parse({ items, total }));
 });
@@ -72,7 +72,7 @@ router.get("/clients/:id/message-threads", async (req, res): Promise<void> => {
   await messageClient(db, id, req.user!);
   const where = threadFilters(req.user!, { ...filters, clientId: id });
   const [items, total] = await Promise.all([
-    threadHeaders(db, req.user!, where, filters.limit, filters.offset), threadCount(db, where),
+    threadHeaders(db, req.user!, where, filters.limit, filters.offset, filters), threadCount(db, where),
   ]);
   res.json(ListClientMessageThreadsResponse.parse({ items, total }));
 });
@@ -112,6 +112,8 @@ router.post("/clients/:id/message-threads", async (req, res): Promise<void> => {
 router.get("/messages/threads/:threadId", async (req, res): Promise<void> => {
   const { threadId } = valid(GetMessageThreadParams.safeParse(req.params));
   const query = valid(GetMessageThreadQueryParams.safeParse(req.query));
+  if (query.untilDate && (query.before || query.beforeId)) throw new MessageError(400, "untilDate cannot be combined with before or beforeId");
+  if (query.untilDate && !isCalendarDay(query.untilDate)) throw new MessageError(400, "Invalid calendar date");
   if (query.beforeId && !query.before) throw new MessageError(400, "beforeId requires before");
   if (query.before && (!isCalendarDay(query.before.slice(0, 10))
     || !/T(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d/.test(query.before)
@@ -120,7 +122,7 @@ router.get("/messages/threads/:threadId", async (req, res): Promise<void> => {
   }
   const [thread] = await threadHeaders(db, req.user!, and(messageScope(req.user!), eq(messageThreadsTable.id, threadId))!);
   if (!thread) throw new MessageError(404, "Thread not found");
-  res.json(GetMessageThreadResponse.parse({ thread, ...await messagePage(db, threadId, req.user!.id, query.limit, query.before, query.beforeId) }));
+  res.json(GetMessageThreadResponse.parse({ thread, ...await messagePage(db, threadId, req.user!.id, query.limit, query.before, query.beforeId, query.untilDate) }));
 });
 
 router.post("/messages/threads/:threadId/messages", async (req, res): Promise<void> => {

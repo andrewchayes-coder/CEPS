@@ -119,6 +119,10 @@ paths:
           in: query
           description: UUID tie-breaker from nextCursor, required for complete timestamp-and-id pagination.
           schema: { type: string, format: uuid }
+        - name: untilDate
+          in: query
+          description: Newest messages through this inclusive Pacific calendar day. Cannot be combined with before or beforeId.
+          schema: { type: string, pattern: '^\d{4}-\d{2}-\d{2}$' }
         - name: limit
           in: query
           schema: { type: integer, minimum: 1, maximum: 50, default: 50 }
@@ -3077,12 +3081,12 @@ components:
     MessageDateFrom:
       name: dateFrom
       in: query
-      description: Inclusive America/Los_Angeles calendar day on lastMessageAt (unlike audit-log UTC date boundaries).
+      description: Match threads with any message on or after this inclusive America/Los_Angeles calendar day.
       schema: { type: string, pattern: '^\d{4}-\d{2}-\d{2}$' }
     MessageDateTo:
       name: dateTo
       in: query
-      description: Inclusive America/Los_Angeles calendar day on lastMessageAt.
+      description: Match threads with any message on or before this inclusive America/Los_Angeles calendar day.
       schema: { type: string, pattern: '^\d{4}-\d{2}-\d{2}$' }
     MessageLimit:
       name: limit
@@ -3156,6 +3160,11 @@ components:
         lastMessagePreview: { type: string }
         lastMessageByName: { type: ["string", "null"] }
         messageCount: { type: integer }
+        rangeMessageCount: { type: ["integer", "null"], description: Messages within explicit date bounds; null without bounds. }
+        rangeLatestAt:
+          anyOf:
+            - { $ref: '#/components/schemas/MessageInstant' }
+            - { type: "null" }
         unread: { type: boolean }
         includeCoordinator: { type: boolean }
         coordinatorName: { type: ["string", "null"] }
@@ -3210,11 +3219,12 @@ components:
         beforeId: { type: string, format: uuid }
     MessageThreadDetail:
       type: object
-      required: [thread, messages, hasMore, nextCursor]
+      required: [thread, messages, hasMore, hasNewer, nextCursor]
       properties:
         thread: { $ref: '#/components/schemas/MessageThreadHeader' }
         messages: { type: array, items: { $ref: '#/components/schemas/ThreadMessage' } }
         hasMore: { type: boolean }
+        hasNewer: { type: boolean, description: Newer messages exist after this page. }
         nextCursor:
           anyOf:
             - { $ref: '#/components/schemas/MessageCursor' }

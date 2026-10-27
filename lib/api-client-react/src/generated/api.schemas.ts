@@ -5,6 +5,171 @@
  * CEPS Portal API — referral intake, authorizations, invoices, payments, remittances, vendors, reporting
  * OpenAPI spec version: 0.1.0
  */
+export type BillingStatus = typeof BillingStatus[keyof typeof BillingStatus];
+
+
+export const BillingStatus = {
+  pending: 'pending',
+  billed: 'billed',
+  partially_paid: 'partially_paid',
+  paid: 'paid',
+  waived: 'waived',
+} as const;
+
+export interface ReviewFlag {
+  id: string;
+  reason: string;
+  flaggedBy: string;
+  /** @nullable */
+  flaggedByName?: string | null;
+  flaggedAt: string;
+  /** @nullable */
+  resolvedAt: string | null;
+  /** @nullable */
+  resolvedBy: string | null;
+  /** @nullable */
+  resolutionNote: string | null;
+}
+
+export type ReviewFlagInputTargetType = typeof ReviewFlagInputTargetType[keyof typeof ReviewFlagInputTargetType];
+
+
+export const ReviewFlagInputTargetType = {
+  payment_line: 'payment_line',
+  fee: 'fee',
+} as const;
+
+export interface ReviewFlagInput {
+  targetType: ReviewFlagInputTargetType;
+  targetId: string;
+  /**
+     * @minLength 1
+     * @maxLength 500
+     */
+  reason: string;
+}
+
+export interface ReviewFlagResolution {
+  /**
+     * @minLength 1
+     * @maxLength 500
+     */
+  note: string;
+}
+
+export type BillingImportInputMode = typeof BillingImportInputMode[keyof typeof BillingImportInputMode];
+
+
+export const BillingImportInputMode = {
+  preview: 'preview',
+  commit: 'commit',
+} as const;
+
+export interface BillingImportInput {
+  /**
+     * @minLength 1
+     * @maxLength 10000000
+     */
+  csvContent: string;
+  mode: BillingImportInputMode;
+}
+
+export type BillingRowMatchStatus = typeof BillingRowMatchStatus[keyof typeof BillingRowMatchStatus];
+
+
+export const BillingRowMatchStatus = {
+  matched: 'matched',
+  unmatched: 'unmatched',
+  amount_mismatch: 'amount_mismatch',
+  already_imported: 'already_imported',
+} as const;
+
+export interface BillingRow {
+  rebilled?: boolean;
+  untracked?: boolean;
+  id?: string;
+  rowNumber: number;
+  invoiceNumber: string;
+  billedAt: string;
+  uciNumber: string;
+  authNumber: string;
+  serviceMonth: string;
+  serviceCode: string;
+  billedAmount: string;
+  matchStatus: BillingRowMatchStatus;
+  /** @nullable */
+  reviewReason: string | null;
+  /** @nullable */
+  clientName: string | null;
+  targetCount: number;
+}
+
+export type BillingImportResultMode = typeof BillingImportResultMode[keyof typeof BillingImportResultMode];
+
+
+export const BillingImportResultMode = {
+  preview: 'preview',
+  commit: 'commit',
+} as const;
+
+export interface BillingImportResult {
+  rebilled?: number;
+  untrackedCount?: number;
+  untrackedAmount?: string;
+  mode: BillingImportResultMode;
+  headers: string[];
+  rows: BillingRow[];
+  imported: number;
+  matched: number;
+  unmatched: number;
+  amountMismatch: number;
+  alreadyImported: number;
+  deferred: number;
+  totalAmount: string;
+  /** @nullable */
+  importBatchId: string | null;
+}
+
+export interface BillingRowsResult {
+  items: BillingRow[];
+  total: number;
+}
+
+export type BillingReportRowTargetType = typeof BillingReportRowTargetType[keyof typeof BillingReportRowTargetType];
+
+
+export const BillingReportRowTargetType = {
+  payment_line: 'payment_line',
+  fee: 'fee',
+} as const;
+
+export interface BillingReportRow {
+  targetType: BillingReportRowTargetType;
+  targetId: string;
+  clientId: string;
+  clientName: string;
+  item: string;
+  /** @nullable */
+  serviceMonth: string | null;
+  amount: string;
+  remittedAmount: string;
+  billingStatus: BillingStatus;
+  /** @nullable */
+  billedAt: string | null;
+  /** @nullable */
+  billedAmount: string | null;
+  /** @nullable */
+  invoiceNumber: string | null;
+  /** @nullable */
+  daysSinceBilled: number | null;
+  flag: ReviewFlag | null;
+}
+
+export interface BillingReportResult {
+  items: BillingReportRow[];
+  total: number;
+}
+
 /**
  * ISO-8601 timestamp retained as a string to preserve PostgreSQL microseconds in pagination cursors. Do not coerce to a JavaScript Date.
  * @pattern ^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,6})?(?:Z|[+-]\d{2}:\d{2})$
@@ -1344,6 +1509,15 @@ export interface PaymentRemittanceLink {
 }
 
 export interface PaymentAllocation {
+  billingCount?: number;
+  billingStatus?: BillingStatus;
+  /** @nullable */
+  billedAt?: string | null;
+  /** @nullable */
+  billedAmount?: string | null;
+  /** @nullable */
+  invoiceNumber?: string | null;
+  flag?: ReviewFlag | null;
   id: string;
   authorizationId: string;
   /** @pattern ^\d{4}-(0[1-9]|1[0-2])$ */
@@ -3016,6 +3190,15 @@ export const FeeStatus = {
 } as const;
 
 export interface Fee {
+  billingCount?: number;
+  billingStatus?: BillingStatus;
+  /** @nullable */
+  billedAt?: string | null;
+  /** @nullable */
+  billedAmount?: string | null;
+  /** @nullable */
+  invoiceNumber?: string | null;
+  flag?: ReviewFlag | null;
   id: string;
   clientId: string;
   /** @nullable */
@@ -3425,6 +3608,109 @@ export type MessageDateToParameter = string;
 export type MessageLimitParameter = number;
 
 export type MessageOffsetParameter = number;
+
+export type ListBillingRowsParams = {
+matchStatus?: ListBillingRowsMatchStatus;
+/**
+ * @minimum 1
+ * @maximum 500
+ */
+limit?: number;
+/**
+ * @minimum 0
+ */
+offset?: number;
+};
+
+export type ListBillingRowsMatchStatus = typeof ListBillingRowsMatchStatus[keyof typeof ListBillingRowsMatchStatus];
+
+
+export const ListBillingRowsMatchStatus = {
+  matched: 'matched',
+  unmatched: 'unmatched',
+  amount_mismatch: 'amount_mismatch',
+} as const;
+
+export type GetBillingReportParams = {
+report: GetBillingReportReport;
+status?: GetBillingReportStatus;
+clientId?: string;
+startDate?: string;
+endDate?: string;
+olderThanDays?: GetBillingReportOlderThanDays;
+/**
+ * @minimum 1
+ * @maximum 500
+ */
+limit?: number;
+/**
+ * @minimum 0
+ */
+offset?: number;
+};
+
+export type GetBillingReportReport = typeof GetBillingReportReport[keyof typeof GetBillingReportReport];
+
+
+export const GetBillingReportReport = {
+  flagged: 'flagged',
+  unpaid: 'unpaid',
+} as const;
+
+export type GetBillingReportStatus = typeof GetBillingReportStatus[keyof typeof GetBillingReportStatus];
+
+
+export const GetBillingReportStatus = {
+  open: 'open',
+  resolved: 'resolved',
+  all: 'all',
+} as const;
+
+export type GetBillingReportOlderThanDays = typeof GetBillingReportOlderThanDays[keyof typeof GetBillingReportOlderThanDays];
+
+
+export const GetBillingReportOlderThanDays = {
+  NUMBER_0: 0,
+  NUMBER_30: 30,
+  NUMBER_60: 60,
+  NUMBER_90: 90,
+} as const;
+
+export type ExportBillingReportParams = {
+report: ExportBillingReportReport;
+status?: ExportBillingReportStatus;
+clientId?: string;
+startDate?: string;
+endDate?: string;
+olderThanDays?: ExportBillingReportOlderThanDays;
+};
+
+export type ExportBillingReportReport = typeof ExportBillingReportReport[keyof typeof ExportBillingReportReport];
+
+
+export const ExportBillingReportReport = {
+  flagged: 'flagged',
+  unpaid: 'unpaid',
+} as const;
+
+export type ExportBillingReportStatus = typeof ExportBillingReportStatus[keyof typeof ExportBillingReportStatus];
+
+
+export const ExportBillingReportStatus = {
+  open: 'open',
+  resolved: 'resolved',
+  all: 'all',
+} as const;
+
+export type ExportBillingReportOlderThanDays = typeof ExportBillingReportOlderThanDays[keyof typeof ExportBillingReportOlderThanDays];
+
+
+export const ExportBillingReportOlderThanDays = {
+  NUMBER_0: 0,
+  NUMBER_30: 30,
+  NUMBER_60: 60,
+  NUMBER_90: 90,
+} as const;
 
 export type ListClientMessageThreadsParams = {
 /**

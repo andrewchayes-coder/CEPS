@@ -5,10 +5,21 @@
  * CEPS Portal API — referral intake, authorizations, invoices, payments, remittances, vendors, reporting
  * OpenAPI spec version: 0.1.0
  */
+import type { BillingStatus } from './billingStatus';
 import type { PaymentAllocationRemitted } from './paymentAllocationRemitted';
 import type { PaymentRemittanceLink } from './paymentRemittanceLink';
+import type { ReviewFlag } from './reviewFlag';
 
 export interface PaymentAllocation {
+  billingCount?: number;
+  billingStatus?: BillingStatus;
+  /** @nullable */
+  billedAt?: string | null;
+  /** @nullable */
+  billedAmount?: string | null;
+  /** @nullable */
+  invoiceNumber?: string | null;
+  flag?: ReviewFlag | null;
   id: string;
   authorizationId: string;
   /** @pattern ^\d{4}-(0[1-9]|1[0-2])$ */

@@ -8,6 +8,197 @@
 import * as zod from 'zod/v4';
 
 
+export const importAltaBillingBodyCsvContentMax = 10000000;
+
+
+
+export const ImportAltaBillingBody = zod.object({
+  "csvContent": zod.string().min(1).max(importAltaBillingBodyCsvContentMax),
+  "mode": zod.enum(['preview', 'commit'])
+})
+
+export const ImportAltaBillingResponse = zod.object({
+  "rebilled": zod.int().optional(),
+  "untrackedCount": zod.int().optional(),
+  "untrackedAmount": zod.string().optional(),
+  "mode": zod.enum(['preview', 'commit']),
+  "headers": zod.array(zod.string()),
+  "rows": zod.array(zod.object({
+  "rebilled": zod.boolean().optional(),
+  "untracked": zod.boolean().optional(),
+  "id": zod.string().optional(),
+  "rowNumber": zod.int(),
+  "invoiceNumber": zod.string(),
+  "billedAt": zod.string(),
+  "uciNumber": zod.string(),
+  "authNumber": zod.string(),
+  "serviceMonth": zod.string(),
+  "serviceCode": zod.string(),
+  "billedAmount": zod.string(),
+  "matchStatus": zod.enum(['matched', 'unmatched', 'amount_mismatch', 'already_imported']),
+  "reviewReason": zod.string().nullable(),
+  "clientName": zod.string().nullable(),
+  "targetCount": zod.int()
+})),
+  "imported": zod.int(),
+  "matched": zod.int(),
+  "unmatched": zod.int(),
+  "amountMismatch": zod.int(),
+  "alreadyImported": zod.int(),
+  "deferred": zod.int(),
+  "totalAmount": zod.string(),
+  "importBatchId": zod.string().nullable()
+})
+
+
+export const listBillingRowsQueryLimitDefault = 100;
+export const listBillingRowsQueryLimitMax = 500;
+
+export const listBillingRowsQueryOffsetDefault = 0;
+export const listBillingRowsQueryOffsetMin = 0;
+
+
+
+export const ListBillingRowsQueryParams = zod.object({
+  "matchStatus": zod.enum(['matched', 'unmatched', 'amount_mismatch']).optional(),
+  "limit": zod.coerce.number().int().min(1).max(listBillingRowsQueryLimitMax).default(listBillingRowsQueryLimitDefault),
+  "offset": zod.coerce.number().int().min(listBillingRowsQueryOffsetMin).default(listBillingRowsQueryOffsetDefault)
+})
+
+export const ListBillingRowsResponse = zod.object({
+  "items": zod.array(zod.object({
+  "rebilled": zod.boolean().optional(),
+  "untracked": zod.boolean().optional(),
+  "id": zod.string().optional(),
+  "rowNumber": zod.int(),
+  "invoiceNumber": zod.string(),
+  "billedAt": zod.string(),
+  "uciNumber": zod.string(),
+  "authNumber": zod.string(),
+  "serviceMonth": zod.string(),
+  "serviceCode": zod.string(),
+  "billedAmount": zod.string(),
+  "matchStatus": zod.enum(['matched', 'unmatched', 'amount_mismatch', 'already_imported']),
+  "reviewReason": zod.string().nullable(),
+  "clientName": zod.string().nullable(),
+  "targetCount": zod.int()
+})),
+  "total": zod.int()
+})
+
+
+export const flagForReviewBodyReasonMax = 500;
+
+
+
+export const FlagForReviewBody = zod.object({
+  "targetType": zod.enum(['payment_line', 'fee']),
+  "targetId": zod.uuid(),
+  "reason": zod.string().min(1).max(flagForReviewBodyReasonMax)
+})
+
+export const FlagForReviewResponse = zod.object({
+  "id": zod.string(),
+  "reason": zod.string(),
+  "flaggedBy": zod.string(),
+  "flaggedByName": zod.string().nullish(),
+  "flaggedAt": zod.string(),
+  "resolvedAt": zod.string().nullable(),
+  "resolvedBy": zod.string().nullable(),
+  "resolutionNote": zod.string().nullable()
+})
+
+
+export const ResolveReviewFlagParams = zod.object({
+  "id": zod.coerce.string()
+})
+
+export const resolveReviewFlagBodyNoteMax = 500;
+
+
+
+export const ResolveReviewFlagBody = zod.object({
+  "note": zod.string().min(1).max(resolveReviewFlagBodyNoteMax)
+})
+
+export const ResolveReviewFlagResponse = zod.object({
+  "id": zod.string(),
+  "reason": zod.string(),
+  "flaggedBy": zod.string(),
+  "flaggedByName": zod.string().nullish(),
+  "flaggedAt": zod.string(),
+  "resolvedAt": zod.string().nullable(),
+  "resolvedBy": zod.string().nullable(),
+  "resolutionNote": zod.string().nullable()
+})
+
+
+export const getBillingReportQueryStatusDefault = `open`;
+export const getBillingReportQueryOlderThanDaysDefault = 0;
+export const getBillingReportQueryLimitDefault = 100;
+export const getBillingReportQueryLimitMax = 500;
+
+export const getBillingReportQueryOffsetDefault = 0;
+export const getBillingReportQueryOffsetMin = 0;
+
+
+
+export const GetBillingReportQueryParams = zod.object({
+  "report": zod.enum(['flagged', 'unpaid']),
+  "status": zod.enum(['open', 'resolved', 'all']).default(getBillingReportQueryStatusDefault),
+  "clientId": zod.coerce.string().optional(),
+  "startDate": zod.coerce.string().optional(),
+  "endDate": zod.coerce.string().optional(),
+  "olderThanDays": zod.union([zod.literal(0),zod.literal(30),zod.literal(60),zod.literal(90)]).default(getBillingReportQueryOlderThanDaysDefault),
+  "limit": zod.coerce.number().int().min(1).max(getBillingReportQueryLimitMax).default(getBillingReportQueryLimitDefault),
+  "offset": zod.coerce.number().int().min(getBillingReportQueryOffsetMin).default(getBillingReportQueryOffsetDefault)
+})
+
+export const GetBillingReportResponse = zod.object({
+  "items": zod.array(zod.object({
+  "targetType": zod.enum(['payment_line', 'fee']),
+  "targetId": zod.string(),
+  "clientId": zod.string(),
+  "clientName": zod.string(),
+  "item": zod.string(),
+  "serviceMonth": zod.string().nullable(),
+  "amount": zod.string(),
+  "remittedAmount": zod.string(),
+  "billingStatus": zod.enum(['pending', 'billed', 'partially_paid', 'paid', 'waived']),
+  "billedAt": zod.string().nullable(),
+  "billedAmount": zod.string().nullable(),
+  "invoiceNumber": zod.string().nullable(),
+  "daysSinceBilled": zod.int().nullable(),
+  "flag": zod.union([zod.object({
+  "id": zod.string(),
+  "reason": zod.string(),
+  "flaggedBy": zod.string(),
+  "flaggedByName": zod.string().nullish(),
+  "flaggedAt": zod.string(),
+  "resolvedAt": zod.string().nullable(),
+  "resolvedBy": zod.string().nullable(),
+  "resolutionNote": zod.string().nullable()
+}),zod.null()])
+})),
+  "total": zod.int()
+})
+
+
+export const exportBillingReportQueryStatusDefault = `open`;
+export const exportBillingReportQueryOlderThanDaysDefault = 0;
+
+export const ExportBillingReportQueryParams = zod.object({
+  "report": zod.enum(['flagged', 'unpaid']),
+  "status": zod.enum(['open', 'resolved', 'all']).default(exportBillingReportQueryStatusDefault),
+  "clientId": zod.coerce.string().optional(),
+  "startDate": zod.coerce.string().optional(),
+  "endDate": zod.coerce.string().optional(),
+  "olderThanDays": zod.union([zod.literal(0),zod.literal(30),zod.literal(60),zod.literal(90)]).default(exportBillingReportQueryOlderThanDaysDefault)
+})
+
+export const ExportBillingReportResponse = zod.unknown()
+
+
 export const ListMessageRecipientsParams = zod.object({
   "id": zod.uuid()
 })
@@ -1428,6 +1619,21 @@ export const GetClientCaseResponse = zod.object({
   "remainingAmount": zod.string(),
   "createdAt": zod.string().nullish(),
   "allocations": zod.array(zod.object({
+  "billingCount": zod.int().optional(),
+  "billingStatus": zod.enum(['pending', 'billed', 'partially_paid', 'paid', 'waived']).optional(),
+  "billedAt": zod.string().nullish(),
+  "billedAmount": zod.string().nullish(),
+  "invoiceNumber": zod.string().nullish(),
+  "flag": zod.union([zod.object({
+  "id": zod.string(),
+  "reason": zod.string(),
+  "flaggedBy": zod.string(),
+  "flaggedByName": zod.string().nullish(),
+  "flaggedAt": zod.string(),
+  "resolvedAt": zod.string().nullable(),
+  "resolvedBy": zod.string().nullable(),
+  "resolutionNote": zod.string().nullable()
+}),zod.null()]).optional(),
   "id": zod.string(),
   "authorizationId": zod.string(),
   "serviceMonth": zod.string().regex(getClientCaseResponsePaymentsItemAllocationsItemServiceMonthRegExp),
@@ -3873,6 +4079,21 @@ export const ListPaymentsResponse = zod.object({
   "remainingAmount": zod.string(),
   "createdAt": zod.string().nullish(),
   "allocations": zod.array(zod.object({
+  "billingCount": zod.int().optional(),
+  "billingStatus": zod.enum(['pending', 'billed', 'partially_paid', 'paid', 'waived']).optional(),
+  "billedAt": zod.string().nullish(),
+  "billedAmount": zod.string().nullish(),
+  "invoiceNumber": zod.string().nullish(),
+  "flag": zod.union([zod.object({
+  "id": zod.string(),
+  "reason": zod.string(),
+  "flaggedBy": zod.string(),
+  "flaggedByName": zod.string().nullish(),
+  "flaggedAt": zod.string(),
+  "resolvedAt": zod.string().nullable(),
+  "resolvedBy": zod.string().nullable(),
+  "resolutionNote": zod.string().nullable()
+}),zod.null()]).optional(),
   "id": zod.string(),
   "authorizationId": zod.string(),
   "serviceMonth": zod.string().regex(listPaymentsResponseItemsItemAllocationsItemServiceMonthRegExp),
@@ -3947,6 +4168,21 @@ export const CreatePaymentResponse = zod.object({
   "remainingAmount": zod.string(),
   "createdAt": zod.string().nullish(),
   "allocations": zod.array(zod.object({
+  "billingCount": zod.int().optional(),
+  "billingStatus": zod.enum(['pending', 'billed', 'partially_paid', 'paid', 'waived']).optional(),
+  "billedAt": zod.string().nullish(),
+  "billedAmount": zod.string().nullish(),
+  "invoiceNumber": zod.string().nullish(),
+  "flag": zod.union([zod.object({
+  "id": zod.string(),
+  "reason": zod.string(),
+  "flaggedBy": zod.string(),
+  "flaggedByName": zod.string().nullish(),
+  "flaggedAt": zod.string(),
+  "resolvedAt": zod.string().nullable(),
+  "resolvedBy": zod.string().nullable(),
+  "resolutionNote": zod.string().nullable()
+}),zod.null()]).optional(),
   "id": zod.string(),
   "authorizationId": zod.string(),
   "serviceMonth": zod.string().regex(createPaymentResponseAllocationsItemServiceMonthRegExp),
@@ -4095,6 +4331,21 @@ export const GetPaymentResponse = zod.object({
   "remainingAmount": zod.string(),
   "createdAt": zod.string().nullish(),
   "allocations": zod.array(zod.object({
+  "billingCount": zod.int().optional(),
+  "billingStatus": zod.enum(['pending', 'billed', 'partially_paid', 'paid', 'waived']).optional(),
+  "billedAt": zod.string().nullish(),
+  "billedAmount": zod.string().nullish(),
+  "invoiceNumber": zod.string().nullish(),
+  "flag": zod.union([zod.object({
+  "id": zod.string(),
+  "reason": zod.string(),
+  "flaggedBy": zod.string(),
+  "flaggedByName": zod.string().nullish(),
+  "flaggedAt": zod.string(),
+  "resolvedAt": zod.string().nullable(),
+  "resolvedBy": zod.string().nullable(),
+  "resolutionNote": zod.string().nullable()
+}),zod.null()]).optional(),
   "id": zod.string(),
   "authorizationId": zod.string(),
   "serviceMonth": zod.string().regex(getPaymentResponseAllocationsItemServiceMonthRegExp),
@@ -4170,6 +4421,21 @@ export const UpdatePaymentResponse = zod.object({
   "remainingAmount": zod.string(),
   "createdAt": zod.string().nullish(),
   "allocations": zod.array(zod.object({
+  "billingCount": zod.int().optional(),
+  "billingStatus": zod.enum(['pending', 'billed', 'partially_paid', 'paid', 'waived']).optional(),
+  "billedAt": zod.string().nullish(),
+  "billedAmount": zod.string().nullish(),
+  "invoiceNumber": zod.string().nullish(),
+  "flag": zod.union([zod.object({
+  "id": zod.string(),
+  "reason": zod.string(),
+  "flaggedBy": zod.string(),
+  "flaggedByName": zod.string().nullish(),
+  "flaggedAt": zod.string(),
+  "resolvedAt": zod.string().nullable(),
+  "resolvedBy": zod.string().nullable(),
+  "resolutionNote": zod.string().nullable()
+}),zod.null()]).optional(),
   "id": zod.string(),
   "authorizationId": zod.string(),
   "serviceMonth": zod.string().regex(updatePaymentResponseAllocationsItemServiceMonthRegExp),
@@ -4377,6 +4643,21 @@ export const listFeesResponseFeeMonthRegExp = new RegExp('^\\d{4}-(0[1-9]|1[0-2]
 
 
 export const ListFeesResponseItem = zod.object({
+  "billingCount": zod.int().optional(),
+  "billingStatus": zod.enum(['pending', 'billed', 'partially_paid', 'paid', 'waived']).optional(),
+  "billedAt": zod.string().nullish(),
+  "billedAmount": zod.string().nullish(),
+  "invoiceNumber": zod.string().nullish(),
+  "flag": zod.union([zod.object({
+  "id": zod.string(),
+  "reason": zod.string(),
+  "flaggedBy": zod.string(),
+  "flaggedByName": zod.string().nullish(),
+  "flaggedAt": zod.string(),
+  "resolvedAt": zod.string().nullable(),
+  "resolvedBy": zod.string().nullable(),
+  "resolutionNote": zod.string().nullable()
+}),zod.null()]).optional(),
   "id": zod.string(),
   "clientId": zod.string(),
   "clientName": zod.string().nullish(),
@@ -4418,6 +4699,21 @@ export const createFeeResponseFeeMonthRegExp = new RegExp('^\\d{4}-(0[1-9]|1[0-2
 
 
 export const CreateFeeResponse = zod.object({
+  "billingCount": zod.int().optional(),
+  "billingStatus": zod.enum(['pending', 'billed', 'partially_paid', 'paid', 'waived']).optional(),
+  "billedAt": zod.string().nullish(),
+  "billedAmount": zod.string().nullish(),
+  "invoiceNumber": zod.string().nullish(),
+  "flag": zod.union([zod.object({
+  "id": zod.string(),
+  "reason": zod.string(),
+  "flaggedBy": zod.string(),
+  "flaggedByName": zod.string().nullish(),
+  "flaggedAt": zod.string(),
+  "resolvedAt": zod.string().nullable(),
+  "resolvedBy": zod.string().nullable(),
+  "resolutionNote": zod.string().nullable()
+}),zod.null()]).optional(),
   "id": zod.string(),
   "clientId": zod.string(),
   "clientName": zod.string().nullish(),
@@ -4457,6 +4753,21 @@ export const updateFeeResponseFeeMonthRegExp = new RegExp('^\\d{4}-(0[1-9]|1[0-2
 
 
 export const UpdateFeeResponse = zod.object({
+  "billingCount": zod.int().optional(),
+  "billingStatus": zod.enum(['pending', 'billed', 'partially_paid', 'paid', 'waived']).optional(),
+  "billedAt": zod.string().nullish(),
+  "billedAmount": zod.string().nullish(),
+  "invoiceNumber": zod.string().nullish(),
+  "flag": zod.union([zod.object({
+  "id": zod.string(),
+  "reason": zod.string(),
+  "flaggedBy": zod.string(),
+  "flaggedByName": zod.string().nullish(),
+  "flaggedAt": zod.string(),
+  "resolvedAt": zod.string().nullable(),
+  "resolvedBy": zod.string().nullable(),
+  "resolutionNote": zod.string().nullable()
+}),zod.null()]).optional(),
   "id": zod.string(),
   "clientId": zod.string(),
   "clientName": zod.string().nullish(),
@@ -4506,6 +4817,21 @@ export const waiveFeeResponseFeeMonthRegExp = new RegExp('^\\d{4}-(0[1-9]|1[0-2]
 
 
 export const WaiveFeeResponse = zod.object({
+  "billingCount": zod.int().optional(),
+  "billingStatus": zod.enum(['pending', 'billed', 'partially_paid', 'paid', 'waived']).optional(),
+  "billedAt": zod.string().nullish(),
+  "billedAmount": zod.string().nullish(),
+  "invoiceNumber": zod.string().nullish(),
+  "flag": zod.union([zod.object({
+  "id": zod.string(),
+  "reason": zod.string(),
+  "flaggedBy": zod.string(),
+  "flaggedByName": zod.string().nullish(),
+  "flaggedAt": zod.string(),
+  "resolvedAt": zod.string().nullable(),
+  "resolvedBy": zod.string().nullable(),
+  "resolutionNote": zod.string().nullable()
+}),zod.null()]).optional(),
   "id": zod.string(),
   "clientId": zod.string(),
   "clientName": zod.string().nullish(),
@@ -4543,6 +4869,21 @@ export const correctFeeCollectionResponseFeeMonthRegExp = new RegExp('^\\d{4}-(0
 
 
 export const CorrectFeeCollectionResponse = zod.object({
+  "billingCount": zod.int().optional(),
+  "billingStatus": zod.enum(['pending', 'billed', 'partially_paid', 'paid', 'waived']).optional(),
+  "billedAt": zod.string().nullish(),
+  "billedAmount": zod.string().nullish(),
+  "invoiceNumber": zod.string().nullish(),
+  "flag": zod.union([zod.object({
+  "id": zod.string(),
+  "reason": zod.string(),
+  "flaggedBy": zod.string(),
+  "flaggedByName": zod.string().nullish(),
+  "flaggedAt": zod.string(),
+  "resolvedAt": zod.string().nullable(),
+  "resolvedBy": zod.string().nullable(),
+  "resolutionNote": zod.string().nullable()
+}),zod.null()]).optional(),
   "id": zod.string(),
   "clientId": zod.string(),
   "clientName": zod.string().nullish(),

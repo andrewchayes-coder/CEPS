@@ -171,6 +171,7 @@ export function AltaRemittanceImport({ onImported }: { onImported: (result: Alta
         <DialogHeader>
           <DialogTitle>Import Alta Payment History Detail Report</DialogTitle>
           <DialogDescription>
+            <strong className="block text-foreground" data-testid="text-payment-import-scope">Records payments received from Alta. Does not mark anything as Billed.</strong>
             Upload Alta&apos;s Payment History Detail Report CSV. The report summary supplies the payment
             date and reference number; each detail line is resolved by UCI, authorization, service month,
             and amount before matching.

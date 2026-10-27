@@ -29,7 +29,7 @@ import { earliestPaymentServiceMonth, formatPaymentServiceMonths } from '@/lib/p
 import { MonthlyAmount, MonthlyAmountLine } from '@/components/authorization-monthly-amount';
 import { ParticipantNotes } from '@/components/participant-notes';
 import { ParticipantMessagesCard } from '@/components/messaging/participant-messages-card';
-import { PaymentRemittedState } from '@/components/payment-remitted-state';
+import { BillingStatusCell, ReviewFlagAction, fallbackLineStatus, fallbackFeeStatus } from '@/components/billing/billing-status';
 
 type PaymentRow = { payment: Payment; line: PaymentAllocation | null };
 type PaymentSortKey = 'checkDate' | 'qbCheckNumber' | 'vendorName' | 'authNumber' | 'serviceMonth' | 'amount' | 'remitted';
@@ -626,7 +626,8 @@ export default function ClientDetailPage() {
                     <SortableTableHead sortDirection={paymentsSort.sort.key === 'authNumber' ? paymentsSort.sort.direction : null} onSort={() => paymentsSort.onSort('authNumber')}>Auth #</SortableTableHead>
                     <SortableTableHead sortDirection={paymentsSort.sort.key === 'serviceMonth' ? paymentsSort.sort.direction : null} onSort={() => paymentsSort.onSort('serviceMonth')}>Service Month</SortableTableHead>
                     <SortableTableHead className="text-right" sortDirection={paymentsSort.sort.key === 'amount' ? paymentsSort.sort.direction : null} onSort={() => paymentsSort.onSort('amount')}>Amount</SortableTableHead>
-                    <SortableTableHead sortDirection={paymentsSort.sort.key === 'remitted' ? paymentsSort.sort.direction : null} onSort={() => paymentsSort.onSort('remitted')}>Remitted</SortableTableHead>
+                    <SortableTableHead sortDirection={paymentsSort.sort.key === 'remitted' ? paymentsSort.sort.direction : null} onSort={() => paymentsSort.onSort('remitted')}>Status</SortableTableHead>
+                    {canEnterRemittances && <TableHead className="text-right">Review</TableHead>}
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -649,11 +650,31 @@ export default function ClientDetailPage() {
                       </TableCell>
                       <TableCell className="whitespace-nowrap" data-testid={`text-client-payment-service-month-${line?.id ?? p.id}`}>{line ? serviceMonthLabel(line.serviceMonth) : formatPaymentServiceMonths(p)}</TableCell>
                       <TableCell className="text-right font-medium">${Number(line?.amount ?? p.amount).toFixed(2)}</TableCell>
-                      <TableCell><PaymentRemittedState line={line} legacyRemitted={!!p.remitted} /></TableCell>
+                      <TableCell>{(() => {
+                        const b = (line ?? {}) as Partial<PaymentAllocation> & { billingCount?: number | null };
+                        return (
+                          <BillingStatusCell
+                            testId={`status-payment-billing-${line?.id ?? p.id}`}
+                            status={b.billingStatus ?? fallbackLineStatus(line?.remitted, !!p.remitted, b.billedAt)}
+                            remittedAmount={line ? line.remittedAmount : (p.remitted ? p.amount : '0')}
+                            amount={line?.amount ?? p.amount}
+                            billedAt={b.billedAt}
+                            billedAmount={b.billedAmount}
+                            invoiceNumber={b.invoiceNumber}
+                            billingCount={b.billingCount}
+                            flag={b.flag}
+                          />
+                        );
+                      })()}</TableCell>
+                      {canEnterRemittances && (
+                        <TableCell className="text-right">
+                          {line ? <ReviewFlagAction targetType="payment_line" targetId={line.id} flag={line.flag} testId={`button-flag-payment-line-${line.id}`} /> : <span className="text-xs text-muted-foreground">-</span>}
+                        </TableCell>
+                      )}
                     </TableRow>
                   ))}
                   {payments.length === 0 && (
-                    <TableRow><TableCell colSpan={7} className="text-center py-8 text-muted-foreground">No payments found.</TableCell></TableRow>
+                    <TableRow><TableCell colSpan={canEnterRemittances ? 8 : 7} className="text-center py-8 text-muted-foreground">No payments found.</TableCell></TableRow>
                   )}
                 </TableBody>
               </Table>
@@ -730,10 +751,26 @@ export default function ClientDetailPage() {
                       <TableCell className="text-right font-medium">${parseFloat(fee.amount).toFixed(2)}</TableCell>
                       <TableCell className="whitespace-nowrap">${Number(fee.remittedAmount).toFixed(2)} of ${Number(fee.amount).toFixed(2)}</TableCell>
                       <TableCell className="text-xs text-muted-foreground font-mono">{fee.ruleApplied || '-'}</TableCell>
-                      <TableCell><Badge variant="outline">{fee.status === 'collected' ? 'Paid' : fee.status === 'pending' ? 'Pending' : fee.status === 'waived' ? 'Waived' : fee.status}</Badge></TableCell>
+                      <TableCell>{(() => {
+                        const f = fee as typeof fee & { billingCount?: number | null };
+                        return (
+                          <BillingStatusCell
+                            testId={`status-fee-billing-${fee.id}`}
+                            status={f.billingStatus ?? fallbackFeeStatus(fee.status, fee.remittedAmount, f.billedAt)}
+                            remittedAmount={fee.remittedAmount}
+                            amount={fee.amount}
+                            billedAt={f.billedAt}
+                            billedAmount={f.billedAmount}
+                            invoiceNumber={f.invoiceNumber}
+                            billingCount={f.billingCount}
+                            flag={f.flag}
+                          />
+                        );
+                      })()}</TableCell>
                       {isStaff && (
                         <TableCell className="text-right">
                           <div className="flex items-center justify-end gap-2">
+                            {canEnterRemittances && <ReviewFlagAction targetType="fee" targetId={fee.id} flag={fee.flag} testId={`button-flag-fee-${fee.id}`} />}
                             <EditFeeDialog id={fee.id} fee={fee} onSaved={() => refetchFees()} />
                             <DeleteEntityButton
                               entityLabel="Fee"

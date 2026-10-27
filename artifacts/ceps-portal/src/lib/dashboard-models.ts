@@ -82,7 +82,7 @@ export function filterAlertsForRole<T extends { kind: string }>(alerts: T[], rol
   return role === 'service_coordinator' ? alerts.filter((a) => a.kind !== 'expiring_authorization') : alerts;
 }
 
-const ALL_TABS = ['vendor-payments', 'case-status', 'pending-auth', 'missing-docs', 'expiring-auth'];
+const ALL_TABS = ['billing-flagged', 'billing-unpaid', 'vendor-payments', 'case-status', 'pending-auth', 'missing-docs', 'expiring-auth'];
 
 export function getAllowedReportTabs(role?: string): string[] {
   if (role === 'staff') return ALL_TABS;

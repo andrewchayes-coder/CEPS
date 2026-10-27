@@ -21,7 +21,9 @@ export async function updateFeeCollectionStatus(
   // fee_id is part of the line-or-fee remittance target migration.
   const allocated = await tx.execute(sql`select coalesce(sum(amount), 0)::text as total from remittance_allocations where fee_id = ${feeId}`);
   const total = String((allocated.rows[0] as { total?: string } | undefined)?.total ?? "0");
-  const nextStatus = money(total).equals(money(fee.amount)) ? "collected" : "pending";
+  const billed = await tx.execute(sql`select 1 from alta_billing_rows where fee_id = ${feeId}
+    and not is_deleted and match_status <> 'unmatched' limit 1`);
+  const nextStatus = money(total).greaterThanOrEqualTo(money(fee.amount)) ? "collected" : billed.rows.length ? "invoiced" : "pending";
   if (nextStatus === fee.status) return;
 
   await tx.update(feesTable).set({ status: nextStatus }).where(eq(feesTable.id, fee.id));

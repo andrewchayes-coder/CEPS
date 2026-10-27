@@ -1294,6 +1294,17 @@ router.patch("/payments/:id", requirePermission("check_writing"), async (req, re
   const { payment } = await db.transaction(async (tx) => {
     const txDb = tx as unknown as typeof db;
     await tx.execute(sql`select id from payments where id = ${id} for update`);
+    if (allocations || legacyMonthMove) {
+      const linked = await tx.execute(sql`select 1 from payment_allocations pa
+        where pa.payment_id = ${id} and (
+          exists(select 1 from alta_billing_row_lines b where b.payment_allocation_id = pa.id)
+          or exists(select 1 from review_flags f where f.payment_allocation_id = pa.id)
+        ) limit 1`);
+      if (linked.rows.length) {
+        relationshipError = "Check lines with billing or review history cannot be replaced. Their history must be preserved.";
+        return { payment: null as typeof paymentsTable.$inferSelect | null };
+      }
+    }
     relationshipError = (await validateParticipantLinks(txDb, effClientId, {
       authorizationId: null,
       invoiceId: effInvoiceId,

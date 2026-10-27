@@ -43,6 +43,9 @@ const matchesHeader = (row: string[], headers: readonly string[]) => headers.eve
 /** Parse Alta's multi-section Payment History Detail Report CSV. */
 export function parseAltaRemittanceCsv(text: string): AltaParseResult {
   const grid = parseCsv(text);
+  if (grid.some(r => r.some(c => c.trim().toLowerCase() === "invoice date") && r.some(c => c.trim().toLowerCase() === "line amount"))) {
+    return { rows: [], problems: [], headerError: "This is an Invoice History billing file. Use Alta Invoice History (billing); this import records payments only." };
+  }
   const summaryIndex = grid.findIndex((row) => matchesHeader(row, SUMMARY_HEADERS));
   const detailIndex = grid.findIndex((row) => matchesHeader(row, DETAIL_HEADERS));
   if (summaryIndex < 0 || detailIndex < 0 || detailIndex <= summaryIndex + 1) {

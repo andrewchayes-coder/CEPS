@@ -27,6 +27,103 @@ tags:
   - name: import
   - name: Storage
 paths:
+  /billing/import:
+    post:
+      operationId: importAltaBilling
+      tags: [Billing]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/BillingImportInput" }
+      responses:
+        "200":
+          description: Preview or committed billing import; never records payments.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/BillingImportResult" }
+  /billing/rows:
+    get:
+      operationId: listBillingRows
+      tags: [Billing]
+      parameters:
+        - { in: query, name: matchStatus, schema: { type: string, enum: [matched, unmatched, amount_mismatch] } }
+        - { in: query, name: limit, schema: { type: integer, minimum: 1, maximum: 500, default: 100 } }
+        - { in: query, name: offset, schema: { type: integer, minimum: 0, default: 0 } }
+      responses:
+        "200":
+          description: Persisted billing rows including unmatched imports.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/BillingRowsResult" }
+  /review-flags:
+    post:
+      operationId: flagForReview
+      tags: [Billing]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ReviewFlagInput" }
+      responses:
+        "201":
+          description: Flag created.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ReviewFlag" }
+  /review-flags/{id}/resolve:
+    post:
+      operationId: resolveReviewFlag
+      tags: [Billing]
+      parameters:
+        - { in: path, name: id, required: true, schema: { type: string } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ReviewFlagResolution" }
+      responses:
+        "200":
+          description: Flag resolved.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ReviewFlag" }
+  /reports/billing:
+    get:
+      operationId: getBillingReport
+      tags: [Billing]
+      parameters:
+        - { in: query, name: report, required: true, schema: { type: string, enum: [flagged, unpaid] } }
+        - { in: query, name: status, schema: { type: string, enum: [open, resolved, all], default: open } }
+        - { in: query, name: clientId, schema: { type: string } }
+        - { in: query, name: startDate, schema: { type: string } }
+        - { in: query, name: endDate, schema: { type: string } }
+        - { in: query, name: olderThanDays, schema: { type: integer, enum: [0, 30, 60, 90], default: 0 } }
+        - { in: query, name: limit, schema: { type: integer, minimum: 1, maximum: 500, default: 100 } }
+        - { in: query, name: offset, schema: { type: integer, minimum: 0, default: 0 } }
+      responses:
+        "200":
+          description: Staff billing report.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/BillingReportResult" }
+  /reports/billing/export:
+    get:
+      operationId: exportBillingReport
+      tags: [Billing]
+      parameters:
+        - { in: query, name: report, required: true, schema: { type: string, enum: [flagged, unpaid] } }
+        - { in: query, name: status, schema: { type: string, enum: [open, resolved, all], default: open } }
+        - { in: query, name: clientId, schema: { type: string } }
+        - { in: query, name: startDate, schema: { type: string } }
+        - { in: query, name: endDate, schema: { type: string } }
+        - { in: query, name: olderThanDays, schema: { type: integer, enum: [0, 30, 60, 90], default: 0 } }
+      responses:
+        "200":
+          description: Complete filtered CSV, not a paginated subset.
+          content:
+            text/csv:
+              schema: { type: string }
   /clients/{id}/message-recipients:
     get:
       tags: [messages]
@@ -3098,6 +3195,106 @@ components:
       in: query
       schema: { type: integer, minimum: 0, default: 0 }
   schemas:
+    BillingStatus:
+      type: string
+      enum: [pending, billed, partially_paid, paid, waived]
+    ReviewFlag:
+      type: object
+      required: [id, reason, flaggedBy, flaggedAt, resolvedAt, resolvedBy, resolutionNote]
+      properties:
+        id: { type: string }
+        reason: { type: string }
+        flaggedBy: { type: string }
+        flaggedByName: { type: ["string", "null"] }
+        flaggedAt: { type: string }
+        resolvedAt: { type: ["string", "null"] }
+        resolvedBy: { type: ["string", "null"] }
+        resolutionNote: { type: ["string", "null"] }
+    ReviewFlagInput:
+      type: object
+      required: [targetType, targetId, reason]
+      properties:
+        targetType: { type: string, enum: [payment_line, fee] }
+        targetId: { type: string, format: uuid }
+        reason: { type: string, minLength: 1, maxLength: 500 }
+    ReviewFlagResolution:
+      type: object
+      required: [note]
+      properties:
+        note: { type: string, minLength: 1, maxLength: 500 }
+    BillingImportInput:
+      type: object
+      required: [csvContent, mode]
+      properties:
+        csvContent: { type: string, minLength: 1, maxLength: 10000000 }
+        mode: { type: string, enum: [preview, commit] }
+    BillingRow:
+      type: object
+      required: [rowNumber, invoiceNumber, billedAt, uciNumber, authNumber, serviceMonth, serviceCode, billedAmount, matchStatus, reviewReason, clientName, targetCount]
+      properties:
+        rebilled: { type: boolean }
+        untracked: { type: boolean }
+        id: { type: string }
+        rowNumber: { type: integer }
+        invoiceNumber: { type: string }
+        billedAt: { type: string }
+        uciNumber: { type: string }
+        authNumber: { type: string }
+        serviceMonth: { type: string }
+        serviceCode: { type: string }
+        billedAmount: { type: string }
+        matchStatus: { type: string, enum: [matched, unmatched, amount_mismatch, already_imported] }
+        reviewReason: { type: ["string", "null"] }
+        clientName: { type: ["string", "null"] }
+        targetCount: { type: integer }
+    BillingImportResult:
+      type: object
+      required: [mode, headers, rows, imported, matched, unmatched, amountMismatch, alreadyImported, deferred, totalAmount, importBatchId]
+      properties:
+        rebilled: { type: integer }
+        untrackedCount: { type: integer }
+        untrackedAmount: { type: string }
+        mode: { type: string, enum: [preview, commit] }
+        headers: { type: array, items: { type: string } }
+        rows: { type: array, items: { $ref: "#/components/schemas/BillingRow" } }
+        imported: { type: integer }
+        matched: { type: integer }
+        unmatched: { type: integer }
+        amountMismatch: { type: integer }
+        alreadyImported: { type: integer }
+        deferred: { type: integer }
+        totalAmount: { type: string }
+        importBatchId: { type: ["string", "null"] }
+    BillingRowsResult:
+      type: object
+      required: [items, total]
+      properties:
+        items: { type: array, items: { $ref: "#/components/schemas/BillingRow" } }
+        total: { type: integer }
+    BillingReportRow:
+      type: object
+      required: [targetType, targetId, clientId, clientName, item, serviceMonth, amount, remittedAmount, billingStatus, billedAt, billedAmount, invoiceNumber, daysSinceBilled, flag]
+      properties:
+        targetType: { type: string, enum: [payment_line, fee] }
+        targetId: { type: string }
+        clientId: { type: string }
+        clientName: { type: string }
+        item: { type: string }
+        serviceMonth: { type: ["string", "null"] }
+        amount: { type: string }
+        remittedAmount: { type: string }
+        billingStatus: { $ref: "#/components/schemas/BillingStatus" }
+        billedAt: { type: ["string", "null"] }
+        billedAmount: { type: ["string", "null"] }
+        invoiceNumber: { type: ["string", "null"] }
+        daysSinceBilled: { type: ["integer", "null"] }
+        flag: { anyOf: [{ $ref: "#/components/schemas/ReviewFlag" }, { type: "null" }] }
+    BillingReportResult:
+      type: object
+      required: [items, total]
+      properties:
+        items: { type: array, items: { $ref: "#/components/schemas/BillingReportRow" } }
+        total: { type: integer }
     MessageInstant:
       type: string
       description: ISO-8601 timestamp retained as a string to preserve PostgreSQL microseconds in pagination cursors. Do not coerce to a JavaScript Date.
@@ -4436,6 +4633,12 @@ components:
       type: object
       required: [id, authorizationId, serviceMonth, amount, remittedAmount, remitted, remittanceLinks]
       properties:
+        billingCount: { type: integer }
+        billingStatus: { $ref: "#/components/schemas/BillingStatus" }
+        billedAt: { type: ["string", "null"] }
+        billedAmount: { type: ["string", "null"] }
+        invoiceNumber: { type: ["string", "null"] }
+        flag: { anyOf: [{ $ref: "#/components/schemas/ReviewFlag" }, { type: "null" }] }
         id: { type: string }
         authorizationId: { type: string }
         serviceMonth: { type: string, pattern: '^\d{4}-(0[1-9]|1[0-2])$' }
@@ -4828,6 +5031,12 @@ components:
       type: object
       required: [id, clientId, amount, status, authNumber, remittedAmount, feeAuthorizationMissing]
       properties:
+        billingCount: { type: integer }
+        billingStatus: { $ref: "#/components/schemas/BillingStatus" }
+        billedAt: { type: ["string", "null"] }
+        billedAmount: { type: ["string", "null"] }
+        invoiceNumber: { type: ["string", "null"] }
+        flag: { anyOf: [{ $ref: "#/components/schemas/ReviewFlag" }, { type: "null" }] }
         id: { type: string }
         clientId: { type: string }
         clientName: { type: ["string", "null"] }

@@ -1,4 +1,5 @@
 import { Router, type IRouter } from "express";
+import { billingDetails, billingFields } from "../lib/billingStatus";
 import { eq, desc, and, ne, sql } from "drizzle-orm";
 import { db, feesTable, authorizationsTable, remittanceAllocationsTable } from "@workspace/db";
 import {
@@ -44,11 +45,12 @@ async function enrichFees(fees: (typeof feesTable.$inferSelect)[]) {
       remittedAmounts.set(row.feeId, row.total);
     }
   }
-  return fees.map((fee) => feeJson(fee, {
+  const billing = await billingDetails("fee", fees.map(f => f.id));
+  return fees.map((fee) => ({ ...feeJson(fee, {
     clientName: clientNames.get(fee.clientId),
     authNumber: fee.authorizationId ? authNumbers.get(fee.authorizationId) : null,
     remittedAmount: remittedAmounts.get(fee.id) ?? "0.00",
-  }));
+  }), ...billingFields(billing.get(fee.id)) }));
 }
 
 router.get("/fees", requireAuth, async (req, res): Promise<void> => {
@@ -58,6 +60,13 @@ router.get("/fees", requireAuth, async (req, res): Promise<void> => {
     return;
   }
   const filters = [notDeleted(feesTable)];
+  const viewer = req.user!;
+  if (viewer.role === "service_coordinator") {
+    filters.push(sql`${feesTable.clientId} in (select id from clients where assigned_coordinator_id = ${viewer.id} and not is_deleted)`);
+  } else if (viewer.role === "parent_guardian" || viewer.role === "self") {
+    filters.push(viewer.linkedRecordType === "client" && viewer.linkedRecordId
+      ? eq(feesTable.clientId, viewer.linkedRecordId) : sql`false`);
+  } else if (viewer.role !== "staff") filters.push(sql`false`);
   if (query.data.clientId) filters.push(eq(feesTable.clientId, query.data.clientId));
   if (query.data.status) filters.push(eq(feesTable.status, query.data.status));
   if (query.data.feeMonth) filters.push(eq(feesTable.feeMonth, query.data.feeMonth));

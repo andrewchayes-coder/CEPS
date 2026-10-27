@@ -1,6 +1,7 @@
 import { and, eq, inArray, sql } from "drizzle-orm";
 import { db, paymentsTable, paymentAllocationsTable, remittanceAllocationsTable, remittancesTable } from "@workspace/db";
 import { money } from "./money";
+import { billingDetails, billingFields } from "./billingStatus";
 import { authNumberMap, clientNameMap, vendorNameMap, notDeleted, paymentJson } from "./serializers";
 
 export async function allocatedToLine(paymentAllocationId: string, database: typeof db): Promise<ReturnType<typeof money>> {
@@ -27,6 +28,7 @@ export async function enrichPayments(
     db.select().from(paymentAllocationsTable).where(inArray(paymentAllocationsTable.paymentId, ids)),
   ]);
   const allocationIds = paymentAllocations.map((allocation) => allocation.id);
+  const billing = await billingDetails("payment_line", allocationIds);
   const remittanceLinks = viewer?.role === "vendor" || !allocationIds.length
     ? []
     : await db.select({
@@ -68,6 +70,7 @@ export async function enrichPayments(
       allocatedAmount: (allocated.get(p.id) ?? money(p.remitted ? p.amount : 0)).toFixed(2),
       remainingAmount: money(p.amount).minus(allocated.get(p.id) ?? money(p.remitted ? p.amount : 0)).toFixed(2),
       allocations: paymentAllocations.filter((a) => a.paymentId === p.id).map((a) => ({
+        ...billingFields(billing.get(a.id)),
         id: a.id,
         authorizationId: a.authorizationId,
         authNumber: allocationAuthNums.get(a.authorizationId) ?? null,

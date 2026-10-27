@@ -15,6 +15,7 @@ import PendingAuthReport from './reports/pending-auth-report';
 import CaseStatusReport from './reports/case-status-report';
 import MissingDocumentsReport from './reports/missing-documents-report';
 import ExpiringAuthReport from './reports/expiring-auth-report';
+import BillingReport from './reports/billing-report';
 import { stableSort, useTableSort } from '@/lib/table-sorting';
 import { SearchableSelect } from '@/components/searchable-select';
 import { useDebounce } from '@/hooks/use-debounce';
@@ -149,6 +150,8 @@ export default function ReportsPage() {
           {showPendingAuth && <TabsTrigger value="pending-auth" data-testid="tab-pending-auth">Pending Authorization</TabsTrigger>}
           {isStaff && <TabsTrigger value="missing-docs" data-testid="tab-missing-docs">Missing Documents</TabsTrigger>}
           {showExpiringAuth && <TabsTrigger value="expiring-auth" data-testid="tab-expiring-auth">Expiring Authorizations</TabsTrigger>}
+          {isStaff && <TabsTrigger value="billing-flagged" data-testid="tab-billing-flagged">Flagged for review</TabsTrigger>}
+          {isStaff && <TabsTrigger value="billing-unpaid" data-testid="tab-billing-unpaid">Billed, not paid</TabsTrigger>}
         </TabsList>
 
         {isCoordinator && (
@@ -177,6 +180,16 @@ export default function ReportsPage() {
         {showExpiringAuth && (
           <TabsContent value="expiring-auth">
             <ExpiringAuthReport filters={globalFilters} />
+          </TabsContent>
+        )}
+        {isStaff && (
+          <TabsContent value="billing-flagged">
+            <BillingReport report="flagged" filters={globalFilters} />
+          </TabsContent>
+        )}
+        {isStaff && (
+          <TabsContent value="billing-unpaid">
+            <BillingReport report="unpaid" filters={globalFilters} />
           </TabsContent>
         )}
       </Tabs>

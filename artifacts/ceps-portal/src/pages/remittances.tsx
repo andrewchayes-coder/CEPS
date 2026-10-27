@@ -7,7 +7,8 @@ import { CreateRemittanceDialog } from '@/components/create-remittance-dialog';
 import { MatchRemittanceDialog } from '@/components/match-remittance-dialog';
 import { Link } from 'wouter';
 import { AltaRemittanceImport } from '@/components/alta-remittance-import';
-import { Card, CardContent, CardHeader } from '@/components/ui/card';
+import { AltaBillingImport, BillingHistoryCard } from '@/components/billing/alta-billing-import';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow, SortableTableHead, useTableSort } from '@/components/ui/table';
 import { MetricHelp } from '@/components/metric-help';
@@ -108,8 +109,26 @@ export default function RemittancesPage() {
           <h1 className="text-3xl font-bold tracking-tight">Remittances</h1>
           <p className="text-muted-foreground mt-1">Reconciliation of funds received from Alta Regional Center.</p>
         </div>
-        {canEnterRemittances && <div className="flex gap-2"><CreateRemittanceDialog onSaved={() => refetch()} /><AltaRemittanceImport onImported={onImported} /></div>}
+        {canEnterRemittances && <CreateRemittanceDialog onSaved={() => refetch()} />}
       </div>
+      {canEnterRemittances && (
+        <div className="grid gap-4 md:grid-cols-2">
+          <Card data-testid="card-payment-history-import">
+            <CardHeader>
+              <CardTitle className="text-base">Alta Payment History (payments)</CardTitle>
+              <CardDescription>Records payments received from Alta. Does not mark items as Billed.</CardDescription>
+            </CardHeader>
+            <CardContent><AltaRemittanceImport onImported={onImported} /></CardContent>
+          </Card>
+          <Card data-testid="card-invoice-history-import">
+            <CardHeader>
+              <CardTitle className="text-base">Alta Invoice History (billing)</CardTitle>
+              <CardDescription>Marks items as Billed. Does not record any payment.</CardDescription>
+            </CardHeader>
+            <CardContent><AltaBillingImport /></CardContent>
+          </Card>
+        </div>
+      )}
       {isStaff && !canEnterRemittances && <p className="text-sm text-muted-foreground">You don't have permission to enter or match remittances — ask an admin to grant it in Admin &gt; Users.</p>}
 
       {isStaff && (
@@ -338,6 +357,7 @@ export default function RemittancesPage() {
           </div>
         </CardContent>
       </Card>
+      {canEnterRemittances && <BillingHistoryCard />}
     </div>
   );
 }

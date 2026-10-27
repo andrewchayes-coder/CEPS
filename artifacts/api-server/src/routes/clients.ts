@@ -41,6 +41,8 @@ import { enrichPayments } from "../lib/paymentSerialization";
 import { softDeleteClient } from "../lib/participantLinks";
 import { coordinatorCanAccessClient } from "../lib/clientAccess";
 
+import { deleteCoordinatorDrafts, draftUci } from "../lib/referralDrafts";
+
 const router: IRouter = Router();
 
 function scopeClientId(req: { user?: { role: string; linkedRecordType: string | null; linkedRecordId: string | null } }): string | null {
@@ -304,6 +306,11 @@ router.patch("/clients/:id", requireAuth, async (req, res): Promise<void> => {
     const [updated] = await tx.update(clientsTable).set(parsed.data)
       .where(and(eq(clientsTable.id, id), notDeleted(clientsTable))).returning();
     if (!updated) return null;
+    if (before.assignedCoordinatorId && before.assignedCoordinatorId !== updated.assignedCoordinatorId) {
+      const uci = draftUci(before.uciNumber);
+      if (uci) await deleteCoordinatorDrafts(txDb, before.assignedCoordinatorId, req.user!.id,
+        "Deleted after participant reassignment", uci);
+    }
     if ((["uciNumber", "firstName", "lastName"] as const)
       .some(field => parsed.data[field] !== undefined && parsed.data[field] !== before[field])) {
       recheckPos = true;

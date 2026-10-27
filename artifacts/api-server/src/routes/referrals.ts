@@ -45,6 +45,8 @@ import { sortedOrder } from "../lib/sorting";
 import { logger } from "../lib/logger";
 import { recheckPosAfterClientSave } from "../lib/posRecheck";
 import { applyReferralClientUpdates } from "../lib/referralClientUpdates";
+import { DraftAccessError, submissionDraft, deleteCoordinatorDrafts, draftUci } from "../lib/referralDrafts";
+import { referralDraftsTable } from "@workspace/db";
 
 function addressStateError(fields: Record<string, unknown>, changed?: Record<string, unknown>): string | null {
   for (const [prefix, label] of [
@@ -421,6 +423,9 @@ router.post("/referrals", requireStaffOrCoordinator, async (req, res): Promise<v
     return;
   }
   const f = parsed.data.intakeFields;
+  if (parsed.data.draftId && req.user!.role !== "service_coordinator") {
+    res.status(404).json({ error: "Draft not found" }); return;
+  }
   const stateError = addressStateError(f);
   if (stateError) {
     res.status(400).json({ error: stateError });
@@ -475,6 +480,8 @@ router.post("/referrals", requireStaffOrCoordinator, async (req, res): Promise<v
   let result;
   try {
     result = await db.transaction(async (tx) => {
+      const draft = parsed.data.draftId
+        ? await submissionDraft(tx as unknown as typeof db, parsed.data.draftId, req.user!.id, f.clientUci) : null;
     // Lock an existing UCI row so contact and representative reconciliation is
     // atomic with referral creation. A concurrent new-UCI insert is still
     // guarded by the database unique constraint.
@@ -601,9 +608,17 @@ router.post("/referrals", requireStaffOrCoordinator, async (req, res): Promise<v
       heldForReview ? undefined : `Referral for ${client.firstName} ${client.lastName}`,
       tx as unknown as typeof db,
     );
+      if (draft) {
+        await tx.delete(referralDraftsTable).where(and(eq(referralDraftsTable.id, draft.id), eq(referralDraftsTable.userId, req.user!.id)));
+        await audit(req.user!.id, "delete_referral_draft", "referral_draft", draft.id,
+          "Deleted after referral submission", tx as unknown as typeof db);
+      }
       return { client, referral, familyRepresentative, heldForReview };
     });
   } catch (error) {
+    if (error instanceof DraftAccessError) {
+      res.status(error.status).json({ error: error.message }); return;
+    }
     if (error instanceof DeletedParticipantError) {
       res.status(409).json({ error: error.message });
       return;
@@ -815,6 +830,9 @@ router.post("/referrals/:id/coordinator-review", requireStaff, async (req, res):
     );
     if (input.reassignAsAssignedCoordinator && client.assignedCoordinatorId !== coordinator.id) {
       await tx.update(clientsTable).set({ assignedCoordinatorId: coordinator.id }).where(eq(clientsTable.id, client.id));
+      const uci = draftUci(client.uciNumber);
+      if (client.assignedCoordinatorId && uci) await deleteCoordinatorDrafts(tx as unknown as typeof db,
+        client.assignedCoordinatorId, req.user!.id, "Deleted after participant reassignment", uci);
       await audit(
         req.user!.id,
         "reassign_client_coordinator",

@@ -27,12 +27,15 @@ import { Link, useLocation } from 'wouter';
 import { MessageSquare } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { DashboardTile } from '@/components/dashboard-tile';
+import { useOwnDrafts } from '@/components/referral-drafts';
 import { getCoordinatorTiles, getInvoicesInReview, filterAlertsForRole, getMessageAlertHref } from '@/lib/dashboard-models';
 
 export default function DashboardPage() {
   const { user } = useAuth();
   const [, navigate] = useLocation();
   const { data: summary, isLoading, error } = useGetDashboardSummary();
+  const ownDrafts = useOwnDrafts(user?.role === 'service_coordinator');
+  const draftCount = ownDrafts.data?.items.length ?? 0;
 
   if (isLoading) {
     return <DashboardSkeleton />;
@@ -69,6 +72,14 @@ export default function DashboardPage() {
            'Here is your account overview.'}
         </p>
       </div>
+
+      {isCoordinator && draftCount > 0 && (
+        <Link href="/referrals?tab=drafts" className="flex items-center gap-3 rounded-lg border border-primary/30 bg-primary/5 px-4 py-3 text-sm transition-colors hover:bg-primary/10" data-testid="link-unfinished-drafts">
+          <FileText className="h-4 w-4 text-primary shrink-0" />
+          <span className="flex-1">You have {draftCount} unfinished referral {draftCount === 1 ? 'draft' : 'drafts'}</span>
+          <span className="font-medium text-primary">View drafts</span>
+        </Link>
+      )}
 
       {/* Alerts Section (High Priority) */}
       {visibleAlerts.length > 0 && (

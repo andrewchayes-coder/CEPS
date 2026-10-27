@@ -110,6 +110,7 @@ import type {
   ListPaymentsParams,
   ListReadyForCheckWritingInvoicesParams,
   ListReadyToApproveInvoicesParams,
+  ListReferralDraftsParams,
   ListReferrals200,
   ListReferralsParams,
   ListRemittances200,
@@ -140,6 +141,9 @@ import type {
   PosParseResult,
   PosPdfInput,
   Referral,
+  ReferralDraft,
+  ReferralDraftInput,
+  ReferralDraftList,
   ReferralInput,
   ReferralPendingReview,
   ReferralUpdate,
@@ -210,6 +214,280 @@ const withQueryKey = <T extends object, K>(query: T, queryKey: K): T & { queryKe
   }
   return result;
 };
+
+export const getListReferralDraftsUrl = (params?: ListReferralDraftsParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/referral-drafts?${stringifiedParams}` : `/api/referral-drafts`
+}
+
+export const listReferralDrafts = async (params?: ListReferralDraftsParams, options?: Parameters<typeof customFetch>[1]): Promise<ReferralDraftList> => {
+
+  return customFetch<ReferralDraftList>(getListReferralDraftsUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListReferralDraftsQueryKey = (params?: ListReferralDraftsParams,) => {
+    return [
+    `/api/referral-drafts`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getListReferralDraftsQueryOptions = <TData = Awaited<ReturnType<typeof listReferralDrafts>>, TError = ErrorType<void>>(params?: ListReferralDraftsParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listReferralDrafts>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListReferralDraftsQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listReferralDrafts>>> = ({ signal }) => listReferralDrafts(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listReferralDrafts>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListReferralDraftsQueryResult = NonNullable<Awaited<ReturnType<typeof listReferralDrafts>>>
+export type ListReferralDraftsQueryError = ErrorType<void>
+
+
+
+export function useListReferralDrafts<TData = Awaited<ReturnType<typeof listReferralDrafts>>, TError = ErrorType<void>>(
+ params?: ListReferralDraftsParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listReferralDrafts>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListReferralDraftsQueryOptions(params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getCreateReferralDraftUrl = () => {
+
+
+
+
+  return `/api/referral-drafts`
+}
+
+export const createReferralDraft = async (referralDraftInput: ReferralDraftInput, options?: Parameters<typeof customFetch>[1]): Promise<ReferralDraft> => {
+
+  return customFetch<ReferralDraft>(getCreateReferralDraftUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(referralDraftInput)
+  }
+);}
+
+
+
+
+
+export const getCreateReferralDraftMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createReferralDraft>>, TError,{data: BodyType<ReferralDraftInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof createReferralDraft>>, TError,{data: BodyType<ReferralDraftInput>}, TContext> => {
+
+const mutationKey = ['createReferralDraft'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof createReferralDraft>>, {data: BodyType<ReferralDraftInput>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  createReferralDraft(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type CreateReferralDraftMutationResult = NonNullable<Awaited<ReturnType<typeof createReferralDraft>>>
+    export type CreateReferralDraftMutationBody = BodyType<ReferralDraftInput>
+    export type CreateReferralDraftMutationError = ErrorType<void>
+
+    export const useCreateReferralDraft = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createReferralDraft>>, TError,{data: BodyType<ReferralDraftInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof createReferralDraft>>,
+        TError,
+        {data: BodyType<ReferralDraftInput>},
+        TContext
+      > => {
+      return useMutation(getCreateReferralDraftMutationOptions(options));
+    }
+
+export const getUpdateReferralDraftUrl = (id: string,) => {
+
+
+
+
+  return `/api/referral-drafts/${id}`
+}
+
+export const updateReferralDraft = async (id: string,
+    referralDraftInput: ReferralDraftInput, options?: Parameters<typeof customFetch>[1]): Promise<ReferralDraft> => {
+
+  return customFetch<ReferralDraft>(getUpdateReferralDraftUrl(id),
+  {
+    ...options,
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(referralDraftInput)
+  }
+);}
+
+
+
+
+
+export const getUpdateReferralDraftMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateReferralDraft>>, TError,{id: string;data: BodyType<ReferralDraftInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof updateReferralDraft>>, TError,{id: string;data: BodyType<ReferralDraftInput>}, TContext> => {
+
+const mutationKey = ['updateReferralDraft'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof updateReferralDraft>>, {id: string;data: BodyType<ReferralDraftInput>}> = (props) => {
+          const {id,data} = props ?? {};
+
+          return  updateReferralDraft(id,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type UpdateReferralDraftMutationResult = NonNullable<Awaited<ReturnType<typeof updateReferralDraft>>>
+    export type UpdateReferralDraftMutationBody = BodyType<ReferralDraftInput>
+    export type UpdateReferralDraftMutationError = ErrorType<void>
+
+    export const useUpdateReferralDraft = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateReferralDraft>>, TError,{id: string;data: BodyType<ReferralDraftInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof updateReferralDraft>>,
+        TError,
+        {id: string;data: BodyType<ReferralDraftInput>},
+        TContext
+      > => {
+      return useMutation(getUpdateReferralDraftMutationOptions(options));
+    }
+
+export const getDeleteReferralDraftUrl = (id: string,) => {
+
+
+
+
+  return `/api/referral-drafts/${id}`
+}
+
+export const deleteReferralDraft = async (id: string, options?: Parameters<typeof customFetch>[1]): Promise<void> => {
+
+  return customFetch<void>(getDeleteReferralDraftUrl(id),
+  {
+    ...options,
+    method: 'DELETE'
+
+
+  }
+);}
+
+
+
+
+
+export const getDeleteReferralDraftMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteReferralDraft>>, TError,{id: string}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof deleteReferralDraft>>, TError,{id: string}, TContext> => {
+
+const mutationKey = ['deleteReferralDraft'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof deleteReferralDraft>>, {id: string}> = (props) => {
+          const {id} = props ?? {};
+
+          return  deleteReferralDraft(id,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type DeleteReferralDraftMutationResult = NonNullable<Awaited<ReturnType<typeof deleteReferralDraft>>>
+
+    export type DeleteReferralDraftMutationError = ErrorType<void>
+
+    export const useDeleteReferralDraft = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteReferralDraft>>, TError,{id: string}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof deleteReferralDraft>>,
+        TError,
+        {id: string},
+        TContext
+      > => {
+      return useMutation(getDeleteReferralDraftMutationOptions(options));
+    }
 
 export const getImportAltaBillingUrl = () => {
 

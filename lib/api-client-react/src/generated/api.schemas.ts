@@ -5,6 +5,44 @@
  * CEPS Portal API — referral intake, authorizations, invoices, payments, remittances, vendors, reporting
  * OpenAPI spec version: 0.1.0
  */
+/**
+ * Incomplete form values; JSON must be under 200 KB.
+ */
+export type ReferralDraftInputData = { [key: string]: unknown };
+
+export interface ReferralDraftInput {
+  /** Incomplete form values; JSON must be under 200 KB. */
+  data: ReferralDraftInputData;
+  /**
+     * @minimum 0
+     * @maximum 5
+     */
+  currentStep: number;
+  /** @nullable */
+  supportingDocumentUrl?: string | null;
+}
+
+export type ReferralDraftData = { [key: string]: unknown };
+
+export interface ReferralDraft {
+  id: string;
+  userId: string;
+  /** @nullable */
+  uciNumber: string | null;
+  label: string;
+  currentStep: number;
+  data: ReferralDraftData;
+  /** @nullable */
+  supportingDocumentUrl: string | null;
+  createdAt: string;
+  updatedAt: string;
+  documentRestoreFailed: boolean;
+}
+
+export interface ReferralDraftList {
+  items: ReferralDraft[];
+}
+
 export type BillingStatus = typeof BillingStatus[keyof typeof BillingStatus];
 
 
@@ -1875,6 +1913,7 @@ export const ReferralInputPaymentTypeRequested = {
 } as const;
 
 export interface ReferralInput {
+  draftId?: string;
   intakeFields: ReferralIntakeInput;
   submittedVia?: ReferralInputSubmittedVia;
   serviceFrequency?: ReferralInputServiceFrequency;
@@ -3612,6 +3651,13 @@ export type MessageDateToParameter = string;
 export type MessageLimitParameter = number;
 
 export type MessageOffsetParameter = number;
+
+export type ListReferralDraftsParams = {
+/**
+ * Restore one owned draft and validate its attached document.
+ */
+id?: string;
+};
 
 export type ListBillingRowsParams = {
 matchStatus?: ListBillingRowsMatchStatus;

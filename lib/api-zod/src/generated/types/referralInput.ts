@@ -11,6 +11,7 @@ import type { ReferralInputSubmittedVia } from './referralInputSubmittedVia';
 import type { ReferralIntakeInput } from './referralIntakeInput';
 
 export interface ReferralInput {
+  draftId?: string;
   intakeFields: ReferralIntakeInput;
   submittedVia?: ReferralInputSubmittedVia;
   serviceFrequency?: ReferralInputServiceFrequency;

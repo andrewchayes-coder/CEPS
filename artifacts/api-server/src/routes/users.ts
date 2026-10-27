@@ -17,6 +17,8 @@ import { requireStaff, requirePermission, hashPassword, iso, getUserPermissions,
 import { userJson, userNameMap, diffDetail } from "../lib/serializers";
 import { sortedOrder } from "../lib/sorting";
 
+import { deleteCoordinatorDrafts } from "../lib/referralDrafts";
+
 const router: IRouter = Router();
 const requireManageUsers = requirePermission("manage_users");
 const MANAGE_USERS_LOCK = sql`select pg_advisory_xact_lock(712046, 21)`;
@@ -243,6 +245,8 @@ router.patch("/users/:id", requireManageUsers, async (req, res): Promise<void> =
         if (!role) throw new UserGuardrailError("Selected staff role was not found or has been deleted");
       }
       const [updated] = await tx.update(usersTable).set(updates).where(eq(usersTable.id, id)).returning();
+      if (!updated.active) await deleteCoordinatorDrafts(tx as unknown as typeof db, id, req.user!.id,
+        "Deleted after coordinator deactivation");
       const managerCount = await activeManageUsersCount(tx);
       if (managerCount < 1) {
         throw new UserGuardrailError("At least one active staff user must retain the manage_users permission");
@@ -300,6 +304,7 @@ router.delete("/users/:id", requireManageUsers, async (req, res): Promise<void> 
       }
       const [deactivated] = await tx.update(usersTable).set({ active: false }).where(eq(usersTable.id, id)).returning();
       if (!deactivated) return null;
+      await deleteCoordinatorDrafts(tx as unknown as typeof db, id, req.user!.id, "Deleted after coordinator deactivation");
       if (await activeManageUsersCount(tx) < 1) {
         throw new UserGuardrailError("At least one active staff user must retain the manage_users permission");
       }

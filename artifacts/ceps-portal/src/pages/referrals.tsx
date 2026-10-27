@@ -26,6 +26,7 @@ import { ClientLink } from '@/components/entity-links';
 import { useDebounce } from '@/hooks/use-debounce';
 import { DownloadReferralConfirmation } from '@/components/download-referral-confirmation';
 import { DateRangeFilter } from '@/components/date-range-filter';
+import { MyDraftsTable, useOwnDrafts } from '@/components/referral-drafts';
 
 const PAGE_SIZE = 50;
 
@@ -40,10 +41,12 @@ export default function ReferralsPage() {
   const [startDate, setStartDate] = useState<string>();
   const [endDate, setEndDate] = useState<string>();
   const [page, setPage] = useState(0);
-  const [tab, setTab] = useState<'all' | 'mine'>('all');
+  const [tab, setTab] = useState<'all' | 'mine' | 'drafts'>(() => user?.role === 'service_coordinator' && new URLSearchParams(searchParams).get('tab') === 'drafts' ? 'drafts' : 'all');
   const isCoordinator = user?.role === 'service_coordinator';
+  const drafts = isCoordinator && tab === 'drafts';
+  const ownDrafts = useOwnDrafts(isCoordinator);
   const mine = isCoordinator && tab === 'mine';
-  const switchTab = (t: 'all' | 'mine') => {
+  const switchTab = (t: 'all' | 'mine' | 'drafts') => {
     setTab(t);
     setPage(0);
     setStatusFilter('all');
@@ -71,7 +74,7 @@ export default function ReferralsPage() {
   const { data, isLoading, isError, refetch } = useListReferrals(params, {
     query: {
       queryKey: ['referrals', user?.id ?? null, params],
-      enabled: !!user,
+      enabled: !!user && !drafts,
     },
   });
 
@@ -107,12 +110,13 @@ export default function ReferralsPage() {
 
       {isCoordinator && (
         <div className="flex gap-2" role="tablist">
-          <Button role="tab" aria-selected={!mine} variant={mine ? 'outline' : 'default'} size="sm" onClick={() => switchTab('all')} data-testid="tab-all-referrals">Referrals</Button>
+          <Button role="tab" aria-selected={tab === 'all'} variant={tab === 'all' ? 'default' : 'outline'} size="sm" onClick={() => switchTab('all')} data-testid="tab-all-referrals">Referrals</Button>
           <Button role="tab" aria-selected={mine} variant={mine ? 'default' : 'outline'} size="sm" onClick={() => switchTab('mine')} data-testid="tab-my-submissions">My submissions</Button>
+          <Button role="tab" aria-selected={drafts} variant={drafts ? 'default' : 'outline'} size="sm" onClick={() => switchTab('drafts')} data-testid="tab-my-drafts">My drafts ({ownDrafts.data?.items.length ?? 0})</Button>
         </div>
       )}
 
-      <Card>
+      {drafts ? <Card><CardContent className="p-0"><MyDraftsTable /></CardContent></Card> : <Card>
         {!mine && <CardHeader className="pb-3 border-b">
           <div className="flex flex-col sm:flex-row gap-4 items-center justify-between">
             <div className="relative w-full sm:max-w-sm">
@@ -268,7 +272,7 @@ export default function ReferralsPage() {
             </div>
           </div>
         </CardContent>
-      </Card>
+      </Card>}
     </div>
   );
 }

@@ -1,11 +1,15 @@
-import { formatDate } from '@/lib/dates';
-import React, { useState } from 'react';
+import { formatDate, formatDateTime } from '@/lib/dates';
+import React, { useEffect, useRef, useState } from 'react';
 import { apiErrorMessage } from '@/lib/api-error';
 import { isAuthorizationAmount, normalizeAuthorizationAmount, isServiceDate } from '@/lib/referral-service';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
-import { useCreateReferral, getGetDashboardSummaryQueryKey } from '@workspace/api-client-react';
+import { useCreateReferral, getGetDashboardSummaryQueryKey, useCreateReferralDraft, useUpdateReferralDraft, useListReferralDrafts, getListReferralDraftsQueryKey } from '@workspace/api-client-react';
+import { DraftChooser, DuplicateDraftAlert, LeaveDraftDialog, MISSING_DRAFT_DOCUMENT_MESSAGE, duplicateDraftId, invalidateReferralDrafts, useOwnDrafts } from '@/components/referral-drafts';
+import { useLeaveGuard } from '@/hooks/use-leave-guard';
+import { ProtectedData } from '@/components/protected-data';
+import { Skeleton } from '@/components/ui/skeleton';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -15,7 +19,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { Separator } from '@/components/ui/separator';
 import { useToast } from '@/hooks/use-toast';
-import { ChevronDown, ChevronLeft, ChevronRight, AlertTriangle, CheckCircle2, Users, FileText } from 'lucide-react';
+import { ChevronDown, ChevronLeft, ChevronRight, AlertTriangle, Save, CheckCircle2, Users, FileText } from 'lucide-react';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { FileUpload } from '@/components/file-upload';
 import { trackAnalyticsEvent } from '@/lib/analytics';
@@ -24,7 +28,7 @@ import { PreferredLanguageField } from '@/components/preferred-language-field';
 import { validLanguage } from '@/lib/preferred-language';
 import { useAuth } from '@/components/auth/auth-provider';
 import { useQueryClient } from '@tanstack/react-query';
-import { Link } from 'wouter';
+import { Link, useLocation, useSearch } from 'wouter';
 import { DownloadReferralConfirmation } from '@/components/download-referral-confirmation';
 import { SearchableSelect } from '@/components/searchable-select';
 import { isUSState, stateOptions } from '@/lib/us-states';
@@ -151,21 +155,7 @@ const fullSchema = z.object({
 
 type FormValues = z.infer<typeof fullSchema>;
 
-const STEPS = ['Coordinator', 'Vendor', 'Activity', 'Participant', 'Documents', 'Review'];
-
-export default function ReferralNewPage() {
-  const { user } = useAuth();
-  const queryClient = useQueryClient();
-  const { toast } = useToast();
-  const createReferral = useCreateReferral();
-  const [submitted, setSubmitted] = useState<{ id: string; message?: string; canView: boolean } | null>(null);
-  const [currentStep, setCurrentStep] = useState(0);
-  const [supportingDocumentUrl, setSupportingDocumentUrl] = useState<string | undefined>(undefined);
-  const [familyRepOpen, setFamilyRepOpen] = useState(false);
-
-  const form = useForm<FormValues>({
-    resolver: zodResolver(fullSchema),
-    defaultValues: {
+const DEFAULT_VALUES: FormValues = {
       regionalCenterName: 'Alta California Regional Center',
       coordinatorName: '',
       coordinatorEmail: '',
@@ -210,7 +200,25 @@ export default function ReferralNewPage() {
       contactCity: '',
       contactZip: '',
       contactState: 'CA',
-    },
+    };
+
+const snapshot = (values: unknown, doc: string | undefined) => JSON.stringify([values, doc ?? null]);
+
+const STEPS = ['Coordinator', 'Vendor', 'Activity', 'Participant', 'Documents', 'Review'];
+
+export default function ReferralNewPage() {
+  const { user } = useAuth();
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
+  const createReferral = useCreateReferral();
+  const [submitted, setSubmitted] = useState<{ id: string; message?: string; canView: boolean } | null>(null);
+  const [currentStep, setCurrentStep] = useState(0);
+  const [supportingDocumentUrl, setSupportingDocumentUrl] = useState<string | undefined>(undefined);
+  const [familyRepOpen, setFamilyRepOpen] = useState(false);
+
+  const form = useForm<FormValues>({
+    resolver: zodResolver(fullSchema),
+    defaultValues: DEFAULT_VALUES,
     mode: 'onChange'
   });
 
@@ -220,6 +228,107 @@ export default function ReferralNewPage() {
   const vendorAcceptsChecks = watch('vendorAcceptsChecks');
   const vendorBillingDifferent = watch('vendorBillingDifferent');
   const clientIsMinor = watch('clientIsMinor');
+
+  // ---------------------------------------------------------------------------
+  // Coordinator-only referral drafts
+  // ---------------------------------------------------------------------------
+  const isCoordinator = user?.role === 'service_coordinator';
+  const [location, navigate] = useLocation();
+  const search = useSearch();
+  const draftParam = isCoordinator ? new URLSearchParams(search).get('draft') : null;
+  const [draftId, setDraftId] = useState<string | null>(null);
+  const [savedAt, setSavedAt] = useState<string | null>(null);
+  const [autoSave, setAutoSave] = useState(false);
+  const [docMissing, setDocMissing] = useState(false);
+  const [duplicateId, setDuplicateId] = useState<string | null>(null);
+  const [chooserDone, setChooserDone] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const baseline = useRef(snapshot(DEFAULT_VALUES, undefined));
+  const loadedFor = useRef<string | null>(null);
+  const createDraft = useCreateReferralDraft();
+  const updateDraft = useUpdateReferralDraft();
+  const ownDrafts = useOwnDrafts(isCoordinator);
+  const needsRestore = !!draftParam && loadedFor.current !== draftParam;
+  // Restore always reads GET ?id= so the server re-validates the attached document.
+  const restore = useListReferralDrafts({ id: draftParam ?? undefined }, {
+    query: { queryKey: getListReferralDraftsQueryKey({ id: draftParam ?? '' }), enabled: needsRestore, staleTime: 0, gcTime: 0, refetchOnWindowFocus: false, retry: false },
+  });
+
+  const values = watch();
+  const dirty = isCoordinator && !submitted && snapshot(values, supportingDocumentUrl) !== baseline.current;
+  const currentUrl = `${location}${search ? `?${search}` : ''}`;
+  const leave = useLeaveGuard(dirty, navigate, currentUrl);
+
+  useEffect(() => {
+    const d = restore.data?.items?.[0];
+    if (!draftParam || !d || d.id !== draftParam || loadedFor.current === draftParam) return;
+    loadedFor.current = d.id;
+    const restored = { ...DEFAULT_VALUES, ...(d.data as Partial<FormValues>) } as FormValues;
+    const doc = d.supportingDocumentUrl ?? undefined;
+    form.reset(restored);
+    setSupportingDocumentUrl(doc);
+    setFamilyRepOpen(Boolean(restored.familyRepName || restored.familyRepPhone || restored.familyRepEmail));
+    setCurrentStep(Math.min(STEPS.length - 1, Math.max(0, d.currentStep)));
+    setDraftId(d.id);
+    setSavedAt(d.updatedAt);
+    setAutoSave(true);
+    setDocMissing(d.documentRestoreFailed);
+    setDuplicateId(null);
+    baseline.current = snapshot(restored, doc);
+  }, [restore.data, draftParam, form]);
+
+  const saveDraft = async (step: number): Promise<boolean> => {
+    const current = form.getValues();
+    const doc = supportingDocumentUrl;
+    const body = { data: current as unknown as Record<string, unknown>, currentStep: step, supportingDocumentUrl: doc ?? null };
+    setSaving(true);
+    try {
+      const d = draftId
+        ? await updateDraft.mutateAsync({ id: draftId, data: body })
+        : await createDraft.mutateAsync({ data: body });
+      loadedFor.current = d.id;
+      baseline.current = snapshot(current, doc);
+      setDraftId(d.id);
+      setSavedAt(d.updatedAt);
+      setAutoSave(true);
+      setDuplicateId(null);
+      if (draftParam !== d.id) navigate(`/referrals/new?draft=${d.id}`, { replace: true });
+      invalidateReferralDrafts(queryClient);
+      return true;
+    } catch (err) {
+      const dup = duplicateDraftId(err);
+      if (dup) setDuplicateId(dup);
+      else toast({ variant: 'destructive', title: 'Draft not saved', description: apiErrorMessage(err, 'Your changes were not saved. Try again.') });
+      return false;
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const findDuplicate = async () => {
+    const uci = form.getValues('clientUci').trim();
+    if (!uci) return null;
+    const refreshed = await ownDrafts.refetch();
+    if (refreshed.error) throw refreshed.error;
+    const list = refreshed.data?.items ?? [];
+    return list.find(d => d.id !== draftId && d.uciNumber?.trim() === uci)?.id ?? null;
+  };
+
+  const openDraft = (id: string) => leave.guard(() => {
+    setDuplicateId(null);
+    navigate(`/referrals/new?draft=${id}`);
+  });
+
+  const resetDraftState = () => {
+    loadedFor.current = null;
+    baseline.current = snapshot(DEFAULT_VALUES, undefined);
+    setDraftId(null); setSavedAt(null); setAutoSave(false); setDocMissing(false); setDuplicateId(null);
+  };
+
+  const saveAndLeave = async () => {
+    if (await saveDraft(currentStep)) leave.proceed();
+    else leave.cancel();
+  };
 
   const nextStep = async () => {
     if (currentStep >= STEPS.length - 1 || vendorAcceptsChecks === false) return;
@@ -231,12 +340,23 @@ export default function ReferralNewPage() {
 
     const isStepValid = await trigger(fieldsToValidate as any);
     if (isStepValid) {
+      if (isCoordinator && currentStep === 3) {
+        try {
+          const dup = await findDuplicate();
+          if (dup) { setDuplicateId(dup); return; }
+        } catch (err) {
+          toast({ variant: 'destructive', title: 'Could not check existing drafts', description: apiErrorMessage(err, 'Try again before continuing.') });
+          return;
+        }
+      }
+      if (isCoordinator && autoSave && !(await saveDraft(currentStep + 1))) return;
       setCurrentStep(s => s + 1);
       window.scrollTo(0, 0);
     }
   };
 
-  const prevStep = () => {
+  const prevStep = async () => {
+    if (isCoordinator && autoSave && !(await saveDraft(currentStep - 1))) return;
     setCurrentStep(s => s - 1);
     window.scrollTo(0, 0);
   };
@@ -262,7 +382,8 @@ export default function ReferralNewPage() {
         submittedVia: 'portal',
         serviceFrequency: serviceFrequency as 'one_time' | 'monthly',
         supportingDocumentUrl: supportingDocumentUrl ?? '',
-        intakeFields: intakeFields as any
+        intakeFields: intakeFields as any,
+        ...(isCoordinator && draftId ? { draftId } : {}),
       }
     }, {
       onSuccess: (res) => {
@@ -272,6 +393,7 @@ export default function ReferralNewPage() {
         void queryClient.invalidateQueries({ queryKey: ['/api/referrals'] });
         void queryClient.invalidateQueries({ queryKey: ['referrals'] });
         void queryClient.invalidateQueries({ queryKey: getGetDashboardSummaryQueryKey() });
+        if (isCoordinator) invalidateReferralDrafts(queryClient);
         if ('message' in res && res.status === 'pending_review') {
           setSubmitted({ id: res.id, message: res.message, canView: false });
         } else if ('clientId' in res) {
@@ -306,7 +428,7 @@ export default function ReferralNewPage() {
           {submitted.message && <CardContent className="text-sm text-muted-foreground">No further action is needed right now. CEPS will review the participant information before the referral can proceed.</CardContent>}
           <CardFooter className="flex flex-col sm:flex-row sm:items-start gap-3">
             <DownloadReferralConfirmation id={submitted.id} />
-            <Button variant="outline" onClick={() => { form.reset(); setSupportingDocumentUrl(undefined); setFamilyRepOpen(false); setCurrentStep(0); setSubmitted(null); }} data-testid="button-submit-another-referral">Submit another referral</Button>
+            <Button variant="outline" onClick={() => { form.reset(); setSupportingDocumentUrl(undefined); setFamilyRepOpen(false); setCurrentStep(0); setSubmitted(null); if (isCoordinator) { resetDraftState(); setChooserDone(true); navigate('/referrals/new', { replace: true }); } }} data-testid="button-submit-another-referral">Submit another referral</Button>
             {submitted.canView && <Button variant="outline" asChild><Link href={`/referrals/${submitted.id}`}>View referral</Link></Button>}
           </CardFooter>
         </Card>
@@ -314,12 +436,50 @@ export default function ReferralNewPage() {
     );
   }
 
+  if (isCoordinator && (needsRestore ? restore.isLoading : (!draftId && !chooserDone && ownDrafts.isLoading))) {
+    return (
+      <div className="max-w-3xl mx-auto space-y-6 pb-20" data-testid="referral-draft-loading">
+        <Skeleton className="h-9 w-56" /><Skeleton className="h-4 w-80" /><Skeleton className="h-64 w-full" />
+      </div>
+    );
+  }
+
+  if (isCoordinator && needsRestore && (restore.isError || (restore.data && !restore.data.items?.length))) {
+    return (
+      <div className="max-w-2xl mx-auto py-10">
+        <Alert variant="destructive" role="alert">
+          <AlertTriangle className="h-4 w-4" />
+          <AlertTitle>This draft could not be opened</AlertTitle>
+          <AlertDescription className="space-y-3">
+            <p>It may have been submitted or deleted.</p>
+            <div className="flex gap-2">
+              {restore.isError && <Button size="sm" variant="outline" onClick={() => void restore.refetch()}>Retry</Button>}
+              <Button size="sm" variant="outline" onClick={() => { resetDraftState(); navigate('/referrals/new', { replace: true }); }}>Start a new referral</Button>
+            </div>
+          </AlertDescription>
+        </Alert>
+      </div>
+    );
+  }
+
+  if (isCoordinator && !draftParam && !draftId && !chooserDone && !dirty && (ownDrafts.data?.items?.length ?? 0) > 0) {
+    return <DraftChooser drafts={ownDrafts.data!.items} onResume={(id) => navigate(`/referrals/new?draft=${id}`)} onStartNew={() => setChooserDone(true)} />;
+  }
+
   return (
     <div className="max-w-3xl mx-auto space-y-6 pb-20">
+      {isCoordinator && <LeaveDraftDialog open={leave.open} saving={saving} onSave={() => void saveAndLeave()} onDiscard={leave.proceed} onKeep={leave.cancel} />}
       <div>
         <h1 className="text-3xl font-bold tracking-tight">New Referral</h1>
         <p className="text-muted-foreground mt-1">Complete the packet to initiate service authorization.</p>
       </div>
+
+      {isCoordinator && docMissing && !supportingDocumentUrl && (
+        <Alert variant="destructive" role="alert" data-testid="alert-draft-document-missing">
+          <AlertTriangle className="h-4 w-4" />
+          <AlertDescription>{MISSING_DRAFT_DOCUMENT_MESSAGE}</AlertDescription>
+        </Alert>
+      )}
 
       {/* Progress Bar */}
       <div className="flex items-center justify-between mb-8 relative">
@@ -885,13 +1045,30 @@ export default function ReferralNewPage() {
             </Card>
           )}
 
+          {isCoordinator && duplicateId && (
+            <DuplicateDraftAlert
+              draftId={duplicateId}
+              onOpen={() => openDraft(duplicateId)}
+              onDeleted={() => { setDuplicateId(null); void ownDrafts.refetch(); }}
+            />
+          )}
+
+          {isCoordinator && (
+            <div className="flex flex-wrap items-center justify-end gap-3 border-t pt-4">
+              {savedAt && <span className="text-sm text-muted-foreground" role="status" data-testid="text-draft-saved">Draft saved <ProtectedData>{formatDateTime(savedAt)}</ProtectedData></span>}
+              <Button type="button" variant="outline" onClick={() => void saveDraft(currentStep)} disabled={saving || createReferral.isPending} data-testid="button-save-draft">
+                <Save className="w-4 h-4 mr-2" /> {saving ? 'Saving…' : 'Save draft'}
+              </Button>
+            </div>
+          )}
+
           {/* Navigation Buttons */}
           <div className="flex justify-between pt-4">
             <Button 
               type="button" 
               variant="outline" 
-              onClick={prevStep} 
-              disabled={currentStep === 0 || createReferral.isPending}
+              onClick={() => void prevStep()} 
+              disabled={currentStep === 0 || createReferral.isPending || saving}
             >
               <ChevronLeft className="w-4 h-4 mr-2" /> Back
             </Button>
@@ -900,8 +1077,8 @@ export default function ReferralNewPage() {
               <Button 
                 key="next"
                 type="button" 
-                onClick={nextStep}
-                disabled={vendorAcceptsChecks === false}
+                onClick={() => void nextStep()}
+                disabled={vendorAcceptsChecks === false || saving}
               >
                 Next <ChevronRight className="w-4 h-4 ml-2" />
               </Button>

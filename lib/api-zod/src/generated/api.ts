@@ -8,6 +8,87 @@
 import * as zod from 'zod/v4';
 
 
+export const ListReferralDraftsQueryParams = zod.object({
+  "id": zod.uuid().optional().describe('Restore one owned draft and validate its attached document.')
+})
+
+export const ListReferralDraftsResponse = zod.object({
+  "items": zod.array(zod.object({
+  "id": zod.string(),
+  "userId": zod.string(),
+  "uciNumber": zod.string().nullable(),
+  "label": zod.string(),
+  "currentStep": zod.int(),
+  "data": zod.record(zod.string(), zod.unknown()),
+  "supportingDocumentUrl": zod.string().nullable(),
+  "createdAt": zod.string(),
+  "updatedAt": zod.string(),
+  "documentRestoreFailed": zod.boolean()
+}))
+})
+
+
+export const createReferralDraftBodyCurrentStepMin = 0;
+export const createReferralDraftBodyCurrentStepMax = 5;
+
+
+
+export const CreateReferralDraftBody = zod.object({
+  "data": zod.record(zod.string(), zod.unknown()).describe('Incomplete form values; JSON must be under 200 KB.'),
+  "currentStep": zod.int().min(createReferralDraftBodyCurrentStepMin).max(createReferralDraftBodyCurrentStepMax),
+  "supportingDocumentUrl": zod.string().nullish()
+})
+
+export const CreateReferralDraftResponse = zod.object({
+  "id": zod.string(),
+  "userId": zod.string(),
+  "uciNumber": zod.string().nullable(),
+  "label": zod.string(),
+  "currentStep": zod.int(),
+  "data": zod.record(zod.string(), zod.unknown()),
+  "supportingDocumentUrl": zod.string().nullable(),
+  "createdAt": zod.string(),
+  "updatedAt": zod.string(),
+  "documentRestoreFailed": zod.boolean()
+})
+
+
+export const UpdateReferralDraftParams = zod.object({
+  "id": zod.uuid()
+})
+
+export const updateReferralDraftBodyCurrentStepMin = 0;
+export const updateReferralDraftBodyCurrentStepMax = 5;
+
+
+
+export const UpdateReferralDraftBody = zod.object({
+  "data": zod.record(zod.string(), zod.unknown()).describe('Incomplete form values; JSON must be under 200 KB.'),
+  "currentStep": zod.int().min(updateReferralDraftBodyCurrentStepMin).max(updateReferralDraftBodyCurrentStepMax),
+  "supportingDocumentUrl": zod.string().nullish()
+})
+
+export const UpdateReferralDraftResponse = zod.object({
+  "id": zod.string(),
+  "userId": zod.string(),
+  "uciNumber": zod.string().nullable(),
+  "label": zod.string(),
+  "currentStep": zod.int(),
+  "data": zod.record(zod.string(), zod.unknown()),
+  "supportingDocumentUrl": zod.string().nullable(),
+  "createdAt": zod.string(),
+  "updatedAt": zod.string(),
+  "documentRestoreFailed": zod.boolean()
+})
+
+
+export const DeleteReferralDraftParams = zod.object({
+  "id": zod.uuid()
+})
+
+export const DeleteReferralDraftResponse = zod.void()
+
+
 export const importAltaBillingBodyCsvContentMax = 10000000;
 
 
@@ -1938,6 +2019,7 @@ export const createReferralBodyCostRegExp = new RegExp('^\\d+(\\.\\d{1,2})?$');
 
 
 export const CreateReferralBody = zod.object({
+  "draftId": zod.uuid().optional(),
   "intakeFields": zod.object({
   "regionalCenterName": zod.string().optional(),
   "coordinatorName": zod.string().optional(),

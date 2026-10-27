@@ -27,6 +27,59 @@ tags:
   - name: import
   - name: Storage
 paths:
+  /referral-drafts:
+    get:
+      operationId: listReferralDrafts
+      tags: [referrals]
+      parameters:
+        - { name: id, in: query, schema: { type: string, format: uuid }, description: "Restore one owned draft and validate its attached document." }
+      responses:
+        "200":
+          description: Owned coordinator drafts
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ReferralDraftList" }
+        "404": { description: Draft not found }
+    post:
+      operationId: createReferralDraft
+      tags: [referrals]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ReferralDraftInput" }
+      responses:
+        "201":
+          description: Draft saved
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ReferralDraft" }
+        "409": { description: "Duplicate draft; response includes existingDraftId." }
+  /referral-drafts/{id}:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+    patch:
+      operationId: updateReferralDraft
+      tags: [referrals]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ReferralDraftInput" }
+      responses:
+        "200":
+          description: Draft saved
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ReferralDraft" }
+        "404": { description: Draft not found }
+        "409": { description: "Duplicate draft; response includes existingDraftId." }
+    delete:
+      operationId: deleteReferralDraft
+      tags: [referrals]
+      responses:
+        "204": { description: Draft deleted }
+        "404": { description: Draft not found }
   /billing/import:
     post:
       operationId: importAltaBilling
@@ -3195,6 +3248,32 @@ components:
       in: query
       schema: { type: integer, minimum: 0, default: 0 }
   schemas:
+    ReferralDraftInput:
+      type: object
+      required: [data, currentStep]
+      properties:
+        data: { type: object, additionalProperties: true, description: "Incomplete form values; JSON must be under 200 KB." }
+        currentStep: { type: integer, minimum: 0, maximum: 5 }
+        supportingDocumentUrl: { type: ["string", "null"] }
+    ReferralDraft:
+      type: object
+      required: [id, userId, uciNumber, label, currentStep, data, supportingDocumentUrl, createdAt, updatedAt, documentRestoreFailed]
+      properties:
+        id: { type: string }
+        userId: { type: string }
+        uciNumber: { type: ["string", "null"] }
+        label: { type: string }
+        currentStep: { type: integer }
+        data: { type: object, additionalProperties: true }
+        supportingDocumentUrl: { type: ["string", "null"] }
+        createdAt: { type: string }
+        updatedAt: { type: string }
+        documentRestoreFailed: { type: boolean }
+    ReferralDraftList:
+      type: object
+      required: [items]
+      properties:
+        items: { type: array, items: { $ref: "#/components/schemas/ReferralDraft" } }
     BillingStatus:
       type: string
       enum: [pending, billed, partially_paid, paid, waived]
@@ -3973,6 +4052,7 @@ components:
       type: object
       required: [intakeFields]
       properties:
+        draftId: { type: string, format: uuid }
         intakeFields: { $ref: "#/components/schemas/ReferralIntakeInput" }
         submittedVia: { type: string, enum: [portal, staff_manual_entry] }
         serviceFrequency: { type: string, enum: [one_time, monthly] }

@@ -42,11 +42,12 @@ test('remittance page separates payment and invoice history; billing import prev
   const importResult = (mode: 'preview' | 'commit') => ({
     mode, headers: ['Invoice'], rows: [
       { id: 'row-match', rowNumber: 2, invoiceNumber: 'INV-100', billedAt: '2026-01-01', uciNumber: '8936241', authNumber: 'AUTH-1', serviceMonth: '2025-12', serviceCode: '459', billedAmount: '125.00', matchStatus: 'matched', reviewReason: null, clientName: 'Ari Rivera', targetCount: 1 },
-      { id: 'row-deferred', rowNumber: 3, invoiceNumber: 'INV-101', billedAt: '2026-01-02', uciNumber: '8936241', authNumber: 'AUTH-1', serviceMonth: '2025-12', serviceCode: '459', billedAmount: '75.00', matchStatus: 'unmatched', reviewReason: 'Deferred for review', clientName: 'Ari Rivera', targetCount: 0 },
-      { id: 'row-untracked', rowNumber: 4, invoiceNumber: 'INV-102', billedAt: '2026-01-03', uciNumber: '9999999', authNumber: 'UNKNOWN', serviceMonth: '2025-12', serviceCode: '459', billedAmount: '50.00', matchStatus: 'unmatched', reviewReason: 'Service is not tracked', clientName: null, targetCount: 0, untracked: true },
+      { id: 'row-unmatched', rowNumber: 3, invoiceNumber: 'INV-101', billedAt: '2026-01-02', uciNumber: '8936241', authNumber: 'AUTH-1', serviceMonth: '2025-12', serviceCode: '459', billedAmount: '75.00', matchStatus: 'unmatched', reviewReason: 'No participant matches this UCI.', clientName: null, targetCount: 0 },
+      { id: 'row-untracked', rowNumber: 4, invoiceNumber: 'INV-102', billedAt: '2026-01-03', uciNumber: '9999999', authNumber: 'UNKNOWN', serviceMonth: '2025-12', serviceCode: '035', billedAmount: '50.00', matchStatus: 'unmatched', reviewReason: "Service code 035 isn't tracked in the portal", clientName: null, targetCount: 0, untracked: true },
     ], imported: mode === 'commit' ? 1 : 0, matched: 1, unmatched: 1, amountMismatch: 0, alreadyImported: 0,
-    deferred: 1, totalAmount: '250.00', importBatchId: mode === 'commit' ? 'billing-batch-1' : null,
+    deferred: 1, totalAmount: '295.00', importBatchId: mode === 'commit' ? 'billing-batch-1' : null,
     untrackedCount: 1, untrackedAmount: '50.00',
+    payeeProgramCount: 2, payeeProgramAmount: '45.00',
   });
   await page.route('**/api/billing/import', async (route) => {
     const body = route.request().postDataJSON();
@@ -67,11 +68,13 @@ test('remittance page separates payment and invoice history; billing import prev
   await expect(page.getByText('Preview only. Nothing has been saved yet.')).toBeVisible();
   await expect(page.getByTestId('stat-billing-matched')).toContainText('1');
   await expect(page.getByTestId('stat-billing-deferred')).toContainText('1');
+  await expect(page.getByTestId('stat-billing-payee-program')).toHaveText('Skipped: payee program (034) — 2 rows, $45.00');
   await expect(page.getByTestId('group-billing-untracked')).toContainText('1 rows');
   await expect(page.getByTestId('group-billing-untracked')).toContainText('$50.00');
-  await expect(page.getByText('Invoice total').locator('..')).toContainText('$250.00');
+  await expect(page.getByText('Invoice total').locator('..')).toContainText('$295.00');
   await page.getByTestId('button-confirm-billing-import').click();
   await expect(page.getByText('Imported 1 rows.')).toBeVisible();
+  await expect(page.getByTestId('stat-billing-payee-program')).toHaveText('Skipped: payee program (034) — 2 rows, $45.00');
   expect(calls.importBodies.map((x) => x.mode)).toEqual(['preview', 'commit']);
   expect(calls.importBodies[0].csvContent).toContain('INV-100');
   await expect.poll(() => calls.billingGets).toBeGreaterThan(1);

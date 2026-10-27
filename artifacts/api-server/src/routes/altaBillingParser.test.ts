@@ -8,6 +8,7 @@ describe("Alta billing parser (synthetic layout)", () => {
   const csv = syntheticBillingCsv([
     { amount: "40", total: "100" }, { code: "24", auth: "TEST-B", amount: "60", total: "100" },
     { code: "34", invoice: "TEST-002", amount: "10" }, { code: "490", invoice: "TEST-003", amount: "160" },
+    { code: "35", invoice: "TEST-004", amount: "12" },
     { amount: "0", total: "100" }, { amount: "", total: "100" },
   ]);
   it("finds all 17 real-layout headers after six metadata lines and skips deferred rows", () => {
@@ -15,8 +16,26 @@ describe("Alta billing parser (synthetic layout)", () => {
     expect(p.headers).toEqual(syntheticHeaders);
     expect(p.headers).toEqual(BILLING_HEADERS);
     expect(p.rows).toHaveLength(4); expect(p.deferred).toBe(2);
+    expect(p).toMatchObject({ payeeProgramCount: 1, payeeProgramAmount: "10.00" });
     expect(p.rows[0]).toMatchObject({ rowNumber: 8, billedAt: "2026-07-30", billedAmount: "40.00", serviceMonth: "2026-07" });
-    expect(p.rows.map(r => r.serviceCode)).toEqual(["459", "024", "034", "490"]);
+    expect(p.rows.map(r => r.serviceCode)).toEqual(["459", "024", "490", "035"]);
+  });
+  it("includes skipped 034 amounts in invoice totals and skips them before FMS record validation", () => {
+    const lines = [
+      { amount: "40", total: "100" },
+      { code: "034", amount: "60", total: "100", auth: "", uci: "", date: "", month: "" },
+    ];
+    const p = parseAltaBillingCsv(syntheticBillingCsv(lines));
+    expect(p.rows).toHaveLength(1);
+    expect(p).toMatchObject({ payeeProgramCount: 1, payeeProgramAmount: "60.00", deferred: 0 });
+    expect(() => parseAltaBillingCsv(syntheticBillingCsv(lines.map(r => ({ ...r, total: "40" }))))).toThrow(/total.*100.00.*40.00/i);
+  });
+  it("supports a payee-only invoice and keeps deferred payee rows in the deferred count", () => {
+    const p = parseAltaBillingCsv(syntheticBillingCsv([
+      { code: "34", amount: "10" }, { code: "034", amount: "2.50", invoice: "TEST-002" },
+      { code: "34", amount: "0", total: "10" },
+    ]));
+    expect(p).toMatchObject({ rows: [], payeeProgramCount: 2, payeeProgramAmount: "12.50", deferred: 1 });
   });
   it("rejects an invoice-total mismatch and inconsistent totals", () => {
     expect(() => parseAltaBillingCsv(syntheticBillingCsv([{ amount: "40", total: "100" }]))).toThrow(/total.*40.00.*100.00/i);

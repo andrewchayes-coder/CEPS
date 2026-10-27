@@ -27,7 +27,8 @@ const csv = () => syntheticBillingCsv([
   bill(`${nonce}-490`, "160", "490", "INV-FEE"),
   bill(`${nonce}-490`, "160", "490", "INV-COLLECTED", "07/30/2026", "08/2026"),
   bill("MISSING", "20", "459", "INV-NOAUTH"),
-  { ...bill("UNKNOWN", "10", "34", "INV-UNTRACKED"), uci: `${nonce}-unknown` },
+  { ...bill("UNKNOWN", "10", "34", "INV-PAYEE"), uci: `${nonce}-unknown` },
+  { ...bill("UNKNOWN", "12", "35", "INV-UNTRACKED"), uci: `${nonce}-unknown` },
   { ...bill(`${nonce}-459`, "0"), total: "100" },
 ]);
 const post = (data: string, mode = "commit", cookie = staff) => request(app).post("/api/billing/import").set("Cookie", cookie).send({ csvContent: data, mode });
@@ -79,22 +80,35 @@ afterAll(async () => {
 describe("billing import and staff follow-up", () => {
   it("preview is read-only, links all monthly lines, shows mismatch/unmatched/untracked", async () => {
     const r = await post(csv(), "preview"); expect(r.status, JSON.stringify(r.body)).toBe(200);
-    expect(r.body).toMatchObject({ imported: 0, matched: 3, amountMismatch: 1, unmatched: 2, deferred: 1, untrackedCount: 1, untrackedAmount: "10.00" });
+    expect(r.body).toMatchObject({ imported: 0, matched: 3, amountMismatch: 1, unmatched: 2, deferred: 1,
+      payeeProgramCount: 1, payeeProgramAmount: "10.00", untrackedCount: 1, untrackedAmount: "12.00", totalAmount: "527.00" });
     expect(r.body.rows[0].targetCount).toBe(2);
     expect(r.body.rows[1].serviceCode).toBe("024");
     expect(r.body.rows[1].reviewReason).toBe("Billed $65.00, check lines total $60.00");
-    expect(r.body.rows[5].reviewReason).toBe("Service code 034 isn't tracked in the portal");
+    expect(r.body.rows[5].reviewReason).toBe("Service code 035 isn't tracked in the portal");
+    expect(r.body.rows.some((row: { serviceCode: string }) => row.serviceCode === "034")).toBe(false);
     expect(await db.select().from(altaBillingRowsTable).where(eq(altaBillingRowsTable.createdBy, people[0]))).toHaveLength(0);
   });
   it("commits once per source row, never uncollects fees, dedupes and audits once per import", async () => {
     const r = await post(csv()); expect(r.status, JSON.stringify(r.body)).toBe(200);
     expect(r.body.imported).toBe(6);
+    expect(r.body).toMatchObject({ payeeProgramCount: 1, payeeProgramAmount: "10.00" });
+    expect(await db.select().from(altaBillingRowsTable).where(and(eq(altaBillingRowsTable.createdBy, people[0]), eq(altaBillingRowsTable.serviceCode, "034")))).toHaveLength(0);
     expect(await db.select().from(altaBillingRowLinesTable).where(inArray(altaBillingRowLinesTable.paymentAllocationId, lines))).toHaveLength(3);
     expect((await db.select().from(feesTable).where(eq(feesTable.id, fee)))[0].status).toBe("invoiced");
     expect((await db.select().from(feesTable).where(eq(feesTable.id, collected)))[0].status).toBe("collected");
     const dup = await post(csv()); expect(dup.body).toMatchObject({ imported: 0, alreadyImported: 6 });
     const audit = await db.select().from(auditLogTable).where(and(eq(auditLogTable.userId, people[0]), eq(auditLogTable.action, "import_alta_billing")));
     expect(audit).toHaveLength(2);
+  });
+  it("accepts a payee-only file without storing or matching a billing row", async () => {
+    const onlyPayee = syntheticBillingCsv([{ ...bill(`${nonce}-459`, "40", "034", "PAYEE-ONLY"), auth: "", uci: "" }]);
+    for (const mode of ["preview", "commit"]) {
+      const r = await post(onlyPayee, mode);
+      expect(r.status, JSON.stringify(r.body)).toBe(200);
+      expect(r.body).toMatchObject({ imported: 0, rows: [], matched: 0, unmatched: 0, payeeProgramCount: 1, payeeProgramAmount: "40.00", totalAmount: "40.00" });
+    }
+    expect(await db.select().from(altaBillingRowsTable).where(and(eq(altaBillingRowsTable.createdBy, people[0]), eq(altaBillingRowsTable.serviceCode, "034")))).toHaveLength(0);
   });
   it("re-bills all existing lines, preserves old links, displays latest invoice date and count", async () => {
     const r = await post(syntheticBillingCsv([bill(`${nonce}-459`, "100", "459", "INV-REBILL", "09/30/2026")]));

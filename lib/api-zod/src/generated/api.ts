@@ -46,6 +46,8 @@ export const ImportAltaBillingResponse = zod.object({
   "amountMismatch": zod.int(),
   "alreadyImported": zod.int(),
   "deferred": zod.int(),
+  "payeeProgramCount": zod.int().describe('Skipped positive service 034 rows (payee program, not FMS).'),
+  "payeeProgramAmount": zod.string().describe('Total positive Line Amount of skipped service 034 rows; included in invoice total validation.'),
   "totalAmount": zod.string(),
   "importBatchId": zod.string().nullable()
 })

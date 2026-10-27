@@ -106,6 +106,7 @@ export async function importBilling(csv: string, mode: "preview" | "commit", use
       unmatched: rows.filter(r => r.matchStatus === "unmatched").length, amountMismatch: rows.filter(r => r.matchStatus === "amount_mismatch").length,
       alreadyImported: rows.filter(r => r.matchStatus === "already_imported").length,
       rebilled: rows.filter(r => r.rebilled).length,
+      payeeProgramCount: parsed.payeeProgramCount, payeeProgramAmount: parsed.payeeProgramAmount,
       untrackedCount: rows.filter(r => r.untracked && r.matchStatus !== "already_imported").length,
       untrackedAmount: rows.filter(r => r.untracked && r.matchStatus !== "already_imported").reduce((sum, r) => sum.plus(money(r.billedAmount)), money(0)).toFixed(2) };
     if (mode === "commit") {
@@ -116,6 +117,6 @@ export async function importBilling(csv: string, mode: "preview" | "commit", use
       await audit(userId, "import_alta_billing", "alta_billing", batch!, JSON.stringify({ ...counts, deferred: parsed.deferred }), tx as unknown as typeof db);
     }
     return { mode, headers: parsed.headers, rows, ...counts, deferred: parsed.deferred, importBatchId: batch,
-      totalAmount: parsed.rows.reduce((sum, r) => sum.plus(money(r.billedAmount)), money(0)).toFixed(2) };
+      totalAmount: parsed.rows.reduce((sum, r) => sum.plus(money(r.billedAmount)), money(parsed.payeeProgramAmount)).toFixed(2) };
   });
 }

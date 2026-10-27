@@ -94,6 +94,9 @@ function ResultSummary({ result }: { result: Result }) {
           </div>
         ))}
       </div>
+      <p className="text-sm text-muted-foreground" data-testid="stat-billing-payee-program">
+        Skipped: payee program (034) — <ProtectedData>{result.payeeProgramCount ?? 0}</ProtectedData> rows, <ProtectedData>{money(result.payeeProgramAmount)}</ProtectedData>
+      </p>
       <RowsTable rows={tracked} testId="table-billing-import-rows" />
       {untrackedCount > 0 && (
         <div className="space-y-2" data-testid="group-billing-untracked">

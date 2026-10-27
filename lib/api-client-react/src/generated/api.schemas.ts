@@ -125,6 +125,10 @@ export interface BillingImportResult {
   amountMismatch: number;
   alreadyImported: number;
   deferred: number;
+  /** Skipped positive service 034 rows (payee program, not FMS). */
+  payeeProgramCount: number;
+  /** Total positive Line Amount of skipped service 034 rows; included in invoice total validation. */
+  payeeProgramAmount: string;
   totalAmount: string;
   /** @nullable */
   importBatchId: string | null;

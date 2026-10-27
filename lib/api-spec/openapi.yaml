@@ -3249,7 +3249,7 @@ components:
         targetCount: { type: integer }
     BillingImportResult:
       type: object
-      required: [mode, headers, rows, imported, matched, unmatched, amountMismatch, alreadyImported, deferred, totalAmount, importBatchId]
+      required: [mode, headers, rows, imported, matched, unmatched, amountMismatch, alreadyImported, deferred, payeeProgramCount, payeeProgramAmount, totalAmount, importBatchId]
       properties:
         rebilled: { type: integer }
         untrackedCount: { type: integer }
@@ -3263,6 +3263,8 @@ components:
         amountMismatch: { type: integer }
         alreadyImported: { type: integer }
         deferred: { type: integer }
+        payeeProgramCount: { type: integer, description: "Skipped positive service 034 rows (payee program, not FMS)." }
+        payeeProgramAmount: { type: string, description: "Total positive Line Amount of skipped service 034 rows; included in invoice total validation." }
         totalAmount: { type: string }
         importBatchId: { type: ["string", "null"] }
     BillingRowsResult:

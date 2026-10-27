@@ -10,7 +10,7 @@ export interface BillingSource {
 export const billingFingerprint = (r: BillingSource) => createHash("sha256")
   .update([r.invoiceNumber, r.uciNumber, r.authNumber, r.serviceMonth, r.billedAmount].join("|")).digest("hex");
 
-export function parseAltaBillingCsv(text: string): { headers: string[]; rows: BillingSource[]; deferred: number } {
+export function parseAltaBillingCsv(text: string): { headers: string[]; rows: BillingSource[]; deferred: number; payeeProgramCount: number; payeeProgramAmount: string } {
   const grid = parseCsv(text.replace(/^\uFEFF/, ""));
   const normalize = (s: string) => s.trim().toLowerCase();
   const headerIndex = grid.findIndex(r => BILLING_HEADERS.every(h => r.some(c => normalize(c) === normalize(h))));
@@ -23,6 +23,8 @@ export function parseAltaBillingCsv(text: string): { headers: string[]; rows: Bi
   const rows: BillingSource[] = [];
   const invoices = new Map<string, { expected: string; total: ReturnType<typeof money> }>();
   let deferred = 0;
+  let payeeProgramCount = 0;
+  let payeeProgramAmount = money(0);
   for (let i = headerIndex + 1; i < grid.length; i++) {
     const raw = grid[i];
     if (!raw.some(v => v.trim())) continue;
@@ -40,20 +42,27 @@ export function parseAltaBillingCsv(text: string): { headers: string[]; rows: Bi
     if (!invoice) invoices.set(invoiceNumber, { expected, total: money(0) });
     if (!amountText || /^0+(?:\.0{1,2})?$/.test(amountText)) { deferred++; continue; }
     const billedAmount = validatePositiveMoney(amountText);
+    if (!billedAmount) throw new Error(`Row ${i + 1}: invalid Line Amount. Nothing imported.`);
+    // Invoice reconciliation includes every positive line, even non-FMS payee rows.
+    invoices.get(invoiceNumber)!.total = invoices.get(invoiceNumber)!.total.plus(money(billedAmount));
+    const service = get("Service");
+    if (/^\d{1,3}$/.test(service) && service.padStart(3, "0") === "034") {
+      payeeProgramCount++;
+      payeeProgramAmount = payeeProgramAmount.plus(money(billedAmount));
+      continue;
+    }
     const billedAt = toIsoDate(get("Invoice Date"));
     const serviceMonth = toServiceMonth(get("Service Month/Year"));
-    const service = get("Service");
     if (!billedAmount || !billedAt || !Number.isFinite(Date.parse(`${billedAt}T00:00:00Z`)) || new Date(`${billedAt}T00:00:00Z`).toISOString().slice(0, 10) !== billedAt ||
         !serviceMonth || !get("UCI #") || !get("Auth #") || !/^\d{1,3}$/.test(service)) {
       throw new Error(`Row ${i + 1}: invalid Invoice Date, Line Amount, service month, UCI, authorization or service code. Nothing imported.`);
     }
-    invoices.get(invoiceNumber)!.total = invoices.get(invoiceNumber)!.total.plus(money(billedAmount));
     rows.push({ rowNumber: i + 1, invoiceNumber, billedAt, serviceMonth,
       uciNumber: get("UCI #"), authNumber: get("Auth #"), serviceCode: service.padStart(3, "0"), billedAmount });
   }
   for (const [number, invoice] of invoices) {
     if (!invoice.total.equals(money(invoice.expected))) throw new Error(`Invoice ${number}: positive Line Amounts total $${invoice.total.toFixed(2)}, but Total Amount is $${invoice.expected}. Nothing imported.`);
   }
-  if (!rows.length) throw new Error("No positive billed rows found. Deferred rows do not mark anything Billed.");
-  return { headers, rows, deferred };
+  if (!rows.length && !payeeProgramCount) throw new Error("No positive billed rows found. Deferred rows do not mark anything Billed.");
+  return { headers, rows, deferred, payeeProgramCount, payeeProgramAmount: payeeProgramAmount.toFixed(2) };
 }

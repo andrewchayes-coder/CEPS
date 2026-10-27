@@ -41,3 +41,4 @@
 - [Date display policy](date-display-policy.md) — MM/DD/YYYY dates, MM/YYYY service months; calendar dates never shift, timestamps use Pacific, and ISO input/sort values stay canonical.
 - [Browser translation policy](browser-translation-policy.md) — CEPS uses browser translation; keep English labels translatable but protect record data and guard React from detached translator nodes.
 - [Alta billing and re-bills](alta-billing-policy.md) — billing is separate from payment; preserve re-bills, use source invoice dates for aging, and test only with synthetic report data.
+- [Referral draft policy](referral-draft-policy.md) — Option 1 is private coordinator-only work, keyed by UCI, with no expiry or versions and explicit lifecycle deletion.

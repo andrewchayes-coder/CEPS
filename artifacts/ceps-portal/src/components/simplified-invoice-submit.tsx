@@ -199,7 +199,7 @@ export function SimplifiedInvoiceSubmit() {
                   {!linkedClientId || linkedError ? (
                     <p className="text-sm text-destructive" role="alert" data-testid="text-invoice-unlinked">Your account is not linked to a participant record. Contact CEPS to submit invoices.</p>
                   ) : (
-                    <Input value={linkedLoading ? 'Loading…' : linkedClient ? `${linkedClient.firstName} ${linkedClient.lastName}` : ''} readOnly disabled data-testid="text-invoice-participant" />
+                    <Input value={linkedLoading ? 'Loading…' : linkedClient ? `${linkedClient.firstName} ${linkedClient.lastName}` : ''} readOnly disabled translate="no" className="notranslate" data-testid="text-invoice-participant" />
                   )}
                 </div>
               ) : <FormField control={form.control} name="clientId" render={({ field }) => (

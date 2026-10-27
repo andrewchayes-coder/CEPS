@@ -1,3 +1,4 @@
+import { ProtectedData } from '@/components/protected-data';
 import React, { useState } from 'react';
 import { apiErrorMessage } from '@/lib/api-error';
 import {
@@ -206,7 +207,7 @@ function RemoveFamilyRepDialog({ clientId, rep }: { clientId: string; rep: Famil
         <DialogHeader>
           <DialogTitle>Remove Family Representative?</DialogTitle>
           <DialogDescription>
-            Are you sure you want to remove <strong>{rep.name}</strong> from this participant's case?
+            Are you sure you want to remove <strong><ProtectedData>{rep.name}</ProtectedData></strong> from this participant's case?
             If this representative has portal access, it will be revoked immediately.
           </DialogDescription>
         </DialogHeader>
@@ -353,7 +354,7 @@ export function FamilyRepresentativesSection({
               <div key={rep.id} className="min-w-0 space-y-3 rounded-md border bg-card p-3 shadow-sm sm:p-4" data-testid={`rep-row-${rep.id}`}>
                 <div className="min-w-0 space-y-2">
                   <div className="flex flex-wrap items-center gap-2">
-                    <span className="min-w-0 break-words font-semibold text-foreground">{rep.name}</span>
+                    <span className="min-w-0 break-words font-semibold text-foreground"><ProtectedData>{rep.name}</ProtectedData></span>
                     <Badge variant="outline" className="capitalize text-xs font-normal">
                       {rep.relationship || 'unknown'}
                     </Badge>
@@ -380,9 +381,9 @@ export function FamilyRepresentativesSection({
                     </Badge>
                   </div>
                   <div className="space-y-1 text-sm text-muted-foreground">
-                    <div className="flex min-w-0 items-start gap-2" data-testid={`rep-phone-${rep.id}`}><Phone className="mt-0.5 h-3.5 w-3.5 shrink-0" /><span className="min-w-0 break-words">Phone: {rep.phone || '-'}</span></div>
-                    <div className="flex min-w-0 items-start gap-2" data-testid={`rep-email-${rep.id}`}><Mail className="mt-0.5 h-3.5 w-3.5 shrink-0" /><span className="min-w-0 break-all">Email: {rep.email || '-'}</span></div>
-                    <div className="flex min-w-0 items-start gap-2" data-testid={`rep-address-${rep.id}`}><MapPin className="mt-0.5 h-3.5 w-3.5 shrink-0" /><span className="min-w-0 break-words">Address: {rep.address || '-'}</span></div>
+                    <div className="flex min-w-0 items-start gap-2" data-testid={`rep-phone-${rep.id}`}><Phone className="mt-0.5 h-3.5 w-3.5 shrink-0" /><span className="min-w-0 break-words">Phone: <ProtectedData>{rep.phone || '-'}</ProtectedData></span></div>
+                    <div className="flex min-w-0 items-start gap-2" data-testid={`rep-email-${rep.id}`}><Mail className="mt-0.5 h-3.5 w-3.5 shrink-0" /><span className="min-w-0 break-all">Email: <ProtectedData>{rep.email || '-'}</ProtectedData></span></div>
+                    <div className="flex min-w-0 items-start gap-2" data-testid={`rep-address-${rep.id}`}><MapPin className="mt-0.5 h-3.5 w-3.5 shrink-0" /><span className="min-w-0 break-words">Address: <ProtectedData>{rep.address || '-'}</ProtectedData></span></div>
                   </div>
                 </div>
                 

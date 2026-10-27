@@ -1,3 +1,4 @@
+import { ProtectedData } from '@/components/protected-data';
 import React, { useState } from 'react';
 import { useListPayments, useDeletePayment } from '@workspace/api-client-react';
 import { useAuth } from '@/components/auth/auth-provider';
@@ -125,24 +126,24 @@ export default function PaymentsPage() {
               ) : (
                 payments.map(p => (
                   <TableRow key={p.id}>
-                    <TableCell className="whitespace-nowrap">{formatDate(p.checkDate)}</TableCell>
+                    <TableCell className="whitespace-nowrap"><ProtectedData>{formatDate(p.checkDate)}</ProtectedData></TableCell>
                     <TableCell className="font-mono text-sm">
                       <Link href={`/payments/${p.id}`} className="text-primary hover:underline" data-testid="link-payment">
-                        {p.qbCheckNumber}
+                        <ProtectedData>{p.qbCheckNumber}</ProtectedData>
                       </Link>
                     </TableCell>
                     <TableCell><VendorLink id={p.vendorId} name={p.vendorName} /></TableCell>
                     <TableCell className="text-muted-foreground"><ClientLink id={p.clientId} name={p.clientName} className="text-muted-foreground hover:underline" /></TableCell>
-                    <TableCell className="whitespace-nowrap" data-testid={`text-payment-service-month-${p.id}`}>{formatPaymentServiceMonths(p)}</TableCell>
-                    <TableCell className="text-right font-medium">${parseFloat(p.amount).toFixed(2)}</TableCell>
+                    <TableCell className="whitespace-nowrap" data-testid={`text-payment-service-month-${p.id}`}><ProtectedData>{formatPaymentServiceMonths(p)}</ProtectedData></TableCell>
+                    <TableCell className="text-right font-medium">$<ProtectedData>{parseFloat(p.amount).toFixed(2)}</ProtectedData></TableCell>
                     <TableCell>
                       {p.remitted ? <CheckCircle2 className="w-5 h-5 text-chart-5" aria-label="Fully remitted" /> : (
                         <span className="text-xs text-muted-foreground">
                           {p.allocations?.some((line) => line.remitted === 'full') && p.allocations.some((line) => line.remitted !== 'full') && (
                             <span className="block font-semibold text-amber-700 dark:text-amber-300">Partial</span>
                           )}
-                          <MetricHelp label="Allocated" explanation="Amount matched to remittances." /> ${parseFloat(p.allocatedAmount ?? '0').toFixed(2)}<br />
-                          <MetricHelp label="Remaining" explanation="Amount not yet matched to a remittance." /> ${parseFloat(p.remainingAmount ?? p.amount).toFixed(2)}
+                          <MetricHelp label="Allocated" explanation="Amount matched to remittances." /> $<ProtectedData>{parseFloat(p.allocatedAmount ?? '0').toFixed(2)}</ProtectedData><br />
+                          <MetricHelp label="Remaining" explanation="Amount not yet matched to a remittance." /> $<ProtectedData>{parseFloat(p.remainingAmount ?? p.amount).toFixed(2)}</ProtectedData>
                         </span>
                       )}
                     </TableCell>

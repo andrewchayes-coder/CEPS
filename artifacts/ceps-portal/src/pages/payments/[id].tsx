@@ -1,3 +1,4 @@
+import { ProtectedData } from '@/components/protected-data';
 import React from 'react';
 import { useLocation, useParams, Link } from 'wouter';
 import { useGetPayment, useDeletePayment } from '@workspace/api-client-react';
@@ -78,9 +79,9 @@ export default function PaymentDetailPage() {
               </>
             )}
             <dt className="text-muted-foreground">Check Date:</dt>
-            <dd className="col-span-2">{formatDate(payment.checkDate)}</dd>
+            <dd className="col-span-2"><ProtectedData>{formatDate(payment.checkDate)}</ProtectedData></dd>
             <dt className="text-muted-foreground">Amount:</dt>
-            <dd className="col-span-2 font-bold text-lg">${parseFloat(payment.amount).toFixed(2)}</dd>
+            <dd className="col-span-2 font-bold text-lg"><ProtectedData>${parseFloat(payment.amount).toFixed(2)}</ProtectedData></dd>
             <dt className="text-muted-foreground">Payment Type:</dt>
             <dd className="col-span-2 capitalize">{payment.paymentType.replace('_', ' ')}</dd>
             <dt className="text-muted-foreground">Source:</dt>
@@ -90,9 +91,9 @@ export default function PaymentDetailPage() {
               {payment.remitted ? <CheckCircle2 className="w-4 h-4 text-chart-5" /> : <span className="text-muted-foreground">Not yet remitted</span>}
             </dd>
             <dt className="text-muted-foreground"><MetricHelp label="Allocated" explanation="Amount matched to remittances." /></dt>
-            <dd className="col-span-2">${parseFloat(payment.allocatedAmount ?? '0').toFixed(2)}</dd>
+            <dd className="col-span-2"><ProtectedData>${parseFloat(payment.allocatedAmount ?? '0').toFixed(2)}</ProtectedData></dd>
             <dt className="text-muted-foreground"><MetricHelp label="Remaining" explanation="Amount not yet matched to a remittance." /></dt>
-            <dd className="col-span-2">${parseFloat(payment.remainingAmount ?? payment.amount).toFixed(2)}</dd>
+            <dd className="col-span-2"><ProtectedData>${parseFloat(payment.remainingAmount ?? payment.amount).toFixed(2)}</ProtectedData></dd>
           </dl>
 
           <div className="pt-4 border-t space-y-3 mt-4">
@@ -103,13 +104,13 @@ export default function PaymentDetailPage() {
                   <div className="flex justify-between font-medium">
                     <span>
                       {alloc.authorizationId ? (
-                        <Link href={`/authorizations/${alloc.authorizationId}`} className="text-primary hover:underline">{alloc.authNumber}</Link>
+                        <Link href={`/authorizations/${alloc.authorizationId}`} className="text-primary hover:underline"><ProtectedData>{alloc.authNumber}</ProtectedData></Link>
                       ) : (
                         <span className="italic">Manual / No Auth</span>
                       )}
                     </span>
                     <span className="flex items-center gap-2">
-                      ${parseFloat(alloc.amount).toFixed(2)}
+                      <ProtectedData>${parseFloat(alloc.amount).toFixed(2)}</ProtectedData>
                       <Badge variant="outline" className={
                         alloc.remitted === 'full' ? 'border-chart-5/30 bg-chart-5/10 text-chart-5' :
                         alloc.remitted === 'partial' ? 'border-chart-2/30 bg-chart-2/10 text-chart-2' :

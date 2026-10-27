@@ -1,3 +1,4 @@
+import { ProtectedData } from '@/components/protected-data';
 import React, { useState } from 'react';
 import { useListAuthorizations, useDeleteAuthorization } from '@workspace/api-client-react';
 import { DeleteEntityButton } from '@/components/delete-entity-button';
@@ -127,13 +128,13 @@ export default function AuthorizationsPage() {
                     <TableRow key={auth.id} className={isExpiring ? 'bg-chart-1/5' : ''}>
                       <TableCell className="font-medium">
                         <Link href={`/authorizations/${auth.id}`} className="text-primary hover:underline" data-testid="link-authorization">
-                          {auth.authNumber}
+                          <ProtectedData>{auth.authNumber}</ProtectedData>
                         </Link>
                       </TableCell>
                       <TableCell><ClientLink id={auth.clientId} name={auth.clientName} /></TableCell>
                       <TableCell><VendorLink id={auth.vendorId} name={auth.vendorName} /></TableCell>
                       <TableCell className="text-sm whitespace-nowrap">
-                        {formatDateRange(auth.servicePeriodStart, auth.servicePeriodEnd)}
+                        <ProtectedData>{formatDateRange(auth.servicePeriodStart, auth.servicePeriodEnd)}</ProtectedData>
                         {isExpiring && (
                            <span className="flex items-center text-xs text-chart-1 mt-1 font-medium">
                              <AlertCircle className="w-3 h-3 mr-1" /> {auth.daysUntilExpiry} days left
@@ -144,7 +145,7 @@ export default function AuthorizationsPage() {
                         <MonthlyAmount auth={auth} />
                       </TableCell>
                       <TableCell className="text-right">
-                        ${parseFloat(auth.maxPeriodAmount).toFixed(2)}
+                        $<ProtectedData>{parseFloat(auth.maxPeriodAmount).toFixed(2)}</ProtectedData>
                       </TableCell>
                       <TableCell>
                         <Badge variant="outline" className={

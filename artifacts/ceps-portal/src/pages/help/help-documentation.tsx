@@ -4,6 +4,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
 import { getVisibleRoleDocs, type RoleDoc } from './content';
 import { formatDate, formatDateTime, formatMonth } from '@/lib/dates';
+import { ProtectedData } from '@/components/protected-data';
 
 export function HelpDocumentation({ role }: { role?: string }) {
   const docs = getVisibleRoleDocs(role);
@@ -28,9 +29,9 @@ export function HelpDocumentation({ role }: { role?: string }) {
       </div>
       {docs.length > 0 && (
         <p className="text-sm text-muted-foreground" data-testid="help-date-formats">
-          Dates use MM/DD/YYYY (for example, {formatDate('2026-10-22')}).
-          Dates with times use Pacific time (for example, {formatDateTime('2026-10-22T22:05:00Z')}).
-          Service months use MM/YYYY (for example, {formatMonth('2026-10')}).
+          Dates use MM/DD/YYYY (for example, <ProtectedData>{formatDate('2026-10-22')}</ProtectedData>).
+          Dates with times use Pacific time (for example, <ProtectedData>{formatDateTime('2026-10-22T22:05:00Z')}</ProtectedData>).
+          Service months use MM/YYYY (for example, <ProtectedData>{formatMonth('2026-10')}</ProtectedData>).
           Native date and month inputs follow your computer&apos;s settings.
         </p>
       )}

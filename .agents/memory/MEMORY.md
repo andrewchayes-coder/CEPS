@@ -39,3 +39,4 @@
 - [Isolated UI test routing](isolated-ui-test-routing.md) — isolated Vite servers bypass the artifact gateway; real-API tests need explicit request forwarding.
 - [Authorization comments](authorization-comments-policy.md) — Comments and verbatim PDF-derived POS Notes must stay separate; renamed optional CSV headers need legacy aliases.
 - [Date display policy](date-display-policy.md) — MM/DD/YYYY dates, MM/YYYY service months; calendar dates never shift, timestamps use Pacific, and ISO input/sort values stay canonical.
+- [Browser translation policy](browser-translation-policy.md) — CEPS uses browser translation; keep English labels translatable but protect record data and guard React from detached translator nodes.

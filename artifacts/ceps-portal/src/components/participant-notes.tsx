@@ -1,3 +1,4 @@
+import { ProtectedData } from '@/components/protected-data';
 import { useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import {
@@ -50,9 +51,9 @@ function NoteItem({ note, clientId, onDelete }: { note: ClientNote; clientId: st
   return (
     <li className="rounded-md border p-3 space-y-2" data-testid={`note-${note.id}`}>
       <div className="flex flex-wrap items-center gap-2 text-sm">
-        <span className="font-medium" data-testid={`note-author-${note.id}`}>{note.authorName}</span>
+        <span className="font-medium" data-testid={`note-author-${note.id}`}><ProtectedData>{note.authorName}</ProtectedData></span>
         <Badge variant="outline" data-testid={`note-role-${note.id}`}>{note.authorRole === 'staff' ? 'CEPS' : note.authorRole === 'service_coordinator' ? 'SC' : note.authorRole.replaceAll('_', ' ')}</Badge>
-        <span className="text-xs text-muted-foreground" data-testid={`note-created-${note.id}`}>{formatPacific(note.createdAt)}</span>
+        <span className="text-xs text-muted-foreground" data-testid={`note-created-${note.id}`}><ProtectedData>{formatPacific(note.createdAt)}</ProtectedData></span>
       </div>
       {editing ? (
         <div className="space-y-2">
@@ -68,7 +69,7 @@ function NoteItem({ note, clientId, onDelete }: { note: ClientNote; clientId: st
           <p className="whitespace-pre-wrap break-words text-sm" data-testid={`note-body-${note.id}`}>{note.body}</p>
           {note.updatedAt && (
             <p className="text-xs text-muted-foreground" data-testid={`note-edited-${note.id}`}>
-              Edited {formatPacific(note.updatedAt)}{note.updatedByName ? ` by ${note.updatedByName}` : ''}
+              Edited <ProtectedData>{formatPacific(note.updatedAt)}</ProtectedData>{note.updatedByName && <> by <ProtectedData>{note.updatedByName}</ProtectedData></>}
             </p>
           )}
           {(note.canEdit || note.canDelete) && (

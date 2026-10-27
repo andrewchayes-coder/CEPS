@@ -3,6 +3,7 @@ import type { Authorization } from '@workspace/api-client-react';
 import { formatDate } from '@/lib/dates';
 import { formatMoney } from '@/lib/utils';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+import { ProtectedData } from '@/components/protected-data';
 
 export type MonthlyAmountFields = Pick<Authorization,
   'monthlyAmount' | 'oneTimeAmount' | 'monthlyAmountChanged' |
@@ -26,7 +27,9 @@ export function changedTooltipText(a: MonthlyAmountFields): string {
 export function MonthlyAmount({ auth }: { auth: MonthlyAmountFields }) {
   return (
     <span className="inline-flex items-center justify-end gap-1.5" data-testid="authorization-monthly-amount">
-      <span>{monthlyAmountText(auth)}</span>
+      {present(auth.monthlyAmount) ? <ProtectedData>{money(auth.monthlyAmount)}</ProtectedData>
+        : present(auth.oneTimeAmount) ? <><ProtectedData>{money(auth.oneTimeAmount)}</ProtectedData> one-time</>
+        : '—'}
       {auth.monthlyAmountChanged && (
         <TooltipProvider delayDuration={100}>
           <Tooltip>
@@ -35,7 +38,11 @@ export function MonthlyAmount({ auth }: { auth: MonthlyAmountFields }) {
                 changed
               </span>
             </TooltipTrigger>
-            <TooltipContent>{changedTooltipText(auth)}</TooltipContent>
+            <TooltipContent>
+              Was {present(auth.previousMonthlyAmount) ? <ProtectedData>{money(auth.previousMonthlyAmount)}</ProtectedData> : '—'}
+              {' '}until {formatDate(auth.monthlyAmountChangedReceivedDate) !== '—'
+                ? <ProtectedData>{formatDate(auth.monthlyAmountChangedReceivedDate)}</ProtectedData> : 'Received date not recorded'}
+            </TooltipContent>
           </Tooltip>
         </TooltipProvider>
       )}
@@ -48,7 +55,9 @@ export function MonthlyAmountLine({ auth }: { auth: MonthlyAmountFields }) {
   if (!monthly && !present(auth.oneTimeAmount)) return null;
   return (
     <p className="text-xs text-muted-foreground" data-testid="authorization-card-amount">
-      {monthly ? `Monthly: ${money(auth.monthlyAmount!)}` : `One-time: ${money(auth.oneTimeAmount!)}`}
+      {monthly ? 'Monthly: ' : 'One-time: '}
+      <ProtectedData>{money(monthly ? auth.monthlyAmount! : auth.oneTimeAmount!)}</ProtectedData>
+      {!monthly && ' one-time'}
     </p>
   );
 }

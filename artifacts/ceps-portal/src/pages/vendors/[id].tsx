@@ -41,6 +41,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { DateRangeFilter } from '@/components/date-range-filter';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow, SortableTableHead, useTableSort } from '@/components/ui/table';
 import { useDebounce } from '@/hooks/use-debounce';
+import { ProtectedData } from '@/components/protected-data';
 import { formatDate } from '@/lib/dates';
 import { formatMoney } from '@/lib/utils';
 import { ClientLink } from '@/components/entity-links';
@@ -446,7 +447,7 @@ function VendorPaymentsTab({ vendorId }: { vendorId: string }) {
            </CardHeader>
            <CardContent>
               {reportLoading ? <Skeleton className="h-8 w-24" /> : (
-                 <div className="text-2xl font-bold text-primary" data-testid="stat-total-paid">${formatMoney(report.totalPaid)}</div>
+                 <div className="text-2xl font-bold text-primary" data-testid="stat-total-paid">$<ProtectedData>{formatMoney(report.totalPaid)}</ProtectedData></div>
               )}
            </CardContent>
          </Card>

@@ -1,3 +1,4 @@
+import { ProtectedData } from '@/components/protected-data';
 import { referralValueLabel } from '@/lib/referral-labels';
 import React, { useState } from 'react';
 import { useListReferrals } from '@workspace/api-client-react';
@@ -220,7 +221,7 @@ export default function ReferralsPage() {
                     </TableCell>
                     <TableCell>{referral.vendorName || '—'}</TableCell>
                     <TableCell className="text-muted-foreground">
-                      {referral.coordinatorName || 'Unassigned'}
+                      {referral.coordinatorName ? <ProtectedData>{referral.coordinatorName}</ProtectedData> : 'Unassigned'}
                     </TableCell>
                     <TableCell>
                       {referralValueLabel(referral.intakeFields?.serviceType)}

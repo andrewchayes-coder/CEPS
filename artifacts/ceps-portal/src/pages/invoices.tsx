@@ -1,3 +1,4 @@
+import { ProtectedData } from '@/components/protected-data';
 import React, { useState, useEffect } from 'react';
 import { useListInvoices, useListReadyToApproveInvoices, useListReadyForCheckWritingInvoices } from '@workspace/api-client-react';
 import { Link, useSearch } from 'wouter';
@@ -195,7 +196,7 @@ export default function InvoicesPage() {
               ) : (
                 displayedInvoices?.map((invoice) => (
                   <TableRow key={invoice.id}>
-                    <TableCell className="font-medium whitespace-nowrap">{getInvoiceDisplayMonth(invoice)}</TableCell>
+                    <TableCell className="font-medium whitespace-nowrap"><ProtectedData>{getInvoiceDisplayMonth(invoice)}</ProtectedData></TableCell>
                     <TableCell><DocumentTypeBadge type={(invoice).documentType} testId={`badge-invoice-type-${invoice.id}`} /></TableCell>
                     <TableCell><VendorLink id={invoice.vendorId} name={invoice.vendorName} /></TableCell>
                     <TableCell><ClientLink id={invoice.clientId} name={invoice.clientName} /></TableCell>
@@ -210,12 +211,12 @@ export default function InvoicesPage() {
                         ))
                       ) : (
                         invoice.authorizationId ? (
-                          <Link href={`/authorizations/${invoice.authorizationId}`} className="text-primary hover:underline">{invoice.authNumber}</Link>
+                          <Link href={`/authorizations/${invoice.authorizationId}`} className="text-primary hover:underline"><ProtectedData>{invoice.authNumber}</ProtectedData></Link>
                         ) : invoice.authNumber || '-'
                       )}
                     </TableCell>
                     <TableCell className="whitespace-nowrap text-xs" data-testid={`text-invoice-svc-code-${invoice.id}`}>{formatServiceCodes(invoice)}</TableCell>
-                    <TableCell className="text-right font-medium">${parseFloat(invoice.amountRequested).toFixed(2)}</TableCell>
+                    <TableCell className="text-right font-medium">$<ProtectedData>{parseFloat(invoice.amountRequested).toFixed(2)}</ProtectedData></TableCell>
                     <TableCell>
                       <StatusBadge status={invoice.status} />
                     </TableCell>

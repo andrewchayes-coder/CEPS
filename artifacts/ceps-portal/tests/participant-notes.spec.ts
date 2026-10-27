@@ -1,12 +1,13 @@
 import { expect, test, type Page } from '@playwright/test';
+import { simulateBrowserTranslation } from './translation-helper';
 
 const client = { id: 'notes-client', firstName: 'Ari', lastName: 'Rivera', uciNumber: '8936241', dateOfBirth: '2011-03-12', status: 'active' };
 
-async function setup(page: Page, role: string, notes: any[]) {
+async function setup(page: Page, role: string, notes: any[], fees: any[] = []) {
   const calls = { notesGets: 0, posts: [] as any[], patches: [] as any[], deletes: 0 };
   await page.route('**/api/auth/me', (r) => r.fulfill({ json: { id: 'u1', name: 'Pat Staff', email: 'p@example.test', role, permissions: [] } }));
   await page.route('**/api/clients/notes-client/case', (r) => r.fulfill({ json: { client, authorizations: [], invoices: [], payments: [], remittances: [], referrals: [], documents: [] } }));
-  await page.route('**/api/fees**', (r) => r.fulfill({ json: [] }));
+  await page.route('**/api/fees**', (r) => r.fulfill({ json: fees }));
   await page.route('**/api/family-representatives**', (r) => r.fulfill({ json: [] }));
   await page.route('**/api/clients/notes-client/message-threads**', (r) => r.fulfill({ json: { total: 0, items: [] } }));
   await page.route('**/api/clients/notes-client/notes**', async (r) => {
@@ -30,6 +31,36 @@ async function setup(page: Page, role: string, notes: any[]) {
 }
 
 const base = { authorName: 'Pat Staff', authorRole: 'staff', updatedAt: null, updatedByName: null, canEdit: true, canDelete: true };
+
+test('translated participant tabs, dialog and note submission keep record data exact', async ({ page }) => {
+  const errors: Error[] = [];
+  page.on('pageerror', (error) => errors.push(error));
+  const calls = await setup(page, 'staff',
+    [{ ...base, id: 'n1', body: 'A note', createdAt: '2025-01-15T20:30:00.000Z' }],
+    [{ id: 'fee-1', clientId: client.id, authorizationId: null, paymentId: null,
+      amount: '160.00', remittedAmount: '0.00', feeMonth: '2026-09',
+      ruleApplied: 'confirmed_flat_160_per_participant_service_month',
+      status: 'pending', notes: null, createdAt: '2026-09-01T12:00:00.000Z' }],
+  );
+  await page.goto('/clients/notes-client');
+  await expect(page.getByTestId('card-contact-information')).toBeVisible();
+  await expect(page.getByRole('link', { name: 'Ari Rivera' }).first().locator('[translate="no"]')).toBeVisible();
+  await expect(page.getByText(client.uciNumber, { exact: true })).toHaveAttribute('translate', 'no');
+  expect(await simulateBrowserTranslation(page)).toBeGreaterThan(10);
+  await page.getByTestId('tab-fees').click();
+  await expect(page.getByTestId('tab-fees')).toHaveAttribute('data-state', 'active');
+  await expect(page.locator('td [translate="no"]').filter({ hasText: '160.00' }).first()).toBeVisible();
+  await page.getByRole('tab', { name: 'Overview' }).click();
+  await page.getByTestId('button-delete-note-n1').click();
+  await expect(page.getByRole('alertdialog')).toBeVisible();
+  await page.getByTestId('button-cancel-delete-note').click();
+  await expect(page.getByRole('alertdialog')).toHaveCount(0);
+  await page.getByTestId('input-new-note').fill('Still here after translation');
+  await page.getByTestId('button-add-note').click();
+  await expect(page.getByTestId('note-n-new')).toBeVisible();
+  expect(calls.posts[0]).toEqual({ body: 'Still here after translation' });
+  expect(errors).toEqual([]);
+});
 
 test('add, edit, cancel, delete notes', async ({ page }) => {
   const calls = await setup(page, 'staff', [

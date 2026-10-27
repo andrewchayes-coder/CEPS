@@ -1,3 +1,4 @@
+import { ProtectedData } from '@/components/protected-data';
 import { formatDate } from '@/lib/dates';
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
@@ -162,7 +163,7 @@ export function MessageThreadView({ threadId, untilDate }: { threadId: string; u
         <h2 className="break-words text-lg font-semibold" data-testid="text-thread-subject">{t.subject}</h2>
         <p className="text-sm text-muted-foreground">
           Participant:{' '}
-          {isStaffLike ? <Link href={`/clients/${t.clientId}`} className="text-primary hover:underline" data-testid="link-thread-client">{t.clientName}</Link> : t.clientName}
+          {isStaffLike ? <Link href={`/clients/${t.clientId}`} className="text-primary hover:underline"><ProtectedData>{t.clientName}</ProtectedData></Link> : <ProtectedData>{t.clientName}</ProtectedData>}
         </p>
         {user?.role === 'service_coordinator' && (
           <p className="text-sm text-muted-foreground" data-testid="text-thread-assignment">{t.assignee ? `Assigned to ${t.assignee.name}` : 'Unassigned'}</p>
@@ -176,7 +177,7 @@ export function MessageThreadView({ threadId, untilDate }: { threadId: string; u
       </header>
       {untilDate && (
         <div className="flex items-center justify-between gap-2 border-b bg-secondary px-4 py-2 text-sm" data-testid="banner-message-history">
-          <span>Showing messages up to {formatDate(untilDate)}.</span>
+          <span>Showing messages up to <ProtectedData>{formatDate(untilDate)}</ProtectedData>.</span>
           <Button size="sm" variant="outline" onClick={jumpToLatest} data-testid="button-jump-to-latest">Jump to latest</Button>
         </div>
       )}
@@ -197,9 +198,9 @@ export function MessageThreadView({ threadId, untilDate }: { threadId: string; u
         {display.map((m) => (
           <article key={m.id} className={cn('max-w-[85%] rounded-md border p-3', m.isMine ? 'ml-auto bg-primary/10' : 'bg-card')} data-testid={`message-${m.id}`}>
             <div className="mb-1 flex flex-wrap items-baseline gap-x-2 text-xs text-muted-foreground">
-              <span className="text-sm font-medium text-foreground">{m.author.name}</span>
+              <span className="text-sm font-medium text-foreground"><ProtectedData>{m.author.name}</ProtectedData></span>
               <span>{roleLabel(m.author.role)}</span>
-              <span>{formatPacific(m.createdAt)}</span>
+              <span><ProtectedData>{formatPacific(m.createdAt)}</ProtectedData></span>
             </div>
             <MessageBody text={m.body} />
           </article>

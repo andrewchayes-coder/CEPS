@@ -1,3 +1,4 @@
+import { ProtectedData } from '@/components/protected-data';
 import { BrandLogo } from '@/components/brand-logo';
 import React from 'react';
 import { useAuth } from '@/components/auth/auth-provider';
@@ -125,7 +126,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
         <div className="p-4 border-t shrink-0">
           <div className="mb-3">
-            <p className="text-sm font-medium text-foreground truncate">{user?.name}</p>
+            <p className="text-sm font-medium text-foreground truncate"><ProtectedData>{user?.name}</ProtectedData></p>
             <p className="text-xs text-muted-foreground truncate">{user?.role === 'staff' ? (user.staffRole?.name ?? 'Unassigned staff role') : user?.role.replace('_', ' ')}</p>
           </div>
           <div className="flex flex-col gap-1">

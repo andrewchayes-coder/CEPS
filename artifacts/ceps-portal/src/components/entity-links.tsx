@@ -1,6 +1,7 @@
 import React from 'react';
 import { Link } from 'wouter';
 import { useAuth } from '@/components/auth/auth-provider';
+import { ProtectedData } from './protected-data';
 
 // Roles allowed to open a client case record (/clients/:id). Server-side the
 // GET /clients/:id route scopes every role to records it may see (staff/coord:
@@ -42,11 +43,11 @@ export function ClientLink({
   if (id && name && user && CLIENT_LINK_ROLES.has(user.role)) {
     return (
       <Link href={`/clients/${id}`} className={className ?? linkClass} data-testid={testId}>
-        {label}
+        <ProtectedData>{label}</ProtectedData>
       </Link>
     );
   }
-  return <span className={className}>{label}</span>;
+  return <ProtectedData className={className}>{label}</ProtectedData>;
 }
 
 /**
@@ -69,9 +70,9 @@ export function VendorLink({
   if (id && name && user && VENDOR_LINK_ROLES.has(user.role)) {
     return (
       <Link href={`/vendors/${id}`} className={className ?? linkClass} data-testid={testId}>
-        {label}
+        <ProtectedData>{label}</ProtectedData>
       </Link>
     );
   }
-  return <span className={className}>{label}</span>;
+  return <ProtectedData className={className}>{label}</ProtectedData>;
 }

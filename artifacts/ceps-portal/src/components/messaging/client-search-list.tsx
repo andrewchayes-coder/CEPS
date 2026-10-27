@@ -1,3 +1,4 @@
+import { ProtectedData } from '@/components/protected-data';
 import { useState } from 'react';
 import { useListClients } from '@workspace/api-client-react';
 import { useAuth } from '@/components/auth/auth-provider';
@@ -30,7 +31,7 @@ export function ClientSearchList({ onSelect, testIdPrefix }: { onSelect: (c: { i
               onClick={() => onSelect({ id: c.id, name: `${c.firstName} ${c.lastName}` })}
               data-testid={`${testIdPrefix}-option-${c.id}`}
             >
-              {c.firstName} {c.lastName}
+              <ProtectedData>{c.firstName} {c.lastName}</ProtectedData>
               <span className="ml-2 font-mono text-xs text-muted-foreground">{c.uciNumber}</span>
             </button>
           ))

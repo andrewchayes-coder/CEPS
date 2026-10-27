@@ -1,3 +1,4 @@
+import { ProtectedData } from '@/components/protected-data';
 import React from 'react';
 import { useLocation, useParams, Link } from 'wouter';
 import { useGetAuthorization, useDeleteAuthorization, useListAuthorizationVersions } from '@workspace/api-client-react';
@@ -61,7 +62,7 @@ export default function AuthorizationDetailPage() {
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
         <div>
           <h1 className="text-3xl font-bold tracking-tight">Authorization (POS)</h1>
-          <p className="text-muted-foreground mt-1 font-mono">{auth.authNumber}</p>
+          <p className="text-muted-foreground mt-1 font-mono"><ProtectedData>{auth.authNumber}</ProtectedData></p>
         </div>
         <div className="flex items-center gap-2">
           <Badge variant="outline" className={
@@ -98,7 +99,7 @@ export default function AuthorizationDetailPage() {
               <dd className="col-span-2"><ClientLink id={auth.clientId} name={auth.clientName} testId="link-authorization-client" /></dd>
               <dt className="text-muted-foreground">Vendor:</dt>
               <dd className="col-span-2"><VendorLink id={auth.vendorId} name={auth.vendorName} testId="link-authorization-vendor" /></dd>
-              <dt className="text-muted-foreground">Service Code:</dt><dd className="col-span-2">{auth.serviceCode}</dd>
+              <dt className="text-muted-foreground">Service Code:</dt><dd className="col-span-2"><ProtectedData>{auth.serviceCode}</ProtectedData></dd>
               <dt className="text-muted-foreground">Payment Type:</dt><dd className="col-span-2 capitalize">{auth.paymentType?.replace('_', ' ')}</dd>
               {auth.activityDescription && (
                 <>
@@ -107,16 +108,16 @@ export default function AuthorizationDetailPage() {
               )}
               <dt className="text-muted-foreground">Service Period:</dt>
               <dd className="col-span-2">
-                {formatDateRange(auth.servicePeriodStart, auth.servicePeriodEnd)}
+                <ProtectedData>{formatDateRange(auth.servicePeriodStart, auth.servicePeriodEnd)}</ProtectedData>
               </dd>
               {auth.monthlyAmount && (
                 <>
-                  <dt className="text-muted-foreground">Monthly Amount:</dt><dd className="col-span-2">${parseFloat(auth.monthlyAmount).toFixed(2)}</dd>
+                  <dt className="text-muted-foreground">Monthly Amount:</dt><dd className="col-span-2"><ProtectedData>${parseFloat(auth.monthlyAmount).toFixed(2)}</ProtectedData></dd>
                 </>
               )}
               {auth.oneTimeAmount && (
                 <>
-                  <dt className="text-muted-foreground">One-Time Amount:</dt><dd className="col-span-2">${parseFloat(auth.oneTimeAmount).toFixed(2)}</dd>
+                  <dt className="text-muted-foreground">One-Time Amount:</dt><dd className="col-span-2"><ProtectedData>${parseFloat(auth.oneTimeAmount).toFixed(2)}</ProtectedData></dd>
                 </>
               )}
               {auth.units != null && (
@@ -126,7 +127,7 @@ export default function AuthorizationDetailPage() {
               )}
               {auth.receivedDate && (
                 <>
-                  <dt className="text-muted-foreground">Received:</dt><dd className="col-span-2">{formatDate(auth.receivedDate)}</dd>
+                  <dt className="text-muted-foreground">Received:</dt><dd className="col-span-2"><ProtectedData>{formatDate(auth.receivedDate)}</ProtectedData></dd>
                 </>
               )}
               {auth.posNotes && (
@@ -145,14 +146,14 @@ export default function AuthorizationDetailPage() {
             </CardHeader>
             <CardContent className="space-y-4 text-sm">
               <dl className="grid grid-cols-3 gap-2">
-                <dt className="text-muted-foreground">Max (Period):</dt><dd className="col-span-2 font-bold text-lg">${max.toFixed(2)}</dd>
-                <dt className="text-muted-foreground">{auth.paymentType === 'fee' ? 'Fees billed:' : 'Total Paid:'}</dt><dd className="col-span-2">${paid.toFixed(2)}</dd>
-                <dt className="text-muted-foreground"><MetricHelp label="Remaining" explanation="Unused budget remaining against the maximum period amount." /></dt><dd className="col-span-2">${parseFloat(auth.remainingAmount ?? '0').toFixed(2)}</dd>
+                <dt className="text-muted-foreground">Max (Period):</dt><dd className="col-span-2 font-bold text-lg"><ProtectedData>${max.toFixed(2)}</ProtectedData></dd>
+                <dt className="text-muted-foreground">{auth.paymentType === 'fee' ? 'Fees billed:' : 'Total Paid:'}</dt><dd className="col-span-2"><ProtectedData>${paid.toFixed(2)}</ProtectedData></dd>
+                <dt className="text-muted-foreground"><MetricHelp label="Remaining" explanation="Unused budget remaining against the maximum period amount." /></dt><dd className="col-span-2"><ProtectedData>${parseFloat(auth.remainingAmount ?? '0').toFixed(2)}</ProtectedData></dd>
               </dl>
               <div className="space-y-2 pt-2">
                 <div className="flex justify-between text-xs text-muted-foreground">
-                  <span>{auth.paymentType === 'fee' ? 'Fees billed' : 'Utilized'}: ${paid.toFixed(2)}</span>
-                  <span>Max: ${max.toFixed(2)}</span>
+                  <span>{auth.paymentType === 'fee' ? 'Fees billed' : 'Utilized'}: <ProtectedData>${paid.toFixed(2)}</ProtectedData></span>
+                  <span>Max: <ProtectedData>${max.toFixed(2)}</ProtectedData></span>
                 </div>
                 <Progress value={percent} className="h-2" />
                 {isExpiring && (
@@ -183,7 +184,7 @@ export default function AuthorizationDetailPage() {
                 ) : versions.map((version) => (
                   <div key={version.id} className="border-b pb-3 last:border-0 last:pb-0">
                     <div className="flex justify-between gap-3 text-sm">
-                      <span>{formatDateTime(version.changedAt)}</span>
+                      <span><ProtectedData>{formatDateTime(version.changedAt)}</ProtectedData></span>
                       <span className="text-muted-foreground">{version.changedByName ?? 'Staff'}</span>
                     </div>
                     <p className="text-xs text-muted-foreground mt-1">
@@ -192,7 +193,7 @@ export default function AuthorizationDetailPage() {
                         : 'authorization details'}
                     </p>
                     <div className="flex gap-3 text-xs mt-1">
-                      <span>{version.receivedDate ? `Received ${formatDate(version.receivedDate)}` : 'Received date not recorded'}</span>
+                      <span>{version.receivedDate ? <>Received <ProtectedData>{formatDate(version.receivedDate)}</ProtectedData></> : 'Received date not recorded'}</span>
                       {version.posPdfUrl && <a href={`${import.meta.env.BASE_URL}api/storage${version.posPdfUrl}`} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-primary hover:underline">POS PDF <ExternalLink className="w-3 h-3" /></a>}
                     </div>
                   </div>

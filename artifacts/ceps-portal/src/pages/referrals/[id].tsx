@@ -1,3 +1,4 @@
+import { ProtectedData } from '@/components/protected-data';
 import { referralValueLabel } from '@/lib/referral-labels';
 import React, { useState } from 'react';
 import { formatMoney } from '@/lib/utils';
@@ -90,7 +91,7 @@ function CoordinatorReview({ id, review, onReviewed }: { id: string; review: Coo
       </CardHeader>
       <CardContent className="pt-6 space-y-5">
         <>
-            <p className="text-sm">Submitted by <strong data-testid="text-referral-submitter">{review.submittedByName}</strong></p>
+            <p className="text-sm">Submitted by <strong data-testid="text-referral-submitter"><ProtectedData>{review.submittedByName}</ProtectedData></strong></p>
             <div className="space-y-3">
               <div className="hidden sm:grid grid-cols-[minmax(8rem,1fr)_minmax(0,2fr)_minmax(0,2fr)] gap-4 px-4 text-xs font-semibold uppercase tracking-wide text-muted-foreground"><span>Field</span><span>Referral details</span><span>Current participant record</span></div>
               {reviewFields.map(({ key, label, value }) => (
@@ -174,7 +175,7 @@ export default function ReferralDetailPage() {
           <h1 className="text-3xl font-bold tracking-tight">
             Referral: <ClientLink id={referral.clientId} name={referral.clientName || 'Unknown Participant'} />
           </h1>
-          <p className="text-muted-foreground mt-1">Submitted on {formatDate(referral.referralDate)}</p>
+          <p className="text-muted-foreground mt-1">Submitted on <ProtectedData>{formatDate(referral.referralDate)}</ProtectedData></p>
         </div>
         <div className="flex items-center gap-2">
           <Badge variant="outline" className="text-sm px-3 py-1">
@@ -213,7 +214,7 @@ export default function ReferralDetailPage() {
       {isPendingReview && (
         <div role="status" className="rounded-lg border border-primary/30 bg-primary/5 p-4 text-sm">
           <p className="font-semibold">Pending CEPS review</p>
-          <p className="text-muted-foreground mt-1">Submitted by {review?.submittedByName ?? 'a service coordinator'} — they are not currently linked to this participant. Referral agreements and status changes are unavailable until staff make a decision.</p>
+          <p className="text-muted-foreground mt-1">Submitted by {review?.submittedByName ? <ProtectedData>{review.submittedByName}</ProtectedData> : 'a service coordinator'} — they are not currently linked to this participant. Referral agreements and status changes are unavailable until staff make a decision.</p>
         </div>
       )}
       {isStaff && isPendingReview && review && <CoordinatorReview id={id} review={review} onReviewed={refreshReferral} />}
@@ -242,7 +243,7 @@ export default function ReferralDetailPage() {
                   />
                 </p>
                 <p>DOB: {intake?.clientDob}</p>
-                <p>UCI: {intake?.clientUci}</p>
+                <p>UCI: <ProtectedData>{intake?.clientUci}</ProtectedData></p>
                 <p>Language: {intake?.preferredLanguage}</p>
               </div>
 
@@ -252,27 +253,27 @@ export default function ReferralDetailPage() {
                   {referralValueLabel(intake?.serviceType)}
                 </p>
                 <p className="line-clamp-2" title={intake?.activityDescription}>Comments: {intake?.activityDescription || '—'}</p>
-                <p>Dates: {formatDateRange(intake?.serviceStartDate, intake?.serviceEndDate)}</p>
+                <p>Dates: <ProtectedData>{formatDateRange(intake?.serviceStartDate, intake?.serviceEndDate)}</ProtectedData></p>
                 <p>Authorization amount: {intake?.authAmount ? `$${formatMoney(intake.authAmount)} (${(referral.serviceFrequency || intake.serviceFrequency) === 'monthly' ? 'monthly' : (referral.serviceFrequency || intake.serviceFrequency) === 'one_time' ? 'total' : referralValueLabel(referral.serviceFrequency || intake.serviceFrequency)})` : '—'}</p>
               </div>
 
               <div className="space-y-1">
                 <p className="text-muted-foreground font-medium">Vendor</p>
-                <p className="font-semibold">{intake?.vendorName}</p>
-                <p>{intake?.vendorEmail}</p>
-                <p>{intake?.vendorPhone}</p>
+                <p className="font-semibold"><ProtectedData>{intake?.vendorName}</ProtectedData></p>
+                <p><ProtectedData>{intake?.vendorEmail}</ProtectedData></p>
+                <p><ProtectedData>{intake?.vendorPhone}</ProtectedData></p>
               </div>
 
               <div className="space-y-1">
                 <p className="text-muted-foreground font-medium">Service Coordinator</p>
-                <p className="font-semibold" data-testid="text-referral-assigned-coordinator">{referral.coordinatorName || 'Unassigned'}</p>
+                <p className="font-semibold" data-testid="text-referral-assigned-coordinator">{referral.coordinatorName ? <ProtectedData>{referral.coordinatorName}</ProtectedData> : 'Unassigned'}</p>
                 <p className="text-xs text-muted-foreground" data-testid="text-referral-original-submitter">
-                  Submitted by: {referral.submittedByName || 'Not recorded'}
+                  Submitted by: {referral.submittedByName ? <ProtectedData>{referral.submittedByName}</ProtectedData> : 'Not recorded'}
                   {referral.submittedByRole === 'staff' ? ' (Staff)' : referral.submittedByRole === 'service_coordinator' ? ' (Service Coordinator)' : ''}
-                  {' '}on {formatDate(referral.referralDate)}
+                  {' '}on <ProtectedData>{formatDate(referral.referralDate)}</ProtectedData>
                 </p>
                 <p>{intake?.regionalCenterName}</p>
-                {intake?.coordinatorName && <p className="text-xs text-muted-foreground">Referral contact (as entered on the form): {intake.coordinatorName} · {intake.coordinatorEmail}</p>}
+                {intake?.coordinatorName && <p className="text-xs text-muted-foreground">Referral contact (as entered on the form): <ProtectedData>{intake.coordinatorName}</ProtectedData> · <ProtectedData>{intake.coordinatorEmail}</ProtectedData></p>}
               </div>
             </CardContent>
           </Card>
@@ -281,10 +282,10 @@ export default function ReferralDetailPage() {
               <CardHeader className="border-b">
                 <CardTitle className="text-lg">Accepted Agreement</CardTitle>
                 <CardDescription>
-                  Immutable copy accepted by {referral.agreementSnapshot.signedByName} on{' '}
-                  {formatDateTime(referral.agreementSnapshot.signedAt)}
+                  Immutable copy accepted by <ProtectedData>{referral.agreementSnapshot.signedByName}</ProtectedData> on{' '}
+                  <ProtectedData>{formatDateTime(referral.agreementSnapshot.signedAt)}</ProtectedData>
                   {' · '}{referral.agreementSnapshot.signerRelationship.replace('_', ' ')}
-                  {' · '}{referral.agreementSnapshot.recipientEmail}
+                  {' · '}<ProtectedData>{referral.agreementSnapshot.recipientEmail}</ProtectedData>
                 </CardDescription>
               </CardHeader>
               <CardContent className="pt-6">
@@ -306,10 +307,10 @@ export default function ReferralDetailPage() {
                   <CheckCircle2 className="w-5 h-5 shrink-0" />
                   <div className="text-sm">
                     <p className="font-semibold">
-                      Signed on {formatDate(referral.parentSignedAt)}
+                      Signed on <ProtectedData>{formatDate(referral.parentSignedAt)}</ProtectedData>
                     </p>
                     <p className="opacity-90">
-                      By {referral.signedByName}
+                      By <ProtectedData>{referral.signedByName}</ProtectedData>
                       {referral.signerRelationship ? ` (${referral.signerRelationship})` : ''}
                     </p>
                   </div>
@@ -320,7 +321,7 @@ export default function ReferralDetailPage() {
                   <div className="text-sm space-y-1">
                     <p className="font-semibold">Awaiting Signature</p>
                     <p className="opacity-90">
-                      Sent to {referral.intakeSentTo === 'participant' ? 'Participant' : 'Family Rep'} on {formatDate(referral.intakeSentAt)}
+                      Sent to {referral.intakeSentTo === 'participant' ? 'Participant' : 'Family Rep'} on <ProtectedData>{formatDate(referral.intakeSentAt)}</ProtectedData>
                     </p>
                   </div>
                 </div>
@@ -349,7 +350,7 @@ export default function ReferralDetailPage() {
                {referral.altaAuthReceivedAt ? (
                   <div className="flex items-center gap-2 text-sm text-muted-foreground">
                     <CheckCircle2 className="w-4 h-4 text-chart-5" />
-                    Received {formatDate(referral.altaAuthReceivedAt)}
+                    Received <ProtectedData>{formatDate(referral.altaAuthReceivedAt)}</ProtectedData>
                   </div>
                 ) : (
                   <p className="text-sm text-muted-foreground">Waiting for official POS authorization from Regional Center.</p>
@@ -376,7 +377,7 @@ function ReferralHistory({ id }: { id: string }) {
           : !entries?.length ? <p className="text-sm text-muted-foreground">No history recorded.</p>
           : <ol className="space-y-3 max-h-80 overflow-y-auto">
             {entries.map(entry => <li key={entry.id} className="border-b pb-3 last:border-b-0 text-sm">
-              <p className="text-xs text-muted-foreground">{formatDateTime(entry.createdAt)} · {entry.userName || 'Unknown user'}</p>
+              <p className="text-xs text-muted-foreground"><ProtectedData>{formatDateTime(entry.createdAt)}</ProtectedData> · {entry.userName ? <ProtectedData>{entry.userName}</ProtectedData> : 'Unknown user'}</p>
               <p className="font-medium">{entry.action.replaceAll('_', ' ')}</p>
               {entry.detail && <p className="text-muted-foreground break-words">{entry.detail}</p>}
             </li>)}

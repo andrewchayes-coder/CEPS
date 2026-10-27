@@ -1,4 +1,5 @@
 import * as React from 'react';
+import { ProtectedData, isExactDataText } from '@/components/protected-data';
 import { cn } from '@/lib/utils';
 import { ArrowDown, ArrowUp, ChevronsUpDown } from 'lucide-react';
 
@@ -94,7 +95,7 @@ const TableHead = React.forwardRef<
   <th
     ref={ref}
     className={cn(
-      'h-10 px-2 text-left align-middle font-medium text-muted-foreground [&:has([role=checkbox])]:pr-0 [&>[role=checkbox]]:translate-y-[2px]',
+      'h-auto min-h-10 whitespace-normal break-words px-2 py-2 text-left align-middle font-medium text-muted-foreground [&:has([role=checkbox])]:pr-0 [&>[role=checkbox]]:translate-y-[2px]',
       className,
     )}
     {...props}
@@ -133,7 +134,7 @@ function SortableTableHead<Key extends string>({
       <button
         type="button"
         className={cn(
-          'inline-flex w-full items-center gap-1 rounded-sm py-1 text-left hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2',
+          'inline-flex w-full min-w-0 items-center gap-1 whitespace-normal break-words rounded-sm py-1 text-left hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2',
           className?.includes('text-right') && 'justify-end',
         )}
         onClick={() => sortKey ? onSort(sortKey) : (onSort as () => void)()}
@@ -150,7 +151,7 @@ function SortableTableHead<Key extends string>({
 const TableCell = React.forwardRef<
   HTMLTableCellElement,
   React.TdHTMLAttributes<HTMLTableCellElement>
->(({ className, ...props }, ref) => (
+>(({ className, children, ...props }, ref) => (
   <td
     ref={ref}
     className={cn(
@@ -158,7 +159,9 @@ const TableCell = React.forwardRef<
       className,
     )}
     {...props}
-  />
+  >
+    {React.Children.map(children, (child) => isExactDataText(child) ? <ProtectedData>{child}</ProtectedData> : child)}
+  </td>
 ));
 TableCell.displayName = 'TableCell';
 

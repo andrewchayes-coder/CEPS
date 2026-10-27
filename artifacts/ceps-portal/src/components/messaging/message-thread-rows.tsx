@@ -1,3 +1,4 @@
+import { ProtectedData } from '@/components/protected-data';
 import { Link, useSearch } from 'wouter';
 import type { MessageThreadHeader } from '@workspace/api-client-react';
 import { formatMessageClock } from '@/lib/datetime';
@@ -36,7 +37,7 @@ export function MessageThreadRows({ threads, selectedId, showParticipant, showAs
                 <span className={cn('truncate', t.unread ? 'font-semibold' : 'font-medium')}>
                   {showParticipant ? t.clientName : t.subject}
                 </span>
-                <span className="shrink-0 text-xs text-muted-foreground">{formatMessageClock(t.lastMessageAt)}</span>
+                <span className="shrink-0 text-xs text-muted-foreground"><ProtectedData>{formatMessageClock(t.lastMessageAt)}</ProtectedData></span>
               </span>
               {t.resolvedAt != null && (
                 <span className="inline-block rounded-full border bg-secondary px-2 py-0.5 text-xs font-medium" data-testid={`badge-thread-resolved-${t.id}`}>Resolved</span>

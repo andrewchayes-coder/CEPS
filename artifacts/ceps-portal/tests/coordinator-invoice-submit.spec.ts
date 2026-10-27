@@ -1,6 +1,9 @@
 import { expect, test } from '@playwright/test';
+import { simulateBrowserTranslation } from './translation-helper';
 
 test('coordinator submits each attached file separately and retries only a failed invoice', async ({ page }) => {
+  const errors: Error[] = [];
+  page.on('pageerror', (error) => errors.push(error));
   await page.route('**/api/auth/me', (route) => route.fulfill({
     json: { id: 'coordinator-1', name: 'Case Coordinator', email: 'coordinator@test', role: 'service_coordinator', active: true },
   }));
@@ -37,6 +40,8 @@ test('coordinator submits each attached file separately and retries only a faile
   });
 
   await page.goto('/invoices/new');
+  await expect(page.getByRole('heading', { name: 'Submit Invoice' })).toBeVisible();
+  expect(await simulateBrowserTranslation(page)).toBeGreaterThan(10);
   await page.getByTestId('select-coordinator-invoice-client').click();
   await page.getByTestId('select-coordinator-invoice-client-option-client-1').click();
   await expect.poll(() => vendorQueries.length).toBeGreaterThan(0);
@@ -66,6 +71,7 @@ test('coordinator submits each attached file separately and retries only a faile
   await expect.poll(() => submitted.length).toBe(3);
   expect(submitted[2].documentUrl).toBe('/objects/uploads/invoice-b.pdf');
   expect(submitted[2].clientId).toBe('client-1');
+  expect(errors).toEqual([]);
 });
 
 test('staff Needs Entry queue requests oldest-first and keeps workflow actions gated', async ({ page }) => {

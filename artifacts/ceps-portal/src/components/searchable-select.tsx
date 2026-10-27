@@ -4,6 +4,7 @@ import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, Command
 import { Button } from '@/components/ui/button';
 import { Check, ChevronsUpDown } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { ProtectedData, isExactDataText } from './protected-data';
 
 export type SearchableSelectOption = {
   value: string;
@@ -64,6 +65,7 @@ export function SearchableSelect({
   const displayLabel = selectedOption 
     ? selectedOption.label 
     : (value && value !== clearValue && rememberedLabel ? rememberedLabel : placeholder);
+  const isAllOption = value === '__all__' || value === 'all';
 
   return (
     <Popover
@@ -83,7 +85,7 @@ export function SearchableSelect({
           disabled={disabled}
           data-testid={testId}
         >
-          <span className="truncate">{displayLabel}</span>
+          <span className="min-w-0 break-words text-left">{!isAllOption && (selectedOption || (value && value !== clearValue && rememberedLabel)) ? <ProtectedData>{displayLabel}</ProtectedData> : displayLabel}</span>
           <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
         </Button>
       </PopoverTrigger>
@@ -127,8 +129,11 @@ export function SearchableSelect({
                   data-testid={testId ? `${testId}-option-${option.value}` : undefined}
                 >
                   <div className="flex flex-col">
-                    <span>{option.label}</span>
-                    {option.subtitle && <span className="text-xs text-muted-foreground">{option.subtitle}</span>}
+                    {option.value === '__all__' || option.value === 'all' ? option.label : <ProtectedData>{option.label}</ProtectedData>}
+                    {option.subtitle && <span className="text-xs text-muted-foreground">
+                      {option.subtitle.split(/( · )/).map((part, index) => isExactDataText(part)
+                        ? <ProtectedData key={index}>{part}</ProtectedData> : part)}
+                    </span>}
                   </div>
                   <Check className={cn('ml-auto h-4 w-4', value === option.value ? 'opacity-100' : 'opacity-0')} />
                 </CommandItem>

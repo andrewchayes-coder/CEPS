@@ -1,3 +1,4 @@
+import { ProtectedData } from '@/components/protected-data';
 import { formatMonth } from '@/lib/dates';
 import React, { useState } from 'react';
 import { useLocation, useParams } from 'wouter';
@@ -125,11 +126,11 @@ export default function InvoiceDetailPage() {
           <CardContent className="space-y-4 text-sm">
             <dl className="grid grid-cols-3 gap-2">
               <dt className="text-muted-foreground">Participant:</dt><dd className="col-span-2 font-medium"><ClientLink id={invoice.clientId} name={invoice.clientName} /></dd>
-              {formatServiceDates(invoice.serviceStartDate, invoice.serviceEndDate) && <><dt className="text-muted-foreground">Service dates:</dt><dd className="col-span-2" data-testid="text-detail-service-dates">{formatServiceDates(invoice.serviceStartDate, invoice.serviceEndDate)}</dd></>}
+              {formatServiceDates(invoice.serviceStartDate, invoice.serviceEndDate) && <><dt className="text-muted-foreground">Service dates:</dt><dd className="col-span-2" data-testid="text-detail-service-dates"><ProtectedData>{formatServiceDates(invoice.serviceStartDate, invoice.serviceEndDate)}</ProtectedData></dd></>}
               <dt className="text-muted-foreground">Type:</dt><dd className="col-span-2"><DocumentTypeBadge type={(invoice).documentType} testId="badge-detail-document-type" /></dd>
               <dt className="text-muted-foreground">Svc Code:</dt><dd className="col-span-2" data-testid="text-detail-service-codes">{formatServiceCodes(invoice)}</dd>
               <dt className="text-muted-foreground">Vendor:</dt><dd className="col-span-2"><VendorLink id={invoice.vendorId} name={invoice.vendorName} /></dd>
-              <dt className="text-muted-foreground">Amount Requested:</dt><dd className="col-span-2 font-bold text-lg">${parseFloat(invoice.amountRequested).toFixed(2)}</dd>
+              <dt className="text-muted-foreground">Amount Requested:</dt><dd className="col-span-2 font-bold text-lg"><ProtectedData>${parseFloat(invoice.amountRequested).toFixed(2)}</ProtectedData></dd>
               <dt className="text-muted-foreground mt-2">Submitted By:</dt><dd className="col-span-2 mt-2 capitalize">{invoice.submittedByRole}</dd>
             </dl>
 
@@ -163,13 +164,13 @@ export default function InvoiceDetailPage() {
                 {invoice.lineItems.map((line, index) => (
                   <div key={line.id || index} className="p-3 bg-muted/30 rounded-md border text-sm flex flex-col gap-1" data-testid={`text-line-item-${index}`}>
                     <div className="flex justify-between font-medium">
-                      <span>{formatMonth(line.serviceMonth)}</span>
-                      <span>${parseFloat(line.amount).toFixed(2)}</span>
+                      <span><ProtectedData>{formatMonth(line.serviceMonth)}</ProtectedData></span>
+                      <span><ProtectedData>${parseFloat(line.amount).toFixed(2)}</ProtectedData></span>
                     </div>
                     <div className="text-muted-foreground">
                       Authorization:{' '}
                       {line.authorizationId ? (
-                        <Link href={`/authorizations/${line.authorizationId}`} className="text-primary hover:underline">{line.authNumber}</Link>
+                        <Link href={`/authorizations/${line.authorizationId}`} className="text-primary hover:underline"><ProtectedData>{line.authNumber}</ProtectedData></Link>
                       ) : (
                         <span className="italic">None</span>
                       )}

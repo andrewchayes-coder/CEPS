@@ -1,3 +1,4 @@
+import { ProtectedData } from '@/components/protected-data';
 import React from 'react';
 import { useLocation, useParams, Link } from 'wouter';
 import { useGetRemittance, useDeleteRemittance } from '@workspace/api-client-react';
@@ -70,7 +71,7 @@ export default function RemittanceDetailPage() {
           <div>
             <p className="font-medium">Review required</p>
             {remittance.reviewReason === 'amount_mismatch' ? (
-              <p>Actual amount ${parseFloat(remittance.amount).toFixed(2)} vs expected ${parseFloat(remittance.expectedAmount ?? '0').toFixed(2)}. This partial or amount mismatch needs review.</p>
+              <p>Actual amount <ProtectedData>${parseFloat(remittance.amount).toFixed(2)}</ProtectedData> vs expected <ProtectedData>${parseFloat(remittance.expectedAmount ?? '0').toFixed(2)}</ProtectedData>. This partial or amount mismatch needs review.</p>
             ) : (
               <p>{remittance.reviewReason.replace(/_/g, ' ').replace(/\b\w/g, (letter) => letter.toUpperCase())}</p>
             )}
@@ -90,7 +91,7 @@ export default function RemittanceDetailPage() {
             <dd className="col-span-2 font-mono">
               {remittance.authorizationId && remittance.authNumber ? (
                 <Link href={`/authorizations/${remittance.authorizationId}`} className="text-primary hover:underline" data-testid="link-remittance-authorization">
-                  {remittance.authNumber}
+                  <ProtectedData>{remittance.authNumber}</ProtectedData>
                 </Link>
               ) : (
                 <span className="text-muted-foreground">-</span>
@@ -108,24 +109,24 @@ export default function RemittanceDetailPage() {
               </>
             )}
             <dt className="text-muted-foreground">Date Received:</dt>
-            <dd className="col-span-2">{formatDate(remittance.remittanceDate)}</dd>
+            <dd className="col-span-2"><ProtectedData>{formatDate(remittance.remittanceDate)}</ProtectedData></dd>
             <dt className="text-muted-foreground">Service Month:</dt>
-            <dd className="col-span-2">{formatMonth(remittance.paymentMonth)}</dd>
+            <dd className="col-span-2"><ProtectedData>{formatMonth(remittance.paymentMonth)}</ProtectedData></dd>
             <dt className="text-muted-foreground">Amount:</dt>
-            <dd className="col-span-2 font-bold text-lg">${parseFloat(remittance.amount).toFixed(2)}</dd>
+            <dd className="col-span-2 font-bold text-lg"><ProtectedData>${parseFloat(remittance.amount).toFixed(2)}</ProtectedData></dd>
             <dt className="text-muted-foreground"><MetricHelp label="Allocated" explanation="Amount matched to payments." /></dt>
-            <dd className="col-span-2">${parseFloat(remittance.allocatedAmount ?? '0').toFixed(2)}</dd>
+            <dd className="col-span-2"><ProtectedData>${parseFloat(remittance.allocatedAmount ?? '0').toFixed(2)}</ProtectedData></dd>
             <dt className="text-muted-foreground"><MetricHelp label="Remaining" explanation="Amount not yet matched to a payment." /></dt>
-            <dd className="col-span-2">${parseFloat(remittance.remainingAmount ?? remittance.amount).toFixed(2)}</dd>
+            <dd className="col-span-2"><ProtectedData>${parseFloat(remittance.remainingAmount ?? remittance.amount).toFixed(2)}</ProtectedData></dd>
             {(remittance.allocations ?? []).map((allocation) => <React.Fragment key={allocation.id}>
               <dt className="text-muted-foreground">Allocation ({allocation.targetKind === 'fee' ? 'Fee' : 'Payment line'}):</dt>
               <dd className="col-span-2">
                 {allocation.targetKind === 'fee' ? (
-                  <span>${parseFloat(allocation.amount).toFixed(2)} — Fee {formatMonth(allocation.feeMonth)} · Auth {allocation.authNumber ?? '—'}</span>
+                  <span>$<ProtectedData>{parseFloat(allocation.amount).toFixed(2)}</ProtectedData> — Fee <ProtectedData>{formatMonth(allocation.feeMonth)}</ProtectedData> · Auth <ProtectedData>{allocation.authNumber ?? '—'}</ProtectedData></span>
                 ) : (
                   <>
-                    {allocation.paymentId ? <Link href={`/payments/${allocation.paymentId}`} className="text-primary hover:underline">${parseFloat(allocation.amount).toFixed(2)} — Check #{allocation.checkNumber ?? '—'}</Link> : <span>${parseFloat(allocation.amount).toFixed(2)} — Check #{allocation.checkNumber ?? '—'}</span>}
-                    <span className="text-muted-foreground"> · {allocation.serviceMonth ?? '-'} · Auth {allocation.authNumber ?? '—'}</span>
+                    {allocation.paymentId ? <Link href={`/payments/${allocation.paymentId}`} className="text-primary hover:underline"><ProtectedData>${parseFloat(allocation.amount).toFixed(2)}</ProtectedData> — Check #<ProtectedData>{allocation.checkNumber ?? '—'}</ProtectedData></Link> : <span><ProtectedData>${parseFloat(allocation.amount).toFixed(2)}</ProtectedData> — Check #<ProtectedData>{allocation.checkNumber ?? '—'}</ProtectedData></span>}
+                    <span className="text-muted-foreground"> · <ProtectedData>{formatMonth(allocation.serviceMonth)}</ProtectedData> · Auth <ProtectedData>{allocation.authNumber ?? '—'}</ProtectedData></span>
                   </>
                 )}
               </dd>
@@ -133,7 +134,7 @@ export default function RemittanceDetailPage() {
             {remittance.expectedAmount && (
               <>
                 <dt className="text-muted-foreground">Expected amount:</dt>
-                <dd className="col-span-2">${parseFloat(remittance.expectedAmount).toFixed(2)}</dd>
+                <dd className="col-span-2"><ProtectedData>${parseFloat(remittance.expectedAmount).toFixed(2)}</ProtectedData></dd>
               </>
             )}
             <dt className="text-muted-foreground">Source:</dt>

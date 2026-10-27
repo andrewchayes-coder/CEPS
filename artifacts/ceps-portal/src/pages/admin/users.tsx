@@ -1,3 +1,4 @@
+import { ProtectedData } from '@/components/protected-data';
 import { useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { formatDate } from '@/lib/dates';
@@ -126,7 +127,7 @@ export default function UsersPage() {
           {usersQuery.isLoading ? [1, 2, 3].map((n) => <TableRow key={n}><TableCell colSpan={7}><Skeleton className="h-8 w-full" /></TableCell></TableRow>) :
             !sortedUsers.length ? <TableRow><TableCell colSpan={7} className="h-32 text-center text-muted-foreground">No users yet. Add a staff or coordinator account to get started.</TableCell></TableRow> :
             sortedUsers.map((u) => <TableRow key={u.id} data-testid={`row-user-${u.id}`}>
-              <TableCell className="font-medium">{u.name}</TableCell><TableCell>{u.email}</TableCell><TableCell className="text-muted-foreground">{u.phone || '—'}</TableCell>
+              <TableCell className="font-medium"><ProtectedData>{u.name}</ProtectedData></TableCell><TableCell>{u.email}</TableCell><TableCell className="text-muted-foreground">{u.phone || '—'}</TableCell>
               <TableCell>{u.role === 'staff' ? u.staffRole ? <Badge variant="secondary">{u.staffRole.name}</Badge> : <span className="inline-flex items-center gap-1 text-chart-1"><AlertTriangle className="h-3.5 w-3.5" />Unassigned</span> : <span className="text-sm">Service Coordinator</span>}</TableCell>
               <TableCell><Badge variant="outline" className={u.active ? 'border-chart-5/30 text-chart-5' : 'text-muted-foreground'}>{u.active ? 'Active' : 'Inactive'}</Badge></TableCell>
               <TableCell className="text-sm text-muted-foreground">{u.lastLogin ? formatDate(u.lastLogin) : 'Never'}</TableCell>

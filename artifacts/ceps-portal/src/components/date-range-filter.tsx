@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { startOfToday, startOfWeek, endOfWeek, startOfMonth, endOfMonth, startOfQuarter, endOfQuarter } from 'date-fns';
 import { formatDate, formatDateRange } from '@/lib/dates';
+import { ProtectedData } from '@/components/protected-data';
 import { Calendar as CalendarIcon, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
@@ -114,12 +115,17 @@ export function DateRangeFilter({
           <Button
             variant="outline"
             className={cn(
-              'justify-start text-left font-normal h-9 w-full sm:w-[220px]',
+               'justify-start text-left font-normal h-auto min-h-9 w-full sm:w-auto sm:min-w-[220px]',
               !startDate && !endDate && 'text-muted-foreground'
             )}
           >
             <CalendarIcon className="mr-2 h-4 w-4 shrink-0" />
-            <span className="truncate" data-testid="date-range-display">{displayValue}</span>
+             <span className="min-w-0 break-words whitespace-normal" data-testid="date-range-display">
+               {startDate && endDate ? <ProtectedData>{displayValue}</ProtectedData>
+                 : startDate ? <>From <ProtectedData>{formatDate(startDate)}</ProtectedData></>
+                 : endDate ? <>Until <ProtectedData>{formatDate(endDate)}</ProtectedData></>
+                 : displayValue}
+             </span>
           </Button>
         </PopoverTrigger>
         <PopoverContent className="w-[320px] p-4" align="start">

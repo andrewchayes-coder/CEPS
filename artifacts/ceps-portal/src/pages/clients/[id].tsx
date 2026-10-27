@@ -18,6 +18,7 @@ import { Button } from '@/components/ui/button';
 import { ArrowLeft, User, FileText, FileCheck, Receipt, CreditCard, FolderSync, AlertCircle, CheckCircle2, Phone, Mail, MapPin } from 'lucide-react';
 import { Link } from 'wouter';
 import { formatDate, formatDateRange, formatMonth } from '@/lib/dates';
+import { ProtectedData } from '@/components/protected-data';
 import { Progress } from '@/components/ui/progress';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow, SortableTableHead } from '@/components/ui/table';
 import { stableSort, useTableSort } from '@/lib/table-sorting';
@@ -290,17 +291,17 @@ export default function ClientDetailPage() {
               <ClientLink id={client.id} name={`${client.firstName} ${client.lastName}`} />
             </h1>
             <div className="flex items-center gap-3 mt-1 text-sm text-muted-foreground">
-              <span className="font-mono bg-muted px-1.5 py-0.5 rounded">UCI: {client.uciNumber}</span>
-              <span>DOB: {formatDate(client.dateOfBirth)}</span>
+               <span className="font-mono bg-muted px-1.5 py-0.5 rounded">UCI: <ProtectedData>{client.uciNumber}</ProtectedData></span>
+               <span>DOB: <ProtectedData>{formatDate(client.dateOfBirth)}</ProtectedData></span>
             </div>
             {isFamily && !primaryRepresentative && (
               <div className="mt-2 text-sm text-muted-foreground space-y-0.5" data-testid="header-contact-info">
                 <div className="flex flex-wrap items-center gap-x-4 gap-y-0.5">
-                  {client.phone && <span className="flex items-center gap-1.5"><Phone className="w-3.5 h-3.5" /> {client.phone}</span>}
-                  {client.email && <span className="flex items-center gap-1.5 break-all"><Mail className="w-3.5 h-3.5 shrink-0" /> {client.email}</span>}
+                   {client.phone && <span className="flex items-center gap-1.5"><Phone className="w-3.5 h-3.5" /> <ProtectedData>{client.phone}</ProtectedData></span>}
+                   {client.email && <span className="flex items-center gap-1.5 break-all"><Mail className="w-3.5 h-3.5 shrink-0" /> <ProtectedData>{client.email}</ProtectedData></span>}
                 </div>
                 {client.address && (
-                  <div className="flex items-center gap-1.5"><MapPin className="w-3.5 h-3.5" /> {client.address}</div>
+                   <div className="flex items-center gap-1.5"><MapPin className="w-3.5 h-3.5" /> <ProtectedData>{client.address}</ProtectedData></div>
                 )}
               </div>
             )}
@@ -350,14 +351,14 @@ export default function ClientDetailPage() {
         onValueChange={(tab) => navigate(`/clients/${id}?tab=${tab}`, { replace: true })}
         className="w-full"
       >
-        <TabsList className="w-full justify-start overflow-x-auto border-b rounded-none h-12 bg-transparent p-0">
-          <TabsTrigger value="overview" className="data-[state=active]:bg-transparent data-[state=active]:shadow-none data-[state=active]:border-b-2 data-[state=active]:border-primary rounded-none h-12 px-6">Overview</TabsTrigger>
-          <TabsTrigger value="authorizations" className="data-[state=active]:bg-transparent data-[state=active]:shadow-none data-[state=active]:border-b-2 data-[state=active]:border-primary rounded-none h-12 px-6">Authorizations ({authorizations.length})</TabsTrigger>
-          <TabsTrigger value="invoices" className="data-[state=active]:bg-transparent data-[state=active]:shadow-none data-[state=active]:border-b-2 data-[state=active]:border-primary rounded-none h-12 px-6">Invoices ({invoices.length})</TabsTrigger>
-          <TabsTrigger value="payments" className="data-[state=active]:bg-transparent data-[state=active]:shadow-none data-[state=active]:border-b-2 data-[state=active]:border-primary rounded-none h-12 px-6">Payments ({payments.length})</TabsTrigger>
-          <TabsTrigger value="fees" data-testid="tab-fees" className="data-[state=active]:bg-transparent data-[state=active]:shadow-none data-[state=active]:border-b-2 data-[state=active]:border-primary rounded-none h-12 px-6">Fees ({feeList.length})</TabsTrigger>
-          <TabsTrigger value="referrals" className="data-[state=active]:bg-transparent data-[state=active]:shadow-none data-[state=active]:border-b-2 data-[state=active]:border-primary rounded-none h-12 px-6">Referrals ({referrals.length})</TabsTrigger>
-          {isStaff && <TabsTrigger value="documents" data-testid="tab-documents" className="data-[state=active]:bg-transparent data-[state=active]:shadow-none data-[state=active]:border-b-2 data-[state=active]:border-primary rounded-none h-12 px-6">Documents ({caseData.documents.length})</TabsTrigger>}
+        <TabsList className="w-full flex-wrap justify-start border-b rounded-none min-h-12 bg-transparent p-0">
+          <TabsTrigger value="overview" className="data-[state=active]:bg-transparent data-[state=active]:shadow-none data-[state=active]:border-b-2 data-[state=active]:border-primary rounded-none min-h-12 h-auto px-4">Overview</TabsTrigger>
+          <TabsTrigger value="authorizations" className="data-[state=active]:bg-transparent data-[state=active]:shadow-none data-[state=active]:border-b-2 data-[state=active]:border-primary rounded-none min-h-12 h-auto px-4">Authorizations ({authorizations.length})</TabsTrigger>
+          <TabsTrigger value="invoices" className="data-[state=active]:bg-transparent data-[state=active]:shadow-none data-[state=active]:border-b-2 data-[state=active]:border-primary rounded-none min-h-12 h-auto px-4">Invoices ({invoices.length})</TabsTrigger>
+          <TabsTrigger value="payments" className="data-[state=active]:bg-transparent data-[state=active]:shadow-none data-[state=active]:border-b-2 data-[state=active]:border-primary rounded-none min-h-12 h-auto px-4">Payments ({payments.length})</TabsTrigger>
+          <TabsTrigger value="fees" data-testid="tab-fees" className="data-[state=active]:bg-transparent data-[state=active]:shadow-none data-[state=active]:border-b-2 data-[state=active]:border-primary rounded-none min-h-12 h-auto px-4">Fees ({feeList.length})</TabsTrigger>
+          <TabsTrigger value="referrals" className="data-[state=active]:bg-transparent data-[state=active]:shadow-none data-[state=active]:border-b-2 data-[state=active]:border-primary rounded-none min-h-12 h-auto px-4">Referrals ({referrals.length})</TabsTrigger>
+          {isStaff && <TabsTrigger value="documents" data-testid="tab-documents" className="data-[state=active]:bg-transparent data-[state=active]:shadow-none data-[state=active]:border-b-2 data-[state=active]:border-primary rounded-none min-h-12 h-auto px-4">Documents ({caseData.documents.length})</TabsTrigger>}
         </TabsList>
 
         <TabsContent value="overview" className="pt-6 space-y-6">
@@ -479,7 +480,7 @@ export default function ClientDetailPage() {
                           <div>
                             <p className="font-semibold">
                               <Link href={`/authorizations/${auth.id}`} className="text-primary hover:underline" data-testid="link-overview-authorization">
-                                {auth.authNumber}
+                                <ProtectedData>{auth.authNumber}</ProtectedData>
                               </Link>
                             </p>
                             <MonthlyAmountLine auth={auth} />
@@ -487,12 +488,12 @@ export default function ClientDetailPage() {
                               <VendorLink id={auth.vendorId} name={auth.vendorName} className="text-xs text-muted-foreground hover:underline" />
                             </p>
                           </div>
-                          <Badge variant="outline">{auth.serviceCode}</Badge>
+                          <Badge variant="outline"><ProtectedData>{auth.serviceCode}</ProtectedData></Badge>
                         </div>
                         <div className="space-y-2 mt-4">
                           <div className="flex justify-between text-xs text-muted-foreground">
-                            <span>{auth.paymentType === 'fee' ? 'Fees billed' : 'Utilized'}: ${(paid).toFixed(2)}</span>
-                            <span>Max: ${(max).toFixed(2)}</span>
+                            <span>{auth.paymentType === 'fee' ? 'Fees billed' : 'Utilized'}: $<ProtectedData>{(paid).toFixed(2)}</ProtectedData></span>
+                            <span>Max: $<ProtectedData>{(max).toFixed(2)}</ProtectedData></span>
                           </div>
                           <Progress value={percent} className="h-2" />
                           {isLow && (
@@ -530,7 +531,7 @@ export default function ClientDetailPage() {
                     <TableRow key={auth.id}>
                       <TableCell className="font-medium">
                         <Link href={`/authorizations/${auth.id}`} className="text-primary hover:underline" data-testid="link-client-authorization">
-                          {auth.authNumber}
+                          <ProtectedData>{auth.authNumber}</ProtectedData>
                         </Link>
                       </TableCell>
                       <TableCell><VendorLink id={auth.vendorId} name={auth.vendorName} /></TableCell>
@@ -587,7 +588,7 @@ export default function ClientDetailPage() {
                           ))
                         ) : (
                           inv.authorizationId ? (
-                            <Link href={`/authorizations/${inv.authorizationId}`} className="text-primary hover:underline">{inv.authNumber}</Link>
+                            <Link href={`/authorizations/${inv.authorizationId}`} className="text-primary hover:underline"><ProtectedData>{inv.authNumber}</ProtectedData></Link>
                           ) : inv.authNumber || '-'
                         )}
                       </TableCell>

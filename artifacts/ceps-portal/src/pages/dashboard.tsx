@@ -1,3 +1,4 @@
+import { ProtectedData } from '@/components/protected-data';
 import { formatDate, formatDateTime } from '@/lib/dates';
 import React, { useState } from 'react';
 import { useGetDashboardSummary } from '@workspace/api-client-react';
@@ -61,7 +62,7 @@ export default function DashboardPage() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-3xl font-bold tracking-tight">Welcome back, {user?.name.split(' ')[0]}</h1>
+        <h1 className="text-3xl font-bold tracking-tight">Welcome back, <ProtectedData>{user?.name.split(' ')[0]}</ProtectedData></h1>
         <p className="text-muted-foreground mt-1">
           {user?.role === 'staff' ? 'Here is what is happening across all programs today.' : 
            user?.role === 'service_coordinator' ? 'Here is the current status of your caseload.' :
@@ -297,7 +298,7 @@ export default function DashboardPage() {
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-bold">{summary.totals.pendingPosReview ?? summary.totals.unmatchedPosDocuments ?? 0}</div>
-              <p className="text-xs text-muted-foreground mt-1">Oldest: {formatDate(summary.totals.oldestPendingPosDate)}</p>
+              <p className="text-xs text-muted-foreground mt-1">Oldest: <ProtectedData>{formatDate(summary.totals.oldestPendingPosDate)}</ProtectedData></p>
               <p className="text-xs text-muted-foreground">{summary.totals.pendingPosWithoutClient ?? 0} with no matching participant</p>
               <Link href="/authorizations/review" onClick={(e) => e.stopPropagation()} className="text-xs text-primary hover:underline mt-1 inline-block" data-testid="link-tile-pos-review">
                 Review queue →
@@ -326,7 +327,7 @@ export default function DashboardPage() {
                       <p className="text-sm font-medium leading-none capitalize">{activity.action.replace(/_/g, ' ')}</p>
                       {activity.detail && <p className="text-sm text-muted-foreground">{activity.detail}</p>}
                       <p className="text-xs text-muted-foreground">
-                        {formatDateTime(activity.createdAt)}
+                        <ProtectedData>{formatDateTime(activity.createdAt)}</ProtectedData>
                       </p>
                     </div>
                   </div>

@@ -1,3 +1,4 @@
+import { ProtectedData } from '@/components/protected-data';
 import { formatDate } from '@/lib/dates';
 import { referralValueLabel } from '@/lib/referral-labels';
 import { User } from 'lucide-react';
@@ -46,8 +47,8 @@ export function AgreementReview({ data }: { data: AgreementReviewData }) {
         <section>
           <h3 className="font-semibold text-base border-b pb-2 mb-3">Participant Information</h3>
           <div className="grid sm:grid-cols-3 gap-4">
-            <div><p className="text-muted-foreground text-xs uppercase tracking-wider">Name</p><p className="font-medium">{data.clientName}</p></div>
-            <div><p className="text-muted-foreground text-xs uppercase tracking-wider">DOB</p><p className="font-medium">{formatDate(data.participantDob)}</p></div>
+            <div><p className="text-muted-foreground text-xs uppercase tracking-wider">Name</p><p className="font-medium"><ProtectedData>{data.clientName}</ProtectedData></p></div>
+            <div><p className="text-muted-foreground text-xs uppercase tracking-wider">DOB</p><p className="font-medium"><ProtectedData>{formatDate(data.participantDob)}</ProtectedData></p></div>
             <div><p className="text-muted-foreground text-xs uppercase tracking-wider">UCI Number</p><p className="font-medium">{shown(data.participantUci)}</p></div>
           </div>
         </section>
@@ -86,8 +87,8 @@ export function AgreementReview({ data }: { data: AgreementReviewData }) {
           <h3 className="font-semibold text-base border-b pb-2 mb-3">Service & Payment Details</h3>
           <div className="grid sm:grid-cols-3 lg:grid-cols-4 gap-4">
             <div><p className="text-muted-foreground text-xs uppercase tracking-wider">Service Type</p><p className="font-medium capitalize">{label(data.serviceType)}</p></div>
-            <div><p className="text-muted-foreground text-xs uppercase tracking-wider">Start Date</p><p className="font-medium">{formatDate(data.serviceStartDate)}</p></div>
-            <div><p className="text-muted-foreground text-xs uppercase tracking-wider">End Date</p><p className="font-medium">{formatDate(data.serviceEndDate)}</p></div>
+            <div><p className="text-muted-foreground text-xs uppercase tracking-wider">Start Date</p><p className="font-medium"><ProtectedData>{formatDate(data.serviceStartDate)}</ProtectedData></p></div>
+            <div><p className="text-muted-foreground text-xs uppercase tracking-wider">End Date</p><p className="font-medium"><ProtectedData>{formatDate(data.serviceEndDate)}</ProtectedData></p></div>
             <div><p className="text-muted-foreground text-xs uppercase tracking-wider">Frequency</p><p className="font-medium capitalize" data-testid="agreement-frequency">{label(data.serviceFrequency)}</p></div>
             <div><p className="text-muted-foreground text-xs uppercase tracking-wider">Cost</p><p className="font-medium" data-testid="agreement-cost">{data.cost ? `$${data.cost}` : 'Not specified'}</p></div>
             <div><p className="text-muted-foreground text-xs uppercase tracking-wider">Payment Schedule</p><p className="font-medium" data-testid="agreement-payment-schedule">{shown(data.paymentSchedule)}</p></div>

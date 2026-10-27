@@ -108,7 +108,7 @@ export default function RolesPage() {
               <div className="py-16 text-center"><ShieldCheck className="mx-auto mb-3 h-9 w-9 text-primary/50" /><p className="font-medium">No roles yet</p><p className="mt-1 text-sm text-muted-foreground">Create a role to organize staff access.</p><Button variant="outline" className="mt-4" onClick={() => openEditor('new')}>Create a role</Button></div>
             ) : (
               <div className="overflow-x-auto"><Table>
-                <TableHeader><TableRow><TableHead className="min-w-36">Role</TableHead><TableHead className="min-w-48">Description</TableHead><TableHead className="min-w-64">Permissions</TableHead><TableHead className="whitespace-nowrap">Active users</TableHead><TableHead className="text-right">Actions</TableHead></TableRow></TableHeader>
+                <TableHeader><TableRow><TableHead className="min-w-36">Role</TableHead><TableHead className="min-w-48">Description</TableHead><TableHead className="min-w-64">Permissions</TableHead><TableHead>Active users</TableHead><TableHead className="text-right">Actions</TableHead></TableRow></TableHeader>
                 <TableBody>{rolesQuery.data.map((role) => (
                   <TableRow key={role.id} data-testid={`row-role-${role.id}`}>
                     <TableCell className="font-semibold"><div className="flex flex-wrap items-center gap-2">{role.name}{role.isSystem && <Badge variant="outline" className="gap-1 text-primary"><LockKeyhole className="h-3 w-3" />System</Badge>}</div></TableCell>
